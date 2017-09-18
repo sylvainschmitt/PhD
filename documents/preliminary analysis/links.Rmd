@@ -1,0 +1,43 @@
+---
+title: Gbs - BRIDGE - Paracou links
+author: Sylvain SCHMITT
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+
+```{r set, message=FALSE, warning=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+setwd("~/Documents/BIOGECO/Data/Correspondances/")
+library(knitr)
+library(readr)
+library(dplyr)
+library(tidyr)
+opts_chunk$set(
+  echo = T, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+```{r opening, message=FALSE, warning=FALSE}
+t1 <- read_csv('corr_ind_names_GbS2Spag.csv')
+t2 <- read_csv('ind_coords_GbS2Spag.csv')
+t3 <- read_csv('Feuil1_Paracou_Myriam3.csv')
+t <- t1 %>% 
+  left_join(t2, by = c("ID" = "Ind_ID")) %>% 
+  inner_join(t3, by = c("ID" = "Sample_ORI")) %>% 
+  select(ID, pop_num, Species, CODE_SAMPLE) %>% 
+  separate(CODE_SAMPLE, c("plot", "square", "id"), sep = "_")
+rm(t1, t2, t3)
+write.csv(t, "links.csv")
+DT::datatable(t)
+```
+
+We obtained links for 75 individuals of Paracou.

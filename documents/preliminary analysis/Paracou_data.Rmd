@@ -1,0 +1,92 @@
+---
+title: Paracou data
+author: Sylvain SCHMITT
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+
+```{r set, message=FALSE, warning=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+setwd("~/Documents/BIOGECO/Data/Paracou/")
+library(knitr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+opts_chunk$set(
+  echo = T, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+```{r opening, message=FALSE, warning=FALSE}
+sp <- read_delim('Paracou_species.csv', ',') %>% 
+  filter(Genre == "Symphonia") %>% 
+  rename(idSp = idTaxon, Family = Famille, Genus = Genre, species = espece) %>% 
+  dplyr::select(-Family)
+t <- rbind(read_delim('R_PreExploit_1984-85-86.csv', ';'),
+           read_delim('R_PostExploit_1987-88.csv', ';'),
+           read_delim('R_Paracou_1988-2016.csv', ';')) %>% 
+  filter(code_vivant == 'VRAI') %>% 
+  filter(idTaxon %in% sp$idSp) %>% 
+  dplyr::select(n_parcelle, n_carre, n_arbre, idArbre, campagne, Xutm, Yutm, circonf, idTaxon) %>% 
+  mutate(circonf = circonf / pi) %>% 
+  rename(plot = n_parcelle, square = n_carre, id = n_arbre, idPR = idArbre,
+         census = campagne, X = Xutm, Y = Yutm, dbh = circonf, idSp = idTaxon) %>% 
+  left_join(sp)
+rm(sp)
+write.csv(t, "Symphonia.csv")
+```
+
+```{r map}
+# data <- t %>% 
+#   dplyr::select(X, Y, dbh, species) %>% 
+#   unique()
+# crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# coordinates(data) <- ~X + Y
+# proj4string(data) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# data <- spTransform(data, CRSobj = crs)
+# mnt <- raster('./sig/MNT_5m/MNT_ParacouAvril2009_5m.tif')
+# mnt <- projectRaster(mnt, crs = crs)
+# MNTpal <- colorNumeric(c("#f7f7f7", "#cccccc", "#969696", "#525252"), 
+#                     values(mnt), na.color = "transparent")
+# TREEpal <- colorFactor("viridis", as.factor(data$species), na.color = "transparent")
+# l <- leaflet(width = 1800, height = 900) %>% 
+#   addTiles(group = 'Background') %>% 
+#   addRasterImage(mnt, colors = MNTpal, opacity = 0.8, group = 'MNT') %>%
+#   addCircles(data = data, radius = ~dbh/100, color = ~species, group = 'Trees')
+```
+
+```{r diameter}
+t2 <- read_csv('~/Documents/BIOGECO/Data/Correspondances/links.csv')[-1]
+data <- t2 %>% 
+  left_join(t)
+rm(t, t2)
+ggplot(data, aes(census,dbh, color = species, group = idPR)) + 
+  geom_line() + geom_point()
+```
+
+Growth model see @herault_functional_2011.
+
+```{r growth}
+data %>% 
+  select(ID, census, dbh) %>% 
+  group_by(ID) %>% 
+  # filter(ID == "FB02") %>%
+  arrange(census) %>% 
+  unique() %>% 
+  mutate(timelapse = census - lag(census, default=first(census))) %>% 
+  mutate(growth = (dbh - lag(dbh, default=first(dbh)))/timelapse) %>% 
+  ggplot(aes(dbh, growth, color = ID, group = ID)) +
+  geom_point(alpha = 0.3) + geom_line(alpha = 0.3)
+```
+
+
