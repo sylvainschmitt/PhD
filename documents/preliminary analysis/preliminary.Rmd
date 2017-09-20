@@ -1,0 +1,89 @@
+---
+title: Symphonia preliminary anlaysis
+author: Sylvain SCHMITT
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r set, message=FALSE, warning=FALSE, echo=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+path <- "~/Documents/BIOGECO/PhD/data/growth_Paracou/"
+mpath <- "~/Documents/BIOGECO/PhD/documents/preliminary analysis/preliminary_models/"
+library(knitr)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(rstan)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+# Introduction
+
+View [PhD coneptual document online](https://docs.google.com/document/d/1ws7OHgMXHwdHyw5Se_nb_xQk1eDelew8lF4viN7wCpQ/edit?usp=sharing).
+
+# Model M0
+
+```{r opening}
+# sp <- read_delim(file.path(path, 'Paracou_species.csv'), ',') %>%
+#   filter(Genre == "Symphonia") %>%
+#   rename(idSp = idTaxon, Family = Famille, Genus = Genre, species = espece) %>%
+#   dplyr::select(-Family)
+# data <- rbind(read_delim(file.path(path, 'R_PreExploit_1984-85-86.csv'), ';'),
+#            read_delim(file.path(path, 'R_PostExploit_1987-88.csv'), ';'),
+#            read_delim(file.path(path, 'R_Paracou_1988-2016.csv'), ';')) %>%
+#   filter(code_vivant == 'VRAI') %>%
+#   filter(idTaxon %in% sp$idSp) %>%
+#   dplyr::select(n_parcelle, n_carre, n_arbre, idArbre, campagne, Xutm, Yutm, circonf, idTaxon) %>%
+#   mutate(circonf = circonf*10 / pi) %>%
+#   rename(plot = n_parcelle, square = n_carre, id = n_arbre, idPR = idArbre,
+#          census = campagne, X = Xutm, Y = Yutm, dbh = circonf, idSp = idTaxon) %>% 
+#   filter(!is.na(dbh))
+# rm(sp)
+# save(data, file = './preliminary_save/data.Rdata')
+load('./preliminary_save/data.Rdata')
+```
+
+We gathered data from Paracou for *Symphonia* genus resulting in `r length(unique(data$idPR))` individuals. We computed the tree annual growth ($AGR$, in $mm.year^{-1}$) as the difference of diameter at breast height ($dbh$, in $mm$) divided by the time step (from 1 to 2 year depending on the censuses). We related $AGR$ to diameter at breast height with the Canham model following @herault_functional_2011 :
+$$log(AGR_i) = max * exp(-\frac{1}{2}*log(\frac{dbh_i}{\frac{dopt}{ks}}))$$
+Where $max$ represents the maximum value of $log(AGR_i +1)$, $dopt$ the optimal $dbh$ when the maximum is reached and $ks$ the kurtosis of the hump shaped distribution.
+
+```{r M0 data}
+data <- data %>% 
+  select(idPR, census, dbh, idSp) %>% 
+  group_by(idPR) %>% 
+  arrange(census) %>% 
+  mutate(AGR = (dbh - lag(dbh, default=first(dbh)))/(census - lag(census, default=first(census)))) %>% 
+  filter(!is.na(AGR)) %>% 
+  filter(AGR > 0) %>% 
+  filter(AGR < 200)
+data %>%
+  ggplot(aes(dbh, log(AGR))) +
+  geom_point(alpha = 0.3) +
+  xlab('diameter at breast height (dbh in mm)') +
+  ylab(expression('logarithm of annual growth rate (AGR in'~mm.year^{-1}~")"))
+```
+
+```{r}
+fit <- stan(file = file.path(mpath, 'M0.stan'),
+            data = list(N = dim(data)[1],
+                        dbh = data$dbh,
+                        AGR = data$AGR,
+            chains = 1))
+save(fit, file = file.path(mpath, 'M0.Rdata'))
+load(file.path(mpath, 'M0.Rdata'))
+g <- fitgraph(fit)
+```
+
+
+# References
