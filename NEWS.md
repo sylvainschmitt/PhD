@@ -3,6 +3,10 @@
 * GbS sequencing for guyana only (genotoul)
 * subject v2
 
+# PhD 0.1.9004
+
+- preliminary analysis genetic STRUCTURE and distance matrix
+
 # PhD 0.1.9003
 
 * preleminary analysis first model

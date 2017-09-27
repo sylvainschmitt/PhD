@@ -14,5 +14,6 @@ model {
   dopt ~ normal(1, 10^4) ;
   ks ~ normal(1, 10^4) ;
   sigma ~ gamma(10^-2, 10^-2) ;
-  AGR ~ lognormal(m*exp(-0.5*log(dbh/(dopt/ks))), sigma) ;
+  for(n in 1:N)
+    AGR[n] ~ lognormal(m*exp(-0.5*log(dbh[n]/(dopt/ks))*log(dbh[n]/(dopt/ks))), sigma) ;
 }
