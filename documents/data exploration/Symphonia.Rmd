@@ -1,0 +1,162 @@
+---
+title: Symphonia data
+author: Sylvain SCHMITT
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_depth: 5
+    toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r set, message=FALSE, warning=FALSE, echo=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+path <- "~/Documents/BIOGECO/PhD/data/growth_Paracou/"
+library(knitr)
+library(readr)
+library(ggplot2)
+library(reshape2)
+library(raster)
+library(leaflet)
+library(htmltools)
+library(rgdal)
+library(dplyr)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+# Basic data
+
+```{r trees}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% 
+  filter(campagne == 2015) %>% 
+  # filter(n_parcelle %in% c(1,6,11,13:16)) %>%
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0)
+```
+
+```{r map}
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# Paracou plot shapefile
+limits <- as.character(ogrListLayers(file.path(path, 'limits')))
+limits <- readOGR(file.path(path, 'limits'), limits, verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+# Water Table
+hydro <- as.character(ogrListLayers(file.path(path, 'hydrology')))
+hydro <- sapply(hydro, function(l) readOGR(file.path(path, 'hydrology'), l, verbose = F))
+hydro <- lapply(hydro, function(l) spTransform(l, CRSobj = crs))
+WTpal <- colorFactor('Blues', as.factor(hydro$WaterTable$TypeWatEN), reverse = T)
+# MNT raster
+mnt <- raster(file.path(path, 'mnt/MNT_ParacouAvril2009_5m.tif'))
+mnt <- projectRaster(mnt, crs = crs)
+mnt <- crop(mnt, extent(limits))
+# Trees to plot
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+SPpal <- colorFactor(c('darkgreen', 'black', 'firebrick'), as.factor(treesXY$espece))
+# Plot
+leaflet() %>%
+  addPolylines(data = hydro$ContourLinePlots, group = 'Contour', 
+               color = 'grey') %>%
+  addPolylines(data = limits, group = 'Road paths', color = 'black') %>%
+  addPolygons(data = hydro$WaterTable, group = 'WaterTable',
+              opacity = 0, fillOpacity = 0.7,
+              fill = T, fillColor = ~WTpal(TypeWatEN),
+              label = hydro$WaterTable$TypeWatEN) %>%
+  addLayersControl(overlayGroups = c('Contour', 'Road paths', 'WaterTable'),
+                   options = layersControlOptions(collapsed = F)) %>% 
+  addLegend(pal = WTpal, values = levels(as.factor(hydro$WaterTable$TypeWatEN)), 
+            title = 'Water table', position = "bottomright") %>% 
+  addCircles(data = treesXY, radius = ~circonf/pi/10, color = ~SPpal(espece),
+             label = paste("Symphonia", treesXY$espece, treesXY$n_arbre)) %>% 
+  addLegend(pal = SPpal, values = levels(as.factor(treesXY$espece)), 
+            title = 'Symphonia') 
+# # Plot hydro & gaps
+# for(p in unique(treesXY$n_parcelle)){
+#   png(filename=file.path("./Symphonia_maps", paste0("hydro", p, '.png')), width = 1920, height = 1080)
+#   plot <- limits[which(limits$Plot == p),]
+#   plot(plot, main = paste('Plot', p))
+#   plot(hydro$WaterTable, col = WTpal(hydro$WaterTable$TypeWater), add = T)
+#   plot(logging$Gaps, col = "green", add = T)
+#   plot(treesXY, add = T, pch = c(15:17)[as.numeric(as.factor(treesXY$espece))])
+#   text(coordinates(treesXY)[,1], coordinates(treesXY)[,2], treesXY$n_arbre, pos = 3)
+#   legend('topleft', pch = 15:17, levels(as.factor(treesXY$espece)))
+#   dev.off() 
+# }
+```
+
+# GbS data
+
+```{r GBS}
+path <- '~/Documents/BIOGECO/PhD/data/GbS_Symphonia/structure/results_f/k2/'
+data <- list.files(path)
+data <- sample(data, 1)
+data <- starmie::loadStructure(file.path(path, data))
+path <- "~/Documents/BIOGECO/PhD/data/links/"
+ref <- read_csv(file.path(path, 'Symphonia_ind_names_complete-1.csv')) %>% 
+  filter(Pop == 'PR') %>% 
+  select(ID, pop_num, X16)
+data <- data$ancest_df %>% 
+  filter(Pop %in% 1:2) %>% 
+  select(Label, `Cluster 1`) %>% 
+  rename(Globu = `Cluster 1`) %>% 
+  mutate(Label = gsub('c', '', Label)) %>% 
+  left_join(ref, by = c('Label' = 'pop_num')) %>% 
+  tidyr::separate(X16, c('Pop', 'n_parcelle', 'n_carre', 'n_arbre'), '-', convert = T) %>% 
+  select(-Pop) %>% 
+  left_join(trees)
+```
+
+```{r map GBS}
+# Trees to plot
+treesXY <- data[-which(is.na(data$X)),]
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+GLpal <- colorNumeric("RdYlBu", domain = treesXY$Globu)
+# Plot
+leaflet() %>%
+  addPolylines(data = hydro$ContourLinePlots, group = 'Contour', 
+               color = 'grey') %>%
+  addPolylines(data = limits, group = 'Road paths', color = 'black') %>%
+  addPolygons(data = hydro$WaterTable, group = 'WaterTable',
+              opacity = 0, fillOpacity = 0.7,
+              fill = T, fillColor = ~WTpal(TypeWatEN),
+              label = hydro$WaterTable$TypeWatEN) %>%
+  addLayersControl(overlayGroups = c('Contour', 'Road paths', 'WaterTable'),
+                   options = layersControlOptions(collapsed = F)) %>% 
+  addLegend(pal = WTpal, values = levels(as.factor(hydro$WaterTable$TypeWatEn)), 
+            title = 'Water table', position = "bottomright") %>% 
+  addCircles(data = treesXY, radius = ~circonf/pi/10, color = ~GLpal(Globu),
+             label = paste("Symphonia", treesXY$espece, treesXY$n_arbre)) %>% 
+  addLegend(pal = GLpal, values = treesXY$Globu, title = "Globulifera\nGene\nPool") 
+# # Plot hydro & gaps
+# for(p in c(13,14,4)){
+#   png(filename=file.path("./Symphonia_maps", paste0("GBS", p, '.png')), width = 1920, height = 1080)
+#   plot <- limits[which(limits$Plot == p),]
+#   plot(plot, main = paste('Plot', p))
+#   plot(hydro$WaterTable, col = WTpal(hydro$WaterTable$TypeWater), add = T)
+#   plot(treesXY, add = T, col = GLpal(treesXY$Globu), pch = 16, cex = 3)
+#   text(coordinates(treesXY)[,1], coordinates(treesXY)[,2], treesXY$n_arbre, pos = 3)
+#   dev.off() 
+# }
+# Table
+table <- data %>%
+  select(ID, Label, n_parcelle, n_carre, n_arbre, idArbre, Globu, circonf, Xutm, Yutm) %>%
+  mutate(Code_Par = paste0('P-', n_parcelle, '-', n_carre, '-', n_arbre))
+# write.table(table, file='./Symphonia_maps/GbS.txt', row.names = F)
+DT::datatable(table)
+```
+
+# References

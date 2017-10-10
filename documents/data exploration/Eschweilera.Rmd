@@ -54,7 +54,7 @@ mnt <- raster('~/Documents/BIOGECO/PhD/data/SIG_Paracou/MNT_5m/MNT_ParacouAvril2
 mnt <- projectRaster(mnt, crs = '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0')
 data <- data %>% 
   filter(plot %in% c(1,6,11,13:16)) %>% 
-  select(-census, -dbh) %>% 
+  dplyr::select(-census, -dbh) %>% 
   unique()
 # plot(mnt) ; points(data$X, data$Y)
 XY <- data[c('X', 'Y')]
