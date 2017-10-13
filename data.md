@@ -672,21 +672,14 @@ tree
     ## │   ├── Symphonia_Paracou.csv
     ## │   └── Symphonia_Paracou.xlsx
     ## ├── Paracou
+    ## │   ├── biotic
+    ## │   │   ├── Metadonnees_MNC_Paracou.txt
+    ## │   │   ├── MNC_ParacouAvril2009_1m.tfw
+    ## │   │   ├── MNC_ParacouAvril2009_1m.tif
+    ## │   │   ├── MNC_ParacouAvril2009_1m.tif.aux.xml
+    ## │   │   ├── MNC_ParacouAvril2009_1m.tif.ovr
+    ## │   │   └── Thumbs.db
     ## │   ├── hydrology
-    ## │   │   ├── AltitudePlot.dbf
-    ## │   │   ├── AltitudePlot.gpx
-    ## │   │   ├── AltitudePlot.kml
-    ## │   │   ├── AltitudePlot.prj
-    ## │   │   ├── AltitudePlot.shp
-    ## │   │   ├── AltitudePlot.shx
-    ## │   │   ├── AltitudePlot.xml
-    ## │   │   ├── ContourLinePlots.cpg
-    ## │   │   ├── ContourLinePlots.dbf
-    ## │   │   ├── ContourLinePlots.kml
-    ## │   │   ├── ContourLinePlots.prj
-    ## │   │   ├── ContourLinePlots.shp
-    ## │   │   ├── ContourLinePlots.shx
-    ## │   │   ├── ContourLinePlots.xml
     ## │   │   ├── Creeks.cpg
     ## │   │   ├── Creeks.dbf
     ## │   │   ├── Creeks.kml
@@ -714,9 +707,28 @@ tree
     ## │   │   ├── WaterTable.shp
     ## │   │   └── WaterTable.shx
     ## │   ├── limits
+    ## │   │   ├── CIRADConcession.cpg
+    ## │   │   ├── CIRADConcession.dbf
+    ## │   │   ├── CIRADConcession.gpx
+    ## │   │   ├── CIRADConcession.kml
+    ## │   │   ├── CIRADConcession.prj
+    ## │   │   ├── CIRADConcession.qpj
+    ## │   │   ├── CIRADConcession.shp
+    ## │   │   ├── CIRADConcession.shp.xml
+    ## │   │   ├── CIRADConcession.shx
+    ## │   │   ├── OverallPlots.cpg
+    ## │   │   ├── OverallPlots.dbf
+    ## │   │   ├── OverallPlots.prj
+    ## │   │   ├── OverallPlots.qpj
+    ## │   │   ├── OverallPlots.shp
+    ## │   │   ├── OverallPlots.shx
+    ## │   │   ├── RegenerationPlots.cpg
+    ## │   │   ├── RegenerationPlots.dbf
+    ## │   │   ├── RegenerationPlots.prj
+    ## │   │   ├── RegenerationPlots.shp
+    ## │   │   ├── RegenerationPlots.shp.xml
+    ## │   │   ├── RegenerationPlots.shx
     ## │   │   ├── RoadsPaths.dbf
-    ## │   │   ├── RoadsPaths.prj
-    ## │   │   ├── RoadsPaths.qpj
     ## │   │   ├── RoadsPaths.shp
     ## │   │   └── RoadsPaths.shx
     ## │   ├── logging
@@ -727,24 +739,85 @@ tree
     ## │   │   ├── DisturbedAreas.shp
     ## │   │   ├── DisturbedAreas.shx
     ## │   │   ├── DisturbedAreas.xml
+    ## │   │   ├── doc - inventaire données degats exploit.doc
     ## │   │   ├── Gaps.cpg
     ## │   │   ├── Gaps.dbf
     ## │   │   ├── Gaps.prj
     ## │   │   ├── Gaps.shp
     ## │   │   ├── Gaps.shx
+    ## │   │   ├──  LoggingDirection.dbf
     ## │   │   ├── LoggingDirection.dbf
-    ## │   │   ├── LoggingDirection.prj
+    ## │   │   ├──  LoggingDirection.kml
+    ## │   │   ├──  LoggingDirection.prj
     ## │   │   ├── LoggingDirection.sbn
     ## │   │   ├── LoggingDirection.sbx
+    ## │   │   ├──  LoggingDirection.shp
     ## │   │   ├── LoggingDirection.shp
+    ## │   │   ├──  LoggingDirection.shx
     ## │   │   ├── LoggingDirection.shx
+    ## │   │   ├──  LoggingDirection.xml
     ## │   │   ├── LoggingDirection.xml
+    ## │   │   ├── RoadsPaths.dbf
+    ## │   │   ├── RoadsPaths.shp
+    ## │   │   ├── RoadsPaths.shx
     ## │   │   ├── SkidTrails.cpg
     ## │   │   ├── SkidTrails.dbf
     ## │   │   ├── SkidTrails.prj
     ## │   │   ├── SkidTrails.shp
     ## │   │   └── SkidTrails.shx
-    ## │   ├── mnt
+    ## │   ├── pedology
+    ## │   │   ├── CoarseElement.cpg
+    ## │   │   ├── CoarseElement.dbf
+    ## │   │   ├── CoarseElement.kml
+    ## │   │   ├── CoarseElement.shp
+    ## │   │   ├── CoarseElement.shx
+    ## │   │   ├── CoarseElement.xml
+    ## │   │   ├── Drainages.cpg
+    ## │   │   ├── Drainages.dbf
+    ## │   │   ├── Drainages.kml
+    ## │   │   ├── Drainages.shp
+    ## │   │   ├── Drainages.shx
+    ## │   │   ├── Drainages.xml
+    ## │   │   ├── Hydromorphy.cpg
+    ## │   │   ├── Hydromorphy.dbf
+    ## │   │   ├── Hydromorphy.kml
+    ## │   │   ├── Hydromorphy.shp
+    ## │   │   ├── Hydromorphy.shx
+    ## │   │   ├── SoilSurvey.dbf
+    ## │   │   ├── SoilSurvey.shp
+    ## │   │   ├── SoilSurvey.shx
+    ## │   │   ├── SpecificSoils.cpg
+    ## │   │   ├── SpecificSoils.dbf
+    ## │   │   ├── SpecificSoils.kml
+    ## │   │   ├── SpecificSoils.shp
+    ## │   │   ├── SpecificSoils.shx
+    ## │   │   ├── SpecificSoils.xml
+    ## │   │   ├── Thalwegs.dbf
+    ## │   │   ├── Thalwegs.shp
+    ## │   │   ├── Thalwegs.shp.xml
+    ## │   │   ├── Thalwegs.shx
+    ## │   │   ├── Thumbs.db
+    ## │   │   ├── Waterlogging.cpg
+    ## │   │   ├── Waterlogging.dbf
+    ## │   │   ├── Waterlogging.kml
+    ## │   │   ├── Waterlogging.shp
+    ## │   │   ├── Waterlogging.shx
+    ## │   │   └── Waterlogging.xml
+    ## │   ├── topography
+    ## │   │   ├── AltitudePlot.dbf
+    ## │   │   ├── AltitudePlot.gpx
+    ## │   │   ├── AltitudePlot.kml
+    ## │   │   ├── AltitudePlot.prj
+    ## │   │   ├── AltitudePlot.shp
+    ## │   │   ├── AltitudePlot.shx
+    ## │   │   ├── AltitudePlot.xml
+    ## │   │   ├── ContourLinePlots.cpg
+    ## │   │   ├── ContourLinePlots.dbf
+    ## │   │   ├── ContourLinePlots.kml
+    ## │   │   ├── ContourLinePlots.prj
+    ## │   │   ├── ContourLinePlots.shp
+    ## │   │   ├── ContourLinePlots.shx
+    ## │   │   ├── ContourLinePlots.xml
     ## │   │   ├── Metadonnees_MNT_Paracou.txt
     ## │   │   ├── MNT_ParacouAvril2009_5m.aux
     ## │   │   ├── MNT_ParacouAvril2009_5m.tfw
@@ -755,6 +828,7 @@ tree
     ## │   │   ├── relative_elevation.sh
     ## │   │   └── Thumbs.db
     ## │   └── trees
+    ## │       ├── Symphonia_Guyafor.csv
     ## │       └── Symphonia_Paracou.csv
     ## └── SIG_Paracou
     ##     ├── DisturbedAreas.cpg
@@ -783,7 +857,12 @@ tree
     ##     │   │   ├── contour.dbf
     ##     │   │   ├── contour.prj
     ##     │   │   ├── contour.shp
-    ##     │   │   └── contour.shx
+    ##     │   │   ├── contour.shx
+    ##     │   │   ├── grid.dbf
+    ##     │   │   ├── grid.prj
+    ##     │   │   ├── grid.qpj
+    ##     │   │   ├── grid.shp
+    ##     │   │   └── grid.shx
     ##     │   ├── MNT_ParacouAvril2009_5m.tfw
     ##     │   ├── MNT_ParacouAvril2009_5m.tif
     ##     │   ├── MNT_ParacouAvril2009_5m.tif.aux.xml
@@ -865,4 +944,4 @@ tree
     ##     ├── SkidTrails.shp
     ##     └── SkidTrails.shx
     ## 
-    ## 62 directories, 791 files
+    ## 64 directories, 868 files

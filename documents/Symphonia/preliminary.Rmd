@@ -1,0 +1,439 @@
+---
+title: "Symphonia"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(rgdal)
+library(raster)
+library(leaflet)
+library(starmie)
+library(rstan)
+library(tidyverse)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+Paracou
+==================
+
+Headcount {data-width=200}
+-------------------------------------
+
+If we are only using Paracou Biodiversity and Control plots we lack of *Symphonia globulifera* morphotype to have a balanced stratified sampling ($\frac{99}{400}$ instead of $\frac{99}{400}$, see Table 1.1), and we only have 6 *S. indet* which means we can't hope they are in fact *S. globulifera*. Including treatment plots only allow us to reach 168 *S. globulifera* morphotype but with a lot of *S. indet* in which we might find other *S. globulifera* and thus reached a balanced sampling. We observed a strong relation to be tested between water table depth and *S. globulifera* presence (see Figure 1.1). So we may estimate with the layer the number of *S. globulifera* alive in Paracou. But including treatment plots necessitate to control for the light variable due to anthropic gaps of the logging. We thus need to test the effect of the treatments and gaps on individuals growth, mortality, and recruitment to evaluate the effect of the treatment on *Symphonia* Paracou population. So in parrallel we are looking at other Guyafor plots looking for *Symphonia globulifera* with both diameters inventories for at least three censuses and environmental data. 
+
+### Table 1.1 Alive Symphonia headcounts in Paracou by species and treatment. B stand for Biodiviersity plots, C for control plots, and T1, T2, and T3 for treatment plots.
+
+```{r Par_trees}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% 
+  filter(campagne == 2015) %>% 
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0) %>% 
+  filter(n_parcelle != 18)
+trees %>% 
+  mutate(treatment = c(rep(c('C', 'T1', 'T2', 'T3'), 3), rep('B', 4))[n_parcelle]) %>% 
+  dplyr::select(espece, treatment) %>% 
+  reshape2::dcast(espece ~ treatment) %>% 
+  mutate(Total = B + C + T1 + T2 + T3) %>% 
+  kable()
+```
+
+Map {data-width=200}
+-------------------------------------
+
+### Figure 1.1 Symphonia distribution in Paracou.
+
+```{r Par_map}
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# limits
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+# topography
+topo <- readOGR(file.path(path, 'topography'), "ContourLinePlots", verbose = F)
+topo <- spTransform(topo, CRSobj = crs)
+# hydrology
+hydro <- readOGR(file.path(path, 'hydrology'), "WaterTable", verbose = F)
+hydro <- spTransform(hydro, CRSobj = crs)
+hydro_pal <- colorFactor('Blues', as.factor(hydro$TypeWatEN), reverse = T)
+# Trees to plot
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+tree_pal <- colorFactor(c('darkgreen', 'black', 'firebrick'), as.factor(treesXY$espece))
+# Plot
+leaflet() %>%
+  addPolylines(data = limits, group = 'Limits', color = 'black') %>%
+  addPolylines(data = topo, group = 'Contour',
+               color = 'grey') %>%
+  addPolygons(data = hydro, group = 'WaterTable',
+              opacity = 0, fillOpacity = 0.7, fill = T, 
+              fillColor = ~hydro_pal(TypeWatEN), label = ~TypeWatEN) %>%
+  addLayersControl(overlayGroups = c('Contour', 'Limits', 
+                                     'WaterTable', 'Symphonia'),
+                   options = layersControlOptions(collapsed = F)) %>% 
+  addLegend(pal = hydro_pal, values = levels(as.factor(hydro$TypeWatEN)), 
+            title = 'Water table', position = "bottomright") %>% 
+  addCircles(data = treesXY, radius = ~circonf/pi/10, color = ~tree_pal(espece),
+             label = paste("Symphonia", treesXY$espece, treesXY$n_arbre),
+             group = 'Symphonia') %>% 
+  addLegend(pal = tree_pal, values = levels(as.factor(treesXY$espece)), 
+            title = 'Symphonia') 
+rm(list = ls())
+```
+
+Guyafor
+==================
+
+Text {data-width=200}
+-------------------------------------
+
+Table 2.1 shows few individuals in other Guyafor plots. It is due to the fact that most of Guyafor network plots include few bottom lands (Pascal Petronelli, personnal communication). Consequently it seems if we want both good quality diameter inventories and environment data we will have to sample all individuals in Paracou. The question stay to sample or not in treatment plots ? And more generally the question, is about to know if we will have sufficient environmental data (gaps map, lidar) to control anthropic and natural gaps effects ?
+
+Headcount {data-width=200}
+-------------------------------------
+
+### Table 2.1 Symphonia headcounts among Guyafor network by species. Including all individuals, meaning dead ones too.
+
+```{r Guy_trees}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/trees/"
+trees <- read.csv(file.path(path, 'Symphonia_Guyafor.csv'),
+                  dec=",", stringsAsFactors = F)
+trees %>% 
+  dplyr::select(NomForet, espece, n_parcelle, n_carre, n_arbre) %>% 
+  distinct() %>% 
+  reshape2::dcast(NomForet ~ espece) %>% 
+  arrange(desc(globulifera)) %>% 
+  filter(globulifera > 0) %>% 
+  kable()
+rm(list = ls())
+```
+
+Genotypes
+==================
+
+Text {data-width=200}
+-------------------------------------
+
+We gathered genetic material (ddRADseq) of french Guiana from Torroba-Balmori unpublished data (Paracou and Regina). We cleaned `fastq` files after a check with `fastQCheck` allowing us to correct two sequences by removing theim for individuals $PR_{49}$ and $RG_1$. We used `ipyrad ` for the interactive assembly of ddRADseq data sets on genotoul cluster (with denovo assembly, AATT and AT restriction overhang, 85% clustering threshold and a minimum of 48 sample per locus).
+
+We used `vcfR` to load SNPs data into R, and we transform it in genligh object for `adegenet`. We related indivdual IDs to their population and coordinates with *links* table. We coded population in 4 subset for *Symphonia globulifera* and *sp1* in both Paracou and Régina ($PR_{gl}$, $PR_{sp}$, $RG_{gl}$, $RG_{sp}$). Population definition was used to transform vcf file to structure file with PGDspider for further genetic structure analysis with STRUCTURE software. We corrected and transformed in UTM coordinates to compute kinship distance matrix with SPAGEDI.
+
+```{r Gen_data}
+# path <- "~/Documents/BIOGECO/PhD/data/GbS_Symphonia/assembly/symphoGbS2_outfiles/"
+# data <- read.vcfR(file.path(path, 'symphoGbS2.vcf'), verbose = F)
+# data <- vcfR2genlight(data)
+# ploidy(data) <- 2
+# save(data, file = './preliminary_save/assembly.Rdata')
+load('./preliminary_save/assembly.Rdata')
+ID0 <- data@ind.names
+data@ind.names[which(data@ind.names %in% c('PR_49c', 'RG_1c'))] <- c('PR_49', 'RG_1')
+path <- "~/Documents/BIOGECO/PhD/data/links/"
+pop <- data.frame(ID0 = ID0, pop_num = data$ind.names) %>% 
+  left_join(read_csv(file.path(path, 'Symphonia_ind_names.csv'))) %>% 
+  left_join(read_csv(file.path(path, 'Symphonia_ind_coords.csv'),
+                     col_types = cols(Latitude = col_character(), 
+        Longitude = col_character())),
+            by = c("ID" = "Ind_ID")) %>% 
+  dplyr::select(ID0, pop_num, Pop, Species, Latitude, Longitude) %>%
+  separate(Species, c("Genus", "species"), sep = " ") %>%
+  mutate(species = substr(species, 0,2)) %>%
+  mutate(Pop = paste0(Pop, '_', species)) %>%
+  dplyr::select(ID0,pop_num, Pop, Latitude, Longitude) %>%
+  rename(ID = pop_num) %>% 
+  mutate(Latitude = as.numeric(gsub(',', '.', Latitude)),
+         Longitude = as.numeric(gsub(',', '.', Longitude)))
+rm(ID0)
+pop(data) <- pop$Pop
+```
+
+### Figure 3.1 Symphonia population structure in Paracou.
+
+```{r structure}
+path <- '~/Documents/BIOGECO/PhD/data/GbS_Symphonia/structure/results_f/'
+data <- list.files(path, recursive = T, pattern = "_run1_f")
+data <- c(data[-1], data[1])
+data <- lapply(data, function(d) loadStructure(file.path(path, d)))
+data <- do.call('structList', data)
+plotMultiK(data, pop[c('ID', 'Pop')]) +
+  scale_fill_brewer(palette = "Paired")
+```
+
+Map {data-width=200}
+-------------------------------------
+
+```{r GBS}
+path <- '~/Documents/BIOGECO/PhD/data/GbS_Symphonia/structure/results_f/k2/'
+data <- list.files(path)
+data <- sample(data, 1)
+data <- starmie::loadStructure(file.path(path, data))
+path <- "~/Documents/BIOGECO/PhD/data/links/"
+ref <- read_csv(file.path(path, 'Symphonia_ind_names_complete-1.csv')) %>% 
+  filter(Pop == 'PR') %>%
+  dplyr::select(ID, pop_num, X16)
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% 
+  filter(campagne == 2015) %>% 
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0) %>% 
+  filter(n_parcelle != 18)
+data <- data$ancest_df %>% 
+  filter(Pop %in% 1:2) %>% 
+  dplyr::select(Label, `Cluster 1`) %>% 
+  rename(Globu = `Cluster 1`) %>% 
+  mutate(Label = gsub('c', '', Label)) %>% 
+  left_join(ref, by = c('Label' = 'pop_num')) %>% 
+  tidyr::separate(X16, c('Pop', 'n_parcelle', 'n_carre', 'n_arbre'), '-', convert = T) %>% 
+  dplyr::select(-Pop) %>% 
+  left_join(trees)
+```
+
+### Figure 3.2 Symphonia genotype distribution in Paracou.
+
+```{r GbS_map}
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# limits
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+# topography
+topo <- readOGR(file.path(path, 'topography'), "ContourLinePlots", verbose = F)
+topo <- spTransform(topo, CRSobj = crs)
+# hydrology
+hydro <- readOGR(file.path(path, 'hydrology'), "WaterTable", verbose = F)
+hydro <- spTransform(hydro, CRSobj = crs)
+hydro_pal <- colorFactor('Blues', as.factor(hydro$TypeWatEN), reverse = T)
+# Trees to plot
+treesXY <- data[-which(is.na(data$X)),]
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+tree_pal <- colorNumeric("RdYlBu", domain = treesXY$Globu)
+# Plot
+leaflet() %>%
+  addPolylines(data = limits, group = 'Limits', color = 'black') %>%
+  addPolylines(data = topo, group = 'Contour',
+               color = 'grey') %>%
+  addPolygons(data = hydro, group = 'WaterTable',
+              opacity = 0, fillOpacity = 0.7, fill = T, 
+              fillColor = ~hydro_pal(TypeWatEN), label = ~TypeWatEN) %>%
+  addLayersControl(overlayGroups = c('Contour', 'Limits', 
+                                     'WaterTable', 'Symphonia'),
+                   options = layersControlOptions(collapsed = F)) %>% 
+  addLegend(pal = hydro_pal, values = levels(as.factor(hydro$TypeWatEN)), 
+            title = 'Water table', position = "bottomright") %>% 
+  addCircles(data = treesXY, radius = ~circonf/pi/10, color = ~tree_pal(Globu),
+             label = paste("Symphonia", treesXY$espece, treesXY$n_arbre),
+             group = 'Symphonia') %>% 
+  addLegend(pal = tree_pal, values = treesXY$Globu, title = "Globulifera\nGene\nPool")
+rm(list = ls())
+```
+
+Environment
+==================
+
+For the moment habitat association are tested only with Water Table Depth but should further be tested for different environmental variable.
+
+Morphotype association {data-width=200}
+-------------------------------------
+
+```{r table}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# limits
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+limits <- subset(limits, TypeSub %in% c('Subplots', 'SubplotsP16'))
+# hydrology
+hydro <- readOGR(file.path(path, 'hydrology'), "WaterTable", verbose = F)
+hydro <- spTransform(hydro, CRSobj = crs)
+# trees
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  filter(campagne == 2015) %>% 
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0) %>% 
+  filter(n_parcelle != 18)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+
+```
+
+
+
+Genotype association {data-width=200}
+-------------------------------------
+
+
+Functional
+==================
+
+### Figure 5.1 Symphonia functional triat variation in BRIDGE data ($n=23$).
+
+```{r BRIDGE}
+path <- "~/Documents/BIOGECO/PhD/data/BRIDGE/"
+data <- read.csv("~/Documents/BIOGECO/PhD/data/BRIDGE/bridge.csv",
+         dec=",", stringsAsFactors = F) %>%
+  filter(Genus == "Symphonia")
+data %>%
+  select_if(is.numeric) %>%
+  dplyr::select(-X, -Y, -n_lvs, -surete, -taxon_code, -ID_arbre, -ID_ram, -Ht_sample) %>%
+  reshape2::melt() %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_boxplot() + 
+  facet_wrap(~variable, scales = "free")
+rm(list = ls())
+```
+
+Growth
+==================
+
+Treatment effect {data-width=200}
+-------------------------------------
+
+```{r dbh correction}
+source("~/Documents/BIOGECO/PhD/scripts/dbh_correction.R")
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% 
+  filter(n_parcelle %in% 1:16) %>% 
+  mutate(treatment = c(rep(c('C', 'T1', 'T2', 'T3'), 3), rep('B', 4))[n_parcelle]) %>% 
+  mutate(dbh = circonf/pi) %>% 
+  group_by(idArbre) %>% 
+  mutate(dbh_c = correction(dbh, campagne, code_vivant, code_mesure)) %>% 
+  ungroup()
+# errors <- trees %>% 
+#   group_by(idArbre) %>% 
+#   summarise(correc = detect(dbh, campagne)) %>% 
+#   filter(correc != "no") %>% 
+#   select(idArbre) %>% 
+#   unlist()
+# trees %>% 
+#   filter(idArbre %in% errors) %>% 
+#   select(idArbre, campagne, dbh, dbh_c) %>% 
+#   reshape2::melt(id.vars = c('idArbre', 'campagne')) %>% 
+#   ggplot(aes(x = campagne, y = value, color = variable)) +
+#   geom_line() + facet_wrap(~idArbre)
+```
+
+```{r AGR}
+trees <- trees %>% 
+  group_by(idArbre) %>% 
+  mutate(ddbh = (dbh_c - lag(dbh_c, default = first(dbh_c)))) %>% 
+  mutate(dt = (campagne - lag(campagne, default = first(campagne)))) %>% 
+  mutate(agr = ddbh/dt) %>% 
+  filter(agr > 0) %>% 
+  ungroup()
+# trees %>%
+#   ggplot(aes(x = dbh_c, y = agr, color = treatment)) +
+#   geom_point()
+# trees %>% 
+#   ggplot(aes(dbh_c, agr, group = idArbre)) +
+#   facet_wrap(~treatment) +
+#   geom_point(alpha = 0.5)
+# trees %>%
+#   ggplot(aes(x = dbh_c, y = agr, color = espece)) +
+#   geom_point(alpha = 0.3) +
+#   facet_grid(treatment~campagne)
+# trees %>% 
+#   ggplot(aes(campagne, agr)) +
+#   geom_point() +
+#   facet_wrap(~treatment)
+```
+
+```{r gap}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# gaps
+gaps <- shapefile("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/logging/Gaps.shp")
+gaps <- spTransform(gaps, CRSobj = crs)
+gaps$area <- area(gaps)
+# trees
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+gap_area <- (treesXY %over% gaps)$area
+gap_area[which(is.na(gap_area))] <- 0
+
+trees %>% 
+  mutate(gap_area = gap_area) %>% 
+  filter(gap_area > 0) %>% 
+  ggplot(aes(campagne, agr, 
+             color = gap_area), alpha = 0.5) +
+  geom_point() +
+  facet_wrap(~treatment)
+
+trees %>% 
+  mutate(gap_area = gap_area) %>% 
+  ggplot(aes(dbh_c, log(agr), 
+             color = gap_area > 0), alpha = 0.5) +
+  geom_point() +
+  facet_wrap(~treatment)
+
+trees %>%
+  mutate(gap_area = gap_area) %>% 
+  mutate(gap = ifelse(gap_area > 0, 1, 0)) %>% 
+  ggplot(aes(dbh_c, agr, color = campagne,
+             group = idArbre)) +
+  geom_point(alpha = 0.5) +
+  facet_grid(espece~treatment) +
+  scale_color_gradient2(midpoint = 2000)
+
+trees %>%
+  mutate(gap_area = gap_area) %>% 
+  mutate(gap = ifelse(gap_area > 0, 1, 0)) %>% 
+  filter(treatment != 'B') %>% 
+  ggplot(aes(dbh_c, agr, color = campagne,
+             group = idArbre)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(treatment~n_parcelle, labeller = "label_both",
+             ncol = 3, scales = "free") +
+  scale_color_gradient2(midpoint = 2000) +
+  xlab('diameter at breast height (cm)') +
+  ylab('annual growth rate (cm/year)')
+```
+
+```{r M0}
+# mpath <- "/home/sylvain//Documents/BIOGECO/PhD/documents/Symphonia/preliminary_models/"
+# fit <- stan(file = file.path(mpath, 'M0.stan'),
+#             data = list(N = dim(trees)[1],
+#                         dbh = trees$dbh_c,
+#                         agr = trees$agr),
+#             chains = 1)
+# save(fit, file = file.path(mpath, 'M0.Rdata'))
+# load(file.path(mpath, 'M0.Rdata'))
+```
+
+```{r M0 diagnostic}
+# shinystan::launch_shinystan(fit) # interface to vizualise results
+# mcmc_areas(as.matrix(fit),  prob = 0.8)
+# mcmc_trace(as.matrix(fit))
+# ggpairs(data.frame(as.matrix(fit)))
+```
+
+
+References
+==================
+

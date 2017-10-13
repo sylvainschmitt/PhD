@@ -2,13 +2,10 @@
 
 ## In waiting
 
-- Amazonics link (number, individuals) *@Niklas*
-- Flag link (number, individual) *@Niklas*
 - Paracou gaps map of 1992 (both control and treatments) *@Aurélie*
 
 ## Sampling
 
-1. Data on other Guyafor plots than Paracou (Symphonia, environment and genetic)
 1. Symphonia characters to note and materials to collect
 
 ## Environments
@@ -20,11 +17,8 @@
 
 ## Functional
 
-1. Functional variability intra vs inter individuals (BRIDGE)
-
 ## Growth
 
-1. Clean Paracou growth data for Symphonia
 1. Growth models Go (ontogeny only)
 1. Genetic effect on growth
 1. Gap effect on Symphonia growth (Treatment, Gap maps, Lidar)
@@ -37,12 +31,19 @@
 
 ## Questions
 
-*To think of mut notalways meant to be explored.*
+*To think of but not always meant to be explored.*
 
 - Flowers ?
 - Winners and loosers (dbh > 10) ?
 - Water and/or light ?
 - Mortality ?
+
+# PhD 0.1.9006
+
+- **Strange year effect on growth**
+- Clean Paracou growth data for Symphonia
+- Data on other Guyafor plots than Paracou (Symphonia, environment and genetic)
+- Functional variability intra vs inter individuals not available on BRIDGE
 
 # PhD 0.1.9005
 

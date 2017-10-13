@@ -39,6 +39,7 @@ trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
 trees <- trees %>% 
   filter(campagne == 2015) %>% 
   # filter(n_parcelle %in% c(1,6,11,13:16)) %>%
+  # filter(n_parcelle %in% c(2:5,7:10,12)) %>%
   filter(code_vivant == 1) %>% 
   filter(code_mesure == 0)
 ```
@@ -105,7 +106,7 @@ data <- sample(data, 1)
 data <- starmie::loadStructure(file.path(path, data))
 path <- "~/Documents/BIOGECO/PhD/data/links/"
 ref <- read_csv(file.path(path, 'Symphonia_ind_names_complete-1.csv')) %>% 
-  filter(Pop == 'PR') %>% 
+  # filter(Pop == 'PR') %>% 
   select(ID, pop_num, X16)
 data <- data$ancest_df %>% 
   filter(Pop %in% 1:2) %>% 
