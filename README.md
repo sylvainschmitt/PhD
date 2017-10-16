@@ -7,4 +7,4 @@ Documentation
 -------------
 
 -   Symphonia preliminary analysis:
-    -   <https://sylvainschmitt.github.io/TROLL/preliminary>
+    -   <https://sylvainschmitt.github.io/PhD/preliminary>
