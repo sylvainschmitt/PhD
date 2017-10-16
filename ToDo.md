@@ -3,10 +3,11 @@
 1. Materials to collect
 1. "Traits" for morphological character matrix
 1. Define individuals to sample
+1. Rope and weights command for bigshot
 
 # Environments
 
-1. Morphotype and Genotype association to environment (Water table, DEM and derivates)(GbS genotypes)
+1. Morphotype and Genotype association to environment (DEM and derivates)(GbS genotypes)
 1. Proxy of water table map with DEM
 
 # Genetic
