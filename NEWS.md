@@ -1,3 +1,8 @@
+# PhD 0.1.9009
+
+- Internship subject first draft
+- subject third version begining, introducing individual general scheme
+
 # PhD 0.1.9008
 
 - Morphotype and Genotype association to environment Water table depth
