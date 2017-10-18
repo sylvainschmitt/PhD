@@ -1,5 +1,12 @@
 # PhD 0.1.9009
 
+- Symphonia preliminary analysis growth model following Herault et al, 2010
+- subject third version introduction v1
+- subject third version model description begining
+- subject third version litterature review begining
+
+# PhD 0.1.9009
+
 - Internship subject first draft
 - subject third version begining, introducing individual general scheme
 

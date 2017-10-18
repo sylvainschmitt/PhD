@@ -614,6 +614,129 @@ mcmc_trace(as.matrix(fit), facet_args = list(labeller = label_parsed))
 
 ```{r P0}
 GGally::ggpairs(data.frame(as.matrix(fit)[,1:3]))
+rm(list = ls()) ; gc()
+```
+
+Growth 2
+==================
+
+Column 1 {data-width=200}
+-------------------------------------
+
+> To test the effect of gaps on individual tree growth inside *Symphonia* species complex I used the model proposed by @Herault2010:
+$$growth_i \sim \mathcal{N}(\mu*\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta);\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+where the growth between 1988 and 1992 ($growth$ in $cm$) of an individual $i$ depend on its distance to logging gaps $j$ ($d_{i,j}$ in $m$) and the logging gap surface ($S_j$ in $m$). $\mu$, $\alpha$, and $\beta$ represents are the disturbance parameters. A nul $\alpha$ or $\beta$ indicates a nul effect of logging gaps distance or surface.
+
+```{r M2}
+# fit <- stan(file = file.path(mpath, 'M2.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M2.Rdata'))
+load(file.path(mpath, 'M2.Rdata'))
+pars <- c("mu", "alpha", "beta", "sigma") #
+# pars <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),c('alpha', 'beta', 'gamma', 'sigma')]
+```
+
+Column 2 {data-width=200}
+-------------------------------------
+
+>
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R2}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters markov chains.
+
+```{r C2}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P2}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
+```
+
+
+Growth 3
+==================
+
+Column 1 {data-width=200}
+-------------------------------------
+> To test the effect of gaps on individual tree growth inside *Symphonia* species complex I used the model proposed by @Herault2010:
+$$growth_i \sim \mathcal{N}(\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta);\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+where the growth between 1988 and 1992 ($growth$ in $cm$) of an individual $i$ depend on its distance to logging gaps $j$ ($d_{i,j}$ in $m$) and the logging gap surface ($S_j$ in $m$). $\alpha$, and $\beta$ represents are the disturbance parameters. A nul $\alpha$ or $\beta$ indicates a nul effect of logging gaps distance or surface.
+
+```{r M3}
+# fit <- stan(file = file.path(mpath, 'M3.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M3.Rdata'))
+load(file.path(mpath, 'M3.Rdata'))
+pars <- c("alpha", "beta", "sigma")
+# pars <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),c('alpha', 'beta', 'gamma', 'sigma')]
+```
+
+Column 2 {data-width=200}
+-------------------------------------
+
+>
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R3}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters markov chains.
+
+```{r C3}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P3}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
+```
+
+Growth 4
+==================
+
+Column 1 {data-width=200}
+-------------------------------------
+> To test the effect of gaps on individual tree growth inside *Symphonia* species complex I used the model proposed by @Herault2010:
+$$growth_i \sim \mathcal{N}(\mu*\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta) + \omega;\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+where the growth between 1988 and 1992 ($growth$ in $cm$) of an individual $i$ depend on its distance to logging gaps $j$ ($d_{i,j}$ in $m$) and the logging gap surface ($S_j$ in $m$). $\mu$, $\alpha$, and $\beta$ represents are the disturbance parameters. A nul $\alpha$ or $\beta$ indicates a nul effect of logging gaps distance or surface.
+
+```{r M4}
+# fit <- stan(file = file.path(mpath, 'M4.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M4.Rdata'))
+load(file.path(mpath, 'M4.Rdata'))
+pars <- c("mu", "alpha", "beta", "omega", "sigma")
+# pars <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),c('alpha', 'beta', 'gamma', 'sigma')]
+```
+
+Column 2 {data-width=200}
+-------------------------------------
+
+>
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R4}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters markov chains.
+
+```{r C4}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P4}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
 ```
 
 References
