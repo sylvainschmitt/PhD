@@ -1,3 +1,8 @@
+# PhD 0.1.9010
+
+- growth models
+- sampling
+
 # PhD 0.1.9009
 
 - Symphonia preliminary analysis growth model following Herault et al, 2010

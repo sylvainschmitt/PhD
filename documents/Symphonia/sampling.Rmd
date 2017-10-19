@@ -1,0 +1,331 @@
+---
+title: "Sampling"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(rgdal)
+library(raster)
+library(leaflet)
+library(starmie)
+library(rstan)
+library(bayesplot)
+library(abind)
+library(tidyverse)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+# Intro
+
+##
+
+### To Do
+
+* Order big shot weights and rope
+* Order 50 mL centrifuge tubes (to replace those from the lab used for wood sample)
+* Order Eppendorf PCR tube 0.5 mL  (to replace those from the lab used for latex samples)
+* Book the car for the first week (mail Carole and GHP)
+* Book the car for following weeks next week (mail Carole and GHP)
+* Look for sattelite phone
+* Register in Paracou Charte
+* Prepare Dawkins index cheatsheets
+* Prepare protocol cheatsheets
+* Prepare maps
+* Prepare sampling sheets
+
+##
+
+### Planning
+
+* Starting from $30^{th}$ of October
+* During 25 to 30 days
+* End between $4^{th}$ of December and $11^{th}$ of December
+* Sampling from 7 AM until 3 PM
+* Fresh measurement and herbarium preparation to finsih the day
+
+# Sampling
+
+##
+
+### Material
+
+* Big Shot
+* Helmets
+* Big shot weights
+* Big shot rope
+* Bag for big shot rope
+* Sécateur
+* Micromêtre
+* Spad
+* Labels
+* Ziplocks
+* Tea bags
+* Silicagel
+* Black plastic bag
+* Tissue
+* Water spray
+* Tubes filled with for wood
+* Eppendorf for latex
+* Jumelles
+* Dawkins index cheatsheet
+* Protocol cheatsheet
+* Maps
+* Sampling sheets
+* Wite paper
+* Pens
+* Markers for leaves
+
+##
+
+### Protocol
+
+*Prepare bags the day before*
+
+* Note the date
+* Note the tree code (Plot/Square/Id + idArbre)
+* Evaluate tree Dawkins index
+* Sample if possible canopy sun leaves
+* Note the time
+* Note the position of the sampled branch in the tree (at least sun or shadow)
+* Select four leaves for genetic/metabolites
+* Put the leaves for genetic/metabolite in a tea bag with silicagel inside a labelled ziplock
+* Put genetic/metabolite samples in a touc
+* Select 6 leaves for functional measurement
+* Select three for immediate measurement
+* Measure with SPAD in three points
+* Measure with micrometer in three points
+* Label measured leaves with marker
+* Label a ziplock
+* But a wet tissue in a ziplock
+* Fill a ziplock with CO2
+* Pull all the leaves in the ziplock
+* Put functional samples in a double black plastic bag 
+
+# Samples
+
+```{r trees}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% 
+  filter(campagne == 2015) %>% 
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0) %>% 
+  filter(n_parcelle != 18) %>% 
+  mutate(treatment = c(c('C', 'T1', 'T2', 'T3', 
+                         'T2', 'C', 'T1', 'T3',
+                         'T1', 'T2', 'C', 'T3'), 
+                       rep('B', 4))[n_parcelle])
+```
+
+```{r env}
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# limits
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+# plot(limits)
+# contour
+contour <- readOGR(file.path(path, 'topography'), "ContourLinePlots", verbose = F)
+contour <- spTransform(contour, CRSobj = crs)
+# plot(contour)
+# water table
+WT <- readOGR(file.path(path, 'hydrology'), "WaterTable", verbose = F)
+WT <- spTransform(WT, CRSobj = crs)
+WT_pal <- colorFactor('Blues', as.factor(WT$TypeWatEN), reverse = T)
+# plot(WT, col = WT_pal(WT$TypeWatEN))
+# topo
+topo <- readOGR(file.path(path, 'hydrology'), "TopographicLevels", verbose = F)
+topo <- spTransform(topo, CRSobj = crs)
+topo_pal <- colorFactor('Set3', as.factor(topo$TypeTopoEN), reverse = T)
+# plot(topo, col = topo_pal(topo$TypeTopoEN))
+# gaps
+gaps <- readOGR(file.path(path, 'logging'), "Gaps", verbose = F)
+gaps <- spTransform(gaps, CRSobj = crs)
+# plot(gaps, col = 'green')
+# Trees to plot
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+tree_pal <- colorFactor(c('darkgreen', 'black', 'firebrick'), as.factor(treesXY$espece))
+# plot(treesXY, col = tree_pal(treesXY$espece), pch = 16)
+```
+
+```{r interpolation}
+trees <- trees %>% 
+  mutate(WT = as.character((treesXY %over% WT)$TypeWatEN)) %>% 
+  mutate(WT = ifelse(is.na(WT), 'unknwon', WT)) %>% 
+  mutate(topo = as.character((treesXY %over% topo)$TypeTopoEN)) %>% 
+  mutate(topo = ifelse(is.na(topo), 'unknwon', topo)) %>% 
+  mutate(gap = as.numeric(!(is.na((treesXY %over% gaps)$Plot))))
+```
+
+##
+
+> Original headcounts
+
+### Species headcount
+
+```{r species}
+trees %>% 
+  reshape2::dcast(espece ~ 1) %>%
+  kable()
+```
+
+### Species and gaps headcount
+
+```{r gap}
+trees %>% 
+  reshape2::dcast(gap ~ espece) %>%
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Species and water table depth headcount
+
+```{r WT}
+trees %>% 
+  reshape2::dcast(WT ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Species and topography headcount
+
+```{r topo}
+trees %>% 
+  reshape2::dcast(topo ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Species and treatment headcount
+
+```{r treatment}
+trees %>% 
+  reshape2::dcast(treatment ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+###  Species and plot headcount
+
+```{r plot}
+trees %>% 
+  reshape2::dcast(n_parcelle ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+##
+
+```{r selection, cache=F}
+trees <- trees %>% 
+  mutate(sel = 0) %>% 
+  mutate(sel = ifelse(espece == "globulifera", 1, sel)) %>% 
+  mutate(sel = ifelse(gap == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "unknwon", 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "0 : accompanying water-table of the stream", 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "Watertable between 0 and 60 cm", 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "Watertable between 60 and 100 cm", 1, sel)) %>% 
+  mutate(sel = ifelse(topo == "unknwon", 1, sel))
+P <- row.names(trees[trees$topo == 'Plateau' & trees$sel != 1,])  
+S <- row.names(trees[trees$topo == 'Slope' & trees$sel != 1,])
+nb <- (400-sum(trees$sel))/2
+P <- sample(P, floor(nb))
+S <- sample(S, ceiling(nb))
+trees[P,]$sel <- 1
+trees[S,]$sel <- 1
+```
+
+> Number of trees selected: `r sum(trees$sel)`
+
+### Selected species headcount
+
+```{r speciessel, cache=F}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(espece ~ 1) %>%
+  kable()
+```
+
+### Selected species and gaps headcount
+
+```{r gapsel, cache=F}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(gap ~ espece) %>%
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Selected species and water table depth headcount
+
+```{r WTsel, cache=F}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(WT ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Selected species and topography headcount
+
+```{r toposel, cache=F}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(topo ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Selected species and treatment headcount
+
+```{r treatmentsel, cache=F}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(treatment ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+###  Selected species and plot headcount
+
+```{r plotsel, cache=F}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(n_parcelle ~ espece) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+# Maps
+
+# Lab
+
+## 
+
+### Material
+
+* Scanner
+* Balance
+* Étuve
+* Micromêtre
+
+## 
+
+### Protocol
+
+
