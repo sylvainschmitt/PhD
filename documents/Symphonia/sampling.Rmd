@@ -20,13 +20,14 @@ library(starmie)
 library(rstan)
 library(bayesplot)
 library(abind)
+library(ggrepel)
 library(tidyverse)
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
     cache = T, cache.lazy = F)
 ```
 
-# Intro
+# General
 
 ##
 
@@ -35,14 +36,20 @@ opts_chunk$set(
 * Order big shot weights and rope
 * Order 50 mL centrifuge tubes (to replace those from the lab used for wood sample)
 * Order Eppendorf PCR tube 0.5 mL  (to replace those from the lab used for latex samples)
-* Book the car for the first week (mail Carole and GHP)
 * Book the car for following weeks next week (mail Carole and GHP)
-* Look for sattelite phone
+* Check maps with Saint omer
 * Register in Paracou Charte
-* Prepare Dawkins index cheatsheets
 * Prepare protocol cheatsheets
-* Prepare maps
 * Prepare sampling sheets
+
+* Book the car for the first week (mail Carole and GHP)
+* Prepare maps
+* Look for sattelite phone
+* Prepare Dawkins index cheatsheets
+
+### Docs
+
+* [Dawkins index](/home/sylvain/Documents/Dawkins_index.pdf)
 
 ##
 
@@ -60,6 +67,8 @@ opts_chunk$set(
 
 ### Material
 
+* **Sattelite phone**
+* **GPS camera**
 * Big Shot
 * Helmets
 * Big shot weights
@@ -172,6 +181,33 @@ trees <- trees %>%
   mutate(gap = as.numeric(!(is.na((treesXY %over% gaps)$Plot))))
 ```
 
+```{r previous sampling}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/links/"
+SymphoGrowth <- read.csv(file.path(path, 'Symphonia_SymphoGrowth.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  mutate(individual = gsub('P', '', individual)) %>% 
+  separate(individual, c("n_parcelle", "n_carre", "n_arbre" ), '-', convert = T) %>% 
+  distinct() %>% 
+  mutate(SymphoGrowth = 1)
+GbS <- read.csv(file.path(path, 'Symphonia_Match_btw_Gbs_otherDatasets.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  select(Code_Par) %>% 
+  mutate(Code_Par = gsub('P', '', Code_Par)) %>% 
+  separate(Code_Par, c("n_parcelle", "n_carre", "n_arbre" ), '-', convert = T) %>% 
+  distinct() %>% 
+  mutate(GbS = 1)
+# CROPS <- read.csv(file.path(path, 'NA'),
+#                   dec=",", stringsAsFactors = F)
+# DROUGHT <- read.csv(file.path(path, 'NA'),
+#                   dec=",", stringsAsFactors = F)
+trees <- trees %>% 
+  left_join(GbS) %>% 
+  mutate(GbS = ifelse(is.na(GbS), 0, GbS)) %>% 
+  left_join(SymphoGrowth) %>% 
+  mutate(SymphoGrowth = ifelse(is.na(SymphoGrowth), 0, SymphoGrowth))
+rm(SymphoGrowth, GbS)
+```
+
 ##
 
 > Original headcounts
@@ -234,6 +270,8 @@ trees %>%
 ```{r selection, cache=F}
 trees <- trees %>% 
   mutate(sel = 0) %>% 
+  mutate(sel = ifelse(SymphoGrowth == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(GbS == 1, 1, sel)) %>% 
   mutate(sel = ifelse(espece == "globulifera", 1, sel)) %>% 
   mutate(sel = ifelse(gap == 1, 1, sel)) %>% 
   mutate(sel = ifelse(WT == "unknwon", 1, sel)) %>% 
@@ -248,6 +286,8 @@ P <- sample(P, floor(nb))
 S <- sample(S, ceiling(nb))
 trees[P,]$sel <- 1
 trees[S,]$sel <- 1
+treesXY@data$sel <- trees$sel
+rm(nb, P, S)
 ```
 
 > Number of trees selected: `r sum(trees$sel)`
@@ -313,6 +353,94 @@ trees %>%
 
 # Maps
 
+### Dynamic map of selected individuals
+
+```{r selected}
+sel_pal <-colorBin(c('blue', 'red'), trees$sel)
+leaflet() %>%
+  addPolygons(data = limits, fillOpacity = 0,
+              opacity = 0.5, col = 'black') %>% 
+  addCircles(data = treesXY, fillOpacity = 0.6,
+             col = sel_pal(trees$sel), radius= ~circonf/25,
+             label = ~as.character(n_arbre)) %>% 
+  addLegend(colors = c('blue', 'red'), 
+            labels = c('not selected', 'selected'),
+            title = 'Sampling')
+```
+
+### Maps to be printed
+
+```{r maps functions}
+rotateProj = function(spobj, angle) {
+    boxpts = SpatialPoints(t(bbox(spobj)), proj4string = CRS(proj4string(spobj)))
+    boxLL = bbox(spTransform(boxpts, CRS("+init=epsg:4326")))
+    llc = apply(boxLL, 1, mean)
+    prj = paste0("+proj=omerc +lat_0=", llc[2], " +lonc=", llc[1], " +alpha=", 
+        angle, " +gamma=0.0 +k=1.000000 +x_0=0.000 +y_0=0.000 +ellps=WGS84 +units=m ")
+    CRS(prj)
+}
+find_angle <- function(spobj){
+  spobj <- subset(spobj, Subplot == unique(spobj$Subplot)[1])
+  spobj <- fortify(spobj) %>% 
+    filter(long == min(long) | lat == min(lat)) %>% 
+    select(long, lat) %>% 
+    distinct()
+  row.names(spobj) <- c('A', 'B')
+  spobj['C',] <- apply(spobj, 2, min)
+  Pab <- sqrt(sum(apply(spobj[c('A', 'B'),], 2, diff)^2))
+  Pac <- sqrt(sum(apply(spobj[c('A', 'C'),], 2, diff)^2))
+  Pbc <- sqrt(sum(apply(spobj[c('B', 'C'),], 2, diff)^2))
+  angle <- acos((Pab^2 + Pac^2 - Pbc^2) / (2 * Pab * Pac))
+  angle <- angle*180/pi
+}
+make_map <- function(limits, treesXY, contour, p, c){
+  limits_plot <-  subset(limits, Plot == p)
+  limits_plot <-  subset(limits_plot, Subplot == c)
+  if(p != 16)
+    limits_plot <-  subset(limits_plot, TypeSub == "Subplots")
+  else
+    limits_plot <-  subset(limits_plot, TypeSub == "SubplotsP16")
+  # newProj <- rotateProj(limits_plot, find_angle(limits_plot))
+  # limits_plot <- spTransform(limits_plot, newProj)
+  treesXY_plot <- subset(treesXY, n_parcelle == p)
+  treesXY_plot <- subset(treesXY_plot, n_carre == c)
+  # treesXY_plot <- spTransform(treesXY_plot, newProj)
+  # contour_plot <- spTransform(contour, newProj)
+  contour_plot <- crop(contour, extent(limits_plot))
+  ggplot() +
+    geom_polygon(data = fortify(limits_plot),
+                 aes(long, lat, group=group),
+                 fill = "transparent", colour = "black", alpha = 0.2) +
+    geom_polygon(data = fortify(contour_plot),
+                 aes(long, lat, group=group),
+                 colour = "grey", alpha = 0) +
+    geom_point(data = as.data.frame(treesXY_plot),
+               aes(x = Xutm, y = Yutm, size=circonf/pi*100, colour = sel)) +
+    geom_text_repel(data = as.data.frame(treesXY_plot),
+                    aes(Xutm, Yutm, 
+                        label = n_arbre)) +
+    ggtitle(paste('Parcelle', p, 'carré', c)) +
+    coord_equal() +
+    theme(axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),legend.position="none",
+          panel.background=element_blank(),panel.border=element_blank(),panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),plot.background=element_blank())
+}
+```
+
+```{r maps, fig.height=12, fig.width=12}
+ind <- trees %>% 
+  select(n_parcelle, n_carre) %>% 
+  distinct() %>% 
+  arrange(n_parcelle, n_carre)
+maps <- apply(ind, 1, function(x) make_map(limits, treesXY, contour, x[1], x[2]))
+names(maps) <- unlist(ind %>% transmute(paste0('P', n_parcelle, '-', n_carre)))
+cowplot::plot_grid(maps$`P1-1`, maps$`P1-2`,
+                   maps$`P1-3`, maps$`P1-4`)
+```
+
 # Lab
 
 ## 
@@ -323,9 +451,9 @@ trees %>%
 * Balance
 * Étuve
 * Micromêtre
+* protocol cheatsheets
+* Fresh measurements sheets
 
 ## 
 
 ### Protocol
-
-

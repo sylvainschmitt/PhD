@@ -1,3 +1,7 @@
+# PhD 0.1.9011
+
+- sampling maps
+
 # PhD 0.1.9010
 
 - growth models
