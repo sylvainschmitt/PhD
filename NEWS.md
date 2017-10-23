@@ -1,3 +1,8 @@
+# PhD 0.1.9013
+
+- subject 3 model description and more structure
+- growth predictions and model interpretations
+
 # PhD 0.1.9012
 
 - sampling vf 1

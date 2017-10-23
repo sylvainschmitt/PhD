@@ -1,3 +1,7 @@
+# **Priorities**
+
+1. **Concept document and scheme**
+
 # Sampling
 
 # Environments
@@ -19,16 +23,10 @@
 # Others
 
 1. Writting master 2 subject on *Symphonia* functional traits intracomplex variability
-1. CEBA/ATT fundings
-1. Concept document and scheme
 
 # In waiting
 
-- Amazomics link (number, individuals) *@Niklas*
-- Flag link (number, individual) *@Niklas*
 - Paracou gaps map of 1992 (both control and treatments) *@Aurélie*
-- Regional genetic structure in French Guiana (AFLPs) - to decide if sampling will be done in Paracou, all plots, or in Paracou + one or more Guyafor sites *@Caroline*
-- Comparison of Structure assignement proportions based on GbS, CROPS, SSRs to identify conflictive assignments *@Myriam*
 
 # Questions
 

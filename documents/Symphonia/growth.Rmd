@@ -95,18 +95,18 @@ where the growth between 1988 and 1992 ($growth$ in $cm$) of an individual $i$ d
 
 ```{r}
 mtab <- data.frame(
-  M = c('$M_{\\mu, \\alpha, \\beta}$', 
-        '$M_{\\alpha, \\beta}$', 
+  M = c('$M_{\\alpha, \\beta}$', 
+        '$M_{\\mu, \\alpha, \\beta}$', 
         '$M_{\\mu, \\alpha, \\beta, \\omega}$'),
   Model = c(
-    '$growth_i \\sim \\mathcal{N}(\\mu*\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta);\\sigma)$',
     '$growth_i \\sim \\mathcal{N}(\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta);\\sigma)$',
+    '$growth_i \\sim \\mathcal{N}(\\mu*\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta);\\sigma)$',
     '$growth_i \\sim \\mathcal{N}(\\mu*\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta)+\\omega;\\sigma)$'
   )
 )
 mtab$M <- as.character(mtab$M)
 mtab$Model <- as.character(mtab$Model)
-row.names(mtab) <- c('Mmab', 'Mab', 'Mmabo')
+row.names(mtab) <- c('Mab', 'Mmab', 'Mmabo')
 kable(mtab, row.names = F)
 ```
 
@@ -125,7 +125,6 @@ leaflet() %>%
     title = "log of distance\nto logging gaps")
 rm(d, treesXY)
 ```
-
 
 # $M_{log}$
 
@@ -185,7 +184,7 @@ mcmc_trace(as.matrix(fit), facet_args = list(labeller = label_parsed))
 
 ## Column 2 {data-width=200}
 
-> $$growth = e^{`r round(pars['alpha'],2)`*log(d_{gaps}+1) + `r round(pars['beta'],2)`*dbh_{1988} + `r round(pars['gamma'],2)`*log(d_{gaps}+1)*dbh_{1988}} $$
+> $$M_{log}:~~growth \sim log \mathcal{N}(\alpha*log(d_{gaps}+1) + \beta*dbh_{1998} + \gamma*log(d_{gaps}+1)*dbh_{1998}, \sigma) $$
 
 ### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
 
@@ -197,6 +196,76 @@ mcmc_areas(as.matrix(fit)[,1:3],  prob = 0.8)
 
 ```{r P0}
 GGally::ggpairs(data.frame(as.matrix(fit)[,1:3]))
+```
+
+# `r mtab['Mab',1]`
+
+```{r M3}
+# fit <- stan(file = file.path(mpath, 'M3.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M3.Rdata'))
+load(file.path(mpath, 'M3.Rdata'))
+pars <- c("alpha", "beta", "sigma")
+pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+> The model seems to have correctly converged but the pair plot shows a strong correlation between $\alpha$ and $\beta$ parameters certainly due to a confounded factor. This correlation have ot be corrected including more parameters.
+
+### Model Predictions.
+
+```{r M3 pred}
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000,
+#          mean = sum(exp(-pars_val[1]*(d/dmax))*(s/smax)^pars_val[2]),
+#          sd = pars_val[3])
+# pred<- sapply(seq_len(mdata$I), function(i)
+#   apply(as.matrix(fit)[,pars], 1, function(p)
+#     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
+# pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
+# pred$mean <- sapply(seq_len(mdata$I), function(i)
+#                     sum(exp(-pars_val[1]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[2]))
+# pred$gaps <- apply(D, 1, min)
+# pred$dbh <- mdata$dbh
+# names(pred)[1:2] <- c('5%', '95%')
+# save(pred, file = file.path(mpath, 'M3p.Rdata'))
+load(file.path(mpath, 'M3p.Rdata'))
+ggplot(data.frame(dgaps = apply(D, 1, min), 
+                  growth = trees$growth),
+       aes(dgaps, growth)) +
+  geom_ribbon(aes(x = pred$gaps, ymin = pred$`5%`, ymax = pred$`95%`), color = 'grey', alpha = 0.2) +
+  geom_line(aes(x = pred$gaps, y = pred$`5%`, color = '5%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$`95%`, color = '95%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$mean, color = 'mean'), linetype = 2) +
+  geom_point() +
+  xlab('distance to the closest logging gap (m)') +
+  ylab('growth between 1988 and 1992 (cm)') +
+  scale_color_manual(name = 'Model',
+                     values = c('5%' = 'black',
+                                '95%' = 'black',
+                                'mean' = 'red'))
+```
+
+### Parameters markov chains.
+
+```{r C3}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Mab',], collapse = ': ')`
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R3}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P3}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
 ```
 
 # `r mtab['Mmab',1]`
@@ -211,21 +280,21 @@ pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
 
 ## Column 1 {data-width=200}
 
-> 
+> The model seems to have correctly converged besides the log likelyhood seems to be constrained to a maximal value. Parameters seem correctly uncorrelated. $\alpha$ and $\beta$ present both relatively high values significantly non null indicating a strong effect of logging gaps distance and surface on *Symphonia* tree growth.
 
 ### Model Predictions.
 
 ```{r M2 pred}
-P <- function(d, s, dmax, smax, pars_val)
-  rnorm(1000, 
-         mean = pars_val[1] + sum(exp(-pars_val[2]*(d/dmax))*(s/smax)^pars_val[3]),
-         sd = pars_val[4])
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000, 
+#          mean = pars_val[1]*sum(exp(-pars_val[2]*(d/dmax))*(s/smax)^pars_val[3]),
+#          sd = pars_val[4])
 # pred<- sapply(seq_len(mdata$I), function(i)
 #   apply(as.matrix(fit)[,pars], 1, function(p)
 #     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
 # pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
 # pred$mean <- sapply(seq_len(mdata$I), function(i)
-#                     pars_val[1] + sum(exp(-pars_val[2]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[3]))
+#                     pars_val[1]*sum(exp(-pars_val[2]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[3]))
 # pred$gaps <- apply(D, 1, min)
 # pred$dbh <- mdata$dbh
 # names(pred)[1:2] <- c('5%', '95%')
@@ -269,41 +338,6 @@ mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
 GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
 ```
 
-
-# `r mtab['Mab',1]`
-
-```{r M3}
-# fit <- stan(file = file.path(mpath, 'M3.stan'), data = mdata, chains = 1)
-# save(fit, file = file.path(mpath, 'M3.Rdata'))
-load(file.path(mpath, 'M3.Rdata'))
-pars <- c("alpha", "beta", "sigma")
-# pars <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),c('alpha', 'beta', 'gamma', 'sigma')]
-```
-
-## Column 1 {data-width=200}
-
-### Parameters markov chains.
-
-```{r C3}
-mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
-```
-
-## Column 2 {data-width=200}
-
-> `r paste(mtab['Mab',], collapse = ': ')`
-
-### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
-
-```{r R3}
-mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
-```
-
-### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
-
-```{r P3}
-GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
-```
-
 # `r mtab['Mmabo',1]`
 
 ```{r M4}
@@ -311,12 +345,46 @@ GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
 # save(fit, file = file.path(mpath, 'M4.Rdata'))
 load(file.path(mpath, 'M4.Rdata'))
 pars <- c("mu", "alpha", "beta", "omega", "sigma")
-# pars <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),c('alpha', 'beta', 'gamma', 'sigma')]
+pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
 ```
 
 ## Column 1 {data-width=200}
 
-> 
+> The model seems to have correctly converged besides a spread and high distribution of $\alpha$ parameter. This time $\beta$ parameter is relatively low indicating a lower impact of surface on tree growth besides still non null. Hte high value of $\alpha$ question the fact of a binary effect regarding tree growth in relation to logging gaps. Anyway model $M_{\mu,\alpha,\beta,\omega}$ has a higher likelyhood than $M_{\mu,\alpha,\beta}$, consequently with similar convergence and with less parameters model $M_{\mu,\alpha,\beta}$ should be prefered.
+
+### Model Predictions.
+
+```{r M4 pred}
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000,
+#          mean = pars_val[1]*sum(exp(-pars_val[2]*(d/dmax))*(s/smax)^pars_val[3])+pars_val[4],
+#          sd = pars_val[5])
+# pred<- sapply(seq_len(mdata$I), function(i)
+#   apply(as.matrix(fit)[,pars], 1, function(p)
+#     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
+# pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
+# pred$mean <- sapply(seq_len(mdata$I), function(i)
+#                     pars_val[1]*sum(exp(-pars_val[2]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[3])+pars_val[4])
+# pred$gaps <- apply(D, 1, min)
+# pred$dbh <- mdata$dbh
+# names(pred)[1:2] <- c('5%', '95%')
+# save(pred, file = file.path(mpath, 'M4p.Rdata'))
+load(file.path(mpath, 'M4p.Rdata'))
+ggplot(data.frame(dgaps = apply(D, 1, min), 
+                  growth = trees$growth),
+       aes(dgaps, growth)) +
+  geom_ribbon(aes(x = pred$gaps, ymin = pred$`5%`, ymax = pred$`95%`), color = 'grey', alpha = 0.2) +
+  geom_line(aes(x = pred$gaps, y = pred$`5%`, color = '5%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$`95%`, color = '95%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$mean, color = 'mean'), linetype = 2) +
+  geom_point() +
+  xlab('distance to the closest logging gap (m)') +
+  ylab('growth between 1988 and 1992 (cm)') +
+  scale_color_manual(name = 'Model',
+                     values = c('5%' = 'black',
+                                '95%' = 'black',
+                                'mean' = 'red'))
+```
 
 ### Parameters markov chains.
 
