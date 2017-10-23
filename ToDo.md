@@ -1,10 +1,5 @@
 # Sampling
 
-1. Materials to collect
-1. "Traits" for morphological character matrix
-1. Define individuals to sample
-1. Rope and weights command for bigshot
-
 # Environments
 
 1. Morphotype and Genotype association to environment (DEM and derivates)(GbS genotypes)

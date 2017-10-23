@@ -33,23 +33,21 @@ opts_chunk$set(
 
 ### To Do
 
+* Get *Symphonia* ids from DROUGHT
+* Get answer for the car for the first week (mail Carole and GHP)
 * Order big shot weights and rope
 * Order 50 mL centrifuge tubes (to replace those from the lab used for wood sample)
 * Order Eppendorf PCR tube 0.5 mL  (to replace those from the lab used for latex samples)
 * Book the car for following weeks next week (mail Carole and GHP)
-* Check maps with Saint omer
-* Register in Paracou Charte
-* Prepare protocol cheatsheets
-* Prepare sampling sheets
-
-* Book the car for the first week (mail Carole and GHP)
-* Prepare maps
-* Look for sattelite phone
-* Prepare Dawkins index cheatsheets
+* Buy/Find journal, touc, porte vue, enveloppes, plastic boxes
 
 ### Docs
 
-* [Dawkins index](/home/sylvain/Documents/Dawkins_index.pdf)
+* [Field protocol](https://docs.google.com/document/d/1yjYXe50mYG95mUjw61SujkdDBxzIDkbvcJbXg8w6fPo/edit?usp=sharing)
+* [Fresh measurements protocol](https://docs.google.com/document/d/1S-0O5ndADJhtXlrtz6qgRfYZtfS9f1qOgvFlaEF6P8M/edit?usp=sharing)
+* [Symphonia individuals](https://docs.google.com/spreadsheets/d/13BKXG1ETpTvQwcpYcGoTK9eTU002PSWa4Cjyox-OanA/edit?usp=sharing)
+* [Symphonia leaves](https://docs.google.com/spreadsheets/d/1QycHaAmsbBGd76Ma088RXxvFrWT5c_9Md3Eqqob286Q/edit?usp=sharing)
+* [Dawkins index](https://drive.google.com/file/d/0B-lAe8V-ri2SUVZrRGJpQUhUVkU/view?usp=sharing)
 
 ##
 
@@ -61,65 +59,24 @@ opts_chunk$set(
 * Sampling from 7 AM until 3 PM
 * Fresh measurement and herbarium preparation to finsih the day
 
-# Sampling
+### Maps
 
-##
-
-### Material
-
-* **Sattelite phone**
-* **GPS camera**
-* Big Shot
-* Helmets
-* Big shot weights
-* Big shot rope
-* Bag for big shot rope
-* Sécateur
-* Micromêtre
-* Spad
-* Labels
-* Ziplocks
-* Tea bags
-* Silicagel
-* Black plastic bag
-* Tissue
-* Water spray
-* Tubes filled with for wood
-* Eppendorf for latex
-* Jumelles
-* Dawkins index cheatsheet
-* Protocol cheatsheet
-* Maps
-* Sampling sheets
-* Wite paper
-* Pens
-* Markers for leaves
-
-##
-
-### Protocol
-
-*Prepare bags the day before*
-
-* Note the date
-* Note the tree code (Plot/Square/Id + idArbre)
-* Evaluate tree Dawkins index
-* Sample if possible canopy sun leaves
-* Note the time
-* Note the position of the sampled branch in the tree (at least sun or shadow)
-* Select four leaves for genetic/metabolites
-* Put the leaves for genetic/metabolite in a tea bag with silicagel inside a labelled ziplock
-* Put genetic/metabolite samples in a touc
-* Select 6 leaves for functional measurement
-* Select three for immediate measurement
-* Measure with SPAD in three points
-* Measure with micrometer in three points
-* Label measured leaves with marker
-* Label a ziplock
-* But a wet tissue in a ziplock
-* Fill a ziplock with CO2
-* Pull all the leaves in the ziplock
-* Put functional samples in a double black plastic bag 
+* [Parcelle 1](./symphonia_save/maps/Parcelle1.png)
+* [Parcelle 2](./symphonia_save/maps/Parcelle2.png)
+* [Parcelle 3](./symphonia_save/maps/Parcelle3.png)
+* [Parcelle 4](./symphonia_save/maps/Parcelle4.png)
+* [Parcelle 5](./symphonia_save/maps/Parcelle5.png)
+* [Parcelle 6](./symphonia_save/maps/Parcelle6.png)
+* [Parcelle 7](./symphonia_save/maps/Parcelle7.png)
+* [Parcelle 8](./symphonia_save/maps/Parcelle8.png)
+* [Parcelle 9](./symphonia_save/maps/Parcelle9.png)
+* [Parcelle 10](./symphonia_save/maps/Parcelle10.png)
+* [Parcelle 11](./symphonia_save/maps/Parcelle11.png)
+* [Parcelle 12](./symphonia_save/maps/Parcelle12.png)
+* [Parcelle 13](./symphonia_save/maps/Parcelle13.png)
+* [Parcelle 14](./symphonia_save/maps/Parcelle14.png)
+* [Parcelle 15](./symphonia_save/maps/Parcelle15.png)
+* [Parcelle 16](./symphonia_save/maps/Parcelle16.png)
 
 # Samples
 
@@ -182,7 +139,7 @@ trees <- trees %>%
 ```
 
 ```{r previous sampling}
-path <- "/home/sylvain//Documents/BIOGECO/PhD/data/links/"
+path <- "/home/sylvain/Documents/BIOGECO/PhD/data/links/"
 SymphoGrowth <- read.csv(file.path(path, 'Symphonia_SymphoGrowth.csv'),
                   dec=",", stringsAsFactors = F) %>% 
   mutate(individual = gsub('P', '', individual)) %>% 
@@ -196,15 +153,21 @@ GbS <- read.csv(file.path(path, 'Symphonia_Match_btw_Gbs_otherDatasets.csv'),
   separate(Code_Par, c("n_parcelle", "n_carre", "n_arbre" ), '-', convert = T) %>% 
   distinct() %>% 
   mutate(GbS = 1)
-# CROPS <- read.csv(file.path(path, 'NA'),
-#                   dec=",", stringsAsFactors = F)
+CROPS <- read.csv(file.path(path, 'Symphonia_CROPS.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  mutate(individual = gsub('P', '', individual)) %>% 
+  separate(individual, c("n_parcelle", "n_carre", "n_arbre" ), '-', convert = T) %>% 
+  distinct() %>% 
+  mutate(CROPS = 1)
 # DROUGHT <- read.csv(file.path(path, 'NA'),
 #                   dec=",", stringsAsFactors = F)
 trees <- trees %>% 
   left_join(GbS) %>% 
   mutate(GbS = ifelse(is.na(GbS), 0, GbS)) %>% 
   left_join(SymphoGrowth) %>% 
-  mutate(SymphoGrowth = ifelse(is.na(SymphoGrowth), 0, SymphoGrowth))
+  mutate(SymphoGrowth = ifelse(is.na(SymphoGrowth), 0, SymphoGrowth)) %>% 
+  left_join(CROPS) %>% 
+  mutate(CROPS = ifelse(is.na(CROPS), 0, CROPS))
 rm(SymphoGrowth, GbS)
 ```
 
@@ -267,11 +230,12 @@ trees %>%
 
 ##
 
-```{r selection, cache=F}
+```{r selection}
 trees <- trees %>% 
   mutate(sel = 0) %>% 
   mutate(sel = ifelse(SymphoGrowth == 1, 1, sel)) %>% 
   mutate(sel = ifelse(GbS == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(CROPS == 1, 1, sel)) %>% 
   mutate(sel = ifelse(espece == "globulifera", 1, sel)) %>% 
   mutate(sel = ifelse(gap == 1, 1, sel)) %>% 
   mutate(sel = ifelse(WT == "unknwon", 1, sel)) %>% 
@@ -294,7 +258,7 @@ rm(nb, P, S)
 
 ### Selected species headcount
 
-```{r speciessel, cache=F}
+```{r speciessel}
 trees %>% 
   filter(sel == 1) %>% 
   reshape2::dcast(espece ~ 1) %>%
@@ -303,7 +267,7 @@ trees %>%
 
 ### Selected species and gaps headcount
 
-```{r gapsel, cache=F}
+```{r gapsel}
 trees %>% 
   filter(sel == 1) %>% 
   reshape2::dcast(gap ~ espece) %>%
@@ -313,7 +277,7 @@ trees %>%
 
 ### Selected species and water table depth headcount
 
-```{r WTsel, cache=F}
+```{r WTsel}
 trees %>% 
   filter(sel == 1) %>% 
   reshape2::dcast(WT ~ espece) %>% 
@@ -323,7 +287,7 @@ trees %>%
 
 ### Selected species and topography headcount
 
-```{r toposel, cache=F}
+```{r toposel}
 trees %>% 
   filter(sel == 1) %>% 
   reshape2::dcast(topo ~ espece) %>% 
@@ -333,7 +297,7 @@ trees %>%
 
 ### Selected species and treatment headcount
 
-```{r treatmentsel, cache=F}
+```{r treatmentsel}
 trees %>% 
   filter(sel == 1) %>% 
   reshape2::dcast(treatment ~ espece) %>% 
@@ -343,7 +307,7 @@ trees %>%
 
 ###  Selected species and plot headcount
 
-```{r plotsel, cache=F}
+```{r plotsel}
 trees %>% 
   filter(sel == 1) %>% 
   reshape2::dcast(n_parcelle ~ espece) %>% 
@@ -356,19 +320,17 @@ trees %>%
 ### Dynamic map of selected individuals
 
 ```{r selected}
-sel_pal <-colorBin(c('blue', 'red'), trees$sel)
+sel_pal <-colorBin(c('transparent', 'black'), trees$sel)
 leaflet() %>%
   addPolygons(data = limits, fillOpacity = 0,
               opacity = 0.5, col = 'black') %>% 
-  addCircles(data = treesXY, fillOpacity = 0.6,
-             col = sel_pal(trees$sel), radius= ~circonf/25,
+  addCircles(data = treesXY, col = 'black', fillOpacity = 1,
+             fillCol = sel_pal(trees$sel), radius= ~circonf/25,
              label = ~as.character(n_arbre)) %>% 
-  addLegend(colors = c('blue', 'red'), 
+  addLegend(colors = c('transparent', 'black'), 
             labels = c('not selected', 'selected'),
             title = 'Sampling')
 ```
-
-### Maps to be printed
 
 ```{r maps functions}
 rotateProj = function(spobj, angle) {
@@ -392,22 +354,23 @@ find_angle <- function(spobj){
   Pbc <- sqrt(sum(apply(spobj[c('B', 'C'),], 2, diff)^2))
   angle <- acos((Pab^2 + Pac^2 - Pbc^2) / (2 * Pab * Pac))
   angle <- angle*180/pi
+  angles <- c(angle, angle-90)
+  angle <- angles[which(sapply(c(angle, angle-90), abs) == min(sapply(c(angle, angle-90), abs)))]
+  return(angle)
 }
-make_map <- function(limits, treesXY, contour, p, c){
+make_map <- function(limits, treesXY, contour, p){
   limits_plot <-  subset(limits, Plot == p)
-  limits_plot <-  subset(limits_plot, Subplot == c)
   if(p != 16)
     limits_plot <-  subset(limits_plot, TypeSub == "Subplots")
   else
     limits_plot <-  subset(limits_plot, TypeSub == "SubplotsP16")
-  # newProj <- rotateProj(limits_plot, find_angle(limits_plot))
-  # limits_plot <- spTransform(limits_plot, newProj)
+  newProj <- rotateProj(limits_plot, find_angle(limits_plot))
+  limits_plot <- spTransform(limits_plot, newProj)
   treesXY_plot <- subset(treesXY, n_parcelle == p)
-  treesXY_plot <- subset(treesXY_plot, n_carre == c)
-  # treesXY_plot <- spTransform(treesXY_plot, newProj)
-  # contour_plot <- spTransform(contour, newProj)
-  contour_plot <- crop(contour, extent(limits_plot))
-  ggplot() +
+  treesXY_plot <- spTransform(treesXY_plot, newProj)
+  contour_plot <- spTransform(contour, newProj)
+  contour_plot <- crop(contour_plot, extent(limits_plot))
+  g <- ggplot() +
     geom_polygon(data = fortify(limits_plot),
                  aes(long, lat, group=group),
                  fill = "transparent", colour = "black", alpha = 0.2) +
@@ -415,45 +378,34 @@ make_map <- function(limits, treesXY, contour, p, c){
                  aes(long, lat, group=group),
                  colour = "grey", alpha = 0) +
     geom_point(data = as.data.frame(treesXY_plot),
-               aes(x = Xutm, y = Yutm, size=circonf/pi*100, colour = sel)) +
+               aes(x = Xutm, y = Yutm, size=circonf/pi*100,
+                   col = sel)) +
     geom_text_repel(data = as.data.frame(treesXY_plot),
                     aes(Xutm, Yutm, 
                         label = n_arbre)) +
-    ggtitle(paste('Parcelle', p, 'carré', c)) +
+    ggtitle(paste('Parcelle', p)) +
     coord_equal() +
     theme(axis.line=element_blank(),axis.text.x=element_blank(),
           axis.text.y=element_blank(),axis.ticks=element_blank(),
           axis.title.x=element_blank(),
           axis.title.y=element_blank(),legend.position="none",
           panel.background=element_blank(),panel.border=element_blank(),panel.grid.major=element_blank(),
-          panel.grid.minor=element_blank(),plot.background=element_blank())
+          panel.grid.minor=element_blank(),plot.background=element_blank()) +
+    scale_color_continuous(palette = colorBin( c('lightgrey', 'black'), domain = c(0,1))) +
+    ggsn::north(fortify(limits_plot), symbol = 12, 
+                scale = 0.05, anchor = c(x= 125, y = 140))
+  return(g)
 }
 ```
 
-```{r maps, fig.height=12, fig.width=12}
-ind <- trees %>% 
-  select(n_parcelle, n_carre) %>% 
-  distinct() %>% 
-  arrange(n_parcelle, n_carre)
-maps <- apply(ind, 1, function(x) make_map(limits, treesXY, contour, x[1], x[2]))
-names(maps) <- unlist(ind %>% transmute(paste0('P', n_parcelle, '-', n_carre)))
-cowplot::plot_grid(maps$`P1-1`, maps$`P1-2`,
-                   maps$`P1-3`, maps$`P1-4`)
+```{r maps}
+maps <- sapply(sort(unique(trees$n_parcelle)), 
+               function(x) make_map(limits, treesXY, contour, x),
+               simplify = F)
+names(maps) <- paste0('P', sort(unique(trees$n_parcelle)))
+# lapply(maps, function(x)
+#   ggsave(x, file = paste0(gsub(' ', '', x$labels$title), '.png'),
+#          path = './symphonia_save/maps/',
+#          width = 297, height = 420, unit = 'mm',
+#          dpi = 300))
 ```
-
-# Lab
-
-## 
-
-### Material
-
-* Scanner
-* Balance
-* Étuve
-* Micromêtre
-* protocol cheatsheets
-* Fresh measurements sheets
-
-## 
-
-### Protocol

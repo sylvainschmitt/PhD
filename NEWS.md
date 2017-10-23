@@ -1,3 +1,7 @@
+# PhD 0.1.9012
+
+- sampling vf 1
+
 # PhD 0.1.9011
 
 - sampling maps
