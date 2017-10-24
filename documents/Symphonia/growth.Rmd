@@ -21,6 +21,7 @@ library(rstan)
 library(bayesplot)
 library(abind)
 library(tidyverse)
+mpath <- "/home/sylvain/Documents/BIOGECO/PhD/documents/Symphonia/symphonia_models/"
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
     cache = T, cache.lazy = F)
@@ -78,7 +79,6 @@ mdata <- list(I = dim(trees)[1], # Nb of trees
               J = dim(gaps)[1], # Nb of gaps
               S = gaps$area/max(gaps$area), # gaps surface vector
               D = D/max(D)) #tree-gaps distance matrix
-mpath <- "/home/sylvain/Documents/BIOGECO/PhD/documents/Symphonia/symphonia_models/"
 rm(crs, path, correction, detect)
 ```
 

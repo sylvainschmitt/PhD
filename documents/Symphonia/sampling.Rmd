@@ -33,9 +33,6 @@ opts_chunk$set(
 
 ### To Do
 
-* Get *Symphonia* ids from DROUGHT
-* Get answer for the car for the first week (mail Carole and GHP)
-* Order big shot weights and rope
 * Order 50 mL centrifuge tubes (to replace those from the lab used for wood sample)
 * Order Eppendorf PCR tube 0.5 mL  (to replace those from the lab used for latex samples)
 * Book the car for following weeks next week (mail Carole and GHP)
@@ -159,16 +156,22 @@ CROPS <- read.csv(file.path(path, 'Symphonia_CROPS.csv'),
   separate(individual, c("n_parcelle", "n_carre", "n_arbre" ), '-', convert = T) %>% 
   distinct() %>% 
   mutate(CROPS = 1)
-# DROUGHT <- read.csv(file.path(path, 'NA'),
-#                   dec=",", stringsAsFactors = F)
+DROUGHT <- read.csv(file.path(path, 'Symphonia_DROUGHT.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  select(Plot, Carre, Arbre) %>% 
+  rename(n_parcelle = Plot, n_carre = Carre, n_arbre = Arbre) %>% 
+  distinct() %>% 
+  mutate(DROUGHT = 1)
 trees <- trees %>% 
   left_join(GbS) %>% 
   mutate(GbS = ifelse(is.na(GbS), 0, GbS)) %>% 
   left_join(SymphoGrowth) %>% 
   mutate(SymphoGrowth = ifelse(is.na(SymphoGrowth), 0, SymphoGrowth)) %>% 
   left_join(CROPS) %>% 
-  mutate(CROPS = ifelse(is.na(CROPS), 0, CROPS))
-rm(SymphoGrowth, GbS)
+  mutate(CROPS = ifelse(is.na(CROPS), 0, CROPS)) %>% 
+  left_join(DROUGHT) %>% 
+  mutate(DROUGHT = ifelse(is.na(DROUGHT), 0, DROUGHT))
+rm(SymphoGrowth, GbS, CROPS, DROUGHT)
 ```
 
 ##
@@ -236,6 +239,7 @@ trees <- trees %>%
   mutate(sel = ifelse(SymphoGrowth == 1, 1, sel)) %>% 
   mutate(sel = ifelse(GbS == 1, 1, sel)) %>% 
   mutate(sel = ifelse(CROPS == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(DROUGHT == 1, 1, sel)) %>% 
   mutate(sel = ifelse(espece == "globulifera", 1, sel)) %>% 
   mutate(sel = ifelse(gap == 1, 1, sel)) %>% 
   mutate(sel = ifelse(WT == "unknwon", 1, sel)) %>% 

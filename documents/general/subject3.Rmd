@@ -1,12 +1,18 @@
 ---
 title: Ecological genomics of niche exploitation and individual performance in tropical
   forest trees
-author: Sylvain Schmitt, Myriam Heuertz, Bruno Hérault, Niklas Tysklind
-output:
-  html_document:
-    theme: journal
-link-citations: yes
+author: "Sylvain Schmitt, Myriam Heuertz, Bruno Hérault, Niklas Tysklind"
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+output:
+  bookdown::html_document2:
+    theme: readable
+    toc: true
+    toc_float: yes
+    number_sections: false
+  bookdown::pdf_document2:
+    toc: false
+    number_sections: false
+link-citations: yes
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 ---
 
@@ -29,23 +35,29 @@ Earth present a lagre amount of terrestrial and marine ecosystems. Among theim, 
 
 Consequently, we want to include genetic diversity through a bottom-up study starting from indivdual to population instead of classical top-down studies going from communities to species and sometimes until individuals. Because interactions with the biotic and abiotic environement are ultimately based at the level of individuals, we want to discuss eco-evolutionary theories starting with individuals [@Violle2012]. We thus wish to discuss individual level diversity through ecology and evolution to participate to the question of biodiversity characteristics and causes. We want to use an integrative and dynamic model of the individual functionement in interaction with its population and environment through time coupled with a litterature review to explore this question.
 
-```{r, fig.height=10, fig.width=10, fig.cap='Figure 1. Model of individual functionement in interaction with its population and environment through time. *See model description paragraphs for more explanation.*'}
-include_graphics("./subject3_images/PhD3.png")
-```
+<!-- ![Model of individual functionement in interaction with its population and environment through time. See model description paragraphs for more explanation.](./subject3_images/PhD3.png) -->
 
 # Model description
 
-If we a consider an individual tree *A* (see figure 1A). *A* is constituted of a genome with different genes ($G_1,...G_I$). Genes are expressed and result in phenotypic or functional traits ($T_1,...T_J$) among biochemistry, physiolgy and morphology. All functional traits finally influence integrative traits represented by performance traits ($F_1,...F_K$) which directly plays on individual fitness ($w$). But all those step resulting in individual fitness through genes, traits and performance are influenced by their local environment. 
+If we a consider an individual tree *A* (see figure \@ref(fig:model)A). *A* is constituted of a genome with different genes ($G_1,...G_I$). Genes are expressed and result in phenotypic or functional traits ($T_1,...T_J$) among biochemistry, physiolgy and morphology. All functional traits finally influence integrative traits represented by performance traits ($F_1,...F_K$) which directly plays on individual fitness ($w$). But all those step resulting in individual fitness through genes, traits and performance are influenced by their local environment, either biotic or abiotic. 
 
-Now if we consider the same individual *A* inside its environment and its population (see figure 1B) with the environment presenting two habitats (blue and red), and the population two genotypes associated to each habitat (blue and red). Once the indivdual will have reached maturity to reproduce, the first step will be mating with partners through pollen, in the limit of reproductive barriers with sometimes mating between genotypes (blue and red individuals). After mating, individuals will disperse seeds which will established or not in the two habitats. Finally once established tree will grow until maturity to mate again and reproduce, closing the cycle. The whole cycle through reproduction, survival and growth performance traits will be the core of selection on individual fitness responsible of evolution of our population.
+Now if we consider the same individual *A* inside its environment and its population (see figure \@ref(fig:model)B) with the environment presenting two habitats (blue and red), and the population two genotypes associated to each habitat (blue and red). Once the indivdual will have reached maturity to reproduce, the first step will be mating. Mating will happen between individuals through pollen, in the limit of reproductive barriers, with sometimes mating between different genotypes (blue and red individuals). After mating, individuals will disperse seeds, which will established or not in the two habitats. Finally, once established, trees will grow until maturity to mate again and reproduce, closing the cycle. The whole cycle through reproduction, survival and growth performance traits will be the core of selection on individual fitness responsible of evolution of our population.
+
+```{r model, fig.height=10, fig.width=10, fig.cap='Model of individual functionement in interaction with its population and environment through time. *See model description paragraphs for more explanation.*'}
+include_graphics("./subject3_images/PhD3.png")
+```
 
 ## Genes
 
-* Part of the genome will be expressed in the transcriptome depending on individual ontogeny and environmental conditions. **Look into this.** 
+* Genetic local adaptation arise from new mutations, standing genetic variation and adaptive introgression [@Tigano2016].
+* Genome to transcriptome and traits ? Effect of ontogeny ? Effect of envrionment ?
+* Transcripts will result in molecules forming biochemistrial traits of the individual.
 
 ## Traits
 
-* This basic functional traits can be considered as primary traits. Interactions in individuals biochemistrial traits will then build individual physiological and morphological traits.
+* Traits variability will be shaped by: (i) genetic heritage, (ii) environment, (ii) ontogeny and (iv) random
+* Basic functional traits resulting from transcript expression can be considered as primary traits. Interactions in individuals biochemistrial traits will then be the basis for individual physiological and morphological traits.
+* Tropical tree genetic diversity [@Scotti2016] in combination to the environement results in phenotypic variability [@Albert2015] and ultimately to *in situ* performance differences [@Bec2015].
 
 ## Performance and fitness
 
@@ -54,22 +66,13 @@ Now if we consider the same individual *A* inside its environment and its popula
 ## Environment
 
 * Local environment is both abiotic (nutrients, water, light...) and biotic (competition, predation)
-
-## Genes to traits
-
-* Then those transcripts will be responsible for the creation of molecules forming biochemistrial traits of the individual.
-
-## Traits to performance
-
-## Environement effect
-
 * *On which level(s) is interacting the environment ?*
-* Local environment may change functional traits values with phenotypic plasticity.
 
 ## Mating
 
 * A first pre-zygotic barrier happens with all limits to individuals mating: (i) individuals maturity, (ii) flowering synchronization between individuals, (iii) common pollinator if needed, and (iv) distance reachability.
 * Mating can happen between individuals of close but different species [@Cannon2015] resulting in the mating between the two genotypes in figure 1B.
+* Tropical tree have great size, long life time, numerous seeds, large effective population size [@Brown2004], outcrossing mating system and and maintain a strong gene flow [@Hamrick1992; @Nybom2004]. Thus, neutral processes maintain tree diversity over time by connecting populations with high gene flow and large effective population, while adaptive processes lead to local adaptation on short times with an expected genetic differentiation at the loci underlying heritable traits [@Howe2003; @LeCorre2003].
 
 ## Seeds dispersion and establishment
 
@@ -77,11 +80,16 @@ Now if we consider the same individual *A* inside its environment and its popula
 * Seeds establishment will be limited by abiotic environment through environmental filtering, but we can imagine an hybrid due to mating with the second ecotype to established in the second ecotype thanks to genetic introgression.
 * Seeds establishment will be limited by biotic environment through the Jansen-Conell hypothesis.
 
-## Tree growth
+## Tree growth and survival
 
-## Conclusion
+## Conclusion: Performance & Selection
 
 * Interaction between Performance (Ecology) and Selection (Evolution) through fitness
+* Directional and balanced selection ?
+* Selection is driving speciation.
+* Before true phylogenetic species can be defined, populations can diverge into ecotypes due to local adaptation. At this stage of ecotypes, gene flow maintains adaptive polymorphisms inside the whole population [@Tigano2016]. 
+* When populations face a reproductive barrier, they will still largely share genetic variation due to the often large effective population size of the common ancestor, and potentially, due to hybridization between the incipient species. These incipient species can thus be qualified as species complex. At this stage of species complex, gene flow between incipient species can increase standing genetic variation favouring divergent selection, resulting in differential niche adaptation [@Tigano2016]. 
+* True phylogenetic species will exists where gene flow can still be responsible of adaptive introgression through hybrids in secondary contact, allowing species to share genetic polymorphisms or adaptations [@Lindtke2013].
 
 # Litterature review
 
@@ -89,28 +97,34 @@ Now if we consider the same individual *A* inside its environment and its popula
 
 ## TO CLASSIFY
 
-* "The concept of dynamic species pools is underappreciated in community assembly." [cite Mittelbach et al, 2015]
+* "The concept of dynamic species pools is underappreciated in community assembly." [@Mittelbach2015a]
 
-* "Community mean height, leaf area, and SLA increased in response to fertilization, and these shifts were driven almost entirely by intraspecific variation." [cite Siefert et Ritchie, 20016]
+* "Community mean height, leaf area, and SLA increased in response to fertilization, and these shifts were driven almost entirely by intraspecific variation." [@Siefert2016]
 
-* "Trait shifts due to species turnover were generally weak and opposed intraspecific responses." [cite Siefert et Ritchie, 20016]
+* "Trait shifts due to species turnover were generally weak and opposed intraspecific responses." [@Siefert2016]
 
-* "These results highlight the importance of intraspecific variation for short-term community functional responses" [cite Siefert et Ritchie, 20016]
+* "These results highlight the importance of intraspecific variation for short-term community functional responses" [@Siefert2016]
 
-* "However, when intraspecific variation is heritable, allowing for the possibility of trait evolution, communities are much more resilient against environmental disturbance and exhibit far more predictable trait patterns." [cite Barabas et d'Andrea, 2016]
+* "However, when intraspecific variation is heritable, allowing for the possibility of trait evolution, communities are much more resilient against environmental disturbance and exhibit far more predictable trait patterns." [@Barabas2016]
 
 ## Advocate for individual level
 
 * "a much needed demonstration of the pivotal role of intraspecific variability in ecology" [@chave_neutral_2004]
+
 * "Site and individual variability are typically ignored when considering crown size and light interception by trees, and residual variability is relegated to a residual error term, which is then ignored when studying ecological processes." [@Vieilledent2010]
+
 * "Because interactions with the biotic and abiotic environment are ultimately based at the level of the individual, it makes sense to build a theory of community ecology starting with individuals." [@Violle2012]
 
 ## Theory
 
 * @Chesson2000a suggested two diversity maintenance mechanisms, the second being the stabilizing mechanisms: "if negative intraspecific interactions tend to be greater than intraspecific interactions"
+
 * "Variation among individuals within populations allows species to differ in their distributions of responses to the environment despite the fact that the populations to which they belong do not differ on average" [@Clark2010]
+
 * "Consistent with theory predicting that coexistence depends on competition being stronger within than between species" [@Clark2010]
+
 * "Just a variation among individuals is required to maintain species by natural selection, providing a means for adaptive evolution in response to many factors ... explaining why large number of intensely competitive species coexist" [@Clark2010]
+
 * "Traitspace can test for the effects of limiting similarity by explicitly incorporating intraspecific trait variation." [cite Laughlin et Laughlin, 2013]
 
 ## Observation

@@ -1,3 +1,7 @@
+# PhD 0.1.9014
+
+- subject 3 pre-meeting + growth + sampling
+
 # PhD 0.1.9013
 
 - subject 3 model description and more structure
