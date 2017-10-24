@@ -12,3 +12,5 @@ Documentation
     -   <https://sylvainschmitt.github.io/PhD/growth>
 -   Symphonia sampling:
     -   <https://sylvainschmitt.github.io/PhD/sampling>
+-   Subject:
+    -   <https://sylvainschmitt.github.io/PhD/subject3>
