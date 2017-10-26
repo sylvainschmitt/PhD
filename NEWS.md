@@ -1,3 +1,7 @@
+# PhD 0.1.9015
+
+- Subject v4 and growth2 new model
+
 # PhD 0.1.9014
 
 - subject 3 pre-meeting + growth + sampling

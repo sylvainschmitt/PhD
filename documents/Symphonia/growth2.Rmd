@@ -1,0 +1,110 @@
+---
+title: "Symphonia growth"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(rgdal)
+library(raster)
+library(leaflet)
+library(starmie)
+library(rstan)
+library(bayesplot)
+library(abind)
+library(tidyverse)
+mpath <- "/home/sylvain/Documents/BIOGECO/PhD/documents/Symphonia/symphonia_models/"
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+# Intro
+
+```{r data}
+source("~/Documents/BIOGECO/PhD/scripts/dbh_correction.R")
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% # dbh correction
+  filter(n_parcelle %in% 1:16) %>% 
+    mutate(treatment = c(c('C', 'T1', 'T2', 'T3', 
+                         'T2', 'C', 'T1', 'T3',
+                         'T1', 'T2', 'C', 'T3'), 
+                       rep('B', 4))[n_parcelle]) %>% 
+  mutate(dbh = circonf/pi) %>% 
+  group_by(idArbre) %>% 
+  mutate(dbh_c = correction(dbh, campagne, code_vivant, code_mesure)) %>% 
+  ungroup()
+trees <- trees %>% # tree selection
+  filter(treatment != 'B') %>% 
+  arrange(campagne) %>% 
+  group_by(idArbre) %>% 
+  mutate(dt = campagne - lag(campagne)) %>% 
+  mutate(ddbh = dbh_c - lag(dbh_c)) %>% 
+  filter(dt > 0) %>% 
+  filter(ddbh >= 0) %>% 
+  mutate(agr = ddbh/dt) %>% 
+  select(idArbre, n_parcelle, n_carre, n_arbre, Xutm, Yutm, dbh_c, agr)
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# gaps
+gaps <- shapefile("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/logging/Gaps.shp")
+gaps <- spTransform(gaps, CRSobj = crs)
+gaps$area <- area(gaps)
+# trees
+treesXY <- trees %>% 
+  select(-dbh_c, - agr) %>% 
+  distinct()
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+# gap distance
+D <- rgeos::gDistance(spTransform(gaps, "+proj=utm +zone=22 +units=m"),
+                      spTransform(treesXY, "+proj=utm +zone=22 +units=m"),
+                      byid = T)
+trees <- trees %>% 
+  left_join(data.frame(idArbre = treesXY$idArbre, 
+                       Did = as.numeric(row.names(D))))
+mdata <- list(I = dim(trees)[1], # Nb of trees
+              AGR = trees$growth, # growth vector
+              dbh = trees$dbh_c/max(trees$dbh_c), # dbh in 1988 vector
+              J = dim(gaps)[1], # Nb of gaps
+              S = gaps$area/max(gaps$area), # gaps surface vector
+              D = D/max(D)) #tree-gaps distance matrix
+rm(crs, path, correction, detect)
+```
+
+## Models
+
+> I wanted to test for an eventual effect of logging through light and disturbance on Symphonia individuals growth. I combined the disturbance indice of model proposed by @Herault2010:
+$$AGR_i \sim \mathcal{N}(\mu*\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta);\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+with the model proposed by @herault_functional_2011:
+$$log(AGR_i+1) \sim \mathcal{N}(m*e^{-\frac{1}{2}*log(\frac{dbh_i}{d/ks})};\sigma)~|~i\in[1:I]$$
+into:
+$$log(AGR_i+1) \sim \mathcal{N}(m*e^{-\frac{1}{2}*log(\frac{dbh_i}{d/ks})}*e^{\mu*\sum_j^Je^{-\alpha*d_{i,j}}*S_j^\beta};\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+
+## Map
+
+```{r map}
+leaflet() %>%
+  addPolygons(data = gaps, opacity = 0.5, col = 'green') %>% 
+  addCircles(data = treesXY, radius = 0.2,
+             label = paste0('P', treesXY$n_parcelle, '-',
+                            treesXY$n_carre, '-',
+                            treesXY$n_arbre))
+rm(d, treesXY)
+```
+
+# Conclusion
+
+# References
