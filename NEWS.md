@@ -1,3 +1,9 @@
+# PhD 0.1.9016
+
+- Automatic data check for data cleaning in data_exploration
+- internship_subject last review with @GeraldineDerroire before submit
+- sampling table save
+
 # PhD 0.1.9015
 
 - Subject v4 and growth2 new model
