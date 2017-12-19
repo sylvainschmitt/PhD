@@ -103,8 +103,8 @@ if(!all(ind$Parcelle %in% 1:16))
   warning("Lines ", paste(which(!(ind$Parcelle %in% 1:16)), collapse = ', '),
           " have a wrong Parcelle number.\n")
 ## Carré
-if(!all(ind$Carré %in% 1:4))
-  warning("Lines ", paste(which(!(ind$Carré %in% 1:16)), collapse = ', '),
+if(!all(ind$Carré %in% 1:25))
+  warning("Lines ", paste(which(!(ind$Carré %in% 1:25)), collapse = ', '),
           " have a wrong Carré number.\n")
 ## Numéro
 if(!all(ind$Numéro %in% 1:4000))
@@ -131,17 +131,17 @@ if(!all(ind$Contrefort %in% 0:300))
   warning("Lines ", paste(which(!(ind$Contrefort %in% 0:300)), collapse = ', '),
           " have a wrong Contrefort value.\n")
 ## Échasse
-if(!all(ind$Échasse %in% 0:300))
+if(!all(ind$Échasse %in% 0:1000))
   warning("Lines ", paste(which(!(ind$Échasse %in% 0:300)), collapse = ', '),
-          " have a wrong Contrefort value.\n")
+          " have a wrong Échasse value.\n")
 ## Écorce
 Barks <- c('S', 'G', 'SG')
 if(!all(ind$Écorce %in% Barks))
   warning("Lines ", paste(which(!(ind$Écorce %in% Barks)), collapse = ', '),
           " have a wrong Écorce code.\n")
 ## Bois
-if(!all(ind$Bois %in% 0:1))
-  warning("Lines ", paste(which(!(ind$Bois %in% 0:1)), collapse = ', '),
+if(!all(ind$Bois %in% c(NA, 0:1)))
+  warning("Lines ", paste(which(!(ind$Bois %in% c(NA, 0:1))), collapse = ', '),
           " have a wrong Bois code.\n")
 ```
 
@@ -151,8 +151,8 @@ if(!all(SPAD$Parcelle %in% 1:16))
   warning("Lines ", paste(which(!(SPAD$Parcelle %in% 1:16)), collapse = ', '),
           " have a wrong Parcelle number.\n")
 ## Carré
-if(!all(SPAD$Carré %in% 1:4))
-  warning("Lines ", paste(which(!(SPAD$Carré %in% 1:16)), collapse = ', '),
+if(!all(SPAD$Carré %in% 1:25))
+  warning("Lines ", paste(which(!(SPAD$Carré %in% 1:25)), collapse = ', '),
           " have a wrong Carré number.\n")
 ## Numéro
 if(!all(SPAD$Numéro %in% 1:4000))
@@ -175,8 +175,8 @@ if(!all(fresh$Parcelle %in% 1:16))
   warning("Lines ", paste(which(!(fresh$Parcelle %in% 1:16)), collapse = ', '),
           " have a wrong Parcelle number.\n")
 ## Carré
-if(!all(fresh$Carré %in% 1:4))
-  warning("Lines ", paste(which(!(fresh$Carré %in% 1:16)), collapse = ', '),
+if(!all(fresh$Carré %in% 1:25))
+  warning("Lines ", paste(which(!(fresh$Carré %in% 1:25)), collapse = ', '),
           " have a wrong Carré number.\n")
 ## Numéro
 if(!all(fresh$Numéro %in% 1:4000))
@@ -187,12 +187,12 @@ if(!all(fresh$Feuille %in% 1:4000))
   warning("Lines ", paste(which(!(fresh$Feuille %in% 1:4000)), collapse = ', '),
           " have a wrong Feuille number.\n")
 ## LT
-test <- function(x) ((x > 100 & x < 600) | is.na(x))
+test <- function(x) ((x > 50 & x < 600) | is.na(x))
 if(!all(apply(fresh[5:7], 1, function(x) all(sapply(x, test)))))
   warning("Lines ", paste(which(!apply(fresh[5:7], 1, function(x) all(sapply(x, test)))), 
                           collapse = ', '), " have a wrong LT value.\n")
 ## Poids frais
-test <- function(x) ((x > 0.1 & x < 3) | is.na(x))
+test <- function(x) ((x > 0.1 & x < 5) | is.na(x))
 if(!all(sapply(fresh$`Poids frais`, test)))
   warning("Lines ", paste(which(!(sapply(fresh$`Poids frais`, test))), 
                           collapse = ', '), " have a wrong Poids frais value.\n")

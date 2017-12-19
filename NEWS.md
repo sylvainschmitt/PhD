@@ -1,3 +1,8 @@
+# PhD 0.1.9017
+
+- setting growth model N1 for tabebuia
+- data_check improved
+
 # PhD 0.1.9016
 
 - Automatic data check for data cleaning in data_exploration

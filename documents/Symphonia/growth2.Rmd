@@ -62,8 +62,8 @@ gaps <- shapefile("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/logging/Gap
 gaps <- spTransform(gaps, CRSobj = crs)
 gaps$area <- area(gaps)
 # trees
-treesXY <- trees %>% 
-  select(-dbh_c, - agr) %>% 
+treesXY <- trees %>%
+  select(-dbh_c, - agr) %>%
   distinct()
 coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
@@ -72,15 +72,17 @@ treesXY <- spTransform(treesXY, CRSobj = crs)
 D <- rgeos::gDistance(spTransform(gaps, "+proj=utm +zone=22 +units=m"),
                       spTransform(treesXY, "+proj=utm +zone=22 +units=m"),
                       byid = T)
-trees <- trees %>% 
-  left_join(data.frame(idArbre = treesXY$idArbre, 
+trees <- trees %>%
+  left_join(data.frame(idArbre = treesXY$idArbre,
                        Did = as.numeric(row.names(D))))
-mdata <- list(I = dim(trees)[1], # Nb of trees
-              AGR = trees$growth, # growth vector
+mdata <- list(I = dim(trees)[1], # Nb of measurements
+              AGR = trees$agr, # growth vector
               dbh = trees$dbh_c/max(trees$dbh_c), # dbh in 1988 vector
               J = dim(gaps)[1], # Nb of gaps
               S = gaps$area/max(gaps$area), # gaps surface vector
-              D = D/max(D)) #tree-gaps distance matrix
+              K = dim(D)[1], # Nb of individuals
+              D = D/max(D), # tree-gaps distance matrix
+              ind = trees$Did) # Individual number in matrix D
 rm(crs, path, correction, detect)
 ```
 
@@ -88,10 +90,26 @@ rm(crs, path, correction, detect)
 
 > I wanted to test for an eventual effect of logging through light and disturbance on Symphonia individuals growth. I combined the disturbance indice of model proposed by @Herault2010:
 $$AGR_i \sim \mathcal{N}(\mu*\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta);\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
-with the model proposed by @herault_functional_2011:
-$$log(AGR_i+1) \sim \mathcal{N}(m*e^{-\frac{1}{2}*log(\frac{dbh_i}{d/ks})};\sigma)~|~i\in[1:I]$$
+with the potential reductor model proposed by @herault_functional_2011:
+$$log(AGR_i+1) \sim \mathcal{N}(AGR_{max}*e^{-\frac{1}{2}*log(\frac{dbh_i}{d_{opt}/k_s})};\sigma)~|~i\in[1:I]$$
 into:
-$$log(AGR_i+1) \sim \mathcal{N}(m*e^{-\frac{1}{2}*log(\frac{dbh_i}{d/ks})}*e^{\mu*\sum_j^Je^{-\alpha*d_{i,j}}*S_j^\beta};\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+$$log(AGR_i+1) \sim \mathcal{N}(AGR_{max}*e^{-\frac{1}{2}*log(\frac{dbh_i}{d_{opt}/k_s})}*e^{-\sum_j^Je^{-\alpha*d_{i,j}}*S_j^\beta};\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+That I declined in different versions :
+
+### Table 1: Models summary.
+
+```{r}
+mtab <- data.frame(
+  M = c('$M_{1}$'),
+  Model = c(
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\frac{1}{2}*log(\\frac{dbh_i}{d_{opt}/k_s})}*e^{-\\sum_j^Je^{-\\alpha*d_{i,j}}*S_j^\\beta};\\sigma)$'
+  )
+)
+mtab$M <- as.character(mtab$M)
+mtab$Model <- as.character(mtab$Model)
+row.names(mtab) <- c('M1')
+kable(mtab, row.names = F)
+```
 
 ## Map
 
@@ -104,6 +122,77 @@ leaflet() %>%
                             treesXY$n_arbre))
 rm(d, treesXY)
 ```
+
+# `r mtab['M1',1]`
+
+```{r M1}
+fit <- stan(file = file.path(mpath, 'N1.stan'), data = mdata, chains = 1)
+save(fit, file = file.path(mpath, 'N1.Rdata'))
+# load(file.path(mpath, 'N1.Rdata'))
+# pars <- c("AGRmax", "dopt", "ks", "alpha", "beta", "sigma")
+# pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+<!-- > The model seems to have correctly converged but the pair plot shows a strong correlation between $\alpha$ and $\beta$ parameters certainly due to a confounded factor. This correlation have ot be corrected including more parameters. -->
+
+### Model Predictions.
+
+```{r M1 pred}
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000,
+#          mean = sum(exp(-pars_val[1]*(d/dmax))*(s/smax)^pars_val[2]),
+#          sd = pars_val[3])
+# pred<- sapply(seq_len(mdata$I), function(i)
+#   apply(as.matrix(fit)[,pars], 1, function(p)
+#     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
+# pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
+# pred$mean <- sapply(seq_len(mdata$I), function(i)
+#                     sum(exp(-pars_val[1]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[2]))
+# pred$gaps <- apply(D, 1, min)
+# pred$dbh <- mdata$dbh
+# names(pred)[1:2] <- c('5%', '95%')
+# save(pred, file = file.path(mpath, 'N1p.Rdata'))
+# load(file.path(mpath, 'N1p.Rdata'))
+# ggplot(data.frame(dgaps = apply(D, 1, min),
+#                   growth = trees$growth),
+#        aes(dgaps, growth)) +
+#   geom_ribbon(aes(x = pred$gaps, ymin = pred$`5%`, ymax = pred$`95%`), color = 'grey', alpha = 0.2) +
+#   geom_line(aes(x = pred$gaps, y = pred$`5%`, color = '5%'), linetype = 2) +
+#   geom_line(aes(x = pred$gaps, y = pred$`95%`, color = '95%'), linetype = 2) +
+#   geom_line(aes(x = pred$gaps, y = pred$mean, color = 'mean'), linetype = 2) +
+#   geom_point() +
+#   xlab('distance to the closest logging gap (m)') +
+#   ylab('growth between 1988 and 1992 (cm)') +
+#   scale_color_manual(name = 'Model',
+#                      values = c('5%' = 'black',
+#                                 '95%' = 'black',
+#                                 'mean' = 'red'))
+```
+
+### Parameters markov chains.
+
+```{r C1}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['M1',], collapse = ': ')`
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R1}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P1}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
+```
+
 
 # Conclusion
 

@@ -1,35 +1,30 @@
 data {
-  int<lower=0> I ; // Nb of trees
+  int<lower=0> I ; // Nb of measurements
   vector<lower=0>[I] AGR ; // growth vector
-  vector<lower=0>[I] dbh ; // dbh in 1988 vector
+  vector<lower=0>[I] dbh ; // dbh vector
   int<lower=0> J ; // Nb of gaps
   vector<lower=0>[J] S ; // gaps surface vector
-  matrix<lower=0>[I,J] D ; // tree-gaps distance matrix
+  int<lower=0> K ; // Nb of individuals
+  matrix<lower=0>[K,J] D ; // tree-gaps distance matrix
+  int<lower=0> ind[I] ; // Individual number in matrix D
 }
 parameters {
-  real mu ;
-  real alpha ; // distance parameter
-  real<lower=0,upper=3> beta ; // surface parameter (power)
-  real<lower=0,upper=10> sigma ;
+  real AGRmax ; // potential, maximum growth parameter
+  real dopt ; // ontogenic reductor, optimal diameter parameter
+  real ks ; // ontogenic reductor, kurtosis parameter
+  real alpha ; // disturbance reductor, distance parameter
+  real<lower=0,upper=3> beta ; // disturbance reductor, surface parameter (power)
+  real<lower=0,upper=10> sigma ; // variance
 }
 transformed parameters {
   vector[J] Sbeta ; // Sbeta is S^beta because pow(vector,real) is impossible in stan
-  vector[I] Idisturb ; // disturbance index
+  vector[K] Idisturb ; // disturbance index
   for(j in 1:J)
     Sbeta[j] = pow(S[j], beta) ;
-  for(i in 1:I)
-    Idisturb[i] = exp(-alpha*D[i,])*Sbeta ;
+  for(k in 1:K)
+    Idisturb[k] = exp(-alpha*D[k,])*Sbeta ;
 }
 model {
-  growth ~ normal(mu*Idisturb, sigma) ;
+  for(i in 1:I)
+    log(AGR[i]+1) ~ normal(AGRmax*exp(-0.5*log(dbh[i]/(dopt/ks))*log(dbh[i]/(dopt/ks)))*exp(-Idisturb[ind[i]]), sigma) ;
 }
-
-// model {
-//   growth ~ normal(mu*exp(-alpha*D)*Sbeta, sigma) ; 
-// }
-// beware exessive use of vectorial and matricial computation:
-// for a given i
-// Idisturb[i] = exp(-alpha*D[i,])*Sbeta
-// because D[i,] is a row vector (row from a matrix)
-// and Sbeta is a vector (default column)
-// so exp(-alpha*D[i,])*Sbeta = sum_j(exp(-alpha*D[i,j])*Sbeta[j])
