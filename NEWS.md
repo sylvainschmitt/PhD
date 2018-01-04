@@ -1,3 +1,8 @@
+# PhD 0.1.9018
+
+- new subject plan and main ideas
+- subject cleaning (subject _old and _all to be also removed in the future only kept until now for convenience)
+
 # PhD 0.1.9017
 
 - setting growth model N1 for tabebuia
