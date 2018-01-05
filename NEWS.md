@@ -1,5 +1,9 @@
 # PhD 0.1.9018
 
+- new subject second part writting
+
+# PhD 0.1.9018
+
 - new subject plan and main ideas
 - subject cleaning (subject _old and _all to be also removed in the future only kept until now for convenience)
 
