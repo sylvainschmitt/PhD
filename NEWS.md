@@ -1,4 +1,8 @@
-# PhD 0.1.9018
+# PhD 0.1.9020
+
+- new subject first version
+
+# PhD 0.1.9019
 
 - new subject second part writting
 
