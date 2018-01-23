@@ -1,0 +1,52 @@
+---
+title: "Probes design"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(DBI)
+library(tidyverse)
+opts_chunk$set(
+  echo = T, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate"
+```
+
+# Annotation
+
+## DB
+
+```{r annotation}
+db <- src_sqlite(file.path(path, "symphonia.trinity500.trinotate.sqlite"))
+tibble(
+  row.names = src_tbls(db),
+  n = unlist(sapply(src_tbls(db), function(table) db %>% tbl(table) %>% count() %>% collect())),
+  columns = unlist(lapply(
+    sapply(src_tbls(db), function(table) db %>% tbl(table) %>% colnames()),
+    paste, collapse = ", "
+  ))
+) %>% 
+  arrange(desc(n)) %>% 
+  kable()
+```
+
+```{r go ex}
+db <- src_sqlite(file.path(path, "symphonia.trinity500.trinotate.sqlite"))
+db %>% 
+  tbl("go") %>% 
+  collect() %>% 
+  DT::datatable()
+```
+
+# Conclusion
+
+## References
