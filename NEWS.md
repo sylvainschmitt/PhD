@@ -1,7 +1,10 @@
+# PhD 0.1.9023
+* environment
+
 # PhD 0.1.9022
-- subject ferbuary 2018 new structure
-- growth version 2 with greta
-- environment for analysis
+* subject ferbuary 2018 new structure
+* growth version 2 with greta
+* environment for analysis
 
 # PhD 0.1.9021
 *probes init

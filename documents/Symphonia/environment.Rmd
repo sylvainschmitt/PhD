@@ -1,0 +1,126 @@
+---
+title: "Environment"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(raster)
+library(leaflet)
+library(tidyverse)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou"
+```
+
+# Intro
+
+## 
+
+> This document is an introduction to Paracou environmental data to be used for ecology and evolution study of *Symphonia globulifera* species (with morphotypes *globulifera* and *sp1*). It will first focus on abiotic environmental drivers.
+
+> We will interest ourselves only in local environmental factors, and thus will ignore large scale drivers as geology and climate. Environmental factors can be related to individuals resource use through light, water and nutrients. Those factors are related to larger environmental drivers, we can classified in biotic factors, light factors, hydrology, pedology and topography. They are all related to different resources:
+
+>* __Biotic factors__ will affect all resources through facilitation and competition among living organisms. For simplicity and due to a lack of data, we will focus on other tree individuals to represents biotic factors, besides the large amount of living organisms also interacting with trees. Biotic factors vary in space and time at the individual scale.
+* __Light factors__ can be mixed with biotic factors. They represents individuals access to light resources due to biotic factors as canopy height or treefall gaps or anthropic factors as logging gaps. Light factors vary in space and time at the individual scale.
+* __Hydrology__ affect individuals access to water, affecting their growth and survival. Hydrology drivers can be derived from topgraphy (see below). Hydrology vary in space but not in time at the individual scale (if we don't take into account climate).
+* __Pedology__ affect both individuals access to water and nutrients. It can be direct measurement of nutrients, or soil property. Soil property will be proxies for both water and nutrient access. Hydrology vary in space but not in time at the individual scale.
+* __Topography__ affect both individuals access to light, water and nutrients. It encompass first the elevation of the studied area, but lot of topographic indices can be derived from this information (curvature, slope, fluxes...). Derived information will be proxies for light, water and nutrient access depending on the indice. Topography vary in space but not in time at the individual scale.
+
+```{r env}
+data.frame(
+  code = c('NBI', 'DCM', 'LogGap', 'Creeks', 'TopoLevels', 'WTD', 'CoarseElement', 'Drainages', 'Hydromorphy', 'SoilSurv', 'SpecSoil', 'Thalweig', 'WaterLog', 'DEM', 'DEMderiv'),
+  name = c('Nearest neighbour index', 'Digital canpoy model', 'Logging gaps', 'Creeks', 'Toporgaphic levels', 'Water table depth', 'Coars elements', 'Drainages', 'Hydromorphy', 'Soil survey', 'Specific soils', 'Thalweig', 'Water logging', 'Digital elevation model', 'Digital elevation model derivates'),
+  type = c('Biotic', 'Light', 'Light', 'Hydrology', 'Hydrology', 'Hydrology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Topography', 'Toporgaphy'),
+  variable = c('Continuous', 'Continuous', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Continuous', 'Continuous')
+) %>% kable(caption = "Available environmental variables for Paracou.")
+```
+
+# Biotic
+
+# Light
+
+# Hydrology
+
+# Pedology
+
+# Topography
+
+# Wetness
+
+## Model
+
+```{r}
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# Elevation
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif"))
+# Wetness
+wetness <- raster("./environment_save/env/wetness.tiff")
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+# Limits
+limits <- shapefile(file.path(path, "limits", "OverallPlots.shp"))
+limits <- spTransform(limits, CRSobj = crs)
+# hydrology
+hydro <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
+hydro <- spTransform(hydro, CRSobj = crs)
+hydro_pal <- colorFactor('Greys', as.factor(hydro$TypeWatEN), reverse = T)
+# Map
+leaflet() %>%
+  addPolylines(data = limits, group = 'Limits', color = 'black') %>%
+  addRasterImage(wetness) %>% 
+    addPolygons(data = hydro, group = 'WaterTable',
+              opacity = 0, fillOpacity = 0.3, fill = T, 
+              fillColor = ~hydro_pal(TypeWatEN), label = ~TypeWatEN)
+```
+
+## Validation
+
+```{r}
+wetness.hydro <- raster::extract(wetness, hydro)
+hydro_r <- rasterize(hydro, wetness)
+data.frame(wetness = values(wetness), 
+           hydro =  as.factor(hydro$TypeWatEN[values(hydro_r)])) %>% 
+  filter(!is.na(hydro)) %>% 
+  ggplot(aes(hydro, wetness)) +
+  geom_boxplot() +
+  coord_flip()
+```
+
+# Distribution
+
+```{r presence}
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  filter(campagne == 2015) %>% 
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0) %>% 
+  filter(n_parcelle != 18)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+trees$wetness <- raster::extract(wetness, treesXY)
+trees <- trees %>% 
+  filter(espece != "Indet.") %>% 
+  mutate(presence_globulifera = as.numeric(espece == "globulifera")) %>% 
+  mutate(presence_sp1 = as.numeric(espece == "sp.1"))
+trees %>% 
+  select(presence_globulifera, presence_sp1, wetness) %>% 
+  reshape2::melt(id.vars = "wetness") %>% 
+  filter(value > 0) %>% 
+  ggplot(aes(wetness, col = variable, fill = variable)) +
+  geom_density(alpha = 0.3) +
+  xlab("Wetness index") +
+  scale_fill_discrete("Morphotype", labels = c("globulifera", "sp1")) +
+  scale_color_discrete("Morphotype", labels = c("globulifera", "sp1"))
+```
