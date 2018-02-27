@@ -17,11 +17,11 @@ library(rgdal)
 library(raster)
 library(leaflet)
 library(starmie)
-library(greta)
+library(rstan)
 library(bayesplot)
 library(abind)
 library(tidyverse)
-mpath <- "/home/sylvain/Documents/BIOGECO/PhD/documents/Symphonia/symphonia_models/"
+mpath <- "./symphonia_models"
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
     cache = T, cache.lazy = F)
@@ -46,6 +46,8 @@ trees <- trees %>% # dbh correction
   ungroup()
 trees <- trees %>% # tree selection
   filter(treatment != 'B') %>% 
+  filter(n_parcelle == 2) %>% # for tests
+  # filter(espece == "globulifera") %>% # for tests
   arrange(campagne) %>% 
   group_by(idArbre) %>% 
   mutate(dt = campagne - lag(campagne)) %>% 
@@ -53,29 +55,41 @@ trees <- trees %>% # tree selection
   filter(dt > 0) %>% 
   filter(ddbh >= 0) %>% 
   mutate(agr = ddbh/dt) %>% 
-  select(idArbre, n_parcelle, n_carre, n_arbre, Xutm, Yutm, dbh_c, agr)
+  select(idArbre, n_parcelle, n_carre, n_arbre, Xutm, Yutm, dbh_c, agr, espece)
 path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
 # global crs definition
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 # gaps
 gaps <- shapefile("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/logging/Gaps.shp")
 gaps <- spTransform(gaps, CRSobj = crs)
+gaps <- subset(gaps, Plot == 2) # for tests
 gaps$area <- area(gaps)
 # trees
 treesXY <- trees %>%
-  select(-dbh_c, - agr) # %>%
-  # distinct()
+  select(-dbh_c, - agr) %>%
+  distinct()
 coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 treesXY <- spTransform(treesXY, CRSobj = crs)
 # gap distance
-Dm <- rgeos::gDistance(spTransform(gaps, "+proj=utm +zone=22 +units=m"),
+D <- rgeos::gDistance(spTransform(gaps, "+proj=utm +zone=22 +units=m"),
                       spTransform(treesXY, "+proj=utm +zone=22 +units=m"),
                       byid = T)
-# trees <- trees %>%
-#   left_join(data.frame(idArbre = treesXY$idArbre,
-#                        Did = as.numeric(row.names(D))))
+trees <- trees %>%
+  left_join(data.frame(idArbre = treesXY$idArbre,
+                       Did = as.numeric(row.names(D))))
 rm(crs, path, correction, detect)
+# model data
+data <- list(
+  I = dim(trees)[1], # Nb of measurements
+  AGR = trees$agr, # growth vector
+  dbh = trees$dbh_c, # dbh vector
+  J = dim(D)[2], # Nb of gaps
+  S = gaps$area, # gaps surface vector
+  K = dim(D)[1], # Nb of individuals
+  D = D, # tree-gaps distance matrix
+  ind = trees$Did # Individual number in matrix D
+)
 ```
 
 ## Models
@@ -92,14 +106,17 @@ That I declined in different versions :
 
 ```{r}
 mtab <- data.frame(
-  M = c('$M_{1}$'),
+  M = c('$N_{o}$', '$N_{i,o}$', '$N_{g}$', '$N_{o,g}$'),
   Model = c(
-    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\frac{1}{2}*log(\\frac{dbh_i}{d_{opt}/k_s})}*e^{-\\sum_j^Je^{-\\alpha*d_{i,j}}*S_j^\\beta};\\sigma)$'
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{d_{opt}})/k_s)^2};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}({AGR_{max}}_{ind}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{d_{opt}})/k_s)^2};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\sum_j^Je^{-\\alpha*d_{i,j}}*S_j^\\beta};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{d_{opt}})/k_s)^2}*e^{-\\sum_j^Je^{-\\alpha*d_{i,j}}*S_j^\\beta};\\sigma)$'
   )
 )
 mtab$M <- as.character(mtab$M)
 mtab$Model <- as.character(mtab$Model)
-row.names(mtab) <- c('M1')
+row.names(mtab) <- c('No', 'Nio', 'Ng', 'Nog')
 kable(mtab, row.names = F)
 ```
 
@@ -112,68 +129,232 @@ leaflet() %>%
              label = paste0('P', treesXY$n_parcelle, '-',
                             treesXY$n_carre, '-',
                             treesXY$n_arbre))
-rm(d, treesXY)
+rm(treesXY)
 ```
 
-# `r mtab['M1',1]`
+# $N_g$ demo
 
-```{r M1}
-# Data
-log1_AGR <- as_data(log(trees$agr+1))
-dbh <- as_data(trees$dbh_c)
-D <- as_data(Dm)
-S <- as_data(gaps$area)
-# Parameters
-AGRmax <- gamma(10^-2,10^-2)
-dopt <- gamma(10^-2,10^-2)
-ks <- gamma(10^-2,10^-2)
-alpha <- gamma(10^-2,10^-2)
-beta <- gamma(10^-2,10^-2, truncation = c(0,3))
-sigma <- gamma(10^-2,10^-2, truncation = c(0,10))
-# Likelihood
-distribution(log1_AGR) <- normal(AGRmax*exp(-0.5*log(dbh/(dopt/ks)))*exp(exp(-alpha*D) %*% S^beta), sigma)
-# Model
-m <- model(AGRmax, dopt, ks, alpha, beta, sigma)
-# Sampling
-fit <- mcmc(m)
+> From the $I_{disturbance}$ index toward a potential-reductor model form.
+
+$$log(AGR_i+1) = AGR_{max}*\sum_j (e^{-\alpha*d_{i,j}}*S_j^\beta) + \epsilon_i$$
+$$log(AGR_i+1) = AGR_{max}* e^{-\alpha*\sum_j d_{i,j}}*\sum_jS_j^\beta + \epsilon_i$$
+$$log(AGR_i+1) = AGR_{max}* e^{-\alpha*\sum_j d_{i,j}}*e^{log(\sum_jS_j^\beta)} + \epsilon_i$$
+$$log(AGR_i+1) = AGR_{max}* e^{-\alpha*\sum_j d_{i,j} + \beta*log(\sum_jS_j)} + \epsilon_i$$
+$$log(AGR_i+1) \sim \mathcal{N} (AGR_{max}* e^{-\alpha*\sum_j d_{i,j} + \beta*log(\sum_jS_j)} , \sigma)$$
+
+# `r mtab['No',1]`
+
+```{r No}
+# inits <- function() list(AGRmax = 1, Dopt = 100, Ks = 0.1, sigma = 2)
+# fit <- stan(file = file.path(mpath, 'No.stan'), data = data,
+            # init = inits, chains = 2)
+# save(fit, file = file.path(mpath, 'No.Rdata'))
+load(file.path(mpath, 'No.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma")
+pars_opt <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
 ```
 
 ## Column 1 {data-width=200}
 
-### Model Structure.
-```{r}
-plot(m)
-beta <- c(gamma(10^-2, 10^-2, dim = 2), 
-          gamma(10^-2, 10^-2, truncation = c(0,3)))
+### Summary
+
+```{r So}
+broom::tidyMCMC(fit, c(pars,"lp__"), droppars = NULL, rhat = T) %>% kable()
 ```
 
-### Model Predictions.
+### Predictions
 
-```{r M1 pred}
+```{r Yo}
+predict <- function(dbh) 
+  pars_opt["AGRmax"]*exp(-0.5*(log(dbh/pars_opt["Dopt"])/pars_opt["Ks"])^2)
+ggplot(trees, aes(dbh_c, log(agr+1), col = espece)) +
+  geom_point() +
+  geom_line(aes(y = predict(trees$dbh_c)), col = "red")
 ```
 
-### Parameters markov chains.
+### Traces
 
-```{r C1}
-mcmc_trace(fit)
+```{r To}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
 ```
 
 ## Column 2 {data-width=200}
 
-> `r paste(mtab['M1',], collapse = ': ')`
+> `r paste(mtab['No',], collapse = ': ')`
+
+### Posteriors
+
+```{r Po}
+mcmc_areas(as.array(fit), prob = 0.8, pars = pars)
+```
+
+### Pairs
+
+```{r 2o}
+mcmc_pairs(as.array(fit), pars = pars)
+```
+
+
+# `r mtab['Nio',1]`
+
+```{r Nio}
+# inits <- function() list(AGRmax = 1, Dopt = 100, Ks = 0.1, sigma = 2)
+# fit <- stan(file = file.path(mpath, 'Nio.stan'), data = data,
+            # init = inits, chains = 2)
+# save(fit, file = file.path(mpath, 'Nio.Rdata'))
+load(file.path(mpath, 'Nio.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma", "sigma_ind")
+pars_opt <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+### Summary
+
+```{r Sio}
+broom::tidyMCMC(fit, c(pars,"lp__"), droppars = NULL, rhat = T) %>% kable()
+```
+
+### Predictions
+
+```{r Yio}
+predict <- function(dbh)
+  pars_opt["AGRmax"]*exp(-0.5*(log(dbh/pars_opt["Dopt"])/pars_opt["Ks"])^2)
+ggplot(trees, aes(dbh_c, log(agr+1), col = espece)) +
+  geom_point() +
+  geom_line(aes(y = predict(trees$dbh_c)), col = "red")
+```
+
+### Traces
+
+```{r Tio}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+### Individuals
+
+```{r}
+as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),
+               -which(colnames(as.matrix(fit)) %in% pars)] %>% 
+  data.frame(Individual = names(.), AGRmax = .) %>% 
+  mutate(Individual = gsub("AGRmax_ind[", "", Individual, fixed = T)) %>% 
+  mutate(Individual = gsub("]", "", Individual, fixed = T)) %>% 
+  mutate(Did = as.double(Individual)) %>% 
+  left_join(trees) %>% 
+  select(AGRmax, espece) %>% 
+  distinct() %>% 
+  filter(!is.na(espece)) %>% 
+  ggplot(aes(AGRmax, col = espece, fill = espece)) +
+  geom_density(alpha = 0.2) +
+  geom_histogram(aes(y = ..density..), 
+                 alpha = 0.5, position = "dodge")
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Nio',], collapse = ': ')`
+
+### Posteriors
+
+```{r Pio}
+mcmc_areas(as.array(fit), prob = 0.8, pars = pars)
+```
+
+### Pairs
+
+```{r 2io}
+mcmc_pairs(as.array(fit), pars = pars)
+```
+
+# `r mtab['Ng',1]`
+
+```{r Ng}
+fit <- stan(file = file.path(mpath, 'Ng.stan'), data = data)
+save(fit, file = file.path(mpath, 'Ng.Rdata'))
+load(file.path(mpath, 'Ng.Rdata'))
+pars <- c("AGRmax", "alpha", "beta", "sigma")
+pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+### Summary
+
+```{r Sg}
+broom::tidyMCMC(fit, c(pars,"lp__"), droppars = NULL, rhat = T) %>% kable()
+```
+
+### Predictions
+
+```{r Yg}
+```
+
+### Traces
+
+```{r Tg}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Ng',], collapse = ': ')`
+
+### Posteriors
+
+```{r Pg}
+mcmc_areas(as.array(fit), prob = 0.8, pars = pars)
+```
+
+### Pairs
+
+```{r 2g}
+mcmc_pairs(as.array(fit), pars = pars)
+```
+
+# `r mtab['Nog',1]`
+
+```{r}
+# fit <- stan(file = file.path(mpath, 'N1.stan'), data = data)
+# save(fit, file = file.path(mpath, 'N1.Rdata'))
+# load(file.path(mpath, 'N1.Rdata'))
+# pars <- c("AGRmax", "dopt", "ks", "alpha", "beta", "sigma")
+# pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+> The model ...
+
+### Model Predictions.
+
+```{r}
+```
+
+### Parameters markov chains.
+
+```{r}
+# mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           # facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Nog',], collapse = ': ')`
 
 ### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
 
-```{r R1}
-mcmc_areas(fit)
+```{r}
+# mcmc_areas(as.array(fit), prob = 0.8, pars = pars)
 ```
 
 ### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
 
-```{r P1}
-GGally::ggpairs(data.frame(as.matrix(fit)))
+```{r}
+# mcmc_pairs(as.array(fit), pars = pars)
 ```
-
 
 # Conclusion
 

@@ -2,7 +2,7 @@
 title: "Environment"
 output: 
   flexdashboard::flex_dashboard:
-    orientation: columns
+    orientation: rows
     vertical_layout: scroll
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -15,112 +15,612 @@ library(knitr)
 library(raster)
 library(leaflet)
 library(tidyverse)
+library(ggfortify)
+library(ggplot.acm)
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
     cache = T, cache.lazy = F)
 path <- "~/Documents/BIOGECO/PhD/data/Paracou"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
 # Intro
 
-## 
+## intro
 
-> This document is an introduction to Paracou environmental data to be used for ecology and evolution study of *Symphonia globulifera* species (with morphotypes *globulifera* and *sp1*). It will first focus on abiotic environmental drivers.
+This document is an introduction to Paracou environmental data to be used in the PhD. We will first focus on *Symphonia globulifera* species (with morphotypes *globulifera* and *sp1*). Please see environmental paragraph of the PhD subject document first. We still introduce a brief summary of environmental data types.
 
-> We will interest ourselves only in local environmental factors, and thus will ignore large scale drivers as geology and climate. Environmental factors can be related to individuals resource use through light, water and nutrients. Those factors are related to larger environmental drivers, we can classified in biotic factors, light factors, hydrology, pedology and topography. They are all related to different resources:
+* __Biotic interactions__ affect all resources availabilty through facilitation and competition among living organisms. We will focus on other tree individuals as interacting organisms, besides the large amount of living organisms also interacting with trees. Biotic interactions affect (i) light interception through shading between individual trees, responsible for the asymetric competition [e.g. @Ruger2011], (ii) water availability with water table movements [including both competition and facilitation, e.g. @Pretzsch2014], (iii) and nutrients availability and access, with both nutrients competition and facilitation (e.g. nitrogen with *Fabaceae* family). Biotic interactions are uneasy to approach but can be approximated through neighbouring indices [@Canham]. In addition shading is partly included in direct light measurement with spatial measurement such as Lidar.
+* __Hydrology__, by definition, affect individuals access to water. Hydrology includes previously introduced direct measurement of water availability [water table depth and water logging , e.g. @ferry2010higher]. But hydrology also include indirect factors, such as river and other hydrographic networks. Finally, hydrology is intimately related to topography, and thus can be derived from topographic variables (see below).
+* __Pedology__ affect both individuals access to water and nutrients [@Levins1971]. Pedology variables can be direct measurement of nutrients or soil property, which will affect trees access to nutrient and water. Consequently, soil properties will be proxies for both water and nutrient access.
+* __Topography__ affect both individuals access to water and nutrients [e.g. @gunatilleke_specieshabitat_2006]. Topography first encompass the elevation of the studied area and lot of topographic variables and indices can be derived from elevation (slope, aspect, curvature, roughness, ruggedness, position, water flow direction, water accumulation). Derived information will be proxies for water and nutrient access depending on the indice.
 
->* __Biotic factors__ will affect all resources through facilitation and competition among living organisms. For simplicity and due to a lack of data, we will focus on other tree individuals to represents biotic factors, besides the large amount of living organisms also interacting with trees. Biotic factors vary in space and time at the individual scale.
-* __Light factors__ can be mixed with biotic factors. They represents individuals access to light resources due to biotic factors as canopy height or treefall gaps or anthropic factors as logging gaps. Light factors vary in space and time at the individual scale.
-* __Hydrology__ affect individuals access to water, affecting their growth and survival. Hydrology drivers can be derived from topgraphy (see below). Hydrology vary in space but not in time at the individual scale (if we don't take into account climate).
-* __Pedology__ affect both individuals access to water and nutrients. It can be direct measurement of nutrients, or soil property. Soil property will be proxies for both water and nutrient access. Hydrology vary in space but not in time at the individual scale.
-* __Topography__ affect both individuals access to light, water and nutrients. It encompass first the elevation of the studied area, but lot of topographic indices can be derived from this information (curvature, slope, fluxes...). Derived information will be proxies for light, water and nutrient access depending on the indice. Topography vary in space but not in time at the individual scale.
+## variables
 
 ```{r env}
-data.frame(
-  code = c('NBI', 'DCM', 'LogGap', 'Creeks', 'TopoLevels', 'WTD', 'CoarseElement', 'Drainages', 'Hydromorphy', 'SoilSurv', 'SpecSoil', 'Thalweig', 'WaterLog', 'DEM', 'DEMderiv'),
-  name = c('Nearest neighbour index', 'Digital canpoy model', 'Logging gaps', 'Creeks', 'Toporgaphic levels', 'Water table depth', 'Coars elements', 'Drainages', 'Hydromorphy', 'Soil survey', 'Specific soils', 'Thalweig', 'Water logging', 'Digital elevation model', 'Digital elevation model derivates'),
-  type = c('Biotic', 'Light', 'Light', 'Hydrology', 'Hydrology', 'Hydrology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Pedology', 'Topography', 'Toporgaphy'),
-  variable = c('Continuous', 'Continuous', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Discrete', 'Continuous', 'Continuous')
-) %>% kable(caption = "Available environmental variables for Paracou.")
+rbind(
+  c('NCI', 'Neighborhood competition index', 'biotic', 'continuous'),
+  c('DCM', 'Digital canopy model', 'biotic', 'continuous'),
+  c('gap', 'Treefall gaps', 'biotic', 'discrete'),
+  c('log gap', 'Logging gaps', 'biotic', 'discrete'),
+  c('Idist', 'Disturbance index', 'biotic', 'continuous'),
+  c('WTD', 'Water table depth', 'hydrology', 'discrete'),
+  c('dist creek', 'Distance to nearest creek', 'hydrology', 'continuous'),
+  c('drainages', 'Drainages type', 'hydrology', 'discrete'),
+  c('soil', 'Soil chemical survey', 'pedology', 'continuous' ),
+  c('hydromorphy', 'Hydromorphy', 'pedology', 'discrete'),
+  c('waterlog', 'Water logging', 'pedology', 'discrete'),
+  c('DEM', 'Digital elevation model', 'topography', 'continuous'),
+  c('slope', 'Slope', 'topography', 'continuous'),
+  c('aspect', 'Aspect', 'topography', 'continuous'),
+  c('curvature', 'Curvature', 'topography', 'continuous'),
+  c('TRI', 'Topographic roughness index', 'topography', 'continuous'),
+  c('FlowDir', 'Water flow direction', 'topography', 'continuous'),
+  c('wetness', 'Topographic wetness index', 'topography', 'continuous')
+) %>% 
+  data.frame() %>% 
+  rename(code = X1, name = X2, type = X3, variable = X4) %>% 
+  kable(caption = "Available environmental variables for Paracou.")
 ```
 
-# Biotic
-
-# Light
-
-# Hydrology
-
-# Pedology
-
-# Topography
-
-# Wetness
-
-## Model
-
-```{r}
-# global crs definition
-crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
-# Elevation
-dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif"))
-# Wetness
-wetness <- raster("./environment_save/env/wetness.tiff")
-projection(wetness) <- projection(dem)
-wetness <- projectRaster(wetness, crs = crs)
-# Limits
-limits <- shapefile(file.path(path, "limits", "OverallPlots.shp"))
-limits <- spTransform(limits, CRSobj = crs)
-# hydrology
-hydro <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
-hydro <- spTransform(hydro, CRSobj = crs)
-hydro_pal <- colorFactor('Greys', as.factor(hydro$TypeWatEN), reverse = T)
-# Map
-leaflet() %>%
-  addPolylines(data = limits, group = 'Limits', color = 'black') %>%
-  addRasterImage(wetness) %>% 
-    addPolygons(data = hydro, group = 'WaterTable',
-              opacity = 0, fillOpacity = 0.3, fill = T, 
-              fillColor = ~hydro_pal(TypeWatEN), label = ~TypeWatEN)
-```
-
-## Validation
-
-```{r}
-wetness.hydro <- raster::extract(wetness, hydro)
-hydro_r <- rasterize(hydro, wetness)
-data.frame(wetness = values(wetness), 
-           hydro =  as.factor(hydro$TypeWatEN[values(hydro_r)])) %>% 
-  filter(!is.na(hydro)) %>% 
-  ggplot(aes(hydro, wetness)) +
-  geom_boxplot() +
-  coord_flip()
-```
-
-# Distribution
-
-```{r presence}
-trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+```{r sympho}
+sympho <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
                   dec=",", stringsAsFactors = F) %>% 
   filter(campagne == 2015) %>% 
   filter(code_vivant == 1) %>% 
   filter(code_mesure == 0) %>% 
-  filter(n_parcelle != 18)
+  filter(n_parcelle != 18) %>% 
+  mutate(morphotype = espece)
+symphoXY <- sympho
+coordinates(symphoXY) <- ~Xutm + Yutm
+proj4string(symphoXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+symphoXY <- spTransform(symphoXY, CRSobj = crs)
+symphoPal <- colorFactor(c('darkgreen', 'black', 'firebrick'), as.factor(symphoXY$morphotype))
+```
+
+```{r basemap}
+limits <- shapefile(file.path(path, "limits", "OverallPlots.shp"))
+limits <- spTransform(limits, CRSobj = crs)
+basemap <- leaflet() %>%
+  addPolylines(data = limits, color = 'black', group = "limits") %>%
+  addCircles(data = symphoXY, radius = ~circonf/pi/10, 
+             color = ~symphoPal(morphotype), group = "Symphonia") %>% 
+  addLegend(pal = symphoPal, title = 'Morphotype', 
+            values = levels(as.factor(symphoXY$morphotype)),
+            position = "bottomright") %>% 
+  addLayersControl(overlayGroups = c('limits', 'Symphonia'),
+                   options = layersControlOptions(collapsed = T))
+```
+
+# Biotic
+
+## nci
+
+> Neighborhood competition index 
+$$NCI_i = \sum_j (\frac{DBH_j}{DBH_i})^\beta*e^{-\alpha*d_{i,j}} $$
+
+### NCI
+
+```{r nci map}
+
+```
+
+### Morphotype distribution with NCI
+
+```{r nci comp}
+
+```
+
+## dcm
+
+> Digital canopy model
+
+### DCM
+
+```{r dcm map}
+dcm <- raster(file.path(path, "biotic", 
+                        "MNC_ParacouAvril2009_1m.tif"))
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+projection(dcm) <- projection(dem)
+dcm <- projectRaster(dcm, crs = crs)
+basemap %>% 
+  addRasterImage(aggregate(dcm, 4))
+```
+
+### Morphotype distribution with DCM
+
+```{r dcm comp}
+sympho$dcm <- raster::extract(dcm, symphoXY)
+sympho %>% 
+  ggplot(aes(dcm, col = morphotype, fill = morphotype)) +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  xlab('Digital canopy model')
+```
+
+## gap
+
+> Treefall gaps
+
+### gap
+
+```{r gap map, eval=FALSE}
+# gap <- dcm < 10
+# gap <- crop(gap, extent(symphoXY))
+# gap <- rasterToPolygons(gap)
+# gap$area <- area(gap)
+# save(gap, file = "./environment_save/gap.Rdata")
+load("./environment_save/gap.Rdata")
+gap <- subest(gap, area > 4)
+d_gap <- raster(extent(symphoXY), resolution = 10^-4, crs = crs)
+d_gap <- setValues(d_gap, 0)
+d_gap <-  mask(d_gap, gap)
+d_gap <- distance(d_gap)
+basemap %>% 
+  addRasterImage(log(d_gap+1))
+```
+
+### Morphotype distribution with gap
+
+```{r gap comp, eval=FALSE}
+sympho$d_gap <- raster::extract(d_gap, symphoXY)
+sympho %>% 
+  ggplot(aes(d_gap, col = morphotype, fill = morphotype)) +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  scale_x_log10() +
+  xlab('Distance to the closest treefall gap')
+```
+
+## log gap
+
+> Logging gaps
+
+### log gap
+
+```{r log map}
+log_gap <- shapefile(file.path(path, "logging", "Gaps.shp"))
+log_gap <- spTransform(log_gap, CRSobj = crs)
+d_log_gap <- raster(extent(symphoXY), resolution = 10^-4, crs = crs)
+d_log_gap <- setValues(d_log_gap, 0)
+d_log_gap <-  mask(d_log_gap, log_gap)
+d_log_gap <- distance(d_log_gap)
+basemap %>% 
+  addRasterImage(log(d_log_gap+1))
+```
+
+### Morphotype distribution with log gap
+
+```{r log comp}
+sympho$d_log_gap <- raster::extract(d_log_gap, symphoXY)
+sympho %>% 
+  ggplot(aes(d_log_gap, col = morphotype, fill = morphotype)) +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  scale_x_log10() +
+  xlab('Distance to the closest logging gap')
+```
+
+## Idist
+
+> Disturbance index
+$$Idist_i = \sum_j e^{-\alpha*d_{i,j}} * S^\ beta $$
+
+### Idist
+
+```{r Idist map}
+
+```
+
+### Morphotype distribution with Idist
+
+```{r Idist comp}
+
+```
+
+# Hydrology
+
+## wtd
+
+> Water table depth
+
+### WTD
+
+```{r wtd map}
+wtd <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
+wtd <- spTransform(wtd, CRSobj = crs)
+wtdPal <- colorFactor('Blues', as.factor(wtd$TypeWatEN), reverse = T)
+basemap %>%
+  addPolygons(data = wtd, opacity = 0, fillOpacity = 0.5, fill = T,
+              fillColor = ~wtdPal(TypeWatEN), label = ~TypeWatEN)
+```
+
+### Morphotype distribution with log gap
+
+```{r wtd comp}
+sympho$wtd <- raster::extract(wtd, symphoXY)$TypeWatEN
+sympho %>% 
+  ggplot(aes(wtd, fill = morphotype)) +
+  geom_bar(position = "dodge") +
+  scale_y_log10() +
+  xlab('Water table depth') +
+  coord_flip()
+```
+
+## dist creek
+
+> Distance to nearest creek
+
+### dist creek
+
+```{r dist creek map}
+creek <- shapefile(file.path(path, "hydrology", "Creeks.shp"))
+creek <- spTransform(creek, CRSobj = crs)
+d_creek <- raster(extent(symphoXY), resolution = 10^-4, crs = crs)
+d_creek <- setValues(d_creek, 0)
+d_creek <-  mask(d_creek, creek)
+d_creek <- distance(d_creek)
+basemap %>% 
+  addRasterImage(log(d_creek+1))
+```
+
+### Morphotype distribution with dist creek
+
+```{r dist creek comp}
+sympho$d_creek <- raster::extract(d_creek, symphoXY)
+sympho %>% 
+  ggplot(aes(d_creek, col = morphotype, fill = morphotype)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05,
+                 alpha = 0.1, position = "dodge") +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  scale_x_log10() +
+  xlab('Distance to the closest creek')
+```
+
+## drainages
+
+> Drainage type
+
+### drainages
+
+```{r drainages map}
+drainages <- shapefile(file.path(path, "pedology", "Drainages.shp"))
+wtd <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
+proj4string(drainages) <- proj4string(wtd)
+drainages <- spTransform(drainages, CRSobj = crs)
+drainagesPal <- colorFactor('Blues', 
+                            as.factor(drainages$TypDrainEN), 
+                            reverse = T)
+basemap %>%
+  addPolygons(data = drainages, opacity = 0, fillOpacity = 0.5, 
+              fill = T,
+              fillColor = ~drainagesPal(TypDrainEN), 
+              label = ~TypDrainEN)
+```
+
+### Morphotype distribution with drainages
+
+```{r drainages comp}
+sympho$drainages <- raster::extract(drainages, symphoXY)$TypDrainEN
+sympho %>% 
+  ggplot(aes(drainages, fill = morphotype)) +
+  geom_bar(position = "dodge") +
+  xlab('Drainage type') +
+  coord_flip()
+```
+
+# Pedology
+
+## soil
+
+> Soil survey
+
+### soil
+
+```{r soil map}
+soil <- shapefile(file.path(path, "pedology", "SoilSurvey.shp"))
+soil@data %>% 
+  select(Refus, MO, C, N, C_N, Polsen, PBray2, Al_KCl, Mg_ech, K_ech, Na_ech, S, CEC, TS) %>% 
+  prcomp(scale. = T) %>%
+  autoplot(loadings = T, loadings.label = T)
+```
+
+### Morphotype distribution with soil
+
+```{r soil comp}
+
+```
+
+## hydromorphy
+
+> Hydromorphy
+
+### hydromorphy
+
+```{r hydromorphy map}
+hydromorphy <- shapefile(file.path(path, "pedology", "Hydromorphy.shp"))
+wtd <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
+proj4string(hydromorphy) <- proj4string(wtd)
+hydromorphy <- spTransform(hydromorphy, CRSobj = crs)
+hydromorphyPal <- colorFactor('Blues', 
+                            as.factor(hydromorphy$Hydro), 
+                            reverse = T)
+basemap %>%
+  addPolygons(data = hydromorphy, opacity = 0, fillOpacity = 0.5, 
+              fill = T,
+              fillColor = ~hydromorphyPal(Hydro), 
+              label = ~Hydro)
+```
+
+### Morphotype distribution with hydromorphy
+
+```{r hydromorphy comp}
+sympho$hydromorphy <- raster::extract(hydromorphy, symphoXY)$Hydro
+sympho %>% 
+  ggplot(aes(hydromorphy, fill = morphotype)) +
+  geom_bar(position = "dodge") +
+  xlab('Hydromorphy presence')
+```
+
+## waterlog
+
+> Water logging
+
+### waterlog
+
+```{r waterlog map}
+waterlog <- shapefile(file.path(path, "pedology", "Waterlogging.shp"))
+wtd <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
+proj4string(waterlog) <- proj4string(wtd)
+waterlog <- spTransform(waterlog, CRSobj = crs)
+waterlogPal <- colorFactor('Blues', 
+                            as.factor(waterlog$LevelWater), 
+                            reverse = T)
+basemap %>%
+  addPolygons(data = waterlog, opacity = 0, fillOpacity = 0.5, 
+              fill = T,
+              fillColor = ~waterlogPal(LevelWater), 
+              label = ~LevelWater)
+```
+
+### Morphotype distribution with waterlog
+
+```{r waterlog comp}
+sympho$waterlog <- raster::extract(waterlog, symphoXY)$LevelWater
+sympho %>% 
+  ggplot(aes(waterlog, fill = morphotype)) +
+  geom_bar(position = "dodge") +
+  xlab('Water level from water logging') +
+  coord_flip()
+```
+
+# Topography
+
+## wetness
+
+> Topographic wetness index
+
+### Wetness
+
+```{r wetness map}
+wetness <- raster("./environment_save/env/wetness.tiff")
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+basemap %>% 
+  addRasterImage(wetness)
+```
+
+### Morphotype distributions with wetness
+
+```{r wetness comp}
+sympho$wetness <- raster::extract(wetness, symphoXY)
+sympho %>% 
+  ggplot(aes(wetness, col = morphotype, fill = morphotype)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05,
+                 alpha = 0.1, position = "dodge") +
+  geom_density(alpha = 0.2) +
+  xlab('Tropographic wetness index')
+```
+
+## dem
+
+> Digital elevation model
+
+### DEM
+
+```{r dem map}
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif"))
+dem <- projectRaster(dem, crs = crs)
+basemap %>% 
+  addRasterImage(dem)
+```
+
+### Morphotype distribution with DEM
+
+```{r dem comp}
+sympho$dem <- raster::extract(dem, symphoXY)
+sympho %>% 
+  ggplot(aes(dem, col = morphotype, fill = morphotype)) +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  xlab('Digital elevation model')
+```
+
+## slope
+
+> Digital slope model
+
+### slope
+
+```{r slope map}
+slope <- terrain(dem, 'slope')
+basemap %>% 
+  addRasterImage(slope)
+```
+
+### Morphotype distribution with slope
+
+```{r slope comp}
+sympho$slope <- raster::extract(slope, symphoXY)
+sympho %>% 
+  ggplot(aes(slope, col = morphotype, fill = morphotype)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.01,
+                 alpha = 0.1, position = "dodge") +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  xlab('Digital slope model')
+```
+
+## curvature
+
+> Digital curvature model
+
+### curvature
+
+```{r curvature map}
+curvature <- raster("./environment_save/env/curvature.tiff")
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+projection(curvature) <- projection(dem)
+curvature <- projectRaster(curvature, crs = crs)
+curvature <- crop(curvature, extent(symphoXY))
+basemap %>% 
+  addRasterImage(curvature)
+```
+
+### Morphotype distributions with curvature
+
+```{r curvature comp}
+sympho$curvature <- raster::extract(curvature, symphoXY)
+sympho %>% 
+  ggplot(aes(curvature, col = morphotype, fill = morphotype)) +
+  geom_density(alpha = 0.2) +
+  xlab('Digital curvature model')
+```
+
+## aspect
+
+> Digital aspect model
+
+### aspect
+
+```{r aspect map}
+aspect <- terrain(dem, 'aspect')
+basemap %>% 
+  addRasterImage(aspect)
+```
+
+### Morphotype distribution with aspect
+
+```{r aspect comp}
+sympho$aspect <- raster::extract(aspect, symphoXY)
+sympho %>% 
+  ggplot(aes(aspect, col = morphotype, fill = morphotype)) +
+  geom_density(alpha = 0.2) +
+  ylim(0, 1) +
+  xlab('Digital aspect model')
+```
+
+## TRI
+
+> Topographic ruggedness index
+
+### TRI
+
+```{r TRI map}
+TRI <- terrain(dem, 'TRI')
+basemap %>% 
+  addRasterImage(TRI)
+```
+
+### Morphotype distribution with TRI
+
+```{r TRI comp}
+sympho$TRI <- raster::extract(TRI, symphoXY)
+sympho %>% 
+  ggplot(aes(TRI, col = morphotype, fill = morphotype)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05,
+                 alpha = 0.1, position = "dodge") +
+  ylim(0, 1) +
+  xlab('Topographic ruggedness index')
+```
+
+# Correlations
+
+```{r cor}
+library(ade4)
+ord <- sympho %>% 
+  select(d_log_gap, wtd, d_creek, drainages, hydromorphy,
+         waterlog, wetness, dem, slope, curvature, aspect, TRI) %>% 
+  mutate(wtd = factor(wtd)) %>% 
+  mutate(drainages = factor(drainages)) %>% 
+  na.omit() %>% 
+  dudi.mix(scannf = F, nf = 3)
+data(deug)
+deug.dudi <- dudi.pca(deug$tab, center = deug$cent, scale = FALSE, scan = FALSE)
+class(ord) <- class(deug.dudi)
+factoextra::fviz_pca_var(ord, col.var = "contrib", repel = TRUE,
+                         gradient.cols = c("#00AFBB", "#E7B800",
+                                           "#FC4E07"), c(1,2))
+factoextra::fviz_pca_var(ord, col.var = "contrib", repel = TRUE,
+                         gradient.cols = c("#00AFBB", "#E7B800",
+                                           "#FC4E07"), c(1,3))
+factoextra::fviz_pca_var(ord, col.var = "contrib", repel = TRUE,
+                         gradient.cols = c("#00AFBB", "#E7B800",
+                                           "#FC4E07"), c(2,3))
+sympho %>% 
+  model.matrix(~ d_log_gap + wtd + d_creek + drainages + hydromorphy + waterlog + wetness + dem + slope + curvature + aspect + TRI, 
+               data = .) %>% 
+  cor() %>% 
+  corrplot::corrplot()
+```
+
+# Growth
+
+```{r}
+source("~/Documents/BIOGECO/PhD/scripts/dbh_correction.R")
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% # dbh correction
+  filter(n_parcelle %in% 1:16) %>% 
+  mutate(treatment = c(rep(c('C', 'T1', 'T2', 'T3'), 3), rep('B', 4))[n_parcelle]) %>% 
+  mutate(dbh = circonf/pi) %>% 
+  group_by(idArbre) %>% 
+  mutate(dbh_c = correction(dbh, campagne, code_vivant, code_mesure)) %>% 
+  ungroup()
+trees <- trees %>% # tree selection
+  arrange(campagne) %>% 
+  group_by(idArbre) %>% 
+  filter(any(campagne == 1988)) %>% 
+  filter(any(campagne == 1992)) %>% 
+  filter(campagne %in% c(1988, 1992)) %>% 
+  mutate(growth = diff(dbh_c)) %>% 
+  filter(growth > 0) %>% 
+  filter(campagne == 1988) %>% 
+  select(idArbre, n_parcelle, n_carre, n_arbre, espece,
+         Xutm, Yutm, dbh_c, growth)
 treesXY <- trees
 coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 treesXY <- spTransform(treesXY, CRSobj = crs)
 trees$wetness <- raster::extract(wetness, treesXY)
-trees <- trees %>% 
-  filter(espece != "Indet.") %>% 
-  mutate(presence_globulifera = as.numeric(espece == "globulifera")) %>% 
-  mutate(presence_sp1 = as.numeric(espece == "sp.1"))
 trees %>% 
-  select(presence_globulifera, presence_sp1, wetness) %>% 
-  reshape2::melt(id.vars = "wetness") %>% 
-  filter(value > 0) %>% 
-  ggplot(aes(wetness, col = variable, fill = variable)) +
-  geom_density(alpha = 0.3) +
-  xlab("Wetness index") +
-  scale_fill_discrete("Morphotype", labels = c("globulifera", "sp1")) +
-  scale_color_discrete("Morphotype", labels = c("globulifera", "sp1"))
+  filter(espece != "Indet.") %>% 
+  ggplot(aes(wetness, growth/dbh_c)) +
+  geom_point() +
+  facet_wrap(~espece)
+# growth <- as_data(trees$growth)
+# dbh <- as_data(trees$dbh_c)
+# wet <- as_data(trees$wetness)
+# mu <- gamma(10^-2,10^-2)
+# alpha <- gamma(10^-2,10^-2)
+# beta <- gamma(10^-2,10^-2)
+# sigma <- gamma(10^-2,10^-2, truncation = c(0,10))
+# distribution(growth) <- normal(mu + alpha*dbh^2 + beta*wet, sigma)
+# m <- model(mu, alpha, beta, sigma)
+# draws <- mcmc(m, n_samples = 1000)
+# bayesplot::mcmc_trace(draws)
 ```
+
+# References

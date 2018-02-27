@@ -26,5 +26,5 @@ transformed parameters {
 }
 model {
   for(i in 1:I)
-    log(AGR[i]+1) ~ normal(AGRmax*exp(-0.5*log(dbh[i]/(dopt/ks))*log(dbh[i]/(dopt/ks)))*exp(-Idisturb[ind[i]]), sigma) ;
+    log(AGR[i]+1) ~ normal(AGRmax*exp(-0.5*(log(dbh[i]/dopt)/ks)*(log(dbh[i]/dopt)/ks))*exp(-Idisturb[ind[i]]), sigma) ;
 }

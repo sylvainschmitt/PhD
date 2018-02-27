@@ -1,3 +1,8 @@
+# PhD 0.1.9024
+* subject: Environment and Traits sections
+* stan lecture
+* *Symphonia* growth model v2
+
 # PhD 0.1.9023
 * environment
 
@@ -7,7 +12,7 @@
 * environment for analysis
 
 # PhD 0.1.9021
-*probes init
+* probes init
 
 # PhD 0.1.9020
 * new subject first version
