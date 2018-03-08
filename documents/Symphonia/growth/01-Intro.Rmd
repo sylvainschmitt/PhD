@@ -1,0 +1,30 @@
+# Introduction {-}
+
+## Models
+
+I wanted to test for an eventual effect of logging through light and disturbance on Symphonia individuals growth. I combined the disturbance indice of model proposed by @Herault2010:
+$$AGR_i \sim \mathcal{N}(\mu*\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta);\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+with the potential reductor model proposed by @herault_functional_2011:
+$$log(AGR_i+1) \sim \mathcal{N}(AGR_{max}*e^{-\frac{1}{2}*log(\frac{dbh_i}{d_{opt}/k_s})};\sigma)~|~i\in[1:I]$$
+into:
+$$log(AGR_i+1) \sim \mathcal{N}(AGR_{max}*e^{-\frac{1}{2}*log(\frac{dbh_i}{d_{opt}/k_s})}*e^{-\sum_j^Je^{-\alpha*d_{i,j}}*S_j^\beta};\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+That I declined in different versions :
+
+## Table 1: Models summary.
+
+```{r}
+mtab <- data.frame(
+  M = c('$N_{o}$', '$N_{i,o}$', '$N_{s,o}$', '$N_{g}$', '$N_{o,g}$'),
+  Model = c(
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{d_{opt}})/k_s)^2};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}({AGR_{max}}_{ind}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{d_{opt}})/k_s)^2};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}({AGR_{max}}_{sp}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{{d_{opt}}_{sp}})/{k_s}_{sp})^2};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\sum_j^Je^{-\\alpha*d_{i,j}}*S_j^\\beta};\\sigma)$',
+    '$log(AGR_i+1) \\sim \\mathcal{N}(AGR_{max}*e^{-\\frac{1}{2}*(log(\\frac{dbh_i}{d_{opt}})/k_s)^2}*e^{-\\sum_j^Je^{-\\alpha*d_{i,j}}*S_j^\\beta};\\sigma)$'
+  )
+)
+mtab$M <- as.character(mtab$M)
+mtab$Model <- as.character(mtab$Model)
+row.names(mtab) <- c('No', 'Nio', 'Nso', 'Ng', 'Nog')
+kable(mtab, row.names = F)
+```

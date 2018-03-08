@@ -1,0 +1,89 @@
+# Ontgeny
+
+```{r setup_No, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(rstan)
+library(bayesplot)
+library(tidyverse)
+mpath <- "./growth_models"
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+rstan_options(auto_write = T)
+options(mc.cores = parallel::detectCores())
+load("./growth_save/model_data.Rdata")
+```
+
+```{r No}
+# fit <- stan(file = file.path(mpath, 'No.stan'), data = data, chains = 2)
+# save(fit, file = file.path(mpath, 'No.Rdata'))
+load(file.path(mpath, 'No.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma")
+```
+
+## Column 1 {data-width=200}
+
+### Summary
+
+```{r So}
+broom::tidyMCMC(fit, c(pars,"lp__"), droppars = NULL, rhat = T) %>% kable()
+```
+
+### Predictions
+
+```{r Yo}
+cbind(
+  data$trees[c("dbh_c", "agr", "espece")],
+  mean = apply(as.matrix(fit, pars = "AGRpred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "AGRpred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(dbh_c, agr)) +
+  geom_point(aes(col = espece)) +
+  geom_line(aes(y = mean)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'grey', alpha = 0.2)
+```
+
+### Traces
+
+```{r To}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+$$log(AGR_i+1) \sim \mathcal{N}(AGR_{max}*e^{-\frac{1}{2}*(log(\frac{dbh_i}{d_{opt}})/k_s)^2};\sigma)$$
+
+### Posteriors
+
+```{r Po}
+mcmc_areas(as.array(fit), prob = 0.8, pars = pars)
+```
+
+### Pairs
+
+```{r 2o}
+mcmc_pairs(as.array(fit), pars = pars)
+```
+
+### Decorrelate
+
+```{r Do}
+decorrelate <- function(fit, par1, par2){
+  par1 <- enquo(par1)
+  par2 <- enquo(par2)
+  as.data.frame(fit) %>% 
+    select(!!par1, !!par2) %>% 
+    mutate(identity = (!!par1)/(!!par2)) %>%
+    mutate(pow1.5 = (!!par1)/(!!par2)^(3/2)) %>%
+    mutate(square = (!!par1)/(!!par2)^2) %>%
+    mutate(cube = (!!par1)/(!!par2)^3) %>%
+    select(-!!par2) %>% 
+    reshape2::melt(id.var = as.character(par1)[2]) %>% 
+    ggplot(aes_string("value", as.character(par1)[2])) +
+    geom_point() +
+    facet_wrap(~ variable)
+}
+decorrelate(fit, AGRmax, Ks)
+```

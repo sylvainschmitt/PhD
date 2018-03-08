@@ -9,5 +9,5 @@ parameters {
 }
 model {
   beta ~ gamma(10^-2, 10^-2); // beta prior
-  logLL ~ normal(beta*logLMA, sigma); // Likelihood
+  exp(logLL) ~ lognormal(beta*logLMA, sigma); // Likelihood
 } // empty line at the end (C++)

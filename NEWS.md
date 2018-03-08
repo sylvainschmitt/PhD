@@ -1,3 +1,9 @@
+# PhD 0.1.9025
+* subject: Phenotype, IV within species and communities
+* growth2 dev (No, Nio, Nso)
+* growth2 to growth bookdown
+* lecture stan log normal check with @GeraldineDerroire
+
 # PhD 0.1.9024
 * subject: Environment and Traits sections
 * stan lecture

@@ -4,10 +4,14 @@ data {
   vector<lower=0>[I] dbh ; // dbh vector
 }
 parameters {
-  real AGRmax ; // potential growth
+  real AGRmaxP ; // potential growth
   real<lower=0,upper=200> Dopt ; // optimal diameter
   real<lower=0.1,upper=10> Ks ; // kurtosis
   real<lower=0,upper=100> sigma ;
+}
+transformed parameters {
+  real AGRmax ;
+  AGRmax = AGRmaxP*Ks^3 ;
 }
 model {
   for(i in 1:I)

@@ -506,14 +506,26 @@ mcmc_areas(as.array(fit2), prob = 0.8,
 ```{r}
 pars <- c("beta", "sigma")
 pars_opt <- as.matrix(fit2)[which.max(as.matrix(fit2)[,'lp__']), pars]
+pars_fit <- broom::tidy(fit2) %>% select(estimate) %>% unlist()
 predict <- function(logLMA, pars_val)
-  rnorm(1000, mean = pars_val[1]*logLMA, sd = pars_val[2])
-predictions <- sapply(seq_len(data$N), function(i)
+  rlnorm(1000, meanlog = pars_val[1]*logLMA, sdlog = pars_val[2])
+predictions_all <- sapply(seq_len(data$N), function(i)
   apply(as.matrix(fit2)[,pars], 1, function(p)
     predict(LES$log.LMA[i], p)))
-predictions <- data.frame(t(apply(predictions, 2, function(x) 
+predict_null_var <- function(logLMA, pars_val)
+  rlnorm(1000, meanlog = pars_val[1]*logLMA, sdlog = 0)
+predictions_all_null_var <- sapply(seq_len(data$N), function(i)
+  apply(as.matrix(fit2)[,pars], 1, function(p)
+    predict_null_var(LES$log.LMA[i], p)))
+predictions_mean <- sapply(seq_len(data$N), function(i)
+  apply(as.matrix(fit2)[,pars], 1, function(p) exp(p[1]*LES$log.LMA[i])))
+predictions <- data.frame(t(apply(predictions_all, 2, function(x)
   quantile(x, probs = c(0.05, 0.95)))))
-predictions$mean <- pars_opt["beta"]*LES$log.LMA
+predictions$mean_predictions_var <- apply(predictions_all, 2, mean)
+predictions$mean_predictions_null_var <- apply(predictions_all_null_var, 2, mean)
+predictions$mean_predictions_mean <- apply(predictions_mean, 2, mean)
+predictions$mean_opt <- exp(pars_opt["beta"]*LES$log.LMA)
+predictions$mean_fit <- exp(pars_fit["estimate1"]*LES$log.LMA + pars_fit["estimate2"]^2/2)
 predictions$logLL <- LES$log.LL
 predictions$logLMA <- LES$log.LMA
 ```
@@ -521,11 +533,19 @@ predictions$logLMA <- LES$log.LMA
 ## Predictions 2
 
 ```{r, fig.height=4}
-ggplot(predictions, aes(logLMA, logLL)) +
+ggplot(predictions, aes(logLMA, exp(logLL))) +
   geom_ribbon(aes(ymin = X5., ymax = X95.),
               color = "grey", alpha = 0.2) +
-  geom_line(aes(y = mean)) +
-  geom_point()
+  geom_line(aes(y = mean_predictions), col = 'blue') +
+  # geom_line(aes(y = mean_predictions_mean), col = 'black') +
+  geom_line(aes(y = mean_predictions_null_var), col = 'red') +
+  geom_line(aes(y = mean_fit), col = 'green') +
+  # geom_line(aes(y = mean_opt), col = 'green') +
+  geom_point() +
+  stat_function(fun = function(lma) exp(pars_fit["estimate1"]*lma + pars_fit["estimate2"]^2/2), col = "blue")
+
+ggplot(data.frame(LMA = 1:6), aes(x = LMA)) +
+  stat_function(fun = function(lma) exp(pars_fit["estimate1"]*lma + pars_fit["estimate2"]^2/2), col = "blue")
 ```
 
 ## `shinystan`
