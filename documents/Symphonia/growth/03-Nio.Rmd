@@ -1,0 +1,121 @@
+# Individual and ontogeny
+
+```{r setup_Nio, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(rstan)
+library(bayesplot)
+library(tidyverse)
+mpath <- "./growth_models"
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+rstan_options(auto_write = T)
+options(mc.cores = parallel::detectCores())
+load("./growth_save/model_data.Rdata")
+```
+
+## Introduction
+
+We suggested to add an individual random effect on the potential maximum growth $AGR_{max_{ind}}$. It means we make a strong hypothesis on the fact that all individuals will have the same optimal diameter $d_{opt}$ and kurtosis $k_s$ ! We tested the model with the two datasets.
+
+\begin{equation}
+  log(AGR_i+1) \sim \mathcal{N}(AGR_{max_{ind}}*e^{-\frac{1}{2}*(log(\frac{dbh_i}{d_{opt}})/k_s)^2},\sigma)
+  AGR_{max_{ind}} \sim \mathcal{N}^N_{ind}(AGR_{max}, \sigma_{ind})
+  (AGR_{max}, d_{opt}, k_s,\sigma,\sigma_{ind}) \sim \mathcal{\Gamma}^5(10^{-2},10^{-2})
+  (\#eq:No)
+\end{equation}
+
+## Data 1
+
+```{r Nio}
+# fit <- stan(file = file.path(mpath, 'Nio.stan'), data = data, chains = 2)
+# save(fit, file = file.path(mpath, 'Nio.Rdata'))
+load(file.path(mpath, 'Nio.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma", "sigma_ind")
+```
+
+### Diagnostic
+
+Diagnostic seems okay. Summary table \@ref(tab:Sio) shows a correct $\hat{R}$ indicating good convergence as well as the trace plots \@ref(fig:Tio). And the pair plot \@ref(fig:2io) does not seems to show corrrelations between parameters.
+
+```{r Sio}
+broom::tidyMCMC(fit, c(pars,"lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model \"Individual and ontogeny\"")
+```
+
+```{r Tio, fig.cap="Markov chains trace plot after warmup for model \"Individual and ontogeny\""}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2io, fig.cap="Markov chains pairs plot after warmup for model \"Individual and ontogeny\""}
+mcmc_pairs(as.array(fit), pars = pars)
+```
+
+### Predicitons & conclusion
+
+Predictions seems okay in figure \@ref(fig:Yio), but we might have exagerated high or low $AGR_{max_{ind}}$ due to a lack of points for some individuals. Consequently we will test the model with the second dataset.
+
+```{r Yio, fig.cap="Predictions for model \"Individual and ontogeny\""}
+data.frame(
+  mean_all = apply(as.matrix(fit, pars = "AGRpred"), 2, mean),
+  mean_ind = apply(as.matrix(fit, pars = "AGRpred_ind"), 2, mean),
+  t(apply(as.matrix(fit, pars = "AGRpred_ind"), 2, quantile, probs = c(0.05, 0.95))),
+  data$trees
+) %>% 
+  ggplot(aes(dbh_c, agr)) +
+  geom_point(aes(col = espece)) +
+  geom_line(aes(y = mean_ind, group = idArbre), alpha = 0.4) +
+  geom_ribbon(aes(ymin = X5., ymax = X95., group = idArbre), color = 'grey', alpha = 0.05) +
+  geom_line(aes(y = mean_all), lwd = 1.2)
+```
+
+## Data 2
+
+```{r Nio2}
+# fit <- stan(file = file.path(mpath, 'Nio.stan'), data = data2, chains = 2)
+# save(fit, file = file.path(mpath, 'Nio2.Rdata'))
+load(file.path(mpath, 'Nio2.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma", "sigma_ind")
+```
+
+### Diagnostic
+
+Diagnostic seems okay. Summary table \@ref(tab:Sio2) shows a correct $\hat{R}$ indicating good convergence as well as the trace plots \@ref(fig:Tio2). And the pair plot \@ref(fig:2io2) does not seems to show corrrelations between parameters.
+
+```{r Sio2}
+broom::tidyMCMC(fit, c(pars,"lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model \"Individual and ontogeny\"")
+```
+
+```{r Tio2, fig.cap="Markov chains trace plot after warmup for model \"Individual and ontogeny\""}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2io2, fig.cap="Markov chains pairs plot after warmup for model \"Individual and ontogeny\""}
+mcmc_pairs(as.array(fit), pars = pars)
+```
+
+### Predicitons & conclusion
+
+Predictions seems okay in figure \@ref(fig:Yio2). We will thus keep this model for individual and ontogeny effects. But we should further test it for individual or species variations in $d_{opt}$ and $k_s$.
+
+```{r Yio2, fig.cap="Predictions for model \"Individual and ontogeny\""}
+data.frame(
+  mean_all = apply(as.matrix(fit, pars = "AGRpred"), 2, mean),
+  mean_ind = apply(as.matrix(fit, pars = "AGRpred_ind"), 2, mean),
+  t(apply(as.matrix(fit, pars = "AGRpred_ind"), 2, quantile, probs = c(0.05, 0.95))),
+  data2$trees
+) %>% 
+  ggplot(aes(dbh_c, agr)) +
+  geom_point(aes(col = espece)) +
+  geom_line(aes(y = mean_ind, group = idArbre), alpha = 0.4) +
+  geom_ribbon(aes(ymin = X5., ymax = X95., group = idArbre), color = 'grey', alpha = 0.05) +
+  geom_line(aes(y = mean_all), lwd = 1.2)
+```
+
+## Conclusion
+
+We have a stable individual and ontogeny model with individual effect being modelised by a random effect on maximal potential growth rate $AGR_{max_{ind}}$. This parameter could indicate individuals vitality sensu @Allie2016.

@@ -1,7 +1,7 @@
 data {
-  int<lower=0> I ; // Nb of observations
-  vector<lower=0>[I] AGR ; // growth vector
-  vector<lower=0>[I] dbh ; // dbh vector
+  int<lower=0> N ; // Nb of observations
+  vector<lower=0>[N] AGR ; // growth vector
+  vector<lower=0>[N] dbh ; // dbh vector
 }
 parameters {
   real AGRmaxP ; // potential growth
@@ -11,14 +11,14 @@ parameters {
 }
 transformed parameters {
   real AGRmax ;
-  AGRmax = AGRmaxP*Ks^3 ;
+  AGRmax = AGRmaxP*Ks*Ks*Ks ;
 }
 model {
-  for(i in 1:I)
-    log(AGR[i]+1) ~ normal(AGRmax*exp(-0.5*pow(log(dbh[i]/Dopt)/Ks,2)), sigma) ;
+  for(n in 1:N)
+    log(AGR[n]+1) ~ normal(AGRmax*exp(-0.5*pow(log(dbh[n]/Dopt)/Ks,2)), sigma) ;
 }
 generated quantities {
-  vector[I] AGRpred ; // growth prediction vector
-  for(i in 1:I)
-    AGRpred[i] = exp(AGRmax*exp(-0.5*pow(log(dbh[i]/Dopt)/Ks,2)))-1 ;
+  vector[N] AGRpred ; // growth prediction vector
+  for(n in 1:N)
+    AGRpred[n] = exp(AGRmax*exp(-0.5*pow(log(dbh[n]/Dopt)/Ks,2)))-1 ;
 }

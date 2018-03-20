@@ -1,0 +1,176 @@
+---
+title: "Ecological genomics of niche exploitation and individual performance in tropical forest trees"
+author: "Sylvain Schmitt\\textsuperscript{1}, Myriam Heuertz\\textsuperscript{2}, Bruno Hérault\\textsuperscript{3}, Niklas Tysklind\\textsuperscript{4}"
+email: "sylvain.schmitt@agroparistech.fr"
+institute: "\\textsuperscript{1}Bordeaux University, UMR BIOGECO \\textsuperscript{2}INRA, UMR BIOGECO \\textsuperscript{3}INRA, UMR ECOFOG \\textsuperscript{4}CIRAD, UMR ECOFOG"
+longinstitute: "UMR BIOGECO - Bordeaux University/INRA"
+web: "https://sylvainschmitt.netlify.com/"
+logo: "images/ID.png"
+backimg: "images/bkg70.png"
+bibliofiles: "references.bib"
+bibliography: "references.bib"
+posteroptions: width=90,height=110,scale=1.2 #,grid # portrait
+#posteroptions: width=110,height=90,scale=1.2 #,grid # landscape
+headerheight: 13cm
+# large, Large, LARGE, huge, Huge, veryHuge, VeryHuge, VERYHuge
+titlefont: size=\veryHuge,series=\bfseries
+authorfont: size=\huge
+institutefont: size=\Large
+knit: (function(input, encoding, make = TRUE) { source('tex/makefile-renderer.R', local = TRUE) })
+---
+
+%% smart
+%% to=latex
+%% template=tex/poster_night.tex
+%% filter=tex/poster-filters.py
+%% biblatex
+
+```{r packages-and-options, cache=FALSE}
+library('ggplot2')
+library('knitr')
+theme_set(theme_grey(base_size=10))
+knitr::opts_chunk$set(fig.width = 8, fig.height = 6)
+```
+
+[columns=2]
+
+[column]
+
+# Introduction
+
+# Environment
+
+```{r environmentOverlap, fig.cap="Morphotypes distribution along the topographical wetness index (TWI)"}
+path <- "~/Documents/BIOGECO/PhD/data/Paracou"
+docpath <- "~/Documents/BIOGECO/PhD/documents/Symphonia/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+load(file = file.path(path, 'trees', 'symphonia.Rdata'))
+sympho <- sympho %>% 
+  filter(campagne == 2015) %>% 
+  filter(code_vivant == 1) %>% 
+  filter(code_mesure == 0) %>% 
+  filter(n_parcelle != 18) %>% 
+  mutate(morphotype = espece)
+symphoXY <- sympho
+coordinates(symphoXY) <- ~Xutm + Yutm
+proj4string(symphoXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+symphoXY <- spTransform(symphoXY, CRSobj = crs)
+wetness <- raster(file.path(docpath, "./environment_save/env/wetness.tiff"))
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+sympho$wetness <- raster::extract(wetness, symphoXY)
+ge <- sympho %>% 
+  ggplot(aes(wetness, col = morphotype, fill = morphotype)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05,
+                 alpha = 0.1, position = "dodge") +
+  geom_density(alpha = 0.2) +
+  xlab('Tropographic wetness index')
+ge
+```
+
+# Genetic
+
+```{r transciptomic, fig.cap="Candidate SNPs for sequence capture from Tysklind et al, in prep."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
+load(file.path(path, "count_SNP.Rdatat"))
+gg <- count_SNP %>% 
+  ungroup() %>% 
+  mutate(type = ifelse(Is_in_CDS == "False" & Is_not_synonymous == "N/A", 
+                       "SNP in untranslated\nregion (UTR)", NA)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "False", 
+                       "Synonymous SNP in\ncoding region", type)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "True", 
+                       "SNP in coding region\nwith functional impact", type)) %>% 
+  filter(!is.na(type)) %>% 
+  ggplot(aes(type, n, fill = Is_condition_specific)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) format(x, big.mark = " ")) +
+  xlab(" ") + scale_x_discrete(limits = c("SNP in coding region\nwith functional impact",
+                                          "Synonymous SNP in\ncoding region",
+                                          "SNP in untranslated\nregion (UTR)")) +
+  scale_fill_discrete("Morphotype-specific", labels = c("no", "yes")) +
+  geom_text(aes(y = n + 10^5, 
+                col = Is_condition_specific,
+                label = paste(format(n, big.mark = " "))), 
+            size = 3,
+            position = position_dodge(width = 1)) +
+  scale_color_discrete(guide = "none")
+gg
+```
+
+
+# Functional
+
+```{r functionalOverlap, fig.cap="Morphotypes distribution in SLA-BrWD scatterplot."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+load(file.path(path, "data.Rdata"))
+gf <- data  %>% 
+  dplyr::select(morphotype, Dry_Weight, Area_exclude, Wood_infra_density) %>% 
+  mutate(SLA = Area_exclude / Dry_Weight) %>% 
+  mutate(WD = Wood_infra_density) %>% 
+  na.omit() %>% 
+  ggplot(aes(WD, SLA, col = morphotype)) +
+  geom_point() +
+  stat_ellipse() +
+  xlab("Branch wood density (BrWD in g/g)") +
+  ylab("Specific leaf area (SLA in cm/g)")
+gf
+```
+
+
+# Performance
+
+```{r individualGrowth, fig.cap="Symphonia growth model with individual maximum growth rate (Gmax)."}
+docpath <- "~/Documents/BIOGECO/PhD/documents/Symphonia/growth/"
+mpath <- "./growth_models"
+load(file.path(docpath, "./growth_save/model_data.Rdata"))
+load(file.path(docpath, mpath, 'Nio2.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma", "sigma_ind")
+gp <- data.frame(
+  mean_all = apply(as.matrix(fit, pars = "AGRpred"), 2, mean),
+  mean_ind = apply(as.matrix(fit, pars = "AGRpred_ind"), 2, mean),
+  t(apply(as.matrix(fit, pars = "AGRpred_ind"), 2, quantile, probs = c(0.05, 0.95))),
+  data2$trees
+) %>% 
+  filter(agr < 2) %>% 
+  ggplot(aes(dbh_c, agr)) +
+  geom_point(aes(col = espece)) +
+  geom_line(aes(y = mean_ind, group = idArbre), alpha = 0.4) +
+  geom_ribbon(aes(ymin = X5., ymax = X95., group = idArbre), color = 'grey', alpha = 0.05) +
+  geom_line(aes(y = mean_all), lwd = 1.2) +
+  ylab("Annual growth rate (AGR in cm/yr)") +
+  xlab("Diameter at breast height (dbh in cm)") +
+  scale_color_discrete("morphotype")
+gp
+```
+
+# Bibliography
+
+\printbibliography
+
+[column]
+
+# *Symphonia*
+
+```{r allSympho, fig.cap="Preliminary results for \\emph{Symphonia} study case. Subplot \\textbf{A} shows morphotypes distribution along the topographical wetness index (TWI). Subplot \\textbf{B} shows candidate SNPs for sequence capture from Tysklind et al, in prep. Subplot \\textbf{C} shows morphotypes distribution in SLA-BrWD scatterplot. Subplot \\textbf{D} shows growth model with individual maximum growth rate.", fig.height=10, fig.width=16}
+cowplot::plot_grid(ge, gg, gf, gp, labels = LETTERS[1:4])
+```
+
+
+# Acknowledgements
+
+[columns=2]
+
+[column]
+
+[column]
+
+\begin{figure}[htp]
+  \ragedright\includegraphics[width=0.8\textwidth]{images/QR.png}
+\end{figure}
+
+[/columns]
+
+[/columns]

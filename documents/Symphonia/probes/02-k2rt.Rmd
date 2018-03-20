@@ -1,0 +1,162 @@
+```{r setup_k2rt, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
+```
+
+# Trancriptomic result
+
+Niklas used 20 Symphonia juveniles from the transplantation garden experiment for transcriptomic analysis. First reads were assembled with ... Then ...
+
+## Quality check
+
+```{r Qcheck}
+data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
+           delim = "\t")
+data %>% 
+  select(Possible_sequencing_error,
+         SNP_in_mutliple_assembled_genes,
+         SNP_in_mutliple_assembled_isoforms) %>% 
+  mutate(Count = 1) %>%
+  reshape2::melt(id.vars = "Count") %>% 
+  filter(value == "True") %>% 
+  mutate(variable = gsub("_", " ", variable)) %>% 
+  group_by(variable) %>% 
+  summarise(n = n()) %>% 
+  mutate(Percentage = round(n/nrow(data)*100,2)) %>% 
+  kable(caption = "Quality check with single SNPs....",
+        format.args = list(big.mark = " "))
+rm(data) ; invisible(gc())
+```
+
+## SNPs type
+
+```{r count_SNP}
+data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
+           delim = "\t")
+count_SNP <- data %>% 
+  filter(Possible_sequencing_error != "True") %>% 
+  select(Is_in_CDS, Is_not_synonymous, Is_condition_specific) %>% 
+  group_by(Is_in_CDS, Is_not_synonymous, Is_condition_specific) %>% 
+  summarize(n = n()) 
+rm(data) ; invisible(gc())
+```
+
+```{r countTable}
+count_SNP %>% 
+  rename("Coding sequence" = Is_in_CDS,
+         "Not synonymous" = Is_not_synonymous,
+         "Morphotype-specific" = Is_condition_specific) %>% 
+  kable(caption = "Single SNPs headcount for Symphonia juveniles in k2rt main output. First column indicates if the SNP is in a coding sequence, second column indicates is the SNP is not synonymous, third column indicates if the SNP is morphotype-specific, and fourth column indicates the headcount.",
+        format.args = list(big.mark = " "))
+```
+
+```{r countGraph, fig.cap="SNPs headcount for Symphonia juveniles by types. Bar fill color indicates if the SNP is morphotype specific (blue if yes, red if not)."}
+count_SNP %>% 
+  ungroup() %>% 
+  mutate(type = ifelse(Is_in_CDS == "False" & Is_not_synonymous == "N/A", 
+                       "SNP in untranslated\nregion (UTR)", NA)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "False", 
+                       "Synonymous SNP in\ncoding region", type)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "True", 
+                       "SNP in coding region\nwith functional impact", type)) %>% 
+  filter(!is.na(type)) %>% 
+  ggplot(aes(type, n, fill = Is_condition_specific)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) format(x, big.mark = " ")) +
+  xlab(" ") + scale_x_discrete(limits = c("SNP in coding region\nwith functional impact",
+                                          "Synonymous SNP in\ncoding region",
+                                          "SNP in untranslated\nregion (UTR)")) +
+  scale_fill_discrete("Morphotype-specific", labels = c("no", "yes")) +
+  geom_text(aes(y = n + 10^5, 
+                col = Is_condition_specific,
+                label = paste(format(n, big.mark = " "))), 
+            size = 3,
+            position = position_dodge(width = 1)) +
+  scale_color_discrete(guide = "none")
+```
+
+```{r sunburstcount, fig.cap = "SNPs headcount for Symphonia juveniles by types. Levels precise if the SNP is in a coding region, synonymous and finally morphotype-specific."}
+count_SNP %>% 
+  ungroup() %>%
+  mutate(type = ifelse(Is_in_CDS == "False" & Is_not_synonymous == "N/A", 
+                       "UTR-UTR-", NA)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "False", 
+                       "CDS-synonymous-", type)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "True", 
+                       "CDS-functional impact-", type)) %>% 
+  filter(!is.na(type)) %>% 
+  mutate(Is_condition_specific = ifelse(Is_condition_specific == "False",
+                                        "non specific", "morphotype specific")) %>% 
+  mutate(type = paste0(type,Is_condition_specific)) %>% 
+  select(type, n) %>% 
+  sunburstR::sunburst(count = T)
+```
+
+## GO terms
+
+```{r data_GO}
+data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
+           delim = "\t")
+
+GO <- src_sqlite(file.path( "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate",
+                            "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  collect() %>% 
+  separate_rows(annotation, sep = '\t') %>% 
+  filter(grepl("GO:", annotation)) %>% 
+  separate_rows(annotation, sep = '`') %>% 
+  separate(annotation, sep = "\\^",
+           into = c("go_id", "go_namespace", "go_name"))
+
+data_GO <- data %>% 
+  filter(Is_in_CDS == "True") %>% 
+  filter(Is_not_synonymous == "True") %>% 
+  filter(Is_condition_specific == "True") %>% 
+  inner_join(GO, by = c("#Component_ID" = "transcript_id"))
+
+rm(data, GO) ; invisible(gc())
+```
+
+```{r}
+sample_n_groups = function(tbl, size, replace = FALSE, weight = NULL) {
+  # regroup when done
+  grps = tbl %>% groups %>% lapply(as.character) %>% unlist
+  # check length of groups non-zero
+  keep = tbl %>% summarise() %>% ungroup() %>% sample_n(size, replace, weight)
+  # keep only selected groups, regroup because joins change count.
+  # regrouping may be unnecessary but joins do something funky to grouping variable
+  tbl %>% right_join(keep, by=grps) %>% group_by_(.dots = grps)
+}
+```
+
+
+```{r dataGoGraph}
+data_GO %>% 
+  ggplot(aes(go_namespace, fill = as.numeric(KissDE_DeltaF) > 0)) +
+  geom_bar() +
+  coord_flip()
+
+data_GO %>% 
+  group_by(go_name) %>% 
+  summarise(n = n()) %>% 
+  group_by(n) %>% 
+  summarise(GO_n = n()) %>% 
+  filter(GO_n > 1) %>% 
+  ggplot(aes(n, GO_n)) +
+  geom_bar(stat = "identity")
+
+data_GO %>% 
+  group_by(go_name) %>% 
+  filter(n() > 50) %>% 
+  sample_n_groups(100) %>%
+  ggplot(aes(go_name, fill = as.numeric(KissDE_DeltaF) > 0)) +
+  geom_bar() +
+  coord_flip() + scale_y_log10()
+```
+

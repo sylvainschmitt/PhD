@@ -1,0 +1,38 @@
+```{r setup_intro, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+```
+
+# Introduction {-}
+
+## Modus operandi (to discuss):
+
+1. Trouver le kit qu'on voudra utiliser, et l'échelle de travail. C'est à dire, la taille en paires de bases totale qu'on voudra capturer pour séquençage, le nombre d'échantillons, la profondeur de séquençage, en fonction du coût de la manip et des fonds disponibles, aussi en fonction du throughput des séquenceurs. Les kits commerciaux font qu'on n'est pas totalement libres de customiser toutes ces variables. On part sur 15,000 EUR et sur une préparation des librairies à notre plateforme avec séquençage à Toulouse. J'ai fait un calcul pour la proposition de projet Guyamazon, que je te joins (mais je ne suis plus totalement à la une): kits de choix (à confirmer): MyBaits pour les sondes, NEBnext pour les librairies.
+1. Établir la liste des séquences à capturer. T'aider pour cela des transcriptomes de Niklas, en utilisant les critères suivants: Il faudra représenter 
+    * les fragments (gènes) à expression différentielle entre S. glob et S. sp1.
+    * une sélection de gènes (exprimés = assemblés dans les transcriptomes) mais sans expression différentielle
+    * une sélection de sequences nucléaires a priori non exprimés. On se servira préférentiellement des librairies génomiques de Symphonia de Guyane; on contactera pour cela Ivan Scotti - peut-être Niklas est actualisé sur l'assemblage actuel aussi. A défaut de cette voie, on prend les scaffold génomique de S. globulifera africain.
+    * une sélection de séquences d'origine chloroplastique et mitochondrial, définis sur base des librairies génomiques d'Ivan
+On devra faire un compromis entre nombre de fragments à capturer et leur longueur. A priori, je dirai qu'on ciblera une longueur de 500 à 1000 bp/fragment, en fonction des choix qu'on devra faire pour le kit.
+1. Design des sondes. Normalement, le kit qu'on utilisera nous offrira une application pour le faire. Le plus difficile sera d'avoir notre liste de séquences à capturer (= notre référence). 
+1. La manip: extraction ADN, préparation librairies génomiques, capture, séquençage
+1. Analyse de données brutes. Le cas échéant, construction d'une nouvelle référence à partir des données par assemblage de novo car si on designe les sondes sur de l'ARN (= exons), on attrappera peut-être des introns si on capture de l'ADN génomique. Mapping des lectures sur référence, SNP call et génotypage, SNP filtering.
+1. Analyse de données: structure génétique des populations (2 espèces, + leurs hybrides), structure génomique des polymorphismes, génomique écologique: recherche d'association génotypes-environnement spatial/temporel; puis génomique d'association génotype-phénotype.
+
+## Polymorphisms
+
+What we have:
+
+* if the variant is functional (in an open reading frame or not)
+* if the variant is morphtoype-specific (effectively at juvenile stage)
+* annotation
+
+So what we need/can have is (if I try to summarize):
+
+* functional non-synonymous and morphotype-specific variant (at least for juveniles)
+* functional non-synonymous and non morphotype-specific variant 
+* functional synonymous and morphotype-specific variant (at least for juveniles)
+* functional synonymous and non morphotype-specific variant
+* transcribed non-functional and morphotype-specific variant
+* transcribed non-functional and non morphotype-specific variant
+* untranslated regions for control **?UTR**
+* plastid DNA

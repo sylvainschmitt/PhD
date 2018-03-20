@@ -197,3 +197,17 @@ if(!all(sapply(fresh$`Poids frais`, test)))
   warning("Lines ", paste(which(!(sapply(fresh$`Poids frais`, test))), 
                           collapse = ', '), " have a wrong Poids frais value.\n")
 ```
+
+```{r}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+data <- read_csv2(file.path(path, "Full_traits_data.csv"))
+data  %>% 
+  select(morphotype, Dry_Weight, Area_exclude, Wood_infra_density) %>% 
+  mutate(SLA = Area_exclude / Dry_Weight) %>% 
+  mutate(WD = Wood_infra_density) %>% 
+  na.omit() %>% 
+  ggplot(aes(WD, SLA, col = morphotype)) +
+  geom_point() +
+  stat_ellipse()
+```
+

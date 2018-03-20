@@ -1,3 +1,9 @@
+# PhD 0.1.9026
+* Soctropecol poster init
+* probes design bookdown document init
+* growth models development in bookdown
+* data_exploration following final data release by @EmiDt
+
 # PhD 0.1.9025
 * subject: Phenotype, IV within species and communities
 * growth2 dev (No, Nio, Nso)
