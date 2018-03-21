@@ -1,4 +1,4 @@
-```{r setup_k2rt, include=FALSE}
+```{r setup_SNP, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -8,11 +8,15 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
 ```
 
-# Trancriptomic result
+# Single SNPs from transcritpomic
 
-Niklas used 20 Symphonia juveniles from the transplantation garden experiment for transcriptomic analysis. First reads were assembled with ... Then ...
+Niklas used 20 Symphonia juveniles from the transplantation garden experiment for transcriptomic analysis. RNA sequence were captured. The analysis followed the scheme suggested by @Lopez-Maestre2016 (see below). First, reads were assembled with `Trinity` into transcripts. In parrallel, SNPs were detected with `Kissplice`. Then SNPs have been mapped on the transcritpome with `BLAT`. In parrallel SNPs have been tested to be morphotype-specific at the level $\alpha = 0.001$ with `KissDE` and transcriptome Open Reading Frames (ORF) have been indentified with `Transdecoder`. Finally, SNPs functional impact have been evaluated through `k2rt`. Consequently, for every SNP we have the following informations: (i) inside coding DNA sequence (CDS), (ii) synonymous or not, (iii) morphotype-specificity.
+
+![Analysis scheme from @Lopez-Maestre2016.](./probes_data/analysisScheme.jpeg)
 
 ## Quality check
+
+We assessed transcriptomic analysis quality with possible sequencing errors, and SNPs in multiple assembled genes or isoforms (see table \@ref(tab:Qcheck)). We find...
 
 ```{r Qcheck}
 data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
@@ -33,7 +37,9 @@ data %>%
 rm(data) ; invisible(gc())
 ```
 
-## SNPs type
+## Types
+
+Once quality check, we can look at SNP distribution between the three modalities (see table \@ref(tab:countTable) and figures \@ref(fig:countGraph) and \@ref(fig:sunburstcount)). We can see... More particularly we have 99 491 Non-synonymous SNPs in coding region that are morphotype specific making a pool of SNPs to be used in sequence capture. We now need to identify gene functions for those SNPs (GO terms) and more particularly if some functions are enriched in a particular morphotype.
 
 ```{r count_SNP}
 data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
@@ -69,7 +75,7 @@ count_SNP %>%
   geom_bar(stat = "identity", position = "dodge") +
   coord_flip() +
   scale_y_continuous(labels = function(x) format(x, big.mark = " ")) +
-  xlab(" ") + scale_x_discrete(limits = c("SNP in coding region\nwith functional impact",
+  xlab(" ") + scale_x_discrete(limits = c("Not synonymous SNP\nin coding region",
                                           "Synonymous SNP in\ncoding region",
                                           "SNP in untranslated\nregion (UTR)")) +
   scale_fill_discrete("Morphotype-specific", labels = c("no", "yes")) +
@@ -89,7 +95,7 @@ count_SNP %>%
   mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "False", 
                        "CDS-synonymous-", type)) %>% 
   mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "True", 
-                       "CDS-functional impact-", type)) %>% 
+                       "CDS-not synonymous-", type)) %>% 
   filter(!is.na(type)) %>% 
   mutate(Is_condition_specific = ifelse(Is_condition_specific == "False",
                                         "non specific", "morphotype specific")) %>% 
@@ -97,66 +103,3 @@ count_SNP %>%
   select(type, n) %>% 
   sunburstR::sunburst(count = T)
 ```
-
-## GO terms
-
-```{r data_GO}
-data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
-           delim = "\t")
-
-GO <- src_sqlite(file.path( "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate",
-                            "symphonia.trinity500.trinotate.sqlite")) %>% 
-  tbl("Transcript") %>% 
-  collect() %>% 
-  separate_rows(annotation, sep = '\t') %>% 
-  filter(grepl("GO:", annotation)) %>% 
-  separate_rows(annotation, sep = '`') %>% 
-  separate(annotation, sep = "\\^",
-           into = c("go_id", "go_namespace", "go_name"))
-
-data_GO <- data %>% 
-  filter(Is_in_CDS == "True") %>% 
-  filter(Is_not_synonymous == "True") %>% 
-  filter(Is_condition_specific == "True") %>% 
-  inner_join(GO, by = c("#Component_ID" = "transcript_id"))
-
-rm(data, GO) ; invisible(gc())
-```
-
-```{r}
-sample_n_groups = function(tbl, size, replace = FALSE, weight = NULL) {
-  # regroup when done
-  grps = tbl %>% groups %>% lapply(as.character) %>% unlist
-  # check length of groups non-zero
-  keep = tbl %>% summarise() %>% ungroup() %>% sample_n(size, replace, weight)
-  # keep only selected groups, regroup because joins change count.
-  # regrouping may be unnecessary but joins do something funky to grouping variable
-  tbl %>% right_join(keep, by=grps) %>% group_by_(.dots = grps)
-}
-```
-
-
-```{r dataGoGraph}
-data_GO %>% 
-  ggplot(aes(go_namespace, fill = as.numeric(KissDE_DeltaF) > 0)) +
-  geom_bar() +
-  coord_flip()
-
-data_GO %>% 
-  group_by(go_name) %>% 
-  summarise(n = n()) %>% 
-  group_by(n) %>% 
-  summarise(GO_n = n()) %>% 
-  filter(GO_n > 1) %>% 
-  ggplot(aes(n, GO_n)) +
-  geom_bar(stat = "identity")
-
-data_GO %>% 
-  group_by(go_name) %>% 
-  filter(n() > 50) %>% 
-  sample_n_groups(100) %>%
-  ggplot(aes(go_name, fill = as.numeric(KissDE_DeltaF) > 0)) +
-  geom_bar() +
-  coord_flip() + scale_y_log10()
-```
-

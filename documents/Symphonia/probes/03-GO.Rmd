@@ -1,0 +1,155 @@
+```{r setup_GO, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate"
+path_SNP <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
+```
+
+# GO terms from transcritpomic
+
+## Morphotype-specific, non-synonymous SNPs in coding region
+
+### Overview
+
+We will first study GO terms from morphotype-specific, non-synonymous SNPs in coding regions as they have a ptutative functional impact which might be responsible for the morphotypes differentiation.
+
+```{r data_GO}
+data <- read_delim(file.path(path_SNP, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
+           delim = "\t")
+
+GO <- src_sqlite(file.path(path, "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  collect() %>% 
+  separate_rows(annotation, sep = '\t') %>% 
+  filter(grepl("GO:", annotation)) %>% 
+  separate_rows(annotation, sep = '`') %>% 
+  separate(annotation, sep = "\\^",
+           into = c("go_id", "go_namespace", "go_name"))
+
+data_GO <- data %>% 
+  filter(Is_in_CDS == "True") %>% 
+  filter(Is_not_synonymous == "True") %>% 
+  filter(Is_condition_specific == "True") %>% 
+  inner_join(GO, by = c("#Component_ID" = "transcript_id"))
+
+rm(data, GO) ; invisible(gc())
+```
+
+```{r sample_n_groups}
+sample_n_groups = function(tbl, size, replace = FALSE, weight = NULL) {
+  # regroup when done
+  grps = tbl %>% groups %>% lapply(as.character) %>% unlist
+  # check length of groups non-zero
+  keep = tbl %>% summarise() %>% ungroup() %>% sample_n(size, replace, weight)
+  # keep only selected groups, regroup because joins change count.
+  # regrouping may be unnecessary but joins do something funky to grouping variable
+  tbl %>% right_join(keep, by=grps) %>% group_by_(.dots = grps)
+}
+```
+
+```{r GOcount}
+n_GO <- format(nrow(data_GO), big.mark = " ")
+n_SNP <- format(length(unique(data_GO$SNP_ID)), big.mark = " ")
+n_GO.SNP <- data_GO %>% 
+  group_by(SNP_ID) %>% 
+  summarise(n = n()) %>% 
+  select(n) %>% 
+  unlist() %>% 
+  mean() %>% 
+  round(digits =  2)
+n_GOname <- format(length(unique(data_GO$go_name)), big.mark = " ")
+```
+
+We have several GO terms for one SNPs but not all SNPs have been annotated with GO terms. We have a total of `r n_GO` for `r n_SNP` (mean of `r n_GO.SNP` GO term by SNP) distributed over `r n_GOname` GO names. We are first assessing morphotype specificity with $\Delta F$ from `KissDE` the measure of relative abundance from on allele in the other population. Morphotype does not seem enriched between GO namespaces (see figure \@ref(fig:GONamespaceDist)). And if we pick randomly 50 GO terms present in more than 50 SNPs, GO terms still does not seem to be particularly enriched in one morphotype (see figure \@ref(fig:GOnamesDistEx)). Consequently we need specifically to do a functional enrichment analysis.
+
+```{r GONamespaceDist, fig.cap="GO terms distribution by namespaces and morphotype."}
+data_GO %>% 
+  ggplot(aes(go_namespace, fill = as.numeric(KissDE_DeltaF) > 0)) +
+  geom_bar() +
+  coord_flip() +
+  ylab(" ") + xlab("GO namespace") +
+  scale_fill_discrete("DeltaF > 0")
+```
+
+```{r GOnamesDistEx, fig.cap="GO terms distribution by morphotype for a subset of 50 GO terms."}
+data_GO %>% 
+  group_by(go_name) %>% 
+  filter(n() > 50) %>% 
+  sample_n_groups(50) %>%
+  ggplot(aes(go_name, fill = as.numeric(KissDE_DeltaF) > 0)) +
+  geom_bar() +
+  coord_flip() + scale_y_log10() +
+  ylab(" ") + xlab("50 GO examples") + scale_fill_discrete("DeltaF > 0")
+```
+
+### GO term enrichment
+
+I will follow [protocol from `TrinityRNAseq`](https://github.com/trinityrnaseq/BerlinTrinityWorkshop2017/wiki/functional_enrichment).
+
+```{bash GO, echo=T, include=F}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+trinotatePath=~/Tools/Trinotate/
+$trinotatePath/util/extract_GO_assignments_from_Trinotate_xls.pl \
+  --Trinotate_xls \
+  $path/Trinotate/trinotate_annotation_report.xls -T -I \
+  > $path/Trinotate/trinotate_annotation_report.xls.gene_ontology
+```
+
+```{bash GOcheck, echo=T}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+head $path/Trinotate/trinotate_annotation_report.xls.gene_ontology
+```
+
+```{bash seqLengths,echo=T}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+trinityPath=~/Tools/Trinity
+$trinityPath/util/misc/fasta_seq_length.pl \
+  $path/symphonia.trinity500.kissDE/results_coherent_type_0a.fa \
+  > $path/Trinotate/trinity.seqLengths
+```
+
+```{bash seqLengthsCheck, echo=T}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+head $path/Trinotate/trinity.seqLengths
+```
+
+```{bash geneLengths, echo=T, eval=F}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+trinityPath=~/Tools/Trinity
+$trinityPath//util/misc/TPM_weighted_gene_length.py \
+     --gene_trans_map ../Trinity.fasta.gene_trans_map \
+     --trans_lengths .$path/Trinotate/trinity.seqLengths \
+     --TPM_matrix ../Trinity_trans.TMM.EXPR.matrix  \
+     > $path/Trinotate/trinity.geneLengths
+$trinityPath/util/misc/fasta_seq_length.pl \
+  $path/symphonia.trinity500.kissDE/results_coherent_type_0a.fa \
+  > $path/Trinotate/trinity.seqLengths
+```
+
+```{bash geneLengthsCheck, echo=T, eval=F}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+head $path/Trinotate/trinity.geneLengths
+```
+
+```{bash GOenrichment, echo=T, eval=F}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+trinityPath=~/Tools/Trinity
+$trinityPath/Analysis/DifferentialExpression/analyze_diff_expr.pl \
+        --matrix ../Trinity_genes.TMM.EXPR.matrix  \
+        --samples ../samples.txt  \
+        -P 1e-3 -C 2   \
+        --examine_GO_enrichment  \
+        --GO_annots $path/Trinotate/trinotate_annotation_report.xls.gene_ontology \
+        --gene_lengths $path/Trinotate/trinity.geneLengths >
+        > $path/Trinotate/GOenrichment.txt
+```
+
+```{bash GOenrichmentCheck, echo=T, eval=F}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas
+head $path/Trinotate/GOenrichment.txt
+```

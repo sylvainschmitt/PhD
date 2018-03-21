@@ -1,3 +1,6 @@
+# PhD 0.1.9027
+* probes: more text and GO enrichment
+
 # PhD 0.1.9026
 * Soctropecol poster init
 * probes design bookdown document init
