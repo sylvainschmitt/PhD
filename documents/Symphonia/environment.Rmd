@@ -16,7 +16,7 @@ library(raster)
 library(leaflet)
 library(tidyverse)
 library(ggfortify)
-library(ggplot.acm)
+# library(ggplot.acm)
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
     cache = T, cache.lazy = F)
@@ -147,11 +147,13 @@ sympho %>%
 ```{r gap map, eval=FALSE}
 # gap <- dcm < 10
 # gap <- crop(gap, extent(symphoXY))
-# gap <- rasterToPolygons(gap)
-# gap$area <- area(gap)
+# gap <- rasterToPolygons(gap, dissolve = T)
 # save(gap, file = "./environment_save/gap.Rdata")
 load("./environment_save/gap.Rdata")
-gap <- subest(gap, area > 4)
+gap <- gap[2,]
+gap <- disaggregate(gap)
+gap$area <- area(gap)
+gap <- subset(gap, area > 4) # Value to be fixed
 d_gap <- raster(extent(symphoXY), resolution = 10^-4, crs = crs)
 d_gap <- setValues(d_gap, 0)
 d_gap <-  mask(d_gap, gap)
