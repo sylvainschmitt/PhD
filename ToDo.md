@@ -1,22 +1,83 @@
-*The planning document on the drive might have outdated this document and they should be both actualized in parrallel*
-
 # **Priorities**
 
-1. **Concept document and scheme**
+## **Comité de thèse**
+
+- [ ] Complete form
+- [ ] Prepare a revised document describing the subject
+- [ ] Organize the comite
+    - [x] Ask Bruno contacts
+    - [ ] Check contacts disponibility
+    - [ ] Chose the date
+- ...
+
+## **Concept document and scheme**
+
+- [ ] Integrate Myriam last review
+- [ ] Integrate ideas from GTÖ poster
+- [ ] Ask Bruno review (with live feedbacks)
+
+## **MOD integrity**
+
+**!! Before 25th of April !!**
+
+- [x] Module 1
+- [x] Module 2
+- [ ] Module 3
+- [ ] Module 4
 
 # Sampling
 
-# Environments
+- [ ] Schedule next samplings
 
-1. Morphotype and Genotype association to environment (DEM and derivates)(GbS genotypes)
-1. Proxy of water table map with DEM
+# Environments
 
 # Genetic
 
-1. Probes design
+## Symphonia genotyping
+
+- [ ] Choose kit
+- [ ] Select sequence to be captured
+    - To develop
+- [ ] Design probes
+- [ ] Extract DNA
+    - [ ] Prepare leaf extracts
+    - [ ] Review, update and reprint protocol
+- [ ] Wait libraries
+- [ ] Raw data analysis
+    - [ ] Genome by Sequencing (GbS)
+    - [ ] Reads mapping
+    - [ ] SNP call
+    - [ ] SNP filtering
+- [ ] Genetic data analysis
+    - [ ] Genetic structure of populations
+    - [ ] Genomic structure of polymorphisms
+    - [ ] Ecological genomic (genotype-environment association)
+    - [ ] Assocaition genomic (genotype-phenotype association)
 
 # Functional
 
-# Growth
+## Emilie internship
 
-1. Genetic effect on growth
+- [ ] Thursday skypes
+- [ ] Update her [ToDo list](https://github.com/EmiDt/symphostage/blob/master/infoStage.md) 
+
+# Performance
+
+## Growth models
+
+- [ ] Continue developping growth models
+- [ ] Prepare genetic data integration (ANIMAL ?)
+
+# Other
+
+## Uppangala
+
+- [ ] Discuss article with Maxime in Montpellier
+
+## TROLL
+
+- [ ] Finish article
+- [ ] Finish RconTroll
+    - [ ] Visit Toulouse
+- [ ] Help Nino
+- [ ] Help Marion in Montpellier

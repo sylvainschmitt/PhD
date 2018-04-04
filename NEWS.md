@@ -1,3 +1,8 @@
+# PhD 0.1.9030
+* SocTropEcol final revision
+* gap in environment for @EmiDt
+* Update ToDo
+
 # PhD 0.1.9029
 * SocTropEcol poster pre-revision
 
