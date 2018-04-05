@@ -8,22 +8,12 @@
     - [x] Ask Bruno contacts
     - [ ] Check contacts disponibility
     - [ ] Chose the date
-- ...
 
 ## **Concept document and scheme**
 
 - [ ] Integrate Myriam last review
 - [ ] Integrate ideas from GTÖ poster
 - [ ] Ask Bruno review (with live feedbacks)
-
-## **MOD integrity**
-
-**!! Before 25th of April !!**
-
-- [x] Module 1
-- [x] Module 2
-- [ ] Module 3
-- [ ] Module 4
 
 # Sampling
 
@@ -35,10 +25,16 @@
 
 ## Symphonia genotyping
 
-- [ ] Choose kit
+- [ ] Choose kit (MyBaits ?, NEBnext ?)
+    - [ ] Total sequence length ?
+    - [ ] Number of sequences ?
+    - [ ] Sequences depth (O.5-1 kbp ?) ?
 - [ ] Select sequence to be captured
-    - To develop
-- [ ] Design probes
+    - [ ] Morphtoype specific genes (Tysklind et al)
+    - [ ] Non specific genes (Tysklind et al)
+    - [ ] Intron & UTR (Tysklind et al, Scotti et al, or African *S. globulifera*)
+    - [ ] Mitochondrial sequences (Scotti et al)
+- [ ] Design probes (software with the kit)
 - [ ] Extract DNA
     - [ ] Prepare leaf extracts
     - [ ] Review, update and reprint protocol
