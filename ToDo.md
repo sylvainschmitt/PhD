@@ -2,12 +2,14 @@
 
 ## **Comité de thèse**
 
-- [ ] Complete form
+- [x] Complete form
 - [ ] Prepare a revised document describing the subject
 - [ ] Organize the comite
     - [x] Ask Bruno contacts
     - [ ] Check contacts disponibility
     - [ ] Chose the date
+    - [ ] Prepare a presentation
+- [ ] Validate the document with the ED
 
 ## **Concept document and scheme**
 
@@ -33,7 +35,7 @@
     - [ ] Morphtoype specific genes (Tysklind et al)
     - [ ] Non specific genes (Tysklind et al)
     - [ ] Intron & UTR (Tysklind et al, Scotti et al, or African *S. globulifera*)
-    - [ ] Mitochondrial sequences (Scotti et al)
+    - [ ] Chloroplast sequences (Scotti et al)
 - [ ] Design probes (software with the kit)
 - [ ] Extract DNA
     - [ ] Prepare leaf extracts
@@ -77,3 +79,9 @@
     - [ ] Visit Toulouse
 - [ ] Help Nino
 - [ ] Help Marion in Montpellier
+
+# Admin
+
+- [ ] Refund FG, Plane, Poster and GTÖ
+- [ ] Validate GTÖ as formation
+- [ ] Validate Émilie supervizing as formation
