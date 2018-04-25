@@ -1,10 +1,15 @@
 ```{r setup_intro, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(tidyverse)
 ```
 
 # Introduction {-}
 
+This document review and summarize sequence capture and genomic analysis of *Symphonia globulifera*.
+
 ## Modus operandi (to discuss):
+
+We will proceed sequence capture and genomic analysis of *Symphonia globulifera* with following steps:
 
 - [ ] Choose kit (MyBaits ?, NEBnext ?)
     - [ ] Total sequence length ?
@@ -14,10 +19,10 @@ rm(list = ls()) ; invisible(gc()) ; set.seed(42)
     - [ ] Morphtoype specific genes (Tysklind et al)
     - [ ] Non specific genes (Tysklind et al)
     - [ ] Intron & UTR (Tysklind et al, Scotti et al, or African *S. globulifera*)
-    - [ ] Mitochondrial sequences (Scotti et al)
+    - [ ] Chloroplast sequences (Scotti et al)
 - [ ] Design probes (software with the kit)
 - [ ] Extract DNA
-    - [ ] Prepare leaf extracts
+    - [x] Prepare leaf extracts
     - [ ] Review, update and reprint protocol
 - [ ] Wait libraries
 - [ ] Raw data analysis
@@ -30,7 +35,7 @@ rm(list = ls()) ; invisible(gc()) ; set.seed(42)
     - [ ] Genomic structure of polymorphisms
     - [ ] Ecological genomic (genotype-environment association)
     - [ ] Assocaition genomic (genotype-phenotype association)
-    
+
 ```{r seqTree, fig.cap="Different types in which to choose sequences to capture.", echo=F}
 DiagrammeR::DiagrammeR("
    graph TB
@@ -55,26 +60,28 @@ DiagrammeR::DiagrammeR("
    # Non_Specific-->Niklas_et_al
 ```
 
-## Polymorphisms
+## Sequence selection
 
-What we have:
+We have to choose sequences to be captured. The sequence selection for capture will be detailed in next chapters. We will use 5 sources of information:
 
-* if the variant is in a CDS (Coding DNA Sequence)
-* if the variant is non-synonymous (Putative functional impact)
-* if the variant is morphtoype-specific (Effectively at juvenile stage)
-* Annotation
+* __Transcriptomic analysis from Tysklind *et al (in prep)*__, realized on transplant experiment of *Symphonia globulifera* in French Guiana this study will inform us on untrasnlated regions (UTR) and coding DNA sequences (CDS) precizing the putative functional impact and the morphotype specificity of genes
+* __SNPs from French Guiana obtain by GbS in @Torroba-Balmori2017 __, will inform us on guianan SNPs for neutral regions
+* __genome scaffolds from Africa in @Olsson2017 __, will bring us neutral scaffold
+* __chloroplast sequences for French Guiana on NCBI__, will brings us short sequences of chloroplast
+* __chlorplast assembly from Ameria from Bautista et Claros__, will bring us genomic sequences
 
-So what we need/can have is (if I try to summarize):
+We will select approxamitely:
 
-* SNP in CDS
-    * Non-synonymous SNP
-        * Morphotype-specific
-        * Non specific
-    * Synonymous SNP
-        * Morphotype-specific
-        * Non specific
-* SNP in Untranslated Region (UTR)
-    * Morphotype-specific
-    * Non specific
-* SNP in introns (cf Scoti et al)
-* SNP in plastid DNA (cf ?)
+* __60%__ of coding sequence with a functional impact with data from Tysklind *et al (in prep)* split between:
+    * __40%__ of sequences including morphotype-specific variants
+    * __20%__ of sequences including non morphotype-specific variants
+* __30%__ of genomic neutral regions (introns and UTR with some including morphotype-specific variants) from both data from Tysklind *et al (in prep)* and a interpolation between genomic data from @Torroba-Balmori2017 and @Olsson2017
+* __10%__ of chloroplastic regions from interpolation between Bautista et Claros and NCBI american sequences
+    
+```{r planCapture, fig.cap = "Sequences to be captured.", echo=FALSE}
+data.frame(
+  category = c("CDS-MtSpecific", "CDS-NonSpecific", "Neutral-Neutral", "Chloroplast-Chloroplast"),
+  size = c(40, 20, 30, 10)
+) %>% 
+  sunburstR::sunburst()
+```

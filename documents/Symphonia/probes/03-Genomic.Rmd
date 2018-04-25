@@ -1,0 +1,118 @@
+```{r setup_genomic, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(Biostrings)
+library(rBLAST)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
+```
+
+# Genomic data
+
+For neutral genomic data (see figure\@ref(fig:seqTree)) we have different sequences available:
+
+* The African genome scaffolds from @Olsson2017
+* The Guianan scaffolds from Scotti *et al (in prep)*
+* The Guianan sequences from @Torroba-Balmori2017
+
+The idea is to pool scaffolds from @Olsson2017 and Ivan *et al (in prep)* and try to filter redundances by creating extended scaffolds with `Newbler` and `CABOG` (see @Olsson2017). Then we wish to use longest scaffolds (>500 kpb due to assemby issues with Guianan scaffolds) that have good correspondance with @Torroba-Balmori2017 data. We will assess correspondance by blasting @Torroba-Balmori2017 sequences on previously obtained extended scaffolds with `blat`. Processing will be done in a new folder called `Ivan_Olsson_pool`.
+
+## Scaffolds from Scotti *et al (in prep)*
+
+We first need to rename scaffolds to pull theim together. For all scaffolds we will use following code : **Ivan_2018_[file name without .scafSeq]_[scaffold name]**. All scaffolds will be saved with the same name file with extension `.Ivan.renamed.scafSeq`.
+
+```{r scaffoldsIvan, eval=F, echo=T}
+path_Ivan <- file.path(path, "Ivan_2018")
+dir.create(file.path(path, "Ivan_Olsson_pool"))
+dir.create(file.path(path, "Ivan_Olsson_pool", "all_scaffolds"))
+files <- list.files(path_Ivan)
+files <- files[grep("scafSeq$", files)]
+sapply(files, 
+       function(file){
+         scf <- readDNAStringSet(file.path(path_Ivan, file))
+         names(scf) <- paste0("Ivan_2018_", gsub(".scafSeq", "", file), "_", names(scf))
+         writeXStringSet(scf, file.path(path, "Ivan_Olsson_pool", "all_scaffolds",
+                                        paste0(gsub(".scafSeq", "", file), ".Ivan.renamed.scafSeq")))
+       } ,
+       simplify = F)
+```
+
+## Scaffolds from @Olsson2017
+
+We renamed scaffolds from Olsson using following code : **Olsson_2017_[scaffold name]**. All scaffolds will be saved with the same name file with extension `.Olsson.renamed.scafSeq`.
+
+```{r scaffoldsOlsson, echo=T, fig.cap="Disctibution of scaffolds by length in bp."}
+path_Olsson <- file.path(path, "Olsson_2016")
+scf <- readDNAStringSet(file.path(path_Olsson, "symph_genome.fa"))
+data.frame(width = width(scf)) %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  scale_y_log10() +
+  geom_vline(xintercept = 5000) +
+  xlab("Scaffold width")
+names(scf) <- paste0('Olsson_2017_', names(scf))
+writeXStringSet(scf, file.path(path, "Ivan_Olsson_pool", "all_scaffolds",
+                               paste0("symph_genome", ".Olsson.renamed.fa")))
+rm(scf)
+```
+
+## Extended scaffolds creation
+
+We will try to assemble scaffolds with [quickmerge](https://github.com/mahulchak/quickmerge) considering @Olsson2017 as the reference assembly and Scotti *et al (in prep)* as the query assembly. As we do not seek high quality merge, because we only use it to blast sequences from @Torroba-Balmori2017 to identify regions for probes design, we will run only one time `quickmerge` (but see wiki for more instructions on how to build high quality merged asssembly). `nucmer` seems limited by memory size on local machine, we will thus run the script on [genotoul](http://bioinfo.genotoul.fr/).
+
+```{bash assemblyMerge, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_Olsson_pool
+cat all_scaffolds/*.Olsson.renamed.fa > Olsson2017_scaffolds.fa 
+cat all_scaffolds/*.Ivan.renamed.scafSeq > Ivan2018_scaffolds.fa
+cat Ivan2018_scaffolds.fa Olsson2017_scaffolds.fa > scaffolds.fa
+perl ~/Tools/miscperlscripts/split.scaffolds.to.contigs.pl -i scaffolds.fa -o contigs.fa 
+nucmer -l 100 -prefix out Olsson2017_scaffolds.fa Ivan2018_scaffolds.fa
+delta-filter -i 95 -r -q out.delta > out.rq.delta
+~/Tools/quickmerge/quickmerge -d out.rq.delta -q Ivan2018_scaffolds.fa -r Olsson2017_scaffolds.fa -hco 5.0 -c 1.5 -l n -ml m
+# ~/Tools/quickmerge/merge_wrapper.py Ivan2018_scaffolds.fa Olsson2017_scaffolds.fa
+```
+
+<!-- We first prepare file for extended scaffolds creation by pooling together scaffolds. We first create one pool for @Olsson2017 and one for Scotti *et al (in prep)*. We filter scaffolds from Scotti *et al (in prep)* with a length above 5 kbp. Then we pool all scaffolds together. We break theim with [Mads Ablersten script](https://github.com/MadsAlbertsen/miscperlscripts/blob/master/split.scaffolds.to.contigs.pl). And we re-assemble scaffolds with [SSPACE](https://academic.oup.com/bioinformatics/article/27/4/578/197626). We lack reads library to do scaffolding with any software. -->
+
+<!-- [ZORRO](http://www.lge.ibi.unicamp.br/zorro/) might be the tool te reassemble scaffolds from the two assembly (Scotti *et al (In prep)* and @Olsson2017). We need to prepare the two assembly librairies in two fasta files with all scaffolds. Then we need to break scaffolds into contigs with `split_at_Ns.pl` function. Finally we can use `zorro.pl` function to re-assemble all contigs into consensus extended scaffolds. -->
+
+<!-- [CAMSA](https://github.com/compbiol/CAMSA) might have been a solution for extended scaffolds creation but it works with scaffolds in specific CAMSA format (not in FASTA format). They have a utility to convert FASTA to CAMSA (`fasta2camsa.py`). But it need in input both scaffolds (that we have) and original contigs (that we do not have). Consequently for the moment CAMSA is a dead end.  -->
+
+<!-- We will thus have a look to [SSPACE](https://github.com/nsoranzo/sspace_basic).  -->
+
+## @Torroba-Balmori2017 blast on extended scaffolds
+
+We will use [rBLAST](https://github.com/mhahsler/rBLAST) and `blastn` to blast @Torroba-Balmori2017 sequences on extended scaffolds from @Olsson2017 and Scotti *et al (in prep)*. We first need to prepare extended scaffolds as a blast data base with `makeblastdb`. Then we used scaffolds with highest blast match.
+
+```{bash blastDB, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_Olsson_pool
+makeblastdb -in scaffolds.fa -parse_seqids -dbtype nucl
+seqtk seq -a ~/Documents/BIOGECO/PhD/data/Symphonia_Torroba/raw/raw/* > reads_Torroba.fa
+```
+
+```{r readNames, eval=F, echo=T}
+reads <- readDNAStringSet(file.path(path, "Ivan_Olsson_pool", "reads_Torroba.fa"))
+names(reads) <- gsub(" ","", names(reads))
+writeXStringSet(reads, file.path(path, "Ivan_Olsson_pool", "reads_Torroba.fa"))
+rm(reads)
+```
+
+```{bash blast, eval=F, echo=T}
+blastn -query reads_Torroba.fa -db scaffolds_db/scaffolds.fa -outfmt 6 -num_alignments 1 -out blast_result.txt
+```
+
+```{r blastResult, eval=F}
+blast <- read_tsv(file.path(path, "Ivan_Olsson_pool", "blast_result.txt"),
+                  col_names = F)
+names(blast) <- c("Read", "Scaffold", "Perc_Ident", "Alignment_length", "Mismatches",
+                  "Gap_openings", "R_start", "R_end", "S_start", "S_end", "E", "Bits")
+blast %>% 
+  ggplot(aes(Scaffold, Read)) +
+  geom_bar()
+```
+

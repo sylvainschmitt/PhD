@@ -1,3 +1,6 @@
+# PhD 0.1.9033
+* Probes design transcripto, genomic, and chloro seq choice
+
 # PhD 0.1.9032
 * CST v1
 
