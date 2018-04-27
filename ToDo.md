@@ -6,8 +6,8 @@
 - [ ] Prepare a revised document describing the subject
 - [ ] Organize the comite
     - [x] Ask Bruno contacts
-    - [ ] Check contacts disponibility
-    - [ ] Chose the date
+    - [x] Check contacts disponibility
+    - [x] Chose the date
     - [ ] Prepare a presentation
 - [ ] Validate the document with the ED
 
@@ -32,14 +32,14 @@
     - [ ] Number of sequences ?
     - [ ] Sequences depth (O.5-1 kbp ?) ?
 - [ ] Select sequence to be captured
-    - [ ] Morphtoype specific genes (Tysklind et al)
-    - [ ] Non specific genes (Tysklind et al)
-    - [ ] Intron & UTR (Tysklind et al, Scotti et al, or African *S. globulifera*)
-    - [ ] Chloroplast sequences (Scotti et al)
+    - [ ] From transcriptome (Tysklind et al)
+    - [ ] From genome (Olsson et al, Scotti et al)
+    - [ ] From chloroplast (Bautista & Claro, NCBI)
 - [ ] Design probes (software with the kit)
 - [ ] Extract DNA
-    - [ ] Prepare leaf extracts
+    - [x] Prepare leaf extracts
     - [ ] Review, update and reprint protocol
+    - [ ] Do extractions 
 - [ ] Wait libraries
 - [ ] Raw data analysis
     - [ ] Genome by Sequencing (GbS)
@@ -57,7 +57,7 @@
 ## Emilie internship
 
 - [ ] Thursday skypes
-- [ ] Update her [ToDo list](https://github.com/EmiDt/symphostage/blob/master/infoStage.md) 
+- [ ] Meeting with Eric and Geraldine
 
 # Performance
 
