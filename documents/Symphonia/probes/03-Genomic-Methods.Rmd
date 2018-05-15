@@ -1,0 +1,410 @@
+```{r setup_genomic_methods, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(Biostrings)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
+```
+
+# Genomic data - Methods
+
+For neutral genomic data (see figure\@ref(fig:seqTree)) we have different sequences available:
+
+* The African genome scaffolds from @Olsson2017
+* The Guianan scaffolds from Scotti *et al (in prep)*
+* The Guianan sequences from Torroba-Balmor *et al (unpublished)*
+
+Consequently we will split the analysis in three stages: 
+
+* For scaffolds from @Olsson2017, we will blast both consensus sequences and raw reads from Torroba-Balmor *et al (unpublished)* with respectivelly `blastn` and `bwa`. Scaffolds with a good score of match will be select.
+* For scaffolds from Scotti *et al (in prep)*, we will first filter scaffolds (more than 500 bp) and improve scaffolds by merging theim one by one with `quickmerge`, and then blast both consensus sequences and raw reads from Torroba-Balmor *et al (unpublished)* with respectivelly `blastn` and `bwa`.
+* Finally, we will also select scaffolds from @Olsson2017 by checking their overlap with merged scaffolds from Scotti *et al (in prep)*
+
+## Scaffolds from Scotti *et al (in prep)*
+
+### Filtering
+
+Because of the maybe poor quality of the assembly for scaffolds from Scotti *et al (in prep)*, we first start by filtering scaffolds with a width superior to **1000 bp**.
+
+```{bash filteringScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/
+mkdir scf_1000
+for scf in $( ls raw/ | grep scafSeq$); 
+do
+  echo item: $scf
+  perl ~/Tools/SeqFilter/bin/SeqFilter -l 1000 raw/$scf --out scf_1000/$scf
+done
+```
+
+### Renaming
+
+For all scaffolds we will use following code : **Ivan_2018_[file name without .scafSeq]_[scaffold name]**.
+
+```{r renamingScotti, eval=F, echo=T}
+dir.create(file.path(path, "Ivan_2018", "renamed_scf_1000"))
+files <- list.files(file.path(path, "Ivan_2018", "scf_1000"))
+sapply(files, function(file){
+  scf <- readDNAStringSet(file.path(path, "Ivan_2018", "scf_1000", file))
+  names(scf) <- paste0("Ivan_2018_", gsub(".scafSeq", "", file), "_", gsub(" ", "_", names(scf)))
+  writeXStringSet(scf, file.path(path, "Ivan_2018", "renamed_scf_1000",
+                                 paste0(gsub(".scafSeq", "", file), ".1000.renamed.scafSeq")))
+}, simplify = F)
+unlink(file.path(path, "Ivan_2018", "scf_1000"), recursive = T)
+```
+
+### Merging
+
+We will successively merge scaffolds from all libraries with `quickmerge`. We have 9 libraries resulting in 8 successive merge. We were only able to merge the 6 first libraries due to memory limiitation on my local machine and the absence of `quickmerge` on genotoul/genologin. We will still use this merging as a new reference.
+
+```{bash mergingScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/renamed_scf_1000
+ref=(sympho47_1L1_002.1000.renamed.scafSeq merge1.fasta merge2.fasta merge3.fasta merge4.fasta merge5.fasta merge6.fasta merge7.fasta)
+query=(sympho47_1L2_001.1000.renamed.scafSeq sympho47_2L1_008.1000.renamed.scafSeq sympho47_2L1_009.1000.renamed.scafSeq sympho47_2L1_010.1000.renamed.scafSeq sympho47_2L1_011.1000.renamed.scafSeq sympho47_2L1_012.1000.renamed.scafSeq sympho47_3L2_013.1000.renamed.scafSeq sympho47_4L1_014.1000.renamed.scafSeq)
+for i in {0..7} 
+do
+  mkdir merge$i
+  cp  "${ref[$i]}" "${query[$i]}" ./merge$i/
+  cd merge$i
+  nucmer -l 100 -prefix out ${ref[$i]} ${query[$i]}
+  delta-filter -i 95 -r -q out.delta > out.rq.delta
+  ~/Tools/quickmerge/quickmerge -d out.rq.delta -q ${query[$i]} -r ${ref[$i]} -hco 5.0 -c 1.5 -l n -ml m
+  cd ..
+  cp merge$i/merged.fasta ./merge$((i+1)).fasta
+done
+```
+
+```{bash dbScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018
+mkdir merged_1000
+cp  renamed_scf_1000/merge5/merged.fasta merged_1000/merged_1000.fa
+cd merged_1000
+makeblastdb -in merged_1000.fa -parse_seqids -dbtype nucl
+```
+
+### Consensus sequences blast
+
+We will first use the consensus sequence for French Guianan reads from Torroba-Balmori *et al. (unpublished)* previously assembled with ipyrad. As a first brutal approach we only keep the first sequence of the consensus loci file and transform it to fasta (see loci2fa.py script below). We then blast those consensus sequences on merged scaffolds from Scotti *et al (in prep)* with `blastn`.
+
+```{python loci2fa, eval=F, echo=T}
+infile = open("symphoGbS2.loci", "r")
+outfile = open("symphoGbS2.firstline.fasta", "w")
+loci = infile.read().split("|\n")[:-1]
+for loc in loci:
+    reads = loc.split("\n")
+    name, seq = reads[0].split()
+    print >>outfile, ">"+name+"\n"+seq
+outfile.close()
+```
+
+```{bash loci2fa2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Torroba/assembly/symphoGbS2_outfile
+python loci2fa.py
+cat symphoGbS2.firstline.fasta | tr - N >> symphoGbS2.firstline.fasta
+```
+
+```{bash, blastScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Torroba/assembly/symphoGbS2_outfiles/symphoGbS2.firstline.fasta
+blastn -db merged_1000/merged_1000.fa -query $query -out blast_consensus_torroba2.txt -evalue 1e-10 -best_hit_score_edge 0.05 -best_hit_overhang 0.25 -outfmt 6 -perc_identity 75 -max_target_seqs 10
+```
+
+```{r blastResultScotti, eval=F, echo=T}
+blast <- read_tsv(file.path(path, "Ivan_2018", "blast_consensus_torroba2.txt"), col_names = F)
+names(blast) <- c("Read", "Scaffold", "Perc_Ident", "Alignment_length", "Mismatches",
+                  "Gap_openings", "R_start", "R_end", "S_start", "S_end", "E", "Bits")
+write_file(paste(unique(blast$Scaffold), collapse = "\n"), 
+           file.path(path, "Ivan_2018", "selected_scaffolds_blast_consensus2.list"))
+```
+
+```{bash blastResultScotti2, eval=F, echo=T}
+seqtk subseq merged_1000/merged_1000.fa selected_scaffolds_blast_consensus2.list >> selected_scaffolds_blast_consensus2.fa
+```
+
+### Raw reads alignment
+
+We will use the French Guianan raw reads from Torroba-Balmori *et al. (unpublished)*, by aligning them on scaffolds from @Olsson2017 with `bwa`.
+
+```{bash alignmentIvan, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J bwaIvan
+#SBATCH -o alignment_output.out
+#SBATCH -e alignment_error.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+# Environment
+module purge
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/bedtools-2.26.0
+
+# variables
+cd ~/work/Symphonia_Genomes/Ivan_2018/transcript_alignment
+reference=~/work/Symphonia_Genomes/Ivan_2018/merged_1000/merged_1000.fa
+query_path=~/work/Symphonia_Torroba/raw
+# alignment
+bwa index $reference
+mkdir bwa
+for file in $query_path/*.fastq
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  rg="@RG\tID:${filename}\tSM:${filename}\tPL:IONTORRENT"
+  bwa mem -M -R "${rg}" $reference $file > bwa/"${filename}.sam"	
+  rm $file
+done
+# sam2bam
+for file in ./bwa/*.sam
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  java -Xmx4g -jar $PICARD SortSam I=$file O=bwa/"${filename}".bam SORT_ORDER=coordinate
+done
+# Bam index
+for file in bwa/*.bam
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  java -Xmx4g -jar $PICARD BuildBamIndex I=$file O=bwa/"${filename}".bai
+done
+# sam2bed
+mkdir bed
+for file in ./bwa/*.bam
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  bedtools bamtobed -i bwa/"${filename}".bam > bed/"${filename}".bed
+done
+# merge bed
+mkdir merged_bed
+for file in ./bed/*.bed
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  bedtools merge -i bed/"${filename}".bed > merged_bed/"${filename}".bed
+done
+cat bed/* | sort -k1,1V >  all.nonunique.bed
+bedtools merge -n -i all.nonunique.sorted.bed > all.merged.bed
+```
+
+## Scaffolds from @Olsson2017
+
+### Renaming
+
+We renamed scaffolds from Olsson using following code : **Olsson_2017_[scaffold name]**.
+
+```{r renamingOlsson, eval=F, echo=T}
+scf <- readDNAStringSet(file.path(path, "Olsson_2016", "symph_genome.fa"))
+names(scf) <- paste0('Olsson_2017_', names(scf))
+dir.create(file.path(path, "Olsson_2016", "db"))
+writeXStringSet(scf, file.path(path, "Olsson_2016", "db", "Olsson2017.fa")))
+```
+
+### Consensus sequences blast
+
+We will again use the consensus sequence for French Guianan reads from Torroba-Balmori *et al. (unpublished)*, by blasting them on scaffolds from @Olsson2017 with `blastn`.
+
+```{bash, blastOlsson, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016
+cd Olsson2017
+makeblastdb -in Olsson2017.fa -parse_seqids -dbtype nucl
+cd ..
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Torroba/assembly/symphoGbS2_outfiles/symphoGbS2.firstline.fasta
+blastn -db Olsson2017/Olsson2017.fa -query $query -out blast_consensus_torroba2.txt -evalue 1e-10 -best_hit_score_edge 0.05 -best_hit_overhang 0.25 -outfmt 6 -perc_identity 75 -max_target_seqs 10
+```
+
+```{r blastResultOlsson, eval=F, echo=T}
+blast <- read_tsv(file.path(path, "Olsson_2016", "blast_consensus_torroba2.txt"), col_names = F)
+names(blast) <- c("Read", "Scaffold", "Perc_Ident", "Alignment_length", "Mismatches",
+                  "Gap_openings", "R_start", "R_end", "S_start", "S_end", "E", "Bits")
+write_file(paste(unique(blast$Scaffold), collapse = "\n"), 
+           file.path(path, "Olsson_2016", "selected_scaffolds_blast_consensus2.list"))
+```
+
+```{bash blastResultOlsson2, eval=F, echo=T}
+seqtk subseq Olsson2017/Olsson2017.fa selected_scaffolds_blast_consensus2.list >> selected_scaffolds_blast_consensus2.fa
+```
+
+### Raw reads alignment
+
+We will again use the French Guianan raw reads from Torroba-Balmori *et al. (unpublished)*, by aligning them on scaffolds from @Olsson2017 with `bwa`.
+
+```{bash alignmentOlsson, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J bwaOlsson
+#SBATCH -o alignment_output.out
+#SBATCH -e alignment_error.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+# Environment
+module purge
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/bedtools-2.26.0
+
+# variables
+cd ~/work/Symphonia_Genomes/Olsson_2016/transcript_alignment
+reference=~/work/Symphonia_Genomes/Olsson_2016/Olsson2017/Olsson2017.fa
+query_path=~/work/Symphonia_Torroba/raw
+# alignment
+bwa index $reference
+mkdir bwa
+for file in $query_path/*.fastq
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  rg="@RG\tID:${filename}\tSM:${filename}\tPL:IONTORRENT"
+  bwa mem -M -R "${rg}" $reference $file > bwa/"${filename}.sam"	
+  rm $file
+done
+# sam2bam
+for file in ./bwa/*.sam
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  java -Xmx4g -jar $PICARD SortSam I=$file O=bwa/"${filename}".bam SORT_ORDER=coordinate
+done
+# Bam index
+for file in bwa/*.bam
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  java -Xmx4g -jar $PICARD BuildBamIndex I=$file O=bwa/"${filename}".bai
+done
+# sam2bed
+mkdir bed
+for file in ./bwa/*.bam
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  bedtools bamtobed -i bwa/"${filename}".bam > bed/"${filename}".bed
+done
+# merge bed
+mkdir merged_bed
+for file in ./bed/*.bed
+do
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+  bedtools merge -i bed/"${filename}".bed > merged_bed/"${filename}".bed
+done
+cat bed/* > all.nonunique.bed
+bedtools sort -i all.nonunique.bed > all.nonunique.sorted.bed
+bedtools merge -n -i all.nonunique.sorted.bed > all.merged.bed
+```
+
+### Scotti *et al (in prep)* overlap
+
+```{bash mergeScottiOlsson, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016
+mkdir scotti_overlap
+cd scotti_overlap
+ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/merged_1000/merged_1000.fa
+query=../Olsson2017/Olsson2017.fa
+nucmer -l 100 -prefix out $ref $query
+delta-filter -i 95 -r -q out.delta > out.rq.delta
+~/Tools/quickmerge/quickmerge -d out.rq.delta -q $query -r $ref -hco 5.0 -c 1.5 -l n -ml m
+```
+
+```{r overlpas, eval=F, echo=T}
+read_tsv(file.path(path, "Olsson_2016", "scotti_overlap", "summaryOut.txt")) %>%
+   select(REF, QUERY, OVERLAP_LEN) %>%
+   mutate(REF = gsub("Olsson_2017_", "", REF)) %>%
+   mutate(QUERY = gsub("Ivan_2018_sympho47_", "", QUERY)) %>%
+   rename(Olsson = REF, Scotti = QUERY, "Overlap length" = OVERLAP_LEN) %>%
+   kable(caption = "Overlap between scaffolds of @Olsson2017 and merged scaffolds from Scotti *et al (in prep)*.")
+```
+
+## Transcriptome alignment
+
+We will align the filtered transcriptome from Tysklind *et al. (in prep)* on merged scaffolds over $1 kbp$ from Scotti *et al (in prep)* and on scaffolds from @Olsson2017 with `bwa`.
+
+### On Scotti *et al (in prep)*
+
+```{bash alignmentTranscriptIvan, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment
+reference=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/merged_1000/merged_1000.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+filename=$(basename "$query")
+filename="${filename%.*}"
+# alignment
+bwa mem -M $reference $query > "${filename}".sam	
+# sam2bam
+java -Xmx4g -jar $PICARD SortSam \
+  I="${filename}".sam \
+  O="${filename}".bam \
+  SORT_ORDER=coordinate
+java -Xmx4g -jar $PICARD BuildBamIndex \
+  I="${filename}".bam \
+  O="${filename}".bai
+# bam2bed
+bedtools bamtobed -i "${filename}".bam > "${filename}".bed
+```
+
+```{R bwaTranscriptScottiResult1, eval=F, echo=T}
+bed <- read_tsv(file.path(path, "Ivan_2018", "transcript_alignment", "filtered_transcripts.bed"), col_names = F)
+names(bed) <- c("scaffold",  "start",  "end",    "transcript",   "score",  "strand") 
+write_file(paste(unique(bed$scaffold), collapse = "\n"), 
+           file.path(path, "Ivan_2018", "transcript_alignment", "selected_scaffolds.list"))
+write_file(paste(unique(bed$transcript), collapse = "\n"), 
+           file.path(path, "Ivan_2018", "transcript_alignment", "selected_transcripts.list"))
+```
+
+```{bash bwaTranscriptScottiResult2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment
+ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/merged_1000/merged_1000.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+seqtk subseq $ref selected_scaffolds.list >> selected_scaffolds.fa
+seqtk subseq $query selected_transcripts.list >> selected_transcripts.fa
+```
+
+### On @Olsson2017
+
+```{bash alignmentTranscriptOlsson, eval=F, echo=T}
+# variables
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment
+reference=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/Olsson2017/Olsson2017.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+filename=$(basename "$query")
+filename="${filename%.*}"
+# alignment
+bwa mem -M $reference $query > "${filename}".sam	
+# sam2bam
+java -Xmx4g -jar $PICARD SortSam \
+  I="${filename}".sam \
+  O="${filename}".bam \
+  SORT_ORDER=coordinate
+java -Xmx4g -jar $PICARD BuildBamIndex \
+  I="${filename}".bam \
+  O="${filename}".bai
+# bam2bed
+bedtools bamtobed -i "${filename}".bam > "${filename}".bed
+```
+
+```{R bwaTranscriptOlssonResult1, eval=F, echo=T}
+bed <- read_tsv(file.path(path, "Olsson_2016", "transcript_alignment", "filtered_transcripts.bed"), col_names = F)
+names(bed) <- c("scaffold",  "start",  "end",    "transcript",   "score",  "strand") 
+write_file(paste(unique(bed$scaffold), collapse = "\n"), 
+           file.path(path, "Olsson_2016", "transcript_alignment", "selected_scaffolds.list"))
+write_file(paste(unique(bed$transcript), collapse = "\n"), 
+           file.path(path, "Olsson_2016", "transcript_alignment", "selected_transcripts.list"))
+```
+
+```{bash bwaTranscriptOlssonResult2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment
+ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/Olsson2017/Olsson2017.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+seqtk subseq $ref selected_scaffolds.list >> selected_scaffolds.fa
+seqtk subseq $query selected_transcripts.list >> selected_transcripts.fa
+```
