@@ -1,0 +1,439 @@
+```{r setup_func_sel, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(Biostrings)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
+```
+
+# Fuctional region selection
+
+## Transcript alignment on scaffolds from Scotti *et al. (in prep)*
+
+We aligned the filtered transcriptome from Tysklind *et al. (in prep)* on filtered scaffolds Scotti *et al (in prep)* with `bwa`.
+
+```{bash alignmentTranscriptIvan, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment
+reference=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/merged_1000/merged_1000.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+filename=$(basename "$query")
+filename="${filename%.*}"
+# alignment
+bwa mem -M $reference $query > "${filename}".sam	
+# sam2bam
+java -Xmx4g -jar $PICARD SortSam \
+  I="${filename}".sam \
+  O="${filename}".bam \
+  SORT_ORDER=coordinate
+java -Xmx4g -jar $PICARD BuildBamIndex \
+  I="${filename}".bam \
+  O="${filename}".bai
+# bam2bed
+bedtools bamtobed -i "${filename}".bam > "${filename}".bed
+# merging bed
+bedtools merge -i "${filename}".bed -c 1,4 -o count,collapse > "${filename}".merged.bed
+# deduplication
+~/Tools/bbmap/dedupe.sh \
+  in=selected_scaffolds.fa \
+  out=unique_selected_scaffolds.fa \
+  outd=removed_duplicates.fa \
+  findoverlap=t \
+  processcluster=t \
+  | tee -a "dedupe.log"
+```
+
+```{R bwaTranscriptScottiResult1, eval=F, echo=T}
+bed <- read_tsv(file.path(path, "Ivan_2018", "transcript_alignment", "filtered_transcripts.bed"), col_names = F)
+names(bed) <- c("scaffold",  "start",  "end",    "transcript",   "score",  "strand") 
+write_file(paste(unique(bed$scaffold), collapse = "\n"), 
+           file.path(path, "Ivan_2018", "transcript_alignment", "selected_scaffolds.list"))
+write_file(paste(unique(bed$transcript), collapse = "\n"), 
+           file.path(path, "Ivan_2018", "transcript_alignment", "selected_transcripts.list"))
+```
+
+```{bash bwaTranscriptScottiResult2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment
+ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/merged_1000/merged_1000.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+seqtk subseq $ref selected_scaffolds.list >> selected_scaffolds.fa
+seqtk subseq $query selected_transcripts.list >> selected_transcripts.fa
+```
+
+We obtained **169 768** transcripts Tysklind *et al (in prep)* representing **60 184** candidate genes matching on **49 330** scaffolds from Scotti *et al (in prep)* (see fig \@ref(fig:bwaTranscriptResultScottiFig)). We used `dedupe.sh` script to remove duplicates ond overlapping contigs in the selected scaffolds. We identified **0** duplicated scaffolds, **0** scaffold included into another (143 bp), and **2** overlapping scaffolds (476 bp). The final coverage are shown in table \@ref(tab:bwaTranscriptResultScottiCov).
+
+```{r  bwaTranscriptResultScottiCov}
+total_length <- sum(width(readDNAStringSet(file.path(path, "Ivan_2018", "merged_1000", "merged_1000.fa"))))
+n_total <- length(readDNAStringSet(file.path(path, "Ivan_2018", "merged_1000", "merged_1000.fa")))
+bed <-  read_tsv(file.path(path, "Ivan_2018", "transcript_alignment", "filtered_transcripts.merged.bed"), 
+                 col_names = F) %>% unique()
+names(bed) <- c("scaffold", "start", "end", "coverage")
+alignment_coverage <- sum(bed$end-bed$start)
+scf <- readDNAStringSet(file.path(path, "Ivan_2018", "transcript_alignment", "selected_scaffolds.fa"))
+scf <- data.frame(scaffold = names(scf), width_scf = width(scf))
+selection_coverage <- sum(scf$width_scf)
+dedup_scf <- readDNAStringSet(file.path(path, "Ivan_2018", "transcript_alignment", "unique_selected_scaffolds.fa"))
+dedup_scf <- data.frame(scaffold = names(dedup_scf), width_scf = width(dedup_scf))
+dedup_coverage <- sum(dedup_scf$width_scf)
+data.frame(name = c("aligned sequence", "selected scaffold", "deduplicated scaffold", "total"),
+           n = c(nrow(bed), nrow(scf), nrow(dedup_scf), n_total),
+           width = c(alignment_coverage, selection_coverage, dedup_coverage, total_length)) %>% 
+  mutate(coverage = width/total_length*100) %>% 
+  mutate(width = width / 10^6) %>% 
+  kable(caption = "alignment coverage summary",
+        col.names = c("", "N", "Width (Mbp)", "Coverage (%)"),
+        format.args = list(big.mark = " "))
+```
+
+
+```{r bwaTranscriptResultScottiFig, fig.cap="Alignment result of Tysklind et al. (in prep) transcript over Scotti et al. (in prep) scaffolds. Left graph represents the overlap distribution. Right graph represent the selected and deduplicated scaffolds distribution."}
+bed <-  read_tsv(file.path(path, "Ivan_2018", "transcript_alignment", "filtered_transcripts.bed"), 
+                 col_names = F) %>% unique()
+names(bed) <- c("scaffold",  "start",  "end",    "transcript",   "score",  "strand") 
+g1 <- bed %>% 
+  mutate(width = abs(end-start)) %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  scale_x_log10() +
+  xlab("Overlap length of selected transcript\n(from Tysklind et al. (in prep) over Scotti et al. (in prep)") +
+  ggtitle("n = 513 245") +
+  coord_flip()
+scf <- readDNAStringSet(file.path(path, "Ivan_2018", "transcript_alignment", "unique_selected_scaffolds.fa"))
+g2 <- data.frame(scf = names(scf), width = width(scf)) %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  scale_x_log10() +
+  ggtitle("n = 49 330", "total width = 174.01 Mbp") +
+  xlab("Selected scaffolds width (bp)\nfrom Scotti et al. (in prep)") +
+  coord_flip()
+cowplot::plot_grid(g1, g2)
+```
+
+## Masking scaffolds with multimatch from Scotti *et al. (in prep)*
+
+```{bash MaskScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment
+bed=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/torroba_alignment/multimatch.bed
+scf=unique_selected_scaffolds.fa
+bedtools maskfasta -fi $scf -bed $bed -fo masked.scaffolds.fa
+```
+
+```{r MaskScotti2, eval=F, echo=T}
+scf <- readDNAStringSet(file.path(path, "Ivan_2018", 
+                                  "transcript_alignment", "masked.scaffolds.fa"))
+scf <- data.frame(scaffold = names(scf), width = width(scf), 
+           N = letterFrequency(scf, letters = "N")) %>% 
+  mutate(Nperc = N/width*100) %>% 
+  filter(Nperc < 25 & width > 1000) %>% 
+  select(scaffold)
+write_file(paste(scf$scaffold, collapse = "\n"), 
+           file.path(path, "Ivan_2018", "transcript_alignment", "final.scaffolds.list"))
+```
+
+```{bash MaskScotti3, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment
+seqtk subseq masked.scaffolds.fa final.scaffolds.list >> final.scaffolds.fa
+```
+
+```{r  MaskScottiCov}
+total_length <- sum(width(readDNAStringSet(file.path(path, "Ivan_2018", "merged_1000", "merged_1000.fa"))))
+n_total <- length(readDNAStringSet(file.path(path, "Ivan_2018", "merged_1000", "merged_1000.fa")))
+scf <- readDNAStringSet(file.path(path, "Ivan_2018", "transcript_alignment",
+                                  "final.scaffolds.fa"))
+scf <- data.frame(scaffold = names(scf), width = width(scf),
+                  N = letterFrequency(scf, letters = "N"))
+data.frame(name = c("selected scaffold", "total"),
+           n = c(nrow(scf), n_total),
+           width = c(sum(scf$width), total_length),
+           N = c(sum(scf$N), NA)) %>% 
+  mutate(mask = N/width*100) %>% 
+  mutate(coverage = width/total_length*100) %>% 
+  mutate(width = width / 10^6) %>% 
+  select(-N) %>% 
+  kable(caption = "alignment coverage summary",
+        col.names = c("", "N", "Width (Mbp)", "Mask (%N)", "Coverage (%)"),
+        format.args = list(big.mark = " "))
+```
+
+## Transcript alignment on scaffolds from @Olsson2017
+
+We aligned the filtered transcriptome from Tysklind *et al. (in prep)* on filtered scaffolds from @Olsson2017 with `bwa`.
+
+```{bash alignmentTranscriptOlsson, eval=F, echo=T}
+# variables
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment
+reference=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/Olsson2017/Olsson2017.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+filename=$(basename "$query")
+filename="${filename%.*}"
+# alignment
+bwa mem -M $reference $query > "${filename}".sam	
+# sam2bam
+java -Xmx4g -jar $PICARD SortSam \
+  I="${filename}".sam \
+  O="${filename}".bam \
+  SORT_ORDER=coordinate
+java -Xmx4g -jar $PICARD BuildBamIndex \
+  I="${filename}".bam \
+  O="${filename}".bai
+# bam2bed
+bedtools bamtobed -i "${filename}".bam > "${filename}".bed
+# merging bed
+bedtools merge -i "${filename}".bed -c 1,4 -o count,collapse > "${filename}".merged.bed
+# deduplication
+~/Tools/bbmap/dedupe.sh \
+  in=selected_scaffolds.fa \
+  out=unique_selected_scaffolds.fa \
+  outd=removed_duplicates.fa \
+  findoverlap=t \
+  processcluster=t \
+  | tee -a "dedupe.log"
+```
+
+```{R bwaTranscriptOlssonResult1, eval=F, echo=T}
+bed <- read_tsv(file.path(path, "Olsson_2016", "transcript_alignment", "filtered_transcripts.bed"), col_names = F)
+names(bed) <- c("scaffold",  "start",  "end",    "transcript",   "score",  "strand") 
+write_file(paste(unique(bed$scaffold), collapse = "\n"), 
+           file.path(path, "Olsson_2016", "transcript_alignment", "selected_scaffolds.list"))
+write_file(paste(unique(bed$transcript), collapse = "\n"), 
+           file.path(path, "Olsson_2016", "transcript_alignment", "selected_transcripts.list"))
+```
+
+```{bash bwaTranscriptOlssonResult2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment
+ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/Olsson2017/Olsson2017.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+seqtk subseq $ref selected_scaffolds.list >> selected_scaffolds.fa
+seqtk subseq $query selected_transcripts.list >> selected_transcripts.fa
+```
+
+We obtained **174 454** transcripts Tysklind *et al (in prep)* representing **61 290** candidate genes matching on **132 394** scaffolds from Scotti *et al (in prep)* (see fig \@ref(fig:bwaTranscriptResultOlssonFig)). We used `dedupe.sh` script to remove duplicates ond overlapping contigs in the selected scaffolds. We identified **0** duplicated scaffolds, **1** scaffold included into another (143 bp), and **3 979** overlapping scaffolds (406 kbp). The final coverage are shown in table \@ref(tab:bwaTranscriptResultScottiCov). 
+
+```{r  bwaTranscriptResultOlssonCov}
+total_length <- sum(width(readDNAStringSet(file.path(path, "Olsson_2016", "Olsson2017", "Olsson2017.fa"))))
+n_total <- length(readDNAStringSet(file.path(path, "Olsson_2016", "Olsson2017", "Olsson2017.fa")))
+bed <-  read_tsv(file.path(path, "Olsson_2016", "transcript_alignment", "filtered_transcripts.merged.bed"), 
+                 col_names = F) %>% unique()
+names(bed) <- c("scaffold", "start", "end", "coverage")
+alignment_coverage <- sum(bed$end-bed$start)
+scf <- readDNAStringSet(file.path(path, "Olsson_2016", "transcript_alignment", "selected_scaffolds.fa"))
+scf <- data.frame(scaffold = names(scf), width_scf = width(scf))
+selection_coverage <- sum(scf$width_scf)
+dedup_scf <- readDNAStringSet(file.path(path, "Olsson_2016", "transcript_alignment",
+                                        "unique_selected_scaffolds.fa"))
+dedup_scf <- data.frame(scaffold = names(dedup_scf), width_scf = width(dedup_scf))
+dedup_coverage <- sum(dedup_scf$width_scf)
+data.frame(name = c("aligned sequence", "selected scaffold", "deduplicated scaffold", "total"),
+           n = c(nrow(bed), nrow(scf), nrow(dedup_scf), n_total),
+           width = c(alignment_coverage, selection_coverage, dedup_coverage, total_length)) %>% 
+  mutate(coverage = width/total_length*100) %>% 
+  mutate(width = width / 10^6) %>% 
+  kable(caption = "alignment coverage summary",
+        col.names = c("", "N", "Width (Mbp)", "Coverage (%)"),
+        format.args = list(big.mark = " "))
+```
+
+```{r bwaTranscriptResultOlssonFig, fig.cap="Alignment result of Tysklind et al. (in prep) transcript over Olsson et al. (2017) scaffolds. Left graph represents the overlap distribution. Right graph represent the selected and deduplicated scaffolds distribution."}
+bed <-  read_tsv(file.path(path, "Olsson_2016", "transcript_alignment", "filtered_transcripts.bed"), 
+                 col_names = F) %>% unique()
+names(bed) <- c("scaffold",  "start",  "end",    "transcript",   "score",  "strand") 
+g1 <- bed %>% 
+  mutate(width = abs(end-start)) %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  scale_x_log10() +
+  xlab("Overlap length of selected transcript\n(from Tysklind et al. (in prep) over Olsson et al. (2017)") +
+  ggtitle("n = 670 771") +
+  coord_flip()
+scf <- readDNAStringSet(file.path(path, "Olsson_2016", "transcript_alignment", "unique_selected_scaffolds.fa"))
+g2 <- data.frame(scf = names(scf), width = width(scf)) %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  scale_x_log10() +
+  ggtitle("n = 132 393", "total width = 141.00 Mbp") +
+  xlab("Selected scaffolds width (bp)\nfrom Olsson et al. (2017)") +
+  coord_flip()
+cowplot::plot_grid(g1, g2)
+```
+
+## Masking scaffolds with multimatch from @Olsson2017
+
+```{bash MaskOlsson, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment
+bed=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/torroba_alignment/multimatch.bed
+scf=unique_selected_scaffolds.fa
+bedtools maskfasta -fi $scf -bed $bed -fo masked.scaffolds.fa
+```
+
+```{r MaskOlsson2, eval=F, echo=T}
+scf <- readDNAStringSet(file.path(path, "Olsson_2016", 
+                                  "transcript_alignment", "masked.scaffolds.fa"))
+scf <- data.frame(scaffold = names(scf), width = width(scf), 
+           N = letterFrequency(scf, letters = "N")) %>% 
+  mutate(Nperc = N/width*100) %>% 
+  filter(Nperc < 25 & width > 1000) %>% 
+  select(scaffold)
+write_file(paste(scf$scaffold, collapse = "\n"), 
+           file.path(path, "Olsson_2016", "transcript_alignment", "final.scaffolds.list"))
+```
+
+```{bash MaskOlsson3, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment
+seqtk subseq masked.scaffolds.fa final.scaffolds.list >> final.scaffolds.fa
+```
+
+```{r  MaskOlssonCov}
+total_length <- sum(width(readDNAStringSet(file.path(path, "Olsson_2016", "Olsson2017", "Olsson2017.fa"))))
+n_total <- length(readDNAStringSet(file.path(path, "Olsson_2016", "Olsson2017", "Olsson2017.fa")))
+scf <- readDNAStringSet(file.path(path, "Olsson_2016", "transcript_alignment",
+                                  "final.scaffolds.fa"))
+scf <- data.frame(scaffold = names(scf), width = width(scf),
+                  N = letterFrequency(scf, letters = "N"))
+data.frame(name = c("selected scaffold", "total"),
+           n = c(nrow(scf), n_total),
+           width = c(sum(scf$width), total_length),
+           N = c(sum(scf$N), NA)) %>% 
+  mutate(mask = N/width*100) %>% 
+  mutate(coverage = width/total_length*100) %>% 
+  mutate(width = width / 10^6) %>% 
+  select(-N) %>% 
+  kable(caption = "alignment coverage summary",
+        col.names = c("", "N", "Width (Mbp)", "Mask (%N)", "Coverage (%)"),
+        format.args = list(big.mark = " "))
+```
+
+## Merge of selected scaffolds
+
+We merged selected scaffolds from Scotti *et al (in prep)* and @Olsson2017 with `quickmerge`.
+
+```{bash mergeScottiOlsson, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection
+ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment/final.scaffolds.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment/final.scaffolds.fa
+nucmer -l 100 -prefix out $ref $query
+delta-filter -i 95 -r -q out.delta > out.rq.delta
+~/Tools/quickmerge/quickmerge -d out.rq.delta -q $query -r $ref -hco 5.0 -c 1.5 -l n -ml m
+```
+
+We merged selected scaffolds from Scotti *et al (in prep)* and @Olsson2017 with `quickmerge`. We found **33 498** overlaps resulting a final merged assembly of **36 221** scaffolds for a total lenght of **132.80 Mb**.
+
+```{r selectionOverlap, fig.cap="Merging result from quickmerge. Left graph represents the overlap distribution. Right graph represent the merged scaffolds distribution."}
+scf <- readDNAStringSet(file.path(path, "functional_selection", "merged.fasta"))
+data <- read_tsv(file.path(path, "functional_selection", "summaryOut.txt"))
+g1 <- data %>%
+  select(REF, QUERY, OVERLAP_LEN) %>%
+  mutate(QUERY = gsub("Olsson_2017_", "", QUERY)) %>%
+  mutate(REF = gsub("Ivan_2018_sympho47_", "", REF)) %>% 
+  ggplot(aes(OVERLAP_LEN)) +
+  geom_histogram() +
+  scale_x_log10() +
+  xlab("Overlap length of selected scaffolds\n(from Ivan et al. (in prep) and Olsson et al. (2017)") +
+  ggtitle("n = 33 498") +
+  coord_flip()
+g2 <- data.frame(scf = names(scf), width = width(scf)) %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  scale_x_log10() +
+  ggtitle("n = 36 221", "total width = 132.80 Mbp") +
+  xlab("Merged scaffolds width (bp)") +
+  coord_flip()
+cowplot::plot_grid(g1, g2)
+```
+
+## Final subset of selected functional scaffolds
+
+We finally selected 1.067 Mb of sequences by sampling 1.067 1-kb sequences within 1 genes (with possible introns) among 1.067 scaffolds (1 gene per scaffold) with a probability $p=\frac{scaffold\_length}{total\_length}$.
+
+```{bash funcBedPrep, eval=F, echo=T}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes
+cd $path/functional_selection
+bed_Ivan=$path/Ivan_2018/transcript_alignment/filtered_transcripts.bed
+bed_Olsson=$path/Olsson_2016/transcript_alignment/filtered_transcripts.bed
+cat $bed_Ivan $bed_Olsson | sort -k 1,1 -k2,2n >  trsc.all.bed
+awk -F'\t' -v OFS='\t' '{sub(/_i[0-9]/, "", $4)} 1' trsc.all.bed | sort -k 1,1 -k2,2n > genes.all.bed
+bedtools merge -i genes.all.bed -c 4 -o collapse > genes.merged.bed
+```
+
+```{r}
+bed <- read_tsv(file.path(path, "functional_selection", "genes.merged.bed"), 
+                col_names = c("scf",  "start",  "end",    "gene"))
+bed %>% 
+  separate_rows(gene, sep = ",") %>% 
+  filter(gene == "TRINITY_DN103458_c0_g1") %>% 
+  summarise(length(unique(scf)))
+
+data <- bed %>% 
+  separate_rows(gene, sep = ",") %>% 
+  # group_by(gene) %>% 
+  # filter(length(unique(scf)) == 1) %>%
+  group_by(scf, start, end) %>% 
+  filter(length(unique(gene)) == 1) %>%
+  unique() %>% 
+  arrange(scf, start, end) %>% 
+  ungroup()
+
+data %>% 
+  group_by(scf, gene) %>% 
+  summarise(start = min(start), end = max(end)) %>% 
+  mutate(width = end - start + 1) %>% 
+  ggplot(aes(width)) + geom_histogram(binwidth = 100) + 
+  geom_vline(xintercept = 500, col = "red") + xlim(0,10000)
+
+bed %>% 
+  separate_rows(gene, sep = ",") %>% 
+  group_by(scf, start, end) %>% 
+  summarise(n = length(unique(gene))) %>% 
+  ggplot(aes(n)) + geom_histogram(binwidth = 1) + xlim(0,10)
+```
+
+
+```{r funcSelection, eval=F, echo=T}
+# scf
+scf <- readDNAStringSet(file.path(path, "functional_selection", "merged.fasta"))
+selection <- data.frame(scf = names(scf), width = width(scf), 
+                        N = letterFrequency(scf, "N")) %>% 
+  sample_n(1067, weight = width) %>% 
+  select(scf) %>% 
+  unlist()
+scf_sel <- scf[selection]
+# genes
+bed <- read_tsv(file.path(path, "functional_selection", "genes.merged.bed"), 
+                col_names = c("scf",  "start",  "end",    "gene"))
+data.frame(scf = names(scf_sel), width = width(scf_sel), 
+                        N = letterFrequency(scf_sel, "N")) %>% 
+  left_join(bed) %>% 
+  mutate(width_exon = end-start) %>% 
+  separate_rows(gene, sep = ",")
+
+
+  group_by(scf, start, end) %>%
+  summarise(n = n()) %>% 
+  ggplot(aes(n)) + geom_histogram(binwidth = 1)
+  
+  filter(gene == "TRINITY_DN770551_c13_g12")
+  summarise(start = min(start), end = max(end), width_exons = sum(width_exon)) %>% 
+  mutate(width = end - start) %>% 
+  mutate(perc_intron = (1-(width_exons/width))*100) %>% 
+  ggplot(aes(width, perc_intron)) + geom_point()
+
+
+gene_sel <- subseq(scf_sel, end=1000, width=1000)
+writeXStringSet(gene_sel, file.path(path, "functional_selection", "selected.scaffolds.fa"))
+```
+
+```{r funcSelectionTab}
+scf <- readDNAStringSet(file.path(path, "functional_selection", "selected.scaffolds.fa"))
+data.frame(n = length(scf),
+           width = sum(width(scf))/10^6,
+           Nperc = sum(letterFrequency(scf, "N"))/sum(width(scf))) %>% 
+    kable(caption = "Selected neutral scaffolds",
+        col.names = c("N", "Width (Mbp)", "Mask (%N)"),
+        format.args = list(big.mark = " "))
+```
+
+
+

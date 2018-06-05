@@ -19,7 +19,6 @@ We will proceed sequence capture and genomic analysis of *Symphonia globulifera*
     - [ ] Morphtoype specific genes (Tysklind et al)
     - [ ] Non specific genes (Tysklind et al)
     - [ ] Intron & UTR (Tysklind et al, Scotti et al, or African *S. globulifera*)
-    - [ ] Chloroplast sequences (Scotti et al)
 - [ ] Design probes (software with the kit)
 - [ ] Extract DNA
     - [x] Prepare leaf extracts
@@ -54,10 +53,6 @@ DiagrammeR::DiagrammeR("
    Non_Synonymous-->Specific
    Non_Synonymous-->Non_Specific
 ")
-   # Chloroplast-->Scoti_et_al
-   # Intron-->Scoti_et_al
-   # Specific-->Niklas_et_al
-   # Non_Specific-->Niklas_et_al
 ```
 
 ## Sequence selection
@@ -65,23 +60,41 @@ DiagrammeR::DiagrammeR("
 We have to choose sequences to be captured. The sequence selection for capture will be detailed in next chapters. We will use 5 sources of information:
 
 * __Transcriptomic analysis from Tysklind *et al (in prep)*__, realized on transplant experiment of *Symphonia globulifera* in French Guiana this study will inform us on untrasnlated regions (UTR) and coding DNA sequences (CDS) precizing the putative functional impact and the morphotype specificity of genes
-* __SNPs from French Guiana obtain by GbS in @Torroba-Balmori2017 __, will inform us on guianan SNPs for neutral regions
-* __genome scaffolds from Africa in @Olsson2017 __, will bring us neutral scaffold
-* __chloroplast sequences from French Guiana on NCBI__, will brings us short sequences of chloroplast
-* __chlorplast assembly from Ameria from Bautista et Claros__, will bring us genomic sequences
+* __GbS data from French Guiana from Torroba-Balmori *et al. (unpublished)* __, will inform us on guianan neutral regions
+* __genome scaffolds from Africa from @Olsson2017 __, will bring us neutral and functional scaffolds
+* __genome scaffolds from French Guiana from Scotti *et al. (in prep)*__, will bring us neutral and functional scaffolds
+
 
 We will select approxamitely:
 
-* __60%__ of coding sequence with a functional impact with data from Tysklind *et al (in prep)* split between:
-    * __40%__ of sequences including morphotype-specific variants
+* __70%__ of coding sequence with a functional impact with an interpolation between genomes and the transcritome from Tysklind *et al (in prep)* split between:
+    * __50%__ of sequences including morphotype-specific variants
     * __20%__ of sequences including non morphotype-specific variants
-* __30%__ of genomic neutral regions (introns and UTR with some including morphotype-specific variants) from both data from Tysklind *et al (in prep)* and a interpolation between genomic data from @Torroba-Balmori2017 and @Olsson2017
-* __10%__ of chloroplastic regions from interpolation between Bautista et Claros and NCBI american sequences
-    
-```{r planCapture, fig.cap = "Sequences to be captured.", echo=FALSE}
-data.frame(
-  category = c("CDS-MtSpecific", "CDS-NonSpecific", "Neutral-Neutral", "Chloroplast-Chloroplast"),
-  size = c(40, 20, 30, 10)
-) %>% 
-  sunburstR::sunburst()
-```
+* __30%__ of genomic neutral regions with an interpolation between genomes and GbS data from @Torroba-Balmori2017
+  
+## Selection plan
+
+1. Scotti *et al. (in prep)* scaffolds preparation
+    1. Filtering scaffolds over $1kbp$
+    2. Renaming
+    3. Libraries merging
+    4. Removing ribosomic, mitochondrial or chloroplastic genes
+    5. Removing scaffolds with multimatch blasted consensus sequence from Torroba-Balmori *et al. (unpublished)*
+2. @Olsson2017 scaffolds preparation
+    1. Renaming
+    2. Removing scaffolds with multimatch blasted consensus sequence from Torroba-Balmori *et al. (unpublished)*
+3. Tysklind *et al (in prep)* transcript preparation
+    1. Filtering SNP on quality
+    2. Filtering SNP on type
+    3. Filtering SNP on frequency
+4. Fuctional region selection
+    1. Transcript alignment on scaffolds from Scotti *et al. (in prep)*
+    2. Transcript alignment on scaffolds from @Olsson2017
+    3. Merge of selected scaffolds
+    4. Final subset of selected functional scaffolds
+5. Neutral region selection
+    1. Raw reads from Torroba-Balmori *et al. (unpublished)* alignment on scaffolds from Scotti *et al. (in prep)*
+    2. Raw reads from Torroba-Balmori *et al. (unpublished)* alignment on scaffolds from @Olsson2017 
+    3. Removing scaffolds with multimatch
+    4. Removing scaffolds already matching transcripts
+    5. Final subset of selected neutral scaffolds based on ...

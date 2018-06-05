@@ -1,3 +1,10 @@
+# PhD 0.1.9036
+* Probes design
+    * neutral seq v1 done
+    * functional seq selection (annotation)
+* CST
+* bidouille
+
 # PhD 0.1.9035
 * Probes design
 

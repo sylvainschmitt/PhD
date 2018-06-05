@@ -57,7 +57,6 @@
 ## Emilie internship
 
 - [ ] Thursday skypes
-- [ ] Meeting with Eric and Geraldine
 
 # Performance
 
