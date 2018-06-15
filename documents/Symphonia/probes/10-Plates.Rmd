@@ -13,40 +13,8 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/capture/"
 # Plates
 
 ```{r plates}
-plates <- do.call("rbind", sapply(list.files(path, full.names = T), read_tsv, simplify = F))
-g <- plates %>% 
-  mutate(row = substr(Well, 1, 1)) %>% 
-  mutate(col = substr(Well, 2, 3)) %>% 
-  mutate(concentration = as.numeric(gsub(",", ".", Conc.))) %>% 
-  mutate(r260.280 = as.numeric(gsub(",", ".", `260/280`))) %>% 
-  mutate(r260.230 = as.numeric(gsub(",", ".", `260/230`))) %>% 
-  group_by(`Plate ID`) %>% 
-  arrange( Well, -Time) %>% 
-  filter(!duplicated(Well)) %>% 
-  mutate(concentration = ifelse(concentration < 0, NA, concentration)) %>% 
-  mutate(concentration = ifelse(concentration > 1000, NA, concentration)) %>% 
-  # filter(!is.na(concentration)) %>% 
-  dplyr::rename(plate = `Plate ID`, well = Well) %>% 
-  select(plate, well, row, col, concentration, r260.280, r260.230) %>% 
-  arrange(plate, row, col) %>% 
-  # filter(plate == 3) %>% 
-  reshape2::melt(id.vars = c("plate", "well", "row", "col")) %>% 
-  mutate(sel = ifelse(variable == "concentration" & value > 25, "yes", "no")) %>% 
-  mutate(sel = ifelse(variable == "r260.280" & value > 1.8 & value < 2, "yes", sel)) %>% 
-  mutate(sel = ifelse(variable == "r260.230" & value > 2 & value < 2.2, "yes", sel)) %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12))) + 
-  geom_point(aes(colour = sel), size =10)  + 
-  geom_text(aes(label = value), col = "white", size = 2.5) +
-  facet_grid(variable ~ plate) +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-plotly::ggplotly(g)
-```
-
-```{r plates2}
 plates <- do.call("rbind", sapply(list.files(path, full.names = T), read.delim2, simplify = F))
-g <- plates %>% 
+(g <- plates %>% 
   mutate(row = substr(Well, 1, 1)) %>% 
   mutate(col = substr(Well, 2, 3)) %>% 
   group_by(`Plate.ID`) %>% 
@@ -66,6 +34,6 @@ g <- plates %>%
   geom_text(aes(label = concentration), col = "white", size = 2.5) +
   facet_wrap(~ plate) +
   theme_bw() +
-  labs(x=NULL, y = NULL)
-plotly::ggplotly(g)
+  labs(x=NULL, y = NULL))
+# plotly::ggplotly(g)
 ```

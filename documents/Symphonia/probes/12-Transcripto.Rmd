@@ -43,7 +43,6 @@ count_SNP %>%
   filter(type != "unpossible") %>%
   select(type, n) %>% 
   sunburstR::sunburst(count = T)
-rm(list = ls())
 ```
 
 ## Genes
@@ -64,7 +63,7 @@ include_graphics("./probes_data/genesVen.jpg")
 
 We will use this annotation to filter out transcripts with ribosomic, mitochondrial or chloroplastic genes. We thus obtained **74 526** transcripts (175 Mbp) representing **844** putative genes (14 Mbp).
 
-```{r GO}
+```{r GO, eval=F}
 snp <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
            delim = "\t") %>% 
   filter(Possible_sequencing_error != "True") %>% 
@@ -131,7 +130,7 @@ unsel <- data %>%
 rm(snp, transcript, OE, data) ; invisible(gc())
 ```
 
-```{r goeGenes, fig.cap="Number of GO term by candidate gene width. Graph are facetted by enrichment or depletion by morphotype. This graph include the 5 403 candidate genes which represents all type of SNPs."}
+```{r goeGenes, fig.cap="Number of GO term by candidate gene width. Graph are facetted by enrichment or depletion by morphotype. This graph include the 5 403 candidate genes which represents all type of SNPs.", eval=F}
 goe_gene %>%
   ggplot(aes(width, n_go)) +
   geom_point() +

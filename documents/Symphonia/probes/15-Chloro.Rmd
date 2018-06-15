@@ -25,7 +25,7 @@ The aim is to select genes from the African assembly that are relativelly stable
 
 Rocio Bautista & M. Gonzalo Claros already anotated chloroplastic gene from *Symphonia globulifera* from African samples (figure \@ref(fig:chloroRef)) that we will use as reference for the blast:
 
-```{r chloroRef, fig.cap="Result from anotation of 14 scaffolds from chloroplastic genom from *Symphonia globulifera* witg cpGAVAS (Rocio Bautista & M. Gonzalo Claros)"}
+```{r chloroRef, fig.cap="Result from anotation of 14 scaffolds from chloroplastic genom from *Symphonia globulifera* witg cpGAVAS (Rocio Bautista and M. Gonzalo Claros)"}
 include_graphics("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Chloroplast_Africa/Final_Result/Annotacion/annotation_Chloroplast_Symphonia_scaffolds.png")
 ```
 
@@ -46,7 +46,7 @@ We then explored each population set (PopSet field) and corresponding article to
 
 We extracted gene bank ID for all *Symphonia globulifera* sequences from those population sets and retrieve corresponding fasta sequences from NCBI.
 
-```{r sequences}
+```{r sequences, eval=F, echo=T}
 seq <- read_table(file.path(path, "NCBI", "sequence.txt"),
                   col_names = F) %>%
   rename(GeneBankId = X1, Name = X2) %>% 

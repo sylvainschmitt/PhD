@@ -31,7 +31,8 @@ tree
     ## │   │   │   ├── ParacouMNS1m2015.asc.aux.xml
     ## │   │   │   ├── ParacouMNT1m2013.asc
     ## │   │   │   ├── ParacouMNT1m2013.asc.aux.xml
-    ## │   │   │   └── ParacouMNT1m2015.asc
+    ## │   │   │   ├── ParacouMNT1m2015.asc
+    ## │   │   │   └── ParacouMNT1m2015.asc.aux.xml
     ## │   │   ├── MNC_ParacouAvril2009_1m.tfw
     ## │   │   ├── MNC_ParacouAvril2009_1m.tif
     ## │   │   ├── MNC_ParacouAvril2009_1m.tif.aux.xml
@@ -191,17 +192,393 @@ tree
     ## │       ├── Symphonia_Guyafor.csv
     ## │       ├── Symphonia_Paracou.csv
     ## │       └── symphonia.Rdata
+    ## ├── Symphonia_Genomes
+    ## │   ├── Chloroplast_Africa
+    ## │   │   ├── Final_Result
+    ## │   │   │   ├── Annotacion
+    ## │   │   │   │   ├── annotation_Chloroplast_Symphonia_scaffolds.gff3
+    ## │   │   │   │   ├── annotation_Chloroplast_Symphonia_scaffolds.png
+    ## │   │   │   │   ├── annotation_with_problem.txt
+    ## │   │   │   │   ├── annot_fasta
+    ## │   │   │   │   │   ├── CDS.fasta
+    ## │   │   │   │   │   ├── genes.fasta
+    ## │   │   │   │   │   ├── mRNA.fasta
+    ## │   │   │   │   │   ├── protein.fasta
+    ## │   │   │   │   │   ├── rRNA.fasta
+    ## │   │   │   │   │   ├── tRNA_aragorn.fasta
+    ## │   │   │   │   │   └── tRNA.fasta
+    ## │   │   │   │   ├── input_GenomeVX_Chloroplast_Symphonia_scaffolds.txt
+    ## │   │   │   │   └── report_ annotation_Chloroplast_Symphonia_scaffolds.txt
+    ## │   │   │   ├── Assembly
+    ## │   │   │   │   └── Chloroplast_Symphonia_scaffolds_final_result_A5.fasta
+    ## │   │   │   └── Informe_Cloroplasto_Symphonia.pdf
+    ## │   │   ├── Final_Result.zip
+    ## │   │   └── __MACOSX
+    ## │   │       └── Final_Result
+    ## │   │           ├── Annotacion
+    ## │   │           └── Assembly
+    ## │   ├── functional_selection
+    ## │   │   ├── all.merged.bed
+    ## │   │   ├── aln_summary.tsv
+    ## │   │   ├── anchor_summary.txt
+    ## │   │   ├── genes.all.bed
+    ## │   │   ├── genes.merged.bed
+    ## │   │   ├── merged.fasta
+    ## │   │   ├── out.delta
+    ## │   │   ├── out.rq.delta
+    ## │   │   ├── selected.scaffolds.fa
+    ## │   │   ├── summaryOut.txt
+    ## │   │   ├── test_snap
+    ## │   │   │   ├── analysis
+    ## │   │   │   │   ├── alt.ann
+    ## │   │   │   │   ├── alt.dna
+    ## │   │   │   │   ├── err.ann
+    ## │   │   │   │   ├── err.dna
+    ## │   │   │   │   ├── export.aa
+    ## │   │   │   │   ├── export.ann
+    ## │   │   │   │   ├── export.dna
+    ## │   │   │   │   ├── export.tx
+    ## │   │   │   │   ├── gene-stat.log
+    ## │   │   │   │   ├── olp.ann
+    ## │   │   │   │   ├── olp.dna
+    ## │   │   │   │   ├── uni.ann
+    ## │   │   │   │   ├── uni.dna
+    ## │   │   │   │   ├── validate.log
+    ## │   │   │   │   ├── wrn.ann
+    ## │   │   │   │   └── wrn.dna
+    ## │   │   │   ├── merged.bed
+    ## │   │   │   ├── merged.fasta
+    ## │   │   │   ├── merged.gff
+    ## │   │   │   ├── merged.zff
+    ## │   │   │   ├── script.sh
+    ## │   │   │   ├── zff2bed.pl
+    ## │   │   │   └── zff2gff.pl
+    ## │   │   └── trsc.all.bed
+    ## │   ├── Ivan_2018
+    ## │   │   ├── merged_1000
+    ## │   │   │   ├── merged_1000.fa
+    ## │   │   │   ├── merged_1000.fa.amb
+    ## │   │   │   ├── merged_1000.fa.ann
+    ## │   │   │   ├── merged_1000.fa.bwt
+    ## │   │   │   ├── merged_1000.fa.nhr
+    ## │   │   │   ├── merged_1000.fa.nin
+    ## │   │   │   ├── merged_1000.fa.nog
+    ## │   │   │   ├── merged_1000.fa.nsd
+    ## │   │   │   ├── merged_1000.fa.nsi
+    ## │   │   │   ├── merged_1000.fa.nsq
+    ## │   │   │   └── merged_1000.fa.pac
+    ## │   │   ├── raw
+    ## │   │   │   ├── sympho47_1L1_002.kmerFreq
+    ## │   │   │   ├── sympho47_1L1_002.scafSeq
+    ## │   │   │   ├── sympho47_1L2_001.kmerFreq
+    ## │   │   │   ├── sympho47_1L2_001.scafSeq
+    ## │   │   │   ├── sympho47_2L1_008.kmerFreq
+    ## │   │   │   ├── sympho47_2L1_008.scafSeq
+    ## │   │   │   ├── sympho47_2L1_009.kmerFreq
+    ## │   │   │   ├── sympho47_2L1_009.scafSeq
+    ## │   │   │   ├── sympho47_2L1_010.kmerFreq
+    ## │   │   │   ├── sympho47_2L1_010.scafSeq
+    ## │   │   │   ├── sympho47_2L1_011.kmerFreq
+    ## │   │   │   ├── sympho47_2L1_011.scafSeq
+    ## │   │   │   ├── sympho47_2L1_012.kmerFreq
+    ## │   │   │   ├── sympho47_2L1_012.scafSeq
+    ## │   │   │   ├── sympho47_3L2_013.kmerFreq
+    ## │   │   │   ├── sympho47_3L2_013.scaf
+    ## │   │   │   ├── sympho47_3L2_013.scaf_gap
+    ## │   │   │   ├── sympho47_3L2_013.scafSeq
+    ## │   │   │   ├── sympho47_3L2_013.scafSeq.fai
+    ## │   │   │   ├── sympho47_4L1_014.kmerFreq
+    ## │   │   │   ├── sympho47_4L1_014.scaf
+    ## │   │   │   ├── sympho47_4L1_014.scaf_gap
+    ## │   │   │   ├── sympho47_4L1_014.scafSeq
+    ## │   │   │   └── sympho47_4L1_014.scafSeq.fai
+    ## │   │   ├── renamed_scf_1000
+    ## │   │   │   ├── merge0
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   ├── sympho47_1L1_002.1000.renamed.scafSeq
+    ## │   │   │   │   └── sympho47_1L2_001.1000.renamed.scafSeq
+    ## │   │   │   ├── merge1
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge1.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_2L1_008.1000.renamed.scafSeq
+    ## │   │   │   ├── merge1.fasta
+    ## │   │   │   ├── merge2
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge2.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_2L1_009.1000.renamed.scafSeq
+    ## │   │   │   ├── merge2.fasta
+    ## │   │   │   ├── merge3
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge3.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_2L1_010.1000.renamed.scafSeq
+    ## │   │   │   ├── merge3.fasta
+    ## │   │   │   ├── merge4
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge4.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_2L1_011.1000.renamed.scafSeq
+    ## │   │   │   ├── merge4.fasta
+    ## │   │   │   ├── merge5
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge5.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_2L1_012.1000.renamed.scafSeq
+    ## │   │   │   ├── merge5.fasta
+    ## │   │   │   ├── merge6
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge6.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── nucmer.error
+    ## │   │   │   │   ├── nucmer.error.note
+    ## │   │   │   │   ├── out.delta
+    ## │   │   │   │   ├── out.mgaps
+    ## │   │   │   │   ├── out.ntref
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_3L2_013.1000.renamed.scafSeq
+    ## │   │   │   ├── merge6.fasta
+    ## │   │   │   ├── merge7
+    ## │   │   │   │   ├── aln_summary.tsv
+    ## │   │   │   │   ├── anchor_summary.txt
+    ## │   │   │   │   ├── merge7.fasta
+    ## │   │   │   │   ├── merged.fasta
+    ## │   │   │   │   ├── nucmer.error
+    ## │   │   │   │   ├── nucmer.error.note
+    ## │   │   │   │   ├── out.mgaps
+    ## │   │   │   │   ├── out.ntref
+    ## │   │   │   │   ├── out.rq.delta
+    ## │   │   │   │   ├── summaryOut.txt
+    ## │   │   │   │   └── sympho47_4L1_014.1000.renamed.scafSeq
+    ## │   │   │   ├── merge7.fasta
+    ## │   │   │   ├── merge8.fasta
+    ## │   │   │   ├── sympho47_1L1_002.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_1L2_001.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_2L1_008.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_2L1_009.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_2L1_010.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_2L1_011.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_2L1_012.1000.renamed.scafSeq
+    ## │   │   │   ├── sympho47_3L2_013.1000.renamed.scafSeq
+    ## │   │   │   └── sympho47_4L1_014.1000.renamed.scafSeq
+    ## │   │   ├── torroba_alignment
+    ## │   │   │   ├── all.merged.bed
+    ## │   │   │   ├── all.nonunique.bed
+    ## │   │   │   ├── final.scaffolds.fa
+    ## │   │   │   ├── final.scaffolds.list
+    ## │   │   │   ├── masked.scaffolds.fa
+    ## │   │   │   ├── multimatch.bed
+    ## │   │   │   ├── multimatch.merged.bed
+    ## │   │   │   ├── multimatch.nonunique.bed
+    ## │   │   │   ├── scaffolds.fa
+    ## │   │   │   └── scaffolds.list
+    ## │   │   ├── torroba_blast
+    ## │   │   │   ├── blast_consensus_torroba2.txt
+    ## │   │   │   ├── blast_consensus_torroba.txt
+    ## │   │   │   ├── selected_scaffolds_blast_consensus2.fa
+    ## │   │   │   ├── selected_scaffolds_blast_consensus2.list
+    ## │   │   │   ├── selected_scaffolds_blast_consensus.fa
+    ## │   │   │   └── selected_scaffolds_blast_consensus.list
+    ## │   │   └── transcript_alignment
+    ## │   │       ├── dedupe.log
+    ## │   │       ├── filtered_transcripts.bai
+    ## │   │       ├── filtered_transcripts.bam
+    ## │   │       ├── filtered_transcripts.bed
+    ## │   │       ├── filtered_transcripts.merged.bed
+    ## │   │       ├── filtered_transcripts.sam
+    ## │   │       ├── final.scaffolds.fa
+    ## │   │       ├── final.scaffolds.list
+    ## │   │       ├── masked.scaffolds.fa
+    ## │   │       ├── removed_duplicates.fa
+    ## │   │       ├── selected_scaffolds.fa
+    ## │   │       ├── selected_scaffolds.list
+    ## │   │       ├── selected_transcripts.fa
+    ## │   │       ├── selected_transcripts.list
+    ## │   │       └── unique_selected_scaffolds.fa
+    ## │   ├── NCBI
+    ## │   │   ├── blast_result.txt
+    ## │   │   ├── chloroplast_db
+    ## │   │   │   ├── chloroplast.fa
+    ## │   │   │   ├── chloroplast.fa.nhr
+    ## │   │   │   ├── chloroplast.fa.nin
+    ## │   │   │   ├── chloroplast.fa.nog
+    ## │   │   │   ├── chloroplast.fa.nsd
+    ## │   │   │   ├── chloroplast.fa.nsi
+    ## │   │   │   └── chloroplast.fa.nsq
+    ## │   │   ├── sequence.fa
+    ## │   │   └── sequence.txt
+    ## │   ├── neutral_selection
+    ## │   │   ├── aln_summary.tsv
+    ## │   │   ├── anchor_summary.txt
+    ## │   │   ├── Ivan.selected.scaffolds.fa
+    ## │   │   ├── merged.fasta
+    ## │   │   ├── Olsson.selected.scaffolds.fa
+    ## │   │   ├── out.delta
+    ## │   │   ├── out.rq.delta
+    ## │   │   ├── selected.scaffolds.fa
+    ## │   │   └── summaryOut.txt
+    ## │   └── Olsson_2016
+    ## │       ├── Genome_browser_downloads
+    ## │       │   ├── BLASTN.gff3
+    ## │       │   ├── BLASTX.gff3
+    ## │       │   ├── Genes_11072016.gff3
+    ## │       │   ├── Genes.genbank
+    ## │       │   ├── Genes.gff3
+    ## │       │   ├── Genome_browser_downloads.zip
+    ## │       │   ├── Loci_region.gff3
+    ## │       │   ├── Sequence_290916.fasta
+    ## │       │   ├── Sequence_deg7180005250159.fasta
+    ## │       │   ├── Sequence.fasta
+    ## │       │   ├── SSR.gff3
+    ## │       │   ├── SSR_Locus_290916.fasta
+    ## │       │   ├── SSR_Locus_deg7180005250159_101..200.fasta
+    ## │       │   ├── SSR_Locus_deg7180005250159.fasta
+    ## │       │   └── SSR_Locus.gff3
+    ## │       ├── Olsson2017
+    ## │       │   ├── Olsson2017.fa
+    ## │       │   ├── Olsson2017.fa.amb
+    ## │       │   ├── Olsson2017.fa.ann
+    ## │       │   ├── Olsson2017.fa.bwt
+    ## │       │   ├── Olsson2017.fa.nhr
+    ## │       │   ├── Olsson2017.fa.nin
+    ## │       │   ├── Olsson2017.fa.nog
+    ## │       │   ├── Olsson2017.fa.nsd
+    ## │       │   ├── Olsson2017.fa.nsi
+    ## │       │   ├── Olsson2017.fa.nsq
+    ## │       │   ├── Olsson2017.fa.pac
+    ## │       │   └── Olsson2017.fa.sa
+    ## │       ├── scotti_overlap
+    ## │       │   ├── merged.fasta
+    ## │       │   ├── nucmer.error
+    ## │       │   ├── out.mgaps
+    ## │       │   ├── out.ntref
+    ## │       │   └── out.rq.delta
+    ## │       ├── symph_genome.fa
+    ## │       ├── symph_genome.zip
+    ## │       ├── torroba_alignment
+    ## │       │   ├── all.merged.bed
+    ## │       │   ├── all.nonunique.bed
+    ## │       │   ├── final.scaffolds.fa
+    ## │       │   ├── final.scaffolds.list
+    ## │       │   ├── masked.scaffolds.fa
+    ## │       │   ├── multimatch.bed
+    ## │       │   ├── multimatch.merged.bed
+    ## │       │   ├── multimatch.nonunique.bed
+    ## │       │   ├── scaffolds.fa
+    ## │       │   └── scaffolds.list
+    ## │       ├── torroba_blast
+    ## │       │   ├── blast_consensus_torroba2.txt
+    ## │       │   ├── blast_consensus_torroba.txt
+    ## │       │   ├── selected_scaffolds_blast_consensus2.fa
+    ## │       │   ├── selected_scaffolds_blast_consensus2.list
+    ## │       │   ├── selected_scaffolds_blast_consensus.fa
+    ## │       │   └── selected_scaffolds_blast_consensus.list
+    ## │       ├── transcript_alignment
+    ## │       │   ├── dedupe.log
+    ## │       │   ├── filtered_transcripts.bai
+    ## │       │   ├── filtered_transcripts.bam
+    ## │       │   ├── filtered_transcripts.bed
+    ## │       │   ├── filtered_transcripts.merged.bed
+    ## │       │   ├── filtered_transcripts.sam
+    ## │       │   ├── final.scaffolds.fa
+    ## │       │   ├── final.scaffolds.list
+    ## │       │   ├── masked.scaffolds.fa
+    ## │       │   ├── removed_duplicates.fa
+    ## │       │   ├── selected_scaffolds.fa
+    ## │       │   ├── selected_scaffolds.list
+    ## │       │   ├── selected_transcripts.fa
+    ## │       │   ├── selected_transcripts.list
+    ## │       │   └── unique_selected_scaffolds.fa
+    ## │       ├── unsel_genes2.txt
+    ## │       └── unsel_genes.txt
     ## ├── Symphonia_Niklas
+    ## │   ├── debug
+    ## │   │   ├── bwa_summary.bed
+    ## │   │   ├── overlap1.fa
+    ## │   │   ├── overlap1.vfa
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa.amb
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa.ann
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa.bwt
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa.fai
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa.pac
+    ## │   │   ├── TRINITY_DN762220_c15_g1.fa.sa
+    ## │   │   ├── TRINITY_DN762220_c15_g1.vfa
+    ## │   │   ├── TRINITY_DN790531_c8_g1.fa
+    ## │   │   ├── TRINITY_DN790531_c8_g1.fa.amb
+    ## │   │   ├── TRINITY_DN790531_c8_g1.fa.ann
+    ## │   │   ├── TRINITY_DN790531_c8_g1.fa.bwt
+    ## │   │   ├── TRINITY_DN790531_c8_g1.fa.pac
+    ## │   │   ├── TRINITY_DN790531_c8_g1.fa.sa
+    ## │   │   ├── TRINITY_DN790531_c8_g1.vfa
+    ## │   │   ├── trsc.fa
+    ## │   │   ├── way1.bam
+    ## │   │   ├── way1.bed
+    ## │   │   ├── way1.sam
+    ## │   │   ├── way2.bam
+    ## │   │   ├── way2.bed
+    ## │   │   └── way2.sam
+    ## │   ├── filtered_transcripts.fasta
+    ## │   ├── GO_term_enrichment
+    ## │   │   ├── OE_glo.GOseq.depleted.tsv
+    ## │   │   ├── OE_glo.GOseq.enriched.tsv
+    ## │   │   ├── OE_sp1.GOseq.depleted.tsv
+    ## │   │   └── OE_sp1.GOseq.enriched.tsv
     ## │   ├── k2rt
     ## │   │   ├── count_SNP.Rdatat
     ## │   │   └── symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv
+    ## │   ├── symphonia.trinity500.kissDE
+    ## │   │   ├── results_coherent_type_0a.fa
+    ## │   │   ├── results_coherent_type_0b.fa
+    ## │   │   ├── results_coherent_type_1.fa
+    ## │   │   ├── results_coherent_type_2.fa
+    ## │   │   ├── results_coherent_type_3.fa
+    ## │   │   ├── results_coherent_type_4.fa
+    ## │   │   └── sample_n_reads_noW498_1.txt
     ## │   ├── symphonia.trinity500.trinotate.sqlite
+    ## │   ├── TRINITY_DN827332_c1_g32
     ## │   ├── Trinotate
     ## │   │   ├── script.sh
     ## │   │   ├── symphonia.trinity500.trinotate.sqlite
-    ## │   │   └── trinotate_annotation_report.xls
+    ## │   │   ├── trinity.seqLengths
+    ## │   │   ├── trinotate_annotation_report.xls
+    ## │   │   └── trinotate_annotation_report.xls.gene_ontology
     ## │   └── Trinotatesymphonia.trinity500.trinotate.sqlite
     ## ├── Symphonia_Paracou
+    ## │   ├── capture
+    ## │   │   ├── 170518-Sylvain-dosage-plaque3-symphonia.txt
+    ## │   │   ├── 170518-Sylvain-dosage-plaque4-symphonia.txt
+    ## │   │   ├── SymCapture_Sylvain_Plate5.txt
+    ## │   │   ├── SymCapture_Sylvain_Plate6.txt
+    ## │   │   └── SymCapture_Sylvain_Plate7.txt
     ## │   ├── data.Rdata
     ## │   ├── Full_traits_data.csv
     ## │   ├── Maps
@@ -1874,6 +2251,7 @@ tree
     ## │   │   │   ├── Sp1 + pneumato.JPG
     ## │   │   │   └── sp1 type-3000.JPG
     ## │   │   └── Terrain
+    ## │   │       ├── CST.gif
     ## │   │       ├── OM.gif
     ## │   │       ├── video-1512989419.mp4
     ## │   │       └── video-1512989420.mp4
@@ -2646,7 +3024,9 @@ tree
     ##     │   ├── symphoGbS2.json
     ##     │   ├── symphoGbS2.o2627837
     ##     │   ├── symphoGbS2_outfiles
+    ##     │   │   ├── loci2fa.py
     ##     │   │   ├── pop.txt
+    ##     │   │   ├── symphoGbS2.firstline.fasta
     ##     │   │   ├── symphoGbS2.hdf5
     ##     │   │   ├── symphoGbS2.loci
     ##     │   │   ├── symphoGbS2.phy
@@ -2960,4 +3340,4 @@ tree
     ##             ├── symphoStr.e2650696
     ##             └── symphoStr.o2650696
     ## 
-    ## 103 directories, 2843 files
+    ## 145 directories, 3181 files

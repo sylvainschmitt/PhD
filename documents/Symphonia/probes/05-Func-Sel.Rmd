@@ -1,3 +1,8 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
 ```{r setup_func_sel, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
@@ -348,6 +353,67 @@ cowplot::plot_grid(g1, g2)
 
 We finally selected 1.067 Mb of sequences by sampling 1.067 1-kb sequences within 1 genes (with possible introns) among 1.067 scaffolds (1 gene per scaffold) with a probability $p=\frac{scaffold\_length}{total\_length}$.
 
+### Gene selection with `SNAP`
+
+```{bash zff2bed, eval=F, echo=T}
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+my $scf = '';
+while(my $line = <>) {
+    chomp($line);
+    if(substr($line, 0, 1) eq ">") {
+        $line =~ s/>//;
+        $scf = $line;
+    } else {
+        my ($type, $start, $end, $strand, $score, $blank1, $blank2, $blank3, $id) = split('\t', $line);
+        print "$scf\t$type\t$start\t$end\t$id\n";
+    }
+}
+```
+
+```{bash snap, eval=F, echo=T}
+path=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection
+mkdir test_snap
+cp merged.fasta test_snap/
+cd test_snap
+snap=~/Tools/snap/snap
+hmm=~/Tools/snap/HMM/A.thaliana.hmm 
+$snap $hmm merged.fasta > merged.zff
+perl zff2bed merged.zff > merged.bed
+mkdir analysis
+fathom merged.zff merged.fasta -gene-stats > analysis/gene-stat.log
+fathom merged.zff merged.fasta -validate > analysis/validate.log
+cd analysis/
+fathom ../merged.zff ../merged.fasta -categorize 1000
+fathom uni.ann uni.dna -export 1000 -plus
+```
+
+```{r funcSelection2}
+scf <- readDNAStringSet(file.path(path, "functional_selection", "merged.fasta"))
+g <- read_tsv(file.path(path, "functional_selection", "test_snap", "merged.bed"),
+         col_names = c("scf", "type", "start", "end", "gene")) %>% 
+  separate(gene, c("scf", "gene"), sep = "-") %>% 
+  mutate(exon_width = end - start) %>% 
+  group_by(scf, gene) %>% 
+  summarise(start = min(start), end = max(end),
+            exons_width = sum(exon_width)) %>% 
+  mutate(gene_width = end - start) %>% 
+  mutate(perc_intron = (1-exons_width/gene_width)*100) %>% 
+  sample_n(1, weight = gene_width) %>% 
+  left_join(data.frame(scf = names(scf), scf_width = width(scf))) %>% 
+  ungroup() %>% 
+  sample_n(1067, weight = scf_width) %>% 
+  ggplot(aes(gene_width, scf_width, perc_intron)) +
+  geom_point()
+ggExtra::ggMarginal(g + geom_vline(xintercept = 1000, col = "red"), type = "density")
+```
+
+
+### Gene selection with `bedtools`
+
 ```{bash funcBedPrep, eval=F, echo=T}
 path=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes
 cd $path/functional_selection
@@ -358,7 +424,7 @@ awk -F'\t' -v OFS='\t' '{sub(/_i[0-9]/, "", $4)} 1' trsc.all.bed | sort -k 1,1 -
 bedtools merge -i genes.all.bed -c 4 -o collapse > genes.merged.bed
 ```
 
-```{r}
+```{r, eval=F}
 bed <- read_tsv(file.path(path, "functional_selection", "genes.merged.bed"), 
                 col_names = c("scf",  "start",  "end",    "gene"))
 bed %>% 
@@ -425,7 +491,7 @@ gene_sel <- subseq(scf_sel, end=1000, width=1000)
 writeXStringSet(gene_sel, file.path(path, "functional_selection", "selected.scaffolds.fa"))
 ```
 
-```{r funcSelectionTab}
+```{r funcSelectionTab, eval=F}
 scf <- readDNAStringSet(file.path(path, "functional_selection", "selected.scaffolds.fa"))
 data.frame(n = length(scf),
            width = sum(width(scf))/10^6,
