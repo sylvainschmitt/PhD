@@ -11,19 +11,10 @@ This document review and summarize sequence capture and genomic analysis of *Sym
 
 We will proceed sequence capture and genomic analysis of *Symphonia globulifera* with following steps:
 
-- [ ] Choose kit (MyBaits ?, NEBnext ?)
-    - [ ] Total sequence length ?
-    - [ ] Number of sequences ?
-    - [ ] Sequences depth (O.5-1 kbp ?) ?
-- [ ] Select sequence to be captured (see figure \@ref(fig:seqTree))
-    - [ ] Morphtoype specific genes (Tysklind et al)
-    - [ ] Non specific genes (Tysklind et al)
-    - [ ] Intron & UTR (Tysklind et al, Scotti et al, or African *S. globulifera*)
-- [ ] Design probes (software with the kit)
-- [ ] Extract DNA
-    - [x] Prepare leaf extracts
-    - [ ] Review, update and reprint protocol
-- [ ] Wait libraries
+- [x] Choose kit
+- [ ] Select sequence to be captured
+- [x] Extract DNA
+- [ ] Prepare libraries
 - [ ] Raw data analysis
     - [ ] Genome by Sequencing (GbS)
     - [ ] Reads mapping
@@ -57,44 +48,17 @@ DiagrammeR::DiagrammeR("
 
 ## Sequence selection
 
-We have to choose sequences to be captured. The sequence selection for capture will be detailed in next chapters. We will use 5 sources of information:
+Selection of target sequences is based on following scheme \@ref(fig:targets):
 
-* __Transcriptomic analysis from Tysklind *et al (in prep)*__, realized on transplant experiment of *Symphonia globulifera* in French Guiana this study will inform us on untrasnlated regions (UTR) and coding DNA sequences (CDS) precizing the putative functional impact and the morphotype specificity of genes
-* __GbS data from French Guiana from Torroba-Balmori *et al. (unpublished)* __, will inform us on guianan neutral regions
-* __genome scaffolds from Africa from @Olsson2017 __, will bring us neutral and functional scaffolds
-* __genome scaffolds from French Guiana from Scotti *et al. (in prep)*__, will bring us neutral and functional scaffolds
+```{r targets, fig.cap="Schemes of selection of target sequences.", echo=F}
+knitr::include_graphics("images/Probes.png")
+```
 
+## Lexicon
 
-We will select approxamitely:
+* nuclear gene
+* isoform
+* scaffold
+* transcript
+* gene sensu Trinity
 
-* __70%__ of coding sequence with a functional impact with an interpolation between genomes and the transcritome from Tysklind *et al (in prep)* split between:
-    * __50%__ of sequences including morphotype-specific variants
-    * __20%__ of sequences including non morphotype-specific variants
-* __30%__ of genomic neutral regions with an interpolation between genomes and GbS data from @Torroba-Balmori2017
-  
-## Selection plan
-
-1. Scotti *et al. (in prep)* scaffolds preparation
-    1. Filtering scaffolds over $1kbp$
-    2. Renaming
-    3. Libraries merging
-    4. Removing ribosomic, mitochondrial or chloroplastic genes
-    5. Removing scaffolds with multimatch blasted consensus sequence from Torroba-Balmori *et al. (unpublished)*
-2. @Olsson2017 scaffolds preparation
-    1. Renaming
-    2. Removing scaffolds with multimatch blasted consensus sequence from Torroba-Balmori *et al. (unpublished)*
-3. Tysklind *et al (in prep)* transcript preparation
-    1. Filtering SNP on quality
-    2. Filtering SNP on type
-    3. Filtering SNP on frequency
-4. Fuctional region selection
-    1. Transcript alignment on scaffolds from Scotti *et al. (in prep)*
-    2. Transcript alignment on scaffolds from @Olsson2017
-    3. Merge of selected scaffolds
-    4. Final subset of selected functional scaffolds
-5. Neutral region selection
-    1. Raw reads from Torroba-Balmori *et al. (unpublished)* alignment on scaffolds from Scotti *et al. (in prep)*
-    2. Raw reads from Torroba-Balmori *et al. (unpublished)* alignment on scaffolds from @Olsson2017 
-    3. Removing scaffolds with multimatch
-    4. Removing scaffolds already matching transcripts
-    5. Final subset of selected neutral scaffolds based on ...

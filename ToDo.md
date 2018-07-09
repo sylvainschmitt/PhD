@@ -4,38 +4,39 @@
 
 - [ ] Integrate Myriam last review
 - [ ] Integrate ideas from GTÖ poster
-- [ ] Ask Bruno review (with live feedbacks)
-- [ ] Investigate the analysis workflow for decoupled effect from genetic and environment
+- [ ] Integrate Bruno's meeting idea
+- [ ] Integrate CST bibliography
 
 # Sampling
 
-- [ ] Schedule *Eschweilera* sampling for the next dry season
-    - [ ] Gap year student ?
-    - [ ] FTH project ?
-    - [ ] Check Saint-Omer availabilities
-    - [ ] Check needed material
-    - [ ] Define sampling
+## *Eschweilera*
+
+- [x] Dates: September-October
+- [ ] Émilie internship ?
+- [x] FTH project
+    - [ ] Prepare a subject
+    - [ ] Schedule preliminary sampling
+    - [ ] Ask Stephane for material reimboursement
+- [x] Saint-Omer availabilities: starting from 11/09
+- [ ] Check needed material
+    - [ ] Two BigShots available
+    - [ ] Check weights
+    - [ ] Check heads
+    - [ ] Check ropes
+    - [ ] Check helmet/gloves/glasses
+- [ ] Define sampling
 
 # Genetic
 
 ## Symphonia genotyping
 
-- [x] Choose kit (MyBaits ?, NEBnext ?)
-    - [x] Total sequence length (800 kbp)
-    - [x] Number of sequences (800)
-    - [x] Sequences depth (1 kbp)
-- [x] Select sequence to be captured
-    - [x] transcriptome (Tysklind et al) preparation
-    - [x] genomes (Olsson et al, Scotti et al) preparation
-    - [x] transcript alignment
-    - [x] genomic read alignment (Torroba et al)
+- [x] Choose kit
+- [ ] Select sequence to be captured
     - [x] neutral sequences selection
     - [ ] functional sequences selection
 - [ ] Design probes (target sequences to be sent to the company)
-- [ ] Extract DNA
-    - [x] Prepare leaf extracts
-    - [ ] Review, update and reprint protocol
-    - [ ] Do extractions 
+- [x] Extract DNA
+- [ ] Prepare libraries
 - [ ] Raw data analysis
     - [ ] Genome by Sequencing (GbS)
     - [ ] Reads mapping
@@ -47,11 +48,15 @@
     - [ ] Ecological genomic (genotype-environment association)
     - [ ] Assocaition genomic (genotype-phenotype association)
 
+# Environment
+
+- [ ] Prepare past biotic environment reconstruction
+
 # Functional
 
 ## *Symphonia*
 
-- [ ] Prepare Emilie to M2 defense
+- [x] Prepare Emilie to M2 defense
 - [ ] Finish data cleaning and preparation from FT
 - [ ] Take back Emilie analysis to conlude on ExFT interaction within *S. globulifera*
 - [ ] Measure wood anatomical traits
@@ -61,30 +66,35 @@
 
 ## Growth models
 
-- [ ] Continue developping growth models
-- [ ] Prepare genetic data integration (ANIMAL ?)
+- [ ] Discuss simulation approach w Myriam
 
 # Admin
 
 - [x] Refund FG, Plane, Poster and GTÖ
+- [ ] Validate MOOC formation
 - [ ] Validate GTÖ as formation
 - [ ] Validate JDD as formation
 - [ ] Validate Émilie supervizing as formation
-- [ ] Organize Barcelona NGS lecture
-- [ ] CST 1A
-    - [ ] Ask Richard for final document
-    - [ ] Validate the document with the ED
+- [ ] Validate Barcelona NGS lecture as formation
+- [ ] Refund FG mission
+- [ ] Refund Barcelona lecture
 
 # Other
 
 ## Uppangala
 
-- [ ] Discuss article with Maxime in Montpellier
+- [ ] Bullet proof analysis
+- [ ] New draft
+- [ ] Maxime validation
+- [ ] Share with everybody
 
 ## TROLL
 
 - [ ] Finish article
+    - [ ] Additional analysis
+    - [ ] Mathematical concept around R(NE(X(t)))
+    - [ ] New version
+    - [ ] Isabelle validation
+    - [ ] Share with everybody
 - [ ] Finish RconTroll
-    - [ ] Visit Toulouse
-- [ ] Help Nino
-- [ ] Help Marion in Montpellier
+    - [ ] Fabian meeting

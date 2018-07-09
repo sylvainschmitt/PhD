@@ -75,10 +75,6 @@ cd merged_1000
 makeblastdb -in merged_1000.fa -parse_seqids -dbtype nucl
 ```
 
-## Removing ribosomic, mitochondrial or chloroplastic genes
-
-**In waiting for the annotation with [GOfeat](computationalbiology.ufpa.br/gofeat/) (key:VmVQcURDNVBHVWNwQmJ6bDEzeHRmUT09)...**
-
 ## Removing scaffolds with multimatch blasted consensus sequence from Torroba-Balmori *et al. (unpublished)*
 
 We used the consensus sequence for French Guianan reads from Torroba-Balmori *et al. (unpublished)* previously assembled with ipyrad. As a first brutal approach we only keep the first sequence of the consensus loci file and transform it to fasta (see loci2fa.py script below). We then blast those consensus sequences on merged scaffolds from Scotti *et al (in prep)* with `blastn` in order to detect scaffolds with repetitive regions thanks to multimapped consensus sequences. Those sequences will be saved as a list to be removed in final selected scaffolds list.

@@ -75,7 +75,7 @@ count_SNP %>%
   kable(caption = "Single SNPs with unpossible association of characteristic. First column indicates if the SNP is in a coding sequence, second column indicates is the SNP is not synonymous, third column indicates if the SNP is morphotype-specific, and fourth column indicates the headcount.", format.args = list(big.mark = " "))
 ```
 
-## Filtering SNP on frequency
+## Filtering transcripts on SNP frequency
 
 We had a high frequency of SNPs per candidate genes (the majority between 1 SNP per 10 or 100 bp), with some scaffolds with a frquency superior to 0.2 (see figure \@ref(fig:snpGenes2)). We assumed those hyper SNP-rich scaffolds to be errors and we decided to remove them of the reference transcriptome. In order to do that we fitted a $\Gamma$ law into the SNP frequency distribution and we kept scaffolds with a SNP frequency under the $99^{th}$ quantile ($q_{99} = 0.07810194$). We thus removed:
 

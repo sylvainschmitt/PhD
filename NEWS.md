@@ -1,3 +1,7 @@
+# PhD 0.1.9038
+* ToDo
+* Probes design: func seq with blat aln
+
 # PhD 0.1.9037
 * ToDo
 * Probes design: functional seq with enrichment analysis and genes structure

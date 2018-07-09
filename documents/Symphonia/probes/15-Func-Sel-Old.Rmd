@@ -3,12 +3,13 @@ output:
   pdf_document: default
   html_document: default
 ---
-```{r setup_func_sel, include=FALSE}
+```{r setup_func_sel_old, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(parallel)
 library(Biostrings)
 library(tidyverse)
+library(kableExtra)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -16,7 +17,7 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
 ```
 
-# Fuctional region selection
+# Old fuctional region selection
 
 ## Transcript alignment on scaffolds from Scotti *et al. (in prep)*
 
@@ -316,7 +317,7 @@ data.frame(name = c("selected scaffold", "total"),
 We merged selected scaffolds from Scotti *et al (in prep)* and @Olsson2017 with `quickmerge`.
 
 ```{bash mergeScottiOlsson, eval=F, echo=T}
-cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection_old
 ref=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/transcript_alignment/final.scaffolds.fa
 query=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Olsson_2016/transcript_alignment/final.scaffolds.fa
 nucmer -l 100 -prefix out $ref $query
@@ -327,8 +328,8 @@ delta-filter -i 95 -r -q out.delta > out.rq.delta
 We merged selected scaffolds from Scotti *et al (in prep)* and @Olsson2017 with `quickmerge`. We found **33 498** overlaps resulting a final merged assembly of **36 221** scaffolds for a total lenght of **132.80 Mb**.
 
 ```{r selectionOverlap, fig.cap="Merging result from quickmerge. Left graph represents the overlap distribution. Right graph represent the merged scaffolds distribution."}
-scf <- readDNAStringSet(file.path(path, "functional_selection", "merged.fasta"))
-data <- read_tsv(file.path(path, "functional_selection", "summaryOut.txt"))
+scf <- readDNAStringSet(file.path(path, "functional_selection_old", "merged.fasta"))
+data <- read_tsv(file.path(path, "functional_selection_old", "summaryOut.txt"))
 g1 <- data %>%
   select(REF, QUERY, OVERLAP_LEN) %>%
   mutate(QUERY = gsub("Olsson_2017_", "", QUERY)) %>%
@@ -348,158 +349,3 @@ g2 <- data.frame(scf = names(scf), width = width(scf)) %>%
   coord_flip()
 cowplot::plot_grid(g1, g2)
 ```
-
-## Final subset of selected functional scaffolds
-
-We finally selected 1.067 Mb of sequences by sampling 1.067 1-kb sequences within 1 genes (with possible introns) among 1.067 scaffolds (1 gene per scaffold) with a probability $p=\frac{scaffold\_length}{total\_length}$.
-
-### Gene selection with `SNAP`
-
-```{bash zff2bed, eval=F, echo=T}
-#!/usr/bin/env perl
-
-use strict;
-use warnings;
-
-my $scf = '';
-while(my $line = <>) {
-    chomp($line);
-    if(substr($line, 0, 1) eq ">") {
-        $line =~ s/>//;
-        $scf = $line;
-    } else {
-        my ($type, $start, $end, $strand, $score, $blank1, $blank2, $blank3, $id) = split('\t', $line);
-        print "$scf\t$type\t$start\t$end\t$id\n";
-    }
-}
-```
-
-```{bash snap, eval=F, echo=T}
-path=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection
-mkdir test_snap
-cp merged.fasta test_snap/
-cd test_snap
-snap=~/Tools/snap/snap
-hmm=~/Tools/snap/HMM/A.thaliana.hmm 
-$snap $hmm merged.fasta > merged.zff
-perl zff2bed merged.zff > merged.bed
-mkdir analysis
-fathom merged.zff merged.fasta -gene-stats > analysis/gene-stat.log
-fathom merged.zff merged.fasta -validate > analysis/validate.log
-cd analysis/
-fathom ../merged.zff ../merged.fasta -categorize 1000
-fathom uni.ann uni.dna -export 1000 -plus
-```
-
-```{r funcSelection2}
-scf <- readDNAStringSet(file.path(path, "functional_selection", "merged.fasta"))
-g <- read_tsv(file.path(path, "functional_selection", "test_snap", "merged.bed"),
-         col_names = c("scf", "type", "start", "end", "gene")) %>% 
-  separate(gene, c("scf", "gene"), sep = "-") %>% 
-  mutate(exon_width = end - start) %>% 
-  group_by(scf, gene) %>% 
-  summarise(start = min(start), end = max(end),
-            exons_width = sum(exon_width)) %>% 
-  mutate(gene_width = end - start) %>% 
-  mutate(perc_intron = (1-exons_width/gene_width)*100) %>% 
-  sample_n(1, weight = gene_width) %>% 
-  left_join(data.frame(scf = names(scf), scf_width = width(scf))) %>% 
-  ungroup() %>% 
-  sample_n(1067, weight = scf_width) %>% 
-  ggplot(aes(gene_width, scf_width, perc_intron)) +
-  geom_point()
-ggExtra::ggMarginal(g + geom_vline(xintercept = 1000, col = "red"), type = "density")
-```
-
-
-### Gene selection with `bedtools`
-
-```{bash funcBedPrep, eval=F, echo=T}
-path=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes
-cd $path/functional_selection
-bed_Ivan=$path/Ivan_2018/transcript_alignment/filtered_transcripts.bed
-bed_Olsson=$path/Olsson_2016/transcript_alignment/filtered_transcripts.bed
-cat $bed_Ivan $bed_Olsson | sort -k 1,1 -k2,2n >  trsc.all.bed
-awk -F'\t' -v OFS='\t' '{sub(/_i[0-9]/, "", $4)} 1' trsc.all.bed | sort -k 1,1 -k2,2n > genes.all.bed
-bedtools merge -i genes.all.bed -c 4 -o collapse > genes.merged.bed
-```
-
-```{r, eval=F}
-bed <- read_tsv(file.path(path, "functional_selection", "genes.merged.bed"), 
-                col_names = c("scf",  "start",  "end",    "gene"))
-bed %>% 
-  separate_rows(gene, sep = ",") %>% 
-  filter(gene == "TRINITY_DN103458_c0_g1") %>% 
-  summarise(length(unique(scf)))
-
-data <- bed %>% 
-  separate_rows(gene, sep = ",") %>% 
-  # group_by(gene) %>% 
-  # filter(length(unique(scf)) == 1) %>%
-  group_by(scf, start, end) %>% 
-  filter(length(unique(gene)) == 1) %>%
-  unique() %>% 
-  arrange(scf, start, end) %>% 
-  ungroup()
-
-data %>% 
-  group_by(scf, gene) %>% 
-  summarise(start = min(start), end = max(end)) %>% 
-  mutate(width = end - start + 1) %>% 
-  ggplot(aes(width)) + geom_histogram(binwidth = 100) + 
-  geom_vline(xintercept = 500, col = "red") + xlim(0,10000)
-
-bed %>% 
-  separate_rows(gene, sep = ",") %>% 
-  group_by(scf, start, end) %>% 
-  summarise(n = length(unique(gene))) %>% 
-  ggplot(aes(n)) + geom_histogram(binwidth = 1) + xlim(0,10)
-```
-
-
-```{r funcSelection, eval=F, echo=T}
-# scf
-scf <- readDNAStringSet(file.path(path, "functional_selection", "merged.fasta"))
-selection <- data.frame(scf = names(scf), width = width(scf), 
-                        N = letterFrequency(scf, "N")) %>% 
-  sample_n(1067, weight = width) %>% 
-  select(scf) %>% 
-  unlist()
-scf_sel <- scf[selection]
-# genes
-bed <- read_tsv(file.path(path, "functional_selection", "genes.merged.bed"), 
-                col_names = c("scf",  "start",  "end",    "gene"))
-data.frame(scf = names(scf_sel), width = width(scf_sel), 
-                        N = letterFrequency(scf_sel, "N")) %>% 
-  left_join(bed) %>% 
-  mutate(width_exon = end-start) %>% 
-  separate_rows(gene, sep = ",")
-
-
-  group_by(scf, start, end) %>%
-  summarise(n = n()) %>% 
-  ggplot(aes(n)) + geom_histogram(binwidth = 1)
-  
-  filter(gene == "TRINITY_DN770551_c13_g12")
-  summarise(start = min(start), end = max(end), width_exons = sum(width_exon)) %>% 
-  mutate(width = end - start) %>% 
-  mutate(perc_intron = (1-(width_exons/width))*100) %>% 
-  ggplot(aes(width, perc_intron)) + geom_point()
-
-
-gene_sel <- subseq(scf_sel, end=1000, width=1000)
-writeXStringSet(gene_sel, file.path(path, "functional_selection", "selected.scaffolds.fa"))
-```
-
-```{r funcSelectionTab, eval=F}
-scf <- readDNAStringSet(file.path(path, "functional_selection", "selected.scaffolds.fa"))
-data.frame(n = length(scf),
-           width = sum(width(scf))/10^6,
-           Nperc = sum(letterFrequency(scf, "N"))/sum(width(scf))) %>% 
-    kable(caption = "Selected neutral scaffolds",
-        col.names = c("N", "Width (Mbp)", "Mask (%N)"),
-        format.args = list(big.mark = " "))
-```
-
-
-
