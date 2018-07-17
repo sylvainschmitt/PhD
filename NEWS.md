@@ -1,4 +1,7 @@
 # PhD 0.1.9038
+* Probes design: func target done & final bwa check
+
+# PhD 0.1.9038
 * ToDo
 * Probes design: func seq with blat aln
 

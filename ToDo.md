@@ -72,9 +72,9 @@
 
 - [x] Refund FG, Plane, Poster and GTÖ
 - [ ] Validate MOOC formation
-- [ ] Validate GTÖ as formation
+- [x] Validate GTÖ as formation
 - [ ] Validate JDD as formation
-- [ ] Validate Émilie supervizing as formation
+- [x] Validate Émilie supervizing as formation
 - [ ] Validate Barcelona NGS lecture as formation
 - [ ] Refund FG mission
 - [ ] Refund Barcelona lecture
@@ -91,8 +91,8 @@
 ## TROLL
 
 - [ ] Finish article
-    - [ ] Additional analysis
-    - [ ] Mathematical concept around R(NE(X(t)))
+    - [x] Additional analysis
+    - [x] Mathematical concept around R(NE(X(t)))
     - [ ] New version
     - [ ] Isabelle validation
     - [ ] Share with everybody

@@ -447,3 +447,18 @@ data.frame(n = length(scf),
         format.args = list(big.mark = " "))
 ```
 
+## Repetitive regions final check
+
+```{bash neutralBWAcheck, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/neutral_selection
+reference=selected.scaffolds.fa
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/raw_reads/globu1_symphonia_globulifera_CTTGTA_L001_R1_001.fastq.gz
+bwa index $reference
+bwa mem -M $reference $query > raw_read_alignment.sam
+picard=~/Tools/picard/picard.jar
+java -Xmx4g -jar $picard SortSam I=raw_read_alignment.sam O=raw_read_alignment.bam SORT_ORDER=coordinate
+bedtools bamtobed -i raw_read_alignment.bam > raw_read_alignment.bed
+cat bed/* | sort -k 1,1 -k2,2n >  raw_read_alignment.sorted.bed
+bedtools merge -i raw_read_alignment.sorted.bed -c 1 -o count > raw_read_alignment.merged.bed
+```
+

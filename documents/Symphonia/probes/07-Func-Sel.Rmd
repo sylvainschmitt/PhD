@@ -1,0 +1,289 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup_func_sel2, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(Biostrings)
+library(tidyverse)
+library(kableExtra)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
+```
+
+# Fuctional region selection 2
+
+## Open Reading Frames (ORFs) filtering
+
+```{r orfFilterGraph2, fig.cap="Open Reading Frames left and right peptides."}
+src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
+                           "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("ORF") %>% 
+  dplyr::rename(orf = orf_id, trsc = transcript_id, width = length) %>% 
+  collect() %>% 
+  mutate(left = substr(peptide, 1, 1)) %>% 
+  mutate(right = substr(peptide, nchar(peptide), nchar(peptide))) %>% 
+  select(orf, strand, left, right) %>% 
+  reshape2::melt(id.vars = c("orf", "strand"),
+                 variable.name = "side",
+                 value.name = "peptide") %>% 
+  ggplot(aes(peptide, fill = (peptide %in% c("M", "*")))) +
+  geom_bar() +
+  facet_grid(strand~side, labeller = "label_both") +
+  scale_fill_discrete(guide = F)
+```
+
+```{r orfFilterBed2, echo=T}
+orf <- src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
+                           "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("ORF") %>% 
+  dplyr::rename(orf = orf_id, trsc = transcript_id,
+                orfSize = length) %>% 
+  filter(substr(peptide, 1, 1) == "M") %>% 
+  select(-peptide, -strand) %>%
+  collect() %>% 
+  rowwise() %>% 
+  mutate(orfStart = min(as.numeric(lend), as.numeric(rend)),
+         orfEnd = max(as.numeric(lend), as.numeric(rend))) %>% 
+  select(-lend, -rend) %>% 
+  select(trsc, orfStart, orfEnd, orf) %>% 
+  mutate_if(is.numeric, as.character) %>% 
+  write_tsv(path = file.path(path, "functional_selection2", "orf.all.bed"),
+            col_names = F)
+```
+
+## ORF extraction
+
+```{bash orfFasta, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection2
+cat orf.all.bed | sort -k 1,1 -k2,2n >  orf.all.sorted.bed
+trsc=/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta
+bedtools getfasta -name -fi $trsc -bed orf.all.sorted.bed -fo orf.fasta
+```
+
+## ORF alignment on genomics scaffolds
+
+```{bash orfAlign, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection2
+scf=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/neutral_selection/merged.fasta
+orf=./orf.fasta
+blat $scf $orf alignment.psl
+```
+
+```{r blatResORF}
+alignment <- read_tsv(file.path(path, "functional_selection2", "alignment.psl"), skip = 4, 
+         col_names = c("matches", "misMatches", "repMatches", "nCount", 
+                       "qNumInsert", "qBaseInsert",
+                       "tNumInsert", "tBaseInsert", "strand", 
+                       "qName", "qSize", "qStart", "qEnd", 
+                       "tName", "tSize", "tStart", "tEnd", 
+                       "blockCount", "blockSizes", "qStarts", "tStarts")) %>% # psl3 generics
+  dplyr::rename(orf = qName, orfSize = qSize, orfStart = qStart, orfEnd = qEnd, 
+         scf = tName, scfSize = tSize, scfStart = tStart, scfEnd = tEnd) %>% 
+  mutate(alnSize = matches + misMatches + repMatches) %>% 
+  select(alnSize,
+         orf, orfSize, orfStart, orfEnd,
+         scf, scfSize, scfStart, scfEnd)
+```
+
+```{r  blatCovORF}
+total_length <- sum(width(readDNAStringSet(file.path(path, "neutral_selection", "merged.fasta"))))
+n_total <- length(readDNAStringSet(file.path(path, "neutral_selection", "merged.fasta")))
+data.frame(name = c("aligned sequence", "selected scaffold", "total"),
+           n = c(nrow(alignment), length(unique(alignment$scf)), n_total),
+           width = c(sum(alignment$alnSize), 
+                     sum(unique(select(alignment, scf, scfSize))$scfSize), 
+                     total_length)) %>% 
+  mutate(coverage = width/total_length*100) %>% 
+  mutate(width = width / 10^6) %>% 
+  kable(caption = "Alignment coverage of  Tysklind et al. (in prep) ORFs over genomic scaffolds with blat.",
+        col.names = c("", "N", "Width (Mbp)", "Coverage (%)"),
+        format.args = list(big.mark = " "))
+```
+
+```{r blatFigORF, fig.cap="Alignment result of Tysklind et al. (in prep) ORFs over genomic scaffolds with blat. Left graph represents the overlap distribution. Right graph represent the selected and deduplicated scaffolds distribution."}
+g1 <- ggplot(alignment, aes(alnSize)) +
+  geom_histogram() +
+  scale_x_log10() +
+  xlab("Overlap length of selected transcript\n(from Tysklind et al. (in prep) over genomic scaffolds") +
+  coord_flip()
+scf <- readDNAStringSet(file.path(path, "Ivan_2018", "transcript_alignment", "unique_selected_scaffolds.fa"))
+g2 <- alignment %>% 
+  select(scf, scfSize) %>% 
+  unique() %>% 
+  ggplot(aes(scfSize)) +
+  geom_histogram() +
+  scale_x_log10() +
+  xlab("Selected scaffolds width (bp)") +
+  coord_flip()
+cowplot::plot_grid(g1, g2)
+```
+
+## Genes detection woth Open Reading Frames (ORFs)
+
+### Overlaping genes filtering
+
+```{r genesFilter2, echo=T}
+alignment %>% 
+  separate(orf, into = c("gene", "isoform", "geneNumber", "orfNumber"),
+           sep = "::", remove = F) %>% 
+  select(gene, orf, orfStart, orfEnd, scf, scfStart, scfEnd) %>% 
+  unique() %>% 
+  select(scf, scfStart, scfEnd, orf, gene) %>% 
+  arrange(scf, scfStart, scfEnd) %>% 
+  mutate_if(is.numeric, as.character) %>% 
+  write_tsv(path = file.path(path, "functional_selection2", "genes.all.bed"),
+            col_names = F)
+```
+
+```{bash orfBedMerged2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection2
+cat genes.all.bed | sort -k 1,1 -k2,2n >  genes.all.sorted.bed
+bedtools merge -i genes.all.sorted.bed -c 5 -o collapse > genes.merged.bed
+```
+
+```{r orfDist2, fig.cap="Genes overlap", fig.height=4}
+read_tsv(file.path(path, "functional_selection2", "genes.merged.bed"), 
+                col_names = c("scf",  "start",  "end",  "gene")) %>% 
+  separate_rows(gene, sep = ",") %>% 
+  unique() %>% 
+  group_by(scf, start, end) %>% 
+  summarise(genes = n())  %>% 
+  ggplot(aes(genes, fill = (genes == 1))) + 
+  geom_histogram(binwidth = 1) +
+  xlab("Number of overlapping genes\n(1 = no overlap)") +
+  xlim(0, 12) +
+  scale_fill_discrete(guide = F)
+```
+
+### Pre-selected genes
+
+```{r genesFilter3}
+overlapping_genes <- read_tsv(file.path(path, "functional_selection2", "genes.merged.bed"), 
+                col_names = c("scf",  "start",  "end",  "gene")) %>% 
+  separate_rows(gene, sep = ",") %>% 
+  unique() %>% 
+  group_by(scf, start, end) %>% 
+  filter(n() > 1) %>% 
+  ungroup() %>% 
+  select(gene) %>% unique() %>% unlist()
+genes <- alignment %>% 
+  separate(orf, into = c("gene", "isoform", "geneNumber", "orfNumber"),
+           sep = "::", remove = F) %>% 
+  select(gene, orf, orfStart, orfEnd, scf, scfSize, scfStart, scfEnd) %>% 
+  unique() %>% 
+  filter(!(gene %in% overlapping_genes)) %>% 
+  group_by(scf, scfSize, gene) %>% 
+  summarise(geneStart = min(scfStart), geneEnd = max(scfEnd)) %>% 
+  mutate(geneSize = geneEnd - geneStart) %>% 
+  ungroup()
+```
+
+
+```{r genesPlot2, fig.cap="Available genes for target sequences design."}
+genes %>% 
+  ggplot(aes(scfSize/1000, geneSize)) + 
+  geom_hline(yintercept = 1000, col = "red", lwd = 1) +
+  geom_point(alpha = 0.5) +
+  xlab("Scaffold width (kbp)") +
+  ylab("Gene width (kbp)") +
+  scale_y_log10() +
+  ggtitle(paste(nrow(genes), "genes"), 
+          paste(format(sum(genes$geneSize)/1000, big.mark = " "), "kbp"))
+```
+
+## Differential Expression (DE) of genes
+
+**Should introduce a Vienn-Diagramm here !**
+
+```{r diffExprTab2}
+de <- read_delim(file.path(path, "..", "Symphonia_Niklas", "edgeR",
+                     "juv_sympho_43k_retained_genes_DecisionTest.txt"), 
+           delim = " ") %>% 
+  select(-X) %>% 
+  dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
+  mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
+  mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
+  mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
+  mutate(gene = gsub("_i[0-9]", "", trsc)) %>% 
+  filter(gene %in% genes$gene) %>% 
+  select(gene, deg) %>% 
+  unique()
+de %>% 
+  count(gene, deg) %>% 
+  tidyr::spread(deg, n, fill=0) %>% 
+  mutate(NE, NE = recode(NE, "1"="Not enriched")) %>% 
+  mutate(Eglo, Eglo = recode(Eglo, "1"="Globulifera enriched")) %>% 
+  mutate(Esp, Esp = recode(Esp, "1"="Sp1 enriched")) %>% 
+  mutate(deg = paste(NE, Esp, Eglo, sep = "-")) %>% 
+  count(deg) %>% 
+  select(deg, n) %>% 
+  sunburstR::sunburst(count = T)
+```
+
+## Final subset of selected functional scaffolds
+
+We finally selected 1150 sequences of 500 to 1-kbp with 100 bp before geneStart and a maximum of 900 bp after, resulting in 1 063, 544 kbp of targets. All differentially expressed genes between morphotypes were selected (159). And the rest of sequences were selected among non differentially expressed genes randomly (1001).
+
+```{r finalSubset, echo=T}
+targets <- genes %>% 
+  left_join(de) %>% 
+  filter(deg %in% c("Eglo", "Esp")) %>% 
+  rbind(genes %>% 
+          left_join(de) %>% 
+          filter(deg %in% c("DE", NA)) %>% 
+          sample_n(1309)) %>% 
+  group_by(scf, gene) %>% 
+  filter(n() < 2) %>% 
+  mutate(targetStart = max(0, geneStart - 100)) %>% 
+  mutate(targetEnd = min(targetStart + 1000, scfSize)) %>% 
+  mutate(targetSize = targetEnd - targetStart) %>% 
+  filter(targetSize > 500) %>% 
+  mutate(target = paste0(gene, "_on_", scf)) %>% 
+  ungroup()
+targets %>% 
+  select(scf, targetStart, targetEnd, target) %>% 
+  arrange(scf, targetStart, targetEnd, target) %>% 
+  mutate_if(is.numeric, as.character) %>% 
+  write_tsv(path = file.path(path, "functional_selection2", "targets.all.bed"),
+            col_names = F)
+```
+
+```{bash targetFasta, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection2
+cat targets.all.bed | sort -k 1,1 -k2,2n >  targets.all.sorted.bed
+scf=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/neutral_selection/merged.fasta
+bedtools getfasta -name -fi $scf -bed targets.all.sorted.bed -fo targets.fasta
+```
+
+```{r functionalSelectionTab}
+scf <- readDNAStringSet(file.path(path, "functional_selection2", "targets.fasta"))
+data.frame(n = length(scf),
+           width = sum(width(scf))/10^6,
+           Nperc = sum(letterFrequency(scf, "N"))/sum(width(scf))) %>% 
+    kable(caption = "Selected neutral scaffolds",
+        col.names = c("N", "Width (Mbp)", "Mask (%N)"),
+        format.args = list(big.mark = " "))
+```
+
+## Repetitive regions final check
+
+```{bash funcBWAcheck, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection2
+reference=targets.fasta
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/raw_reads/globu1_symphonia_globulifera_CTTGTA_L001_R1_001.fastq.gz
+bwa index $reference
+bwa mem -M $reference $query > raw_read_alignment.sam
+picard=~/Tools/picard/picard.jar
+java -Xmx4g -jar $picard SortSam I=raw_read_alignment.sam O=raw_read_alignment.bam SORT_ORDER=coordinate
+bedtools bamtobed -i raw_read_alignment.bam > raw_read_alignment.bed
+cat bed/* | sort -k 1,1 -k2,2n >  raw_read_alignment.sorted.bed
+bedtools merge -i raw_read_alignment.sorted.bed -c 1 -o count > raw_read_alignment.merged.bed
+```
+
