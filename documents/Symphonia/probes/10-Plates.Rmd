@@ -1,20 +1,51 @@
 ```{r setup_plates, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(parallel)
 library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
-path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/capture/"
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
 # Plates
 
-```{r plates}
-plates <- do.call("rbind", sapply(list.files(path, full.names = T), read.delim2, simplify = F))
-(g <- plates %>% 
+## Organization
+
+```{r plates, fig.cap="Extraction plates organization"}
+plates <- read_csv(file.path(path, "Symphonia_sequence_capture - Plates.csv"))
+bd <- read_csv(file.path(path, "Base_Données_Symphonia.csv"))
+
+plates %>% 
+  mutate(row = substr(Position, 1, 1)) %>% 
+  mutate(col = substr(Position, 2, 3)) %>% 
+  group_by(Plate) %>% 
+  select(Plate, Position, row, col, ID_genetic) %>% 
+  arrange(Plate, row, col) %>% 
+  ggplot(aes(y = factor(row, levels = rev(LETTERS[1:8])),
+             x = factor(col, levels = 1:12))) + 
+  # geom_point(shape=21, size =10)  +
+  geom_text(aes(label = ID_genetic), size = 2.5) +
+  facet_wrap(~ Plate, ncol = 2) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+## Quantifiaction 
+
+### NanoDrop
+
+```{r nanodrop, fig.cap="Extraction plate NanoDrop concentration"}
+nanodrop <- do.call("rbind", sapply(list.files(file.path(path, "NanoDrop"), full.names = T),
+                                  read.delim2, simplify = F)) %>% 
   mutate(row = substr(Well, 1, 1)) %>% 
   mutate(col = substr(Well, 2, 3)) %>% 
   group_by(`Plate.ID`) %>% 
@@ -24,16 +55,205 @@ plates <- do.call("rbind", sapply(list.files(path, full.names = T), read.delim2,
   mutate(Conc. = ifelse(Conc. > 1000, NA, Conc.)) %>% 
   dplyr::rename(plate = `Plate.ID`, well = Well,
                 concentration = Conc., r260.280 = X260.280, 
-                r260.230 = X260.230) %>% 
+                r260.230 = X260.230)
+nanodrop %>% 
   select(plate, well, row, col, concentration) %>% 
   arrange(plate, row, col) %>% 
-  mutate(sel = ifelse(concentration > 20, "yes", "no")) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
              x = factor(col,levels = 1:12))) + 
-  geom_point(aes(colour = sel), size =10)  + 
-  geom_text(aes(label = concentration), col = "white", size = 2.5) +
-  facet_wrap(~ plate) +
+  geom_text(aes(label = concentration), size = 2.5) +
+  facet_wrap(~ plate, nrow = 3) +
   theme_bw() +
-  labs(x=NULL, y = NULL))
-# plotly::ggplotly(g)
+  labs(x=NULL, y = NULL)
 ```
+
+### Electrophoresis
+
+### QBit
+
+```{r qbitTable}
+qbit <- read_csv(file.path(path, "Symphonia_sequence_capture - QBit.csv"))
+qbit %>%
+  select(Plate, Position, Quality_Electrophoresis, Concentration_Final) %>% 
+  kable(col.names = c("Plate", "Position", "Electrophoresis", "Concentraion (ng/microL)"),
+        fig.cap = "Qbit concentrations.")
+```
+
+```{stan qbitModel, output.var="qbitModel", echo=T, eval=F}
+  data {
+    int N ;
+    real Concentration_Qbit[N] ;
+    real Concentration_NanoDrop[N] ;
+  }
+  parameters {
+    real beta ;
+    real sigma ;
+  }
+  model {
+    for(n in 1:N)
+      Concentration_Qbit[n] ~ normal(beta*Concentration_NanoDrop[n], sigma) ;
+  }
+```
+
+```{r fit}
+data <- filter(qbit, Concentration_NanoDrop < 250)
+# fit <- sampling(qbitModel,
+#                 data = list(N = nrow(data),
+#                             Concentration_Qbit = data$Concentration_Final,
+#                             Concentration_NanoDrop = data$Concentration_NanoDrop))
+# save(fit, file = "./probes_save/MQbit.Rdata")
+load("./probes_save/MQbit.Rdata")
+broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>%
+  kable(caption = "Summary table of the model")
+```
+
+```{r pred}
+beta <- broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>% 
+  filter(term == "beta") %>% select(estimate) %>% unlist()
+qbit %>% 
+  ggplot(aes(Concentration_NanoDrop, Concentration_Final)) +
+  geom_point(aes(color = Quality_Electrophoresis)) +
+  geom_abline(intercept = 0, slope = beta) +
+  xlab("Concentration NanoDrop (ng/microL)") +
+  ylab("Concentration Qbit (ng/microL)") +
+  scale_color_discrete("Electrophoresis") +
+  ggtitle(paste("Y =", round(beta,2), "* X"))
+```
+
+## Library plates design
+
+```{r data}
+data <- plates %>% 
+  filter(!is.na(ID_genetic)) %>% 
+  left_join(nanodrop %>% 
+              select(plate, well, concentration) %>% 
+              dplyr::rename(Plate = plate, Position = well, nanodrop = concentration)) %>% 
+  mutate(concentration_est = beta*nanodrop) %>%
+  mutate(ID_paracou = paste0("P", Plot, "_", Subplot, "_", Number)) %>% 
+  mutate(ID = ifelse(!is.na(Plot), ID_paracou, ID_genetic))
+```
+
+### Pool
+
+We will pool all individuals  with 2 extraction and with a nanodrop concentration inferior to 25 $ng.\mu L^{-1}$. Those wiht only one extraction will be concentrated.
+
+```{r pool}
+data %>%
+  group_by(ID) %>% 
+  filter(nanodrop < 25 | is.na(nanodrop)) %>% 
+  filter(n() > 1) %>% 
+  arrange(ID) %>% 
+  select(ID, Plate, Position, nanodrop) %>% 
+  kable(caption = "Samples to be pooled. From plates 1, 2 and 3 to plate 5, 6 and 7") %>% 
+  kable_styling(full_width = F) %>% 
+  kableExtra::collapse_rows(1)
+```
+
+
+### New nanodrop
+
+Pooled individuals and new individuals from Itubera Brazil (n = 3), La Selva Costa Rica (n = 2) and Baro Colorado Island Panama (n = 2) will be quantified with the nanodrop again.
+
+```{r nanodrop2, fig.cap="Extraction plate NanoDrop concentration"}
+america <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_america.txt")) %>% 
+  dplyr::select(Sample.ID, Conc.) %>% 
+  dplyr::rename(ID = Sample.ID, nanodrop = Conc.) %>% 
+  mutate(Plate = "America", Position = NA)
+itubera <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_Itubera.txt")) %>% 
+  dplyr::select(Plate.ID, Well, Conc.) %>% 
+  dplyr::rename(Plate = Plate.ID, Position = Well, nanodrop = Conc.) %>% 
+  mutate(Plate = "Itubera") %>% 
+  mutate(ID = paste0("IT_", Position))
+pull <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_pull.txt")) %>% 
+  dplyr::select(Sample.ID, Conc.) %>% 
+  dplyr::rename(ID = Sample.ID, nanodrop = Conc.) %>% 
+  mutate(Plate = "Pull", Position = NA)
+rbind(america, itubera, pull) %>% 
+  kable(caption = "New nanodrops.")
+```
+
+### Concentration plates
+
+```{r newData}
+pull <- pull %>% 
+  dplyr::rename(nanodrop2 = nanodrop) %>% 
+  select(ID, nanodrop2) %>% 
+  mutate(ID = gsub("-", "_", ID))
+america <- america %>%
+  mutate(Origin = substr(ID, 1,2)) %>% 
+  mutate(Country = ifelse(Origin == "LS", "Costa Rica", "Panama")) %>% 
+  mutate(Origin = ifelse(Origin == "LS", "La Selva", "BCI")) %>% 
+  mutate(Species = "S. globulifera",
+          ID_genetic = ID, ID_paracou = NA, 
+         Plot = NA, Subplot = NA, Number = NA) %>% 
+  arrange(ID, Plate, Position, nanodrop,
+          Species, Origin, Country,
+          ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
+  group_by(Origin) %>% 
+  arrange(desc(nanodrop)) %>% 
+  slice(1:2)
+itubera <- itubera %>% 
+  mutate(Species = "S. globulifera", Origin = "Itubera", Country = "Brazil",
+          ID_genetic = ID, ID_paracou = NA, 
+         Plot = NA, Subplot = NA, Number = NA) %>% 
+  arrange(ID, Plate, Position, nanodrop,
+          Species, Origin, Country,
+          ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
+  mutate_if(is.factor, as.character) %>% 
+  arrange(desc(nanodrop)) %>% 
+  slice(1:3)
+data <- data %>% 
+  filter(!(Plate %in% 1:2)) %>% 
+  group_by(ID) %>% 
+  arrange(ID, Plate) %>% 
+  filter(row_number() == n()) %>% 
+  left_join(pull, by = "ID") %>% 
+  mutate(nanodrop = ifelse(is.na(nanodrop2), nanodrop, nanodrop2)) %>% 
+  select(-nanodrop2, -concentration_est, -Comment) %>% 
+  arrange(ID, Plate, Position, nanodrop,
+          Species, Origin, Country,
+          ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
+  mutate(Plate = as.character(Plate)) %>%
+  bind_rows(america) %>%
+  bind_rows(itubera) %>% 
+  mutate(concentration = beta*nanodrop)
+```
+
+```{r concPlate}
+data <- data %>% 
+  select(ID, Plate, Position, concentration) %>% 
+  arrange(concentration)
+data$new_Plate <- rep(1:5, each = 8*12)[1:432]
+data$new_Position <- rep(unlist(sapply(1:12, function(x) paste0(LETTERS[1:8], x))), 5)[1:432]
+# data %>% 
+#   kable(caption = "New plates design by concentration") %>% 
+#   kable_styling(full_width = F)
+```
+
+```{r concPlateFig}
+data %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, past_Position, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = Plate)) + 
+  geom_text(aes(label = past_Position), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+### Concentration
+
+All individuals with an estimated concetration inferior to 20 $ng.\mu L^{-1}$ will be dried in the speed vacuum centrifuge. And corresponding volume of miliQ water will be added to reach a concentration of 20 $ng.\mu L^{-1}$.
+
+
+### Dilution
+
+All individuals with an estimated concetration superior to 20 $ng.\mu L^{-1}$ will be be diluted adding corresponding volume of miliQ water will be to reach a concentration of 20 $ng.\mu L^{-1}$.
+

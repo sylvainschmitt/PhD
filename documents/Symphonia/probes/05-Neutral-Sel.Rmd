@@ -449,6 +449,8 @@ data.frame(n = length(scf),
 
 ## Repetitive regions final check
 
+Last but not least, we do not want to include repetitive regions in our targets for baits design. We consequently aligned raw reads from one library from Scotti *et al. (in prep)* on our targets with `bwa`. 
+
 ```{bash neutralBWAcheck, eval=F, echo=T}
 cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/neutral_selection
 reference=selected.scaffolds.fa
@@ -458,7 +460,83 @@ bwa mem -M $reference $query > raw_read_alignment.sam
 picard=~/Tools/picard/picard.jar
 java -Xmx4g -jar $picard SortSam I=raw_read_alignment.sam O=raw_read_alignment.bam SORT_ORDER=coordinate
 bedtools bamtobed -i raw_read_alignment.bam > raw_read_alignment.bed
-cat bed/* | sort -k 1,1 -k2,2n >  raw_read_alignment.sorted.bed
+cat raw_read_alignment.bed | sort -k 1,1 -k2,2n >  raw_read_alignment.sorted.bed
 bedtools merge -i raw_read_alignment.sorted.bed -c 1 -o count > raw_read_alignment.merged.bed
 ```
 
+```{r neutralRepeatFilter1}
+bed <- read_tsv(file.path(path, "neutral_selection", "raw_read_alignment.merged.bed"), 
+                col_names = c("target", "start", "end", "coverage"))
+```
+
+We obtained a continuous decreasing distribution of read coverage across our scaffolds regions (figure \@ref(fig:neutralRepetFilter2)). We fitted a $\Gamma$ distribution with positive parameters for scaffolds regions with a coverage under 5 000 (non continuous distribution with optimization issues). We obtained a distribution with a mean of 324 reads per region and a $99^{th}$ quantile of 4 042. We decided to mask regions with a coverage over the $99^{th}$ quantile and remove scaffolds with a mask superior to 75% of its total length (figure \@ref(fig:neutralRepetFilter3)).
+
+```{r neutralRepetFilter2, fig.cap="Read coverage distribution."}
+data <- bed %>%
+  filter(coverage < 5000)
+fit.params <- fitdistrplus::fitdist(data$coverage, 
+                             "gamma", lower = c(0, 0), "mme")
+alpha = fit.params$estimate["shape"]
+beta = fit.params$estimate["rate"]
+ggplot(data) +
+  geom_histogram(aes(coverage, ..density..), binwidth = 100) +
+  geom_line(aes(coverage, y=dgamma(data$coverage, alpha, beta)),
+            color="red", size = 1) +
+  geom_vline(xintercept = alpha/beta, lwd = 1.4) +
+  geom_vline(xintercept = qgamma(0.99, alpha, beta), 
+             lwd = 1.4, linetype = 2) +
+  ylim(NA, 0.005) + xlim(1,5000) +
+  ggtitle(paste("Y ~ Gamma(", round(alpha,3), ",", round(beta,4), ")"),
+          paste("E(Y) = ", round(alpha/(beta)), 
+                ", q99(Y) = ", round(qgamma(0.99, alpha, beta))))
+```
+
+```{r neutralRepeatFilter3, echo=T}
+repetitive_target <- bed %>% 
+  filter(coverage > qgamma(0.99, alpha, beta)) %>% 
+  mutate(size = end - start) 
+repetitive_target %>% 
+  select(target, start, end) %>% 
+  arrange(target, start, end) %>% 
+  mutate_if(is.numeric, as.character) %>% 
+  write_tsv(path = file.path(path, "neutral_selection", "repetitive_targets.bed"),
+            col_names = F)
+```
+
+
+
+```{r neutralRepetFilter4, fig.cap="target regions with a coverage over the 99th quantile of the fitted Gamma distribution (4042)."}
+ggplot(repetitive_target, aes(size)) + 
+  geom_histogram() +
+  ggtitle(paste(nrow(repetitive_target), "targets regions to remove (",
+                sum(repetitive_target$size)/10^3, "kbp)"),
+          paste(length(unique(repetitive_target$target)), "targets over 1165"))
+```
+
+```{bash neutralRepeatFilter5, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/neutral_selection
+cat repetitive_targets.bed | sort -k 1,1 -k2,2n >  repetitive_targets.sorted.bed
+bedtools maskfasta -fi selected.scaffolds.fa -bed repetitive_targets.sorted.bed -fo targets.masked.fasta
+```
+
+```{r neutralRepeatFilter6, echo = T}
+targets <- readDNAStringSet(file.path(path, "neutral_selection", "targets.masked.fasta"))
+writeXStringSet(targets[which(letterFrequency(targets, "N")/width(targets) < 0.65)],
+                file.path(path, "neutral_selection", "targets.filtered.masked.fasta"))
+```
+
+```{r neutralRepeatFilter7}
+targets <- readDNAStringSet(file.path(path, "neutral_selection", 
+                                      "targets.filtered.masked.fasta"))
+data.frame(n = length(targets),
+           width = sum(width(targets))/10^6,
+           Nperc = sum(letterFrequency(targets, "N"))/sum(width(targets))) %>% 
+    kable(caption = "Selected, masked and filtered funcional targets.",
+        col.names = c("N", "Width (Mbp)", "Mask (%N)"),
+        format.args = list(big.mark = " "))
+```
+
+```{bash neutralRepeatFilter8}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/neutral_selection
+cp targets.filtered.masked.fasta neutral.targets.20180717.fasta
+```

@@ -1,4 +1,7 @@
-# PhD 0.1.9038
+# PhD 0.1.9040
+* Probes design: repetitive regin ckeck, waiting for probes desing, new plates & library preparation
+
+# PhD 0.1.9039
 * Probes design: func target done & final bwa check
 
 # PhD 0.1.9038
