@@ -235,6 +235,24 @@ de %>%
 
 We finally selected 1150 sequences of 500 to 1-kbp with 100 bp before geneStart and a maximum of 900 bp after, resulting in 1 063, 544 kbp of targets. All differentially expressed genes between morphotypes were selected (159). And the rest of sequences were selected among non differentially expressed genes randomly (1001).
 
+```{r candidate_functional_target_list}
+genes %>% 
+  left_join(de) %>% 
+  filter(deg %in% c("Eglo", "Esp")) %>% 
+  group_by(scf, gene) %>% 
+  filter(n() < 2) %>% 
+  mutate(targetStart = max(0, geneStart - 100)) %>% 
+  mutate(targetEnd = min(targetStart + 1000, scfSize)) %>% 
+  mutate(targetSize = targetEnd - targetStart) %>% 
+  filter(targetSize > 500) %>% 
+  mutate(target = paste0(gene, "_on_", scf)) %>% 
+  ungroup() %>% 
+  select(target) %>% 
+  write_tsv(path = file.path(path, "functional_selection2",
+                             "candidate_functional_target.list"),
+            col_names = F)
+```
+
 ```{r finalSubset, echo=T}
 targets <- genes %>% 
   left_join(de) %>% 

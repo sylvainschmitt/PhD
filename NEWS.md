@@ -1,3 +1,7 @@
+# PhD 0.1.9041
+* Probes design: capture & baits
+* Eschweilera: preliminray, env, sampling
+
 # PhD 0.1.9040
 * Probes design: repetitive regin ckeck, waiting for probes desing, new plates & library preparation
 

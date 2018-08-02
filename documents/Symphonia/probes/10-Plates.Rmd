@@ -18,7 +18,11 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 
 # Plates
 
-## Organization
+This chapter introduce the plates preparation after the extraction and before libraries preparation. First we will look into plates design after extraction. Then we will quantify their oncentration, volume and DNA quantity, before rearranging them based on their concentration. Finally plates concentration will be adjusted to 20 $ng.\mu L^{-1}$ and sorted by electrophoresis evaluation.
+
+## After extraction
+
+Plates were arranged following figure \@ref(fig:plates) after extraction.
 
 ```{r plates, fig.cap="Extraction plates organization"}
 plates <- read_csv(file.path(path, "Symphonia_sequence_capture - Plates.csv"))
@@ -39,11 +43,15 @@ plates %>%
   labs(x=NULL, y = NULL)
 ```
 
-## Quantifiaction 
+## DNA Quantifiaction 
+
+All plates will be quantified through NanoDrop and some of them with Qbit which is more precise. We will use Qbit-NanoDrop relation to have an estimation of concentration for all samples. Finally electrophoresis are also used to asses DNA quality and degradation.
 
 ### NanoDrop
 
-```{r nanodrop, fig.cap="Extraction plate NanoDrop concentration"}
+NanoDrop evaluated $1 \mu L$ of samples DNA concentration (figure \@ref(fig:nanodrop)) by absorption in addition to contamination. But NanoDrop is known to be inaccurate, especially under 25 $ng.\mu L^{-1}$.
+
+```{r nanodrop, fig.cap="Extraction plate NanoDrop concentration (in ng/microL)"}
 nanodrop <- do.call("rbind", sapply(list.files(file.path(path, "NanoDrop"), full.names = T),
                                   read.delim2, simplify = F)) %>% 
   mutate(row = substr(Well, 1, 1)) %>% 
@@ -69,14 +77,18 @@ nanodrop %>%
 
 ### Electrophoresis
 
+We evaluated samples quality and degradation by an electrophoresis of 1 to 1.5 $\mu L$ of sample DNA with 1 to 1.5 $\mu L$ of **weight** migrating 20 minutes with 20 V on an agarose gel with 80 $mL$ of 0.1 X TAE with 1 $\mu L$ of red gel. Samples were classified as good, medium and bad. "Good" samples only included a band at high molecular weight, "bad" samples only included a smir at low molecular weight indicating degraded DNA, whereas "medium" samples included both.
+
 ### QBit
+
+We used Qbit on 12 samples to have a more precise idea of samples concentration. Qbit is fluorescence to measure samples concentration in $ng.\mu L^{-1}$. We compared QBit estimation of concentration to NanoDrop estimation. We used a bayesian approach to fit the model $Concentration_{Qbit} \sim \mathcal{N}(\beta*Concentration_{NanoDrop},\sigma)$ with a null intercept. We found a pretty strong relation with a beta around 0.3. We thuse used this forumla to estimate better the concentration of all samples.
 
 ```{r qbitTable}
 qbit <- read_csv(file.path(path, "Symphonia_sequence_capture - QBit.csv"))
-qbit %>%
-  select(Plate, Position, Quality_Electrophoresis, Concentration_Final) %>% 
-  kable(col.names = c("Plate", "Position", "Electrophoresis", "Concentraion (ng/microL)"),
-        fig.cap = "Qbit concentrations.")
+# qbit %>%
+#   select(Plate, Position, Quality_Electrophoresis, Concentration_Final) %>% 
+#   kable(col.names = c("Plate", "Position", "Electrophoresis", "Concentraion (ng/microL)"),
+#         fig.cap = "Qbit concentrations.")
 ```
 
 ```{stan qbitModel, output.var="qbitModel", echo=T, eval=F}
@@ -107,7 +119,7 @@ broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>%
   kable(caption = "Summary table of the model")
 ```
 
-```{r pred}
+```{r pred, fig.cap="Model result of the relation between DNA concentration measured with Qbit and NanoDrop. Color indicates the electrophoresis classification of the samples."}
 beta <- broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>% 
   filter(term == "beta") %>% select(estimate) %>% unlist()
 qbit %>% 
@@ -122,6 +134,8 @@ qbit %>%
 
 ## Library plates design
 
+We first designed new plates based on the samples concentration in order to bring all samples to the same concentration for further easier manipulations in libraries preparation.
+
 ```{r data}
 data <- plates %>% 
   filter(!is.na(ID_genetic)) %>% 
@@ -135,7 +149,7 @@ data <- plates %>%
 
 ### Pool
 
-We will pool all individuals  with 2 extraction and with a nanodrop concentration inferior to 25 $ng.\mu L^{-1}$. Those wiht only one extraction will be concentrated.
+We pooled all individuals  with 2 extraction and with a nanodrop concentration inferior to 25 $ng.\mu L^{-1}$. Those wiht only one extraction will be further concentrated. **Warning, P7-3-2812 has been pooled from P2.C12 to P7.C12 instead of P7.D12.**
 
 ```{r pool}
 data %>%
@@ -152,7 +166,7 @@ data %>%
 
 ### New nanodrop
 
-Pooled individuals and new individuals from Itubera Brazil (n = 3), La Selva Costa Rica (n = 2) and Baro Colorado Island Panama (n = 2) will be quantified with the nanodrop again.
+Pooled individuals and new individuals from Itubera Brazil (n = 3), La Selva Costa Rica (n = 2) and Baro Colorado Island Panama (n = 2)  has been quantified again with the nanodrop.
 
 ```{r nanodrop2, fig.cap="Extraction plate NanoDrop concentration"}
 america <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_america.txt")) %>% 
@@ -172,7 +186,9 @@ rbind(america, itubera, pull) %>%
   kable(caption = "New nanodrops.")
 ```
 
-### Concentration plates
+### Plates arranged by concentration
+
+We reorganised plates in a new scheme ordered by concentration followinf figure \@ref(fig:concPlatePosition) design with figure \@ref(fig:concPlateConcentration) concentrations.
 
 ```{r newData}
 pull <- pull %>% 
@@ -191,7 +207,7 @@ america <- america %>%
           ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
   group_by(Origin) %>% 
   arrange(desc(nanodrop)) %>% 
-  slice(1:2)
+  dplyr::slice(1:2)
 itubera <- itubera %>% 
   mutate(Species = "S. globulifera", Origin = "Itubera", Country = "Brazil",
           ID_genetic = ID, ID_paracou = NA, 
@@ -201,7 +217,7 @@ itubera <- itubera %>%
           ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
   mutate_if(is.factor, as.character) %>% 
   arrange(desc(nanodrop)) %>% 
-  slice(1:3)
+  dplyr::slice(1:3)
 data <- data %>% 
   filter(!(Plate %in% 1:2)) %>% 
   group_by(ID) %>% 
@@ -230,7 +246,7 @@ data$new_Position <- rep(unlist(sapply(1:12, function(x) paste0(LETTERS[1:8], x)
 #   kable_styling(full_width = F)
 ```
 
-```{r concPlateFig}
+```{r concPlatePosition, fig.cap="Previous position in new plates arranged by concentration;"}
 data %>% 
   mutate(row = substr(new_Position, 1, 1)) %>% 
   mutate(col = substr(new_Position, 2, 3)) %>% 
@@ -240,20 +256,154 @@ data %>%
   select(new_Plate, row, col, past_Position, Plate) %>% 
   arrange(new_Plate, row, col) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12),
-             col = Plate)) + 
+             x = factor(col,levels = 1:12))) + 
   geom_text(aes(label = past_Position), size = 2.5) +
   facet_wrap(~ new_Plate, nrow = 3) +
   theme_bw() +
   labs(x=NULL, y = NULL)
 ```
 
+```{r concPlateConcentration, fig.cap="Concentration in plates arranged by concentration."}
+data %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, concentration, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = concentration < 20)) + 
+  geom_text(aes(label = round(concentration, 1)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+### Samples volume
+
+In order to adjust samples concentration we need first to assess their current volume, see figure \@ref(fig:volumes). Volume after extraction was around 45 $\mu L$ (estimated loss). Samples have lost volume with NanoDrop, Qbit, electrophoresis, and libraries trial, one or two times. And some sample won volume with pooling. We can consider all samples to have lost 1 $\mu L$ with NanoDrop. Samples used in Qbit lost an additional 1.5 to 3 $\mu L$. Finally samples used in trial libraries lost between 0.5 and 5 $\mu L$ (with library test II repeated). And pooled samples from plate 5, 6 an 7 won 49 $\mu L$ from NanoDroped samples from plate 1, 2, 3 and 4 unused for NanoDrop, Qbit nor libraries trial (original 50 minus 1 nanodropped). Added samples from Itubera, La Selva and Baro Colorado Island have an estimated volume of 10 $\mu L$ (overestimated).
+
+```{r}
+
+```
+
+
+```{r volumes, fig.cap="Samples estimated volumes."}
+libraries_test <- read_csv(file.path(path, 
+                                     "Symphonia_sequence_capture - Libraries test.csv")) %>% 
+  mutate(Volume = ifelse(Date == "23/07/2018", Volume*2, Volume)) # repeated library test II
+data <- data %>% 
+  mutate(volume_init = 45) %>% # lost volume
+  mutate(volume_nanodrop = -1) %>% 
+  left_join(mutate(qbit, volume_qbit = -Volume_Sample) %>% 
+              mutate(Plate = as.character(Plate)) %>% 
+            select(Plate, Position, volume_qbit)) %>% 
+  mutate(volume_qbit = ifelse(is.na(volume_qbit), 0, volume_qbit)) %>% 
+  mutate(volume_pool = ifelse(ID %in% pull$ID, 49, 0)) %>% 
+  left_join(mutate(libraries_test, volume_libraries_test = -Volume) %>% 
+              mutate(Plate = as.character(Plate)) %>% 
+              select(Plate, Position, volume_libraries_test)) %>% 
+  mutate(volume_libraries_test = ifelse(is.na(volume_libraries_test), 
+                                        0, volume_libraries_test)) %>% 
+  mutate(volume = sum(volume_init, volume_nanodrop, volume_qbit, 
+                      volume_pool, volume_libraries_test)) %>% 
+  mutate(volume = ifelse(Plate %in% c("America", "Itubera"), 10, volume)) %>% 
+  select(-volume_init, -volume_nanodrop, -volume_qbit, -volume_pool, -volume_libraries_test)
+data  %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  select(new_Plate, row, col, volume, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = volume)) + 
+  geom_text(aes(label = round(volume, 1)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+
 ### Concentration
 
-All individuals with an estimated concetration inferior to 20 $ng.\mu L^{-1}$ will be dried in the speed vacuum centrifuge. And corresponding volume of miliQ water will be added to reach a concentration of 20 $ng.\mu L^{-1}$.
+All individuals with an estimated concetration inferior to 19 $ng.\mu L^{-1}$ have been dried in the speed vacuum centrifuge. And corresponding volume of miliQ water will be added to reach a concentration of 20 $ng.\mu L^{-1}$. **Maybe we need to use a marge here to not concentrate samples close to the objective.** Sample in P3.A3 has been considered as equal to 20 $ng.\mu L^{-1}$ in order to work by plates. Their DNA content in $ng$ has beeen computed multiplying concentration with volume. The volume of water to add is thus the DNA content divided by the objective concentration of 20 $ng.\mu L^{-1}$: $V = \frac{C_0*V_0}{20}$. Corresponding volumes are shown in figure \@ref(fig:concentrationVolume).
 
+```{r concentration, fig.cap="Samples to be concentrated. Estimated concentration in ng/microL"}
+data %>% 
+  filter(concentration < 19.02) %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  select(new_Plate, row, col, concentration, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(concentration, 2)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
 
+```{r concentrationVolume, fig.cap="Volume to resupspend dry samples."}
+data %>% 
+  filter(concentration < 19.02) %>% 
+  mutate(new_volume = (volume*concentration)/20) %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, concentration, new_volume) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(new_volume, 2)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
 ### Dilution
 
-All individuals with an estimated concetration superior to 20 $ng.\mu L^{-1}$ will be be diluted adding corresponding volume of miliQ water will be to reach a concentration of 20 $ng.\mu L^{-1}$.
+All individuals with an estimated concetration superior to 21 $ng.\mu L^{-1}$ have been diluted adding corresponding volume of miliQ water will be to reach a concentration of 20 $ng.\mu L^{-1}$. Their DNA content in $ng$ has beeen computed multiplying concentration with volume. The volume of water to add is thus the DNA content divided by the objective volume of 20 $ng.\mu L^{-1}$: $V = \frac{C_0*V_0}{20}$ minus the volume already present. Corresponding volumes are shown in figure \@ref(fig:dilutionVolume). Samples with a total volume superior to 200 $\mu L^{-1}$ (more than PCR plate volume, in blue in figure \@ref(fig:dilutionVolume)) will be split in two replicates.
 
+```{r dilution, fig.cap="Samples to be diluted. Estimated concentration in ng/microL"}
+data %>% 
+  filter(concentration >= 21) %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, concentration, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(concentration, 2)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r dilutionVolume, fig.cap="Volume to add to samples over 20 ng/microL."}
+data %>% 
+  filter(concentration > 21) %>% 
+  mutate(new_volume = (volume*concentration)/20 - volume) %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, concentration, volume, new_volume) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = new_volume > 130)) + 
+  geom_text(aes(label = round(new_volume, 2)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL) +
+  scale_color_discrete(guide = F)
+```
