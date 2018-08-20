@@ -1,3 +1,8 @@
+# PhD 0.1.9042
+* Update ToDo
+* Eschweilera sampling selection
+* Symphonia plates design and library preparation protocol
+
 # PhD 0.1.9041
 * Probes design: capture & baits
 * Eschweilera: preliminray, env, sampling

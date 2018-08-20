@@ -55,6 +55,12 @@ opts_chunk$set(
 
 ### Docs
 
+* [Field protocol](https://docs.google.com/document/d/1yjYXe50mYG95mUjw61SujkdDBxzIDkbvcJbXg8w6fPo/edit?usp=sharing)
+* [Fresh measurements protocol](https://docs.google.com/document/d/1S-0O5ndADJhtXlrtz6qgRfYZtfS9f1qOgvFlaEF6P8M/edit?usp=sharing)
+* [Symphonia individuals](https://docs.google.com/spreadsheets/d/13BKXG1ETpTvQwcpYcGoTK9eTU002PSWa4Cjyox-OanA/edit?usp=sharing)
+* [Symphonia leaves](https://docs.google.com/spreadsheets/d/1QycHaAmsbBGd76Ma088RXxvFrWT5c_9Md3Eqqob286Q/edit?usp=sharing)
+* [Dawkins index](https://drive.google.com/file/d/0B-lAe8V-ri2SUVZrRGJpQUhUVkU/view?usp=sharing)
+
 ##
 
 ### Planning
@@ -68,20 +74,186 @@ opts_chunk$set(
 
 ### Maps
 
+* [Parcelle 1](./sampling_save/maps/Parcelle1.png)
+* [Parcelle 5](./sampling_save/maps/Parcelle5.png)
+* [Parcelle 9](./sampling_save/maps/Parcelle9.png)
+* [Parcelle 13](./sampling_save/maps/Parcelle13.png)
+* [Parcelle 14](./sampling_save/maps/Parcelle14.png)
+* [Parcelle 15](./sampling_save/maps/Parcelle15.png)
+* [Parcelle 16](./sampling_save/maps/Parcelle16.png)
+
+
 # Samples
+
+```{r Par_trees}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Eschweilera_Paracou.csv'),
+                  dec=".", stringsAsFactors = F)
+trees <- trees %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  filter(Plot != 18) %>% 
+  mutate(Treatment = c(rep(c('C', 'T1', 'T2', 'T3'), 3), rep('B', 4))[Plot]) %>% 
+  mutate(Treatment_simp = ifelse(Treatment == "C", "Control", ifelse(Treatment == "B", "Biodiv", "Treatment"))) %>% 
+  mutate(Clade = ifelse(Species %in% c("congestiflora", "simiorum"),
+                        "Other", "Parvifolia")) %>% 
+  mutate(SpeciesType = ifelse(Clade == "Other", "outgroup", NA)) %>%
+  mutate(SpeciesType = ifelse(Species == "sagotiana", "sagotiana", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species == "coriacea", "coriacea", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species == "decolorans", "decolorans", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species %in% c("pedicellata", "Indet.", "wachenheimii",
+                                             "grandiflora_form2", "collina", 
+                                             "grandiflora"), "other", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species %in% c("micrantha", "parviflora", "squamata"), 
+                              "rare", SpeciesType)) %>% 
+  filter(Treatment %in% c("B", "C"))
+```
+
+```{r filters}
+# Total of 4.5 plates = 4.5*96 = 432
+sagotiana <- trees %>%
+  filter(Species == "sagotiana") %>% 
+  sample_n(144) # 1/3 = 144
+coriacea <- trees %>%
+  filter(Species == "coriacea") %>% 
+  sample_n(144) # 1/3 = 144
+decolorans <- trees %>%
+  filter(Species == "decolorans") # 1/6 = 72 but 66
+rares <- trees %>%
+  filter(Species %in% c("pedicellata", "wachenheimii")) %>%
+  group_by(Species) %>%
+  sample_n(22) %>%   # 1/6 = 72 - others (2*3) - Lecythis (3) - rare(3) - grandiflora (2) - collina (5) = 60
+  ungroup() %>%
+  bind_rows(trees %>%
+              filter(Species %in% c("collina", "grandiflora_form2", "grandiflora"))) %>%
+    bind_rows(trees %>%
+              filter(SpeciesType == "rare"))
+outgroup <- trees %>% 
+  filter(Clade == "Other") %>% 
+  group_by(Species) %>% 
+  sample_n(3) %>% 
+  ungroup()
+lecythis <- read.csv(file.path(path, 'trees/Lecithis_Paracou.csv'),
+                  dec=".", stringsAsFactors = F) %>% 
+    filter(CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  filter(Plot != 18) %>% 
+  mutate(Treatment = c(rep(c('C', 'T1', 'T2', 'T3'), 3), rep('B', 4))[Plot]) %>% 
+  filter(Treatment %in% c("B", "C")) %>% 
+  sample_n(3)
+selection <- bind_rows(sagotiana, coriacea, decolorans, rares, outgroup, lecythis) %>% 
+  mutate(selection = 1)
+trees <- trees %>% 
+  full_join(selection)
+```
+
+##
+
+> Original headcounts
+
+### Species headcount
+
+```{r species}
+trees %>% 
+  filter(Species != "Indet.") %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ 1) %>% 
+  arrange(desc(Clade), desc(`1`)) %>% 
+  kable()
+```
+
+### Species and treatment headcount
+
+```{r treatment}
+trees %>% 
+  filter(Species != "Indet.") %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ Treatment) %>% 
+  arrange(desc(Clade), desc(B)) %>% 
+  kable()
+```
+
+###  Species and plot headcount
+
+```{r plot}
+trees %>% 
+  filter(Species != "Indet.") %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ Plot) %>% 
+  arrange(desc(Clade), desc(`16`)) %>% 
+  kable()
+```
+
+###  Species and diameters
+
+```{r diam}
+trees %>% 
+  filter(Species != "Indet.") %>% 
+  ggplot(aes(CircCorr, fill = Species)) + 
+  geom_histogram(position = "dodge")
+```
+
+##
+
+> Number of trees selected: `r sum(trees$selection, na.rm = T)`
+
+### Selected species headcount
+
+```{r speciessel}
+trees %>% 
+  filter(selection == 1) %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ 1) %>% 
+  arrange(desc(Clade), desc(`1`)) %>% 
+  kable()
+```
+
+### Species and treatment headcount
+
+```{r treatmentsel}
+trees %>% 
+  filter(selection == 1) %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ Treatment) %>% 
+  arrange(desc(Clade), desc(B)) %>% 
+  kable()
+```
+
+###  Species and plot headcount
+
+```{r plotsel}
+trees %>% 
+  filter(selection == 1) %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ Plot) %>% 
+  arrange(desc(Clade), desc(`16`)) %>% 
+  kable()
+```
+
+###  Species and diameters
+
+```{r diamsel}
+trees %>% 
+  filter(selection == 1) %>% 
+  ggplot(aes(CircCorr, fill = Species)) + 
+  geom_histogram(position = "dodge")
+```
 
 # Maps
 
 ### Dynamic map of selected individuals
 
-```{r selected, eval=F}
-sel_pal <-colorBin(c('transparent', 'black'), trees$sel)
+```{r selected}
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+sel_pal <- colorBin(c('transparent', 'black'), trees$selection)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
 leaflet() %>%
   addPolygons(data = limits, fillOpacity = 0,
               opacity = 0.5, col = 'black') %>% 
   addCircles(data = treesXY, col = 'black', fillOpacity = 1,
-             fillCol = sel_pal(trees$sel), radius= ~circonf/25,
-             label = ~as.character(n_arbre)) %>% 
+             fillCol = sel_pal(trees$selection), radius= ~CircCorr/25,
+             label = ~as.character(TreeFieldNum)) %>% 
   addLegend(colors = c('transparent', 'black'), 
             labels = c('not selected', 'selected'),
             title = 'Sampling')
@@ -121,7 +293,7 @@ make_map <- function(limits, treesXY, contour, p){
     limits_plot <-  subset(limits_plot, TypeSub == "SubplotsP16")
   newProj <- rotateProj(limits_plot, find_angle(limits_plot))
   limits_plot <- spTransform(limits_plot, newProj)
-  treesXY_plot <- subset(treesXY, n_parcelle == p)
+  treesXY_plot <- subset(treesXY, Plot == p)
   treesXY_plot <- spTransform(treesXY_plot, newProj)
   contour_plot <- spTransform(contour, newProj)
   contour_plot <- crop(contour_plot, extent(limits_plot))
@@ -133,11 +305,11 @@ make_map <- function(limits, treesXY, contour, p){
                  aes(long, lat, group=group),
                  colour = "grey", alpha = 0) +
     geom_point(data = as.data.frame(treesXY_plot),
-               aes(x = Xutm, y = Yutm, size=circonf/pi*100,
-                   col = sel)) +
+               aes(x = Xutm, y = Yutm, size=CircCorr/pi*100,
+                   col = selection)) +
     geom_text_repel(data = as.data.frame(treesXY_plot),
                     aes(Xutm, Yutm, 
-                        label = n_arbre)) +
+                        label = TreeFieldNum)) +
     ggtitle(paste('Parcelle', p)) +
     coord_equal() +
     theme(axis.line=element_blank(),axis.text.x=element_blank(),
@@ -154,22 +326,25 @@ make_map <- function(limits, treesXY, contour, p){
 ```
 
 ```{r maps, eval=F}
-maps <- sapply(sort(unique(trees$n_parcelle)), 
+contour <- readOGR(file.path(path, 'topography'), "ContourLinePlots", verbose = F)
+contour <- spTransform(contour, CRSobj = crs)
+treesXY$selection[is.na(treesXY$selection)] <- 0
+maps <- sapply(sort(unique(trees$Plot)), 
                function(x) make_map(limits, treesXY, contour, x),
                simplify = F)
-names(maps) <- paste0('P', sort(unique(trees$n_parcelle)))
-# lapply(maps, function(x)
-#   ggsave(x, file = paste0(gsub(' ', '', x$labels$title), '.png'),
-#          path = './symphonia_save/maps/',
-#          width = 297, height = 420, unit = 'mm',
-#          dpi = 300))
+names(maps) <- paste0('P', sort(unique(trees$Plot)))
+lapply(maps, function(x)
+  ggsave(x, file = paste0(gsub(' ', '', x$labels$title), '.png'),
+         path = './sampling_save/maps',
+         width = 297, height = 420, unit = 'mm',
+         dpi = 300))
 ```
 
 ```{r table, eval=F}
-# trees_sel <- trees %>% 
-#   filter(sel == 1) %>% 
-#   arrange(n_parcelle, n_carre, n_arbre)
-# write.csv(trees_sel, "./symphonia_save/trees_sel.csv",
-#           row.names = F)
+trees %>%
+  filter(selection == 1) %>%
+  arrange(Plot, SubPlot, TreeFieldNum) %>% 
+  write.csv("./sampling_save/trees_sel.csv",
+            row.names = F)
 ```
 

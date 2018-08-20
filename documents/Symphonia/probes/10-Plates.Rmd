@@ -158,7 +158,8 @@ data %>%
   filter(n() > 1) %>% 
   arrange(ID) %>% 
   select(ID, Plate, Position, nanodrop) %>% 
-  kable(caption = "Samples to be pooled. From plates 1, 2 and 3 to plate 5, 6 and 7") %>% 
+  head() %>% 
+  kable(caption = "Preview of Samples to be pooled. From plates 1, 2 and 3 to plate 5, 6 and 7") %>% 
   kable_styling(full_width = F) %>% 
   kableExtra::collapse_rows(1)
 ```
@@ -168,7 +169,7 @@ data %>%
 
 Pooled individuals and new individuals from Itubera Brazil (n = 3), La Selva Costa Rica (n = 2) and Baro Colorado Island Panama (n = 2)  has been quantified again with the nanodrop.
 
-```{r nanodrop2, fig.cap="Extraction plate NanoDrop concentration"}
+```{r nanodrop2}
 america <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_america.txt")) %>% 
   dplyr::select(Sample.ID, Conc.) %>% 
   dplyr::rename(ID = Sample.ID, nanodrop = Conc.) %>% 
@@ -183,7 +184,8 @@ pull <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_pull.txt")) 
   dplyr::rename(ID = Sample.ID, nanodrop = Conc.) %>% 
   mutate(Plate = "Pull", Position = NA)
 rbind(america, itubera, pull) %>% 
-  kable(caption = "New nanodrops.")
+  sample_n(5) %>% 
+  kable(caption = "Preview of New nanodrops.")
 ```
 
 ### Plates arranged by concentration
@@ -241,9 +243,6 @@ data <- data %>%
   arrange(concentration)
 data$new_Plate <- rep(1:5, each = 8*12)[1:432]
 data$new_Position <- rep(unlist(sapply(1:12, function(x) paste0(LETTERS[1:8], x))), 5)[1:432]
-# data %>% 
-#   kable(caption = "New plates design by concentration") %>% 
-#   kable_styling(full_width = F)
 ```
 
 ```{r concPlatePosition, fig.cap="Previous position in new plates arranged by concentration;"}
@@ -285,10 +284,6 @@ data %>%
 
 In order to adjust samples concentration we need first to assess their current volume, see figure \@ref(fig:volumes). Volume after extraction was around 45 $\mu L$ (estimated loss). Samples have lost volume with NanoDrop, Qbit, electrophoresis, and libraries trial, one or two times. And some sample won volume with pooling. We can consider all samples to have lost 1 $\mu L$ with NanoDrop. Samples used in Qbit lost an additional 1.5 to 3 $\mu L$. Finally samples used in trial libraries lost between 0.5 and 5 $\mu L$ (with library test II repeated). And pooled samples from plate 5, 6 an 7 won 49 $\mu L$ from NanoDroped samples from plate 1, 2, 3 and 4 unused for NanoDrop, Qbit nor libraries trial (original 50 minus 1 nanodropped). Added samples from Itubera, La Selva and Baro Colorado Island have an estimated volume of 10 $\mu L$ (overestimated).
 
-```{r}
-
-```
-
 
 ```{r volumes, fig.cap="Samples estimated volumes."}
 libraries_test <- read_csv(file.path(path, 
@@ -326,84 +321,210 @@ data  %>%
   labs(x=NULL, y = NULL)
 ```
 
+### DNA quality
+
+We assessed DNA fragment quality and size through electrophoresis and reorganised columns inside plates by quality.
+
+```{r dnaQuality}
+electrophoresis <- read_csv(file.path(path, 
+                                      "Symphonia_sequence_capture - Electrophoresis.csv")) %>% 
+  select(Plate, Position, Status) %>% 
+  mutate(Plate = as.character(Plate))
+data <- data %>%
+  left_join(electrophoresis, by = c("Plate", "Position")) %>% 
+  mutate(Status = ifelse(is.na(Status), "Medium", Status))
+data <- data %>%  
+  mutate(numeric_status = ifelse(Status == "Good", 1, NA)) %>% 
+  mutate(numeric_status = ifelse(Status == "Medium", 2, numeric_status)) %>% 
+   mutate(numeric_status = ifelse(Status == "Bad", 3, numeric_status)) %>% 
+  arrange(new_Plate, desc(numeric_status))
+data$final_Plate <- rep(1:5, each = 8*12)[1:432]
+data$final_Position <- rep(unlist(sapply(1:12, function(x) paste0(LETTERS[1:8], x))), 5)[1:432]
+# data %>%
+#   select(ID,	new_Plate,	new_Position,	volume, concentration,
+#          final_Plate,	final_Position, Status) %>%
+#   write_csv(path = file.path(path, "Final plate.csv"))
+```
+
+```{r robotQuality}
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  mutate(volumeplus5 = ifelse(volume+5 > 50, 50, volumeplus5)) %>% 
+  filter(new_Plate %in% 1:2) %>% 
+  mutate(source_Plate = ifelse(new_Plate == 1, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(new_Plate == 1, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = new_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(ID,	source_Plate,	source_Position,	volumeplus5, concentration,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "arrangement_quality",
+                             "Robot1.csv"))
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  mutate(volumeplus5 = ifelse(volume+5 > 50, 50, volumeplus5)) %>% 
+  filter(new_Plate %in% 3:4) %>% 
+  mutate(source_Plate = ifelse(new_Plate == 3, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(new_Plate == 3, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = new_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(ID,	source_Plate,	source_Position,	volumeplus5, concentration,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "arrangement_quality",
+                             "Robot2.csv"))
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  mutate(volumeplus5 = ifelse(volume+5 > 50, 50, volumeplus5)) %>% 
+  filter(new_Plate %in% 5:6) %>%   
+  mutate(source_Plate = ifelse(new_Plate == 5, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(new_Plate == 5, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = new_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(ID,	source_Plate,	source_Position,	volumeplus5, concentration,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "arrangement_quality",
+                             "Robot3.csv"))
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  filter(volumeplus5 > 50) %>% 
+  select(ID,	new_Plate,	new_Position,	volumeplus5, concentration,
+         final_Plate,	final_Position) %>% 
+  kable()
+```
+
+```{r dnaQualityPlot1, fig.cap="Plates electrophoresis status before rearrangement."}
+data %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = Status)) + 
+  geom_point(size = 4)  +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r dnaQualityPlot2, fig.cap="Plates electrophoresis status after rearrangement."}
+data %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = Status)) + 
+  geom_point(size = 4)  +
+  facet_wrap(~ final_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
 
 ### Concentration
 
-All individuals with an estimated concetration inferior to 19 $ng.\mu L^{-1}$ have been dried in the speed vacuum centrifuge. And corresponding volume of miliQ water will be added to reach a concentration of 20 $ng.\mu L^{-1}$. **Maybe we need to use a marge here to not concentrate samples close to the objective.** Sample in P3.A3 has been considered as equal to 20 $ng.\mu L^{-1}$ in order to work by plates. Their DNA content in $ng$ has beeen computed multiplying concentration with volume. The volume of water to add is thus the DNA content divided by the objective concentration of 20 $ng.\mu L^{-1}$: $V = \frac{C_0*V_0}{20}$. Corresponding volumes are shown in figure \@ref(fig:concentrationVolume).
+All individuals with an estimated concetration inferior to 19 $ng.\mu L^{-1}$ (Plates 1 and 2) have been dried in the speed vacuum centrifuge. And corresponding volume of miliQ water will be added to reach a concentration of 20 $ng.\mu L^{-1}$ (or at least 6.5 $\mu L$ to reach sample volume). Their DNA content in $ng$ has beeen computed multiplying concentration with volume. The volume of water to add is thus the DNA content divided by the objective concentration of 20 $ng.\mu L^{-1}$: $V = \frac{C_0*V_0}{20}$. Corresponding volumes are shown in figure \@ref(fig:concentrationVolume).
 
 ```{r concentration, fig.cap="Samples to be concentrated. Estimated concentration in ng/microL"}
 data %>% 
-  filter(concentration < 19.02) %>% 
-  mutate(row = substr(new_Position, 1, 1)) %>% 
-  mutate(col = substr(new_Position, 2, 3)) %>% 
-  group_by(new_Plate) %>% 
-  select(new_Plate, row, col, concentration, Plate) %>% 
-  arrange(new_Plate, row, col) %>% 
+  filter(final_Plate %in% 1:2) %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
              x = factor(col,levels = 1:12))) + 
   geom_text(aes(label = round(concentration, 2)), size = 2.5) +
-  facet_wrap(~ new_Plate, nrow = 3) +
+  facet_wrap(~ final_Plate, nrow = 3) +
   theme_bw() +
   labs(x=NULL, y = NULL)
 ```
 
 ```{r concentrationVolume, fig.cap="Volume to resupspend dry samples."}
 data %>% 
-  filter(concentration < 19.02) %>% 
+  filter(final_Plate %in% 1:2) %>% 
   mutate(new_volume = (volume*concentration)/20) %>% 
-  mutate(row = substr(new_Position, 1, 1)) %>% 
-  mutate(col = substr(new_Position, 2, 3)) %>% 
-  group_by(new_Plate) %>% 
-  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
-                                paste0("P", Plate, ".", Position), ID)) %>% 
-  select(new_Plate, row, col, concentration, new_volume) %>% 
-  arrange(new_Plate, row, col) %>% 
+  mutate(new_volume = ifelse(new_volume < 10, 10, new_volume)) %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
              x = factor(col,levels = 1:12))) + 
   geom_text(aes(label = round(new_volume, 2)), size = 2.5) +
-  facet_wrap(~ new_Plate, nrow = 3) +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-```
-### Dilution
-
-All individuals with an estimated concetration superior to 21 $ng.\mu L^{-1}$ have been diluted adding corresponding volume of miliQ water will be to reach a concentration of 20 $ng.\mu L^{-1}$. Their DNA content in $ng$ has beeen computed multiplying concentration with volume. The volume of water to add is thus the DNA content divided by the objective volume of 20 $ng.\mu L^{-1}$: $V = \frac{C_0*V_0}{20}$ minus the volume already present. Corresponding volumes are shown in figure \@ref(fig:dilutionVolume). Samples with a total volume superior to 200 $\mu L^{-1}$ (more than PCR plate volume, in blue in figure \@ref(fig:dilutionVolume)) will be split in two replicates.
-
-```{r dilution, fig.cap="Samples to be diluted. Estimated concentration in ng/microL"}
-data %>% 
-  filter(concentration >= 21) %>% 
-  mutate(row = substr(new_Position, 1, 1)) %>% 
-  mutate(col = substr(new_Position, 2, 3)) %>% 
-  group_by(new_Plate) %>% 
-  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
-                                paste0("P", Plate, ".", Position), ID)) %>% 
-  select(new_Plate, row, col, concentration, Plate) %>% 
-  arrange(new_Plate, row, col) %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12))) + 
-  geom_text(aes(label = round(concentration, 2)), size = 2.5) +
-  facet_wrap(~ new_Plate, nrow = 3) +
+  facet_wrap(~ final_Plate, nrow = 3) +
   theme_bw() +
   labs(x=NULL, y = NULL)
 ```
 
-```{r dilutionVolume, fig.cap="Volume to add to samples over 20 ng/microL."}
+```{r robotResuspension}
+data %>%
+  ungroup() %>% 
+  filter(final_Plate %in% 1:2) %>% 
+  mutate(new_volume = (volume*concentration)/20) %>% 
+  mutate(new_volume = ifelse(new_volume < 10, 10, new_volume)) %>% 
+  mutate(new_volume = round(new_volume, 1)) %>% 
+  mutate(sample_volume = 0) %>% 
+  mutate(source_Plate = ifelse(final_Plate == 1, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(final_Plate == 1, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(source_Plate,	source_Position,	sample_volume, new_volume,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "resuspension",
+                             "Plate1Plate2.csv"))
+```
+
+### Samples volume
+
+The objective is to get 100 $ng$ of DNA in 6.5 $\mu L$ of sample for the library preparation. Consequently we need to extract with the robot $V = \frac{n}{C} = \frac{100}{C}$ with $C$ the sample concentration in $ng.\mu L^{-1}$.
+
+```{r sampleVolume, fig.cap="Sample volume (microL)"}
+data <- data %>% 
+  mutate(new_concentration = ifelse(final_Plate %in% 1:2, 20, concentration)) %>% 
+  mutate(sample_volume = 100/new_concentration) %>% 
+  mutate(sample_volume = ifelse(sample_volume < 1, 1, sample_volume)) %>% 
+  mutate(sample_volume = ifelse(is.na(sample_volume), 1.5, sample_volume))
 data %>% 
-  filter(concentration > 21) %>% 
-  mutate(new_volume = (volume*concentration)/20 - volume) %>% 
-  mutate(row = substr(new_Position, 1, 1)) %>% 
-  mutate(col = substr(new_Position, 2, 3)) %>% 
-  group_by(new_Plate) %>% 
-  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
-                                paste0("P", Plate, ".", Position), ID)) %>% 
-  select(new_Plate, row, col, concentration, volume, new_volume) %>% 
-  arrange(new_Plate, row, col) %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12),
-             col = new_volume > 130)) + 
-  geom_text(aes(label = round(new_volume, 2)), size = 2.5) +
-  facet_wrap(~ new_Plate, nrow = 3) +
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(sample_volume, 2)), size = 2.5) +
+  facet_wrap(~ final_Plate, nrow = 3) +
   theme_bw() +
-  labs(x=NULL, y = NULL) +
-  scale_color_discrete(guide = F)
+  labs(x=NULL, y = NULL)
+```
+
+```{r robotSamples}
+data %>% 
+  filter(final_Plate %in% 3:4) %>% 
+  mutate(source_Plate = ifelse(final_Plate == 3, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(final_Plate == 3, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  mutate(water_volume = 6.5 - sample_volume) %>% 
+  mutate(water_volume = ifelse(water_volume < 2, 0, water_volume)) %>% 
+  mutate(water_volume = round(water_volume, 1)) %>% 
+  mutate(sample_volume = round(sample_volume, 1)) %>% 
+  select(source_Plate,	source_Position,	sample_volume, water_volume,
+         dest_Plate,	dest_Position) %>% 
+    write_csv(path = file.path(path, "Robot", "library_samples",
+                             "Plate3Plate4.csv"))
+data %>% 
+  filter(final_Plate == 5) %>% 
+  mutate(source_Plate = "PCR1") %>% 
+  mutate(dest_Plate = "PCR2") %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  mutate(sample_volume = 2*sample_volume) %>% 
+  mutate(water_volume = 13 - sample_volume) %>% 
+  mutate(water_volume = round(water_volume, 1)) %>% 
+  mutate(sample_volume = round(sample_volume, 1)) %>% 
+  select(source_Plate,	source_Position,	sample_volume, water_volume,
+         dest_Plate,	dest_Position) %>% 
+    write_csv(path = file.path(path, "Robot", "library_samples",
+                             "Plate5.csv"))
+data %>% 
+  ungroup() %>% 
+  filter(final_Plate %in% 3:4) %>% 
+  mutate(source_Plate = ifelse(final_Plate == 3, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(final_Plate == 3, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  mutate(water_volume = 6.5 - sample_volume) %>% 
+  select(final_Plate, final_Position, sample_volume, water_volume) %>% 
+  filter(water_volume < 2) %>% kable()
 ```

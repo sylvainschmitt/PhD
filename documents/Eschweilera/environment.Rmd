@@ -51,6 +51,7 @@ rbind(
   c('hydromorphy', 'Hydromorphy', 'pedology', 'discrete'),
   c('waterlog', 'Water logging', 'pedology', 'discrete'),
   c('DEM', 'Digital elevation model', 'topography', 'continuous'),
+  c('relele', 'Relative elevation', 'topography', 'continuous'),
   c('slope', 'Slope', 'topography', 'continuous'),
   c('aspect', 'Aspect', 'topography', 'continuous'),
   c('curvature', 'Curvature', 'topography', 'continuous'),
@@ -69,7 +70,8 @@ eschweilera <- read.csv(file.path(path, 'trees/Eschweilera_Paracou.csv'),
   filter(CensusYear == 2015) %>% 
   filter(CodeAlive == 1) %>% 
   filter(CodeMeas == 0) %>% 
-  filter(Plot != 18)
+  filter(Plot != 18) %>% 
+  filter(Species %in% c("sagotiana", "coriacea", "decolorans"))
 coordinates(eschweilera) <- ~Xutm + Yutm
 proj4string(eschweilera) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 eschweilera <- spTransform(eschweilera, CRSobj = crs)
@@ -82,12 +84,12 @@ limits <- shapefile(file.path(path, "limits", "OverallPlots.shp"))
 limits <- spTransform(limits, CRSobj = crs)
 basemap <- leaflet() %>%
   addPolylines(data = limits, color = 'black', group = "limits") %>%
-  addCircles(data = eschweilera, radius = ~CircCorr/pi/10, 
-             color = ~eschweileraPal(Species), group = "Eschweilera") %>% 
+    addCircles(data = eschweilera, radius = ~CircCorr/pi/10,  label = ~Species,
+             color = ~eschweileraPal(Species), group = ~Species) %>% 
   addLegend(pal = eschweileraPal, title = 'Eschweilera', 
             values = levels(as.factor(eschweilera$Species)),
             position = "bottomright") %>% 
-  addLayersControl(overlayGroups = c('limits', 'Eschweilera'),
+  addLayersControl(overlayGroups = c('limits', eschweilera$Species),
                    options = layersControlOptions(collapsed = T))
 ```
 
@@ -400,6 +402,54 @@ eschweilera %>%
 
 # Topography
 
+## relele
+
+> Relative elevation
+
+### Relative elevation
+
+```{r relele map}
+relele <- raster(file.path(path, "topography", "difference_stream_downstream.tif"))
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+projection(relele) <- projection(dem)
+relele <- projectRaster(relele, crs = crs)
+basemap %>% 
+  addRasterImage(relele)
+```
+
+### Species distributions with relative elevation
+
+```{r relele comp}
+eschweilera$relele <- raster::extract(relele, eschweilera)
+eschweilera@data %>% 
+  ggplot(aes(relele, col = Species, fill = Species)) +
+  geom_density(alpha = 0.2) +
+  xlab('Relative elevation')
+```
+
+## dem
+
+> Digital elevation model
+
+### DEM
+
+```{r dem map}
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif"))
+dem <- projectRaster(dem, crs = crs)
+basemap %>% 
+  addRasterImage(dem)
+```
+
+### Species distribution with DEM
+
+```{r dem comp}
+eschweilera$dem <- raster::extract(dem, eschweilera)
+eschweilera %>% 
+  ggplot(aes(dem, col = Species, fill = Species)) +
+  geom_density(alpha = 0.2) +
+  xlab('Digital elevation model')
+```
+
 ## wetness
 
 > Topographic wetness index
@@ -425,29 +475,6 @@ eschweilera %>%
   #                alpha = 0.1, position = "dodge") +
   geom_density(alpha = 0.2) +
   xlab('Tropographic wetness index')
-```
-
-## dem
-
-> Digital elevation model
-
-### DEM
-
-```{r dem map}
-dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif"))
-dem <- projectRaster(dem, crs = crs)
-basemap %>% 
-  addRasterImage(dem)
-```
-
-### Species distribution with DEM
-
-```{r dem comp}
-eschweilera$dem <- raster::extract(dem, eschweilera)
-eschweilera %>% 
-  ggplot(aes(dem, col = Species, fill = Species)) +
-  geom_density(alpha = 0.2) +
-  xlab('Digital elevation model')
 ```
 
 ## slope
@@ -545,67 +572,6 @@ eschweilera %>%
                  alpha = 0.1, position = "dodge") +
   ylim(0, 1) +
   xlab('Topographic ruggedness index')
-```
-
-# Correlations
-
-```{r cor}
-library(ade4)
-ord <- eschweilera@data %>% 
-  select(d_log_gap, wtd, d_creek, drainages, hydromorphy,
-         waterlog, wetness, dem, slope, curvature, aspect, TRI) %>% 
-  mutate(wtd = factor(wtd)) %>% 
-  mutate(drainages = factor(drainages)) %>% 
-  na.omit() %>% 
-  dudi.mix(scannf = F, nf = 3)
-data(deug)
-deug.dudi <- dudi.pca(deug$tab, center = deug$cent, scale = FALSE, scan = FALSE)
-class(ord) <- class(deug.dudi)
-factoextra::fviz_pca_var(ord, col.var = "contrib", repel = TRUE,
-                         gradient.cols = c("#00AFBB", "#E7B800",
-                                           "#FC4E07"), c(1,2))
-factoextra::fviz_pca_var(ord, col.var = "contrib", repel = TRUE,
-                         gradient.cols = c("#00AFBB", "#E7B800",
-                                           "#FC4E07"), c(1,3))
-factoextra::fviz_pca_var(ord, col.var = "contrib", repel = TRUE,
-                         gradient.cols = c("#00AFBB", "#E7B800",
-                                           "#FC4E07"), c(2,3))
-eschweilera %>% 
-  model.matrix(~ d_log_gap + wtd + d_creek + drainages + hydromorphy + waterlog + wetness + dem + slope + curvature + aspect + TRI, 
-               data = .) %>% 
-  cor() %>% 
-  corrplot::corrplot()
-```
-
-# Growth
-
-```{r}
-trees <- read.csv(file.path(path, 'trees/Eschweilera_Paracou.csv'),
-                  dec=".", stringsAsFactors = F) %>% 
-  filter(CodeAlive == 1) %>% 
-  filter(CodeMeas == 0) %>% 
-  filter(Plot != 18) %>% 
-  mutate(dbh = CircCorr/pi)
-trees <- trees %>% # tree selection
-  arrange(CensusYear) %>% 
-  group_by(idTree) %>% 
-  filter(any(CensusYear == 1988)) %>% 
-  filter(any(CensusYear == 1992)) %>% 
-  filter(CensusYear %in% c(1988, 1992)) %>% 
-  mutate(growth = diff(dbh)) %>% 
-  filter(growth > 0) %>% 
-  filter(CensusYear == 1988) %>% 
-  select(idTree, Plot, SubPlot, TreeFieldNum, Species,
-         Xutm, Yutm, dbh, growth)
-treesXY <- trees
-coordinates(treesXY) <- ~Xutm + Yutm
-proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
-treesXY <- spTransform(treesXY, CRSobj = crs)
-trees$wetness <- raster::extract(wetness, treesXY)
-trees %>% 
-  ggplot(aes(wetness, growth/dbh)) +
-  geom_point() +
-  facet_wrap(~Species)
 ```
 
 # References

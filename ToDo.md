@@ -12,7 +12,7 @@
 ## *Eschweilera*
 
 - [x] Dates: September-October
-- [ ] Émilie internship ?
+- [ ] Anne internship ?
 - [x] FTH project
     - [ ] Prepare a subject
     - [ ] Schedule preliminary sampling
@@ -24,6 +24,7 @@
     - [ ] Check heads
     - [ ] Check ropes
     - [ ] Check helmet/gloves/glasses
+    - [ ] Sampling material (bags, labels, silicagel, tea pocket..)
 - [ ] Define sampling
 
 # Genetic
@@ -31,12 +32,17 @@
 ## Symphonia genotyping
 
 - [x] Choose kit
-- [ ] Select sequence to be captured
-    - [x] neutral sequences selection
-    - [ ] functional sequences selection
-- [ ] Design probes (target sequences to be sent to the company)
+- [x] Select target sequence to be captured
+- [x] Design probes (target sequences to be sent to the company)
 - [x] Extract DNA
 - [ ] Prepare libraries
+    - [x] Normalisation
+    - [x] Digestion
+    - [x] Adaptor ligation
+    - [x] Size selection (1 col remaining)
+    - [ ] Tagging and amplification
+    - [ ] Amplification check
+    - [ ] Sequence capture
 - [ ] Raw data analysis
     - [ ] Genome by Sequencing (GbS)
     - [ ] Reads mapping
@@ -56,10 +62,9 @@
 
 ## *Symphonia*
 
-- [x] Prepare Emilie to M2 defense
 - [ ] Finish data cleaning and preparation from FT
 - [ ] Take back Emilie analysis to conlude on ExFT interaction within *S. globulifera*
-- [ ] Measure wood anatomical traits
+- [ ] Measure wood anatomical traits (discussion with Seb)
 - [ ] Include wood anatomical traits in FT analysis workflow
 
 # Performance
@@ -76,16 +81,16 @@
 - [ ] Validate JDD as formation
 - [x] Validate Émilie supervizing as formation
 - [ ] Validate Barcelona NGS lecture as formation
-- [ ] Refund FG mission
+- [x] Refund FG mission
 - [ ] Refund Barcelona lecture
 
 # Other
 
 ## Uppangala
 
-- [ ] Bullet proof analysis
-- [ ] New draft
-- [ ] Maxime validation
+- [x] Bullet proof analysis
+- [x] New draft
+- [ ] Valerie exchanges
 - [ ] Share with everybody
 
 ## TROLL
