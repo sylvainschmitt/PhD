@@ -1,0 +1,143 @@
+```{r setup_lib_prep_res, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+# Libraries preparation results
+
+## Post-enrichment quantification
+
+After the enrichment and the purification of the first PCR (PCR1), we quantified double strand DNA in every plates in order to adjust the second PCR (PCR2), and more especially in order to increase the number of cycles in PCR2.
+
+We used the Quant-It technology and we need to transform raw absorbance results into concentration with the scale.
+
+```{r quantit}
+quantit <- read_csv(file.path(path, "QuantIt", 
+                   "SYMCAPTURE_Library_enriched_PCR1_Plate1_Plate2_QuantIt.csv"), skip = 53)[2:4] %>% mutate(QuantIt = 1) %>% 
+  bind_rows(read_csv(file.path(path, "QuantIt", 
+                   "SYMCAPTURE_Library_enriched_PCR1_Plate3_Plate4_Plate5_QuantIt.csv"), skip = 53)[2:4] %>% mutate(QuantIt = 2)) %>% 
+  select(-`Well ID`) %>% 
+  dplyr::rename(position = Well, fluorescence = `dosage_fluo_384_CB:501,527`) %>% 
+  filter(!is.na(fluorescence)) %>%
+  mutate(row = substr(position, 1, 1)) %>% 
+  mutate(col = substr(position, 2, 3)) %>% 
+  arrange(QuantIt, row, as.numeric(col)) %>%
+  mutate(plate = NA) %>%
+  mutate(plate = ifelse(QuantIt == 1 & row != "I" & (as.numeric(col) %% 2 != 0), 
+                         1, plate)) %>% 
+  mutate(plate = ifelse(QuantIt == 1 & row != "I" & (as.numeric(col) %% 2 == 0), 
+                         2, plate)) %>% 
+  mutate(plate = ifelse(QuantIt == 1 & row == "I", "ladder", plate)) %>% 
+  filter(!(QuantIt == 1 & plate == "ladder" & as.numeric(col) > 12)) %>% 
+  mutate(plate = ifelse(QuantIt == 2 & row %in% LETTERS[1:8] & (as.numeric(col) %% 2 != 0), 
+                         3, plate)) %>% 
+  mutate(plate = ifelse(QuantIt == 2 & row %in% LETTERS[1:8] & (as.numeric(col) %% 2 == 0), 
+                         4, plate)) %>% 
+  mutate(plate = ifelse(QuantIt == 2 & row %in% LETTERS[9:11], 5, plate)) %>% 
+  mutate(plate = ifelse(QuantIt == 2 & row == "L", "ladder", plate)) %>% 
+  filter(!(QuantIt == 2 & plate == "ladder" & as.numeric(col) > 12)) %>% 
+  mutate(row_plate = NA) %>% 
+  mutate(row_plate = ifelse(plate %in% as.character(1:4), row, row_plate)) %>% 
+  mutate(col_plate = NA) %>% 
+  mutate(col_plate = ifelse(plate %in% c(1,3), (as.numeric(col) + 1)/2, col_plate)) %>% 
+  mutate(col_plate = ifelse(plate %in% c(2,4), as.numeric(col)/2, col_plate)) %>% 
+  mutate(concentration = NA) %>% 
+  mutate(concentration = ifelse(QuantIt == 1 & plate == "ladder", 
+                                rep(c(0, 5, 10, 20, 40, 60), each = 2), concentration)) %>% 
+  mutate(concentration = ifelse(QuantIt == 2 & plate == "ladder", 
+                                rep(c(0, 5, 10, 20, 40, 60)*19/20, each = 2), concentration))
+```
+
+```{r regression, fig.cap = "Ladder relation between concentration and fluorescence."}
+quantit %>% 
+  filter(!is.na(concentration)) %>% 
+  ggplot(aes(fluorescence, concentration)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~QuantIt, labeller = "label_both")
+```
+
+```{stan quantitModel, output.var="quantitModel", echo=T, eval=F}
+  data {
+    int N ;
+    real fluorescence[N] ;
+    real concentration[N] ;
+  }
+  parameters {
+    real beta ;
+    real sigma ;
+  }
+  model {
+    for(n in 1:N)
+      concentration[n] ~ normal(beta*fluorescence[n], sigma) ;
+  }
+```
+
+```{r fitQuantit}
+data1 <- quantit %>% filter(QuantIt == 1, plate == "ladder")
+data2 <- quantit %>% filter(QuantIt == 2, plate == "ladder")
+# fit1 <- sampling(quantitModel,
+#                 data = list(N = nrow(data1),
+#                             fluorescence = data1$fluorescence,
+#                             concentration = data1$concentration))
+# fit2 <- sampling(quantitModel,
+#                 data = list(N = nrow(data2),
+#                             fluorescence = data2$fluorescence,
+#                             concentration = data2$concentration))
+# save(fit1, fit2, file = "./probes_save/MQantIt.Rdata")
+load("./probes_save/MQantIt.Rdata")
+broom::tidyMCMC(fit1, droppars = NULL, rhat = T) %>% 
+  mutate(QuantIt = 1) %>% 
+  bind_rows(broom::tidyMCMC(fit2, droppars = NULL, rhat = T) %>% 
+              mutate(QuantIt = 2)) %>% 
+  select(QuantIt, term, estimate, std.error, rhat) %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r quantitConcentration}
+beta1 <- broom::tidyMCMC(fit1, droppars = NULL, rhat = T) %>% 
+  filter(term == "beta") %>% select(estimate) %>% unlist()
+beta2 <- broom::tidyMCMC(fit2, droppars = NULL, rhat = T) %>% 
+  filter(term == "beta") %>% select(estimate) %>% unlist()
+quantit <- quantit %>% 
+  mutate(concentration = ifelse(QuantIt == 1 & plate != "ladder", 
+                                fluorescence*beta1, concentration)) %>% 
+  mutate(concentration = ifelse(QuantIt == 2 & plate != "ladder", 
+                                fluorescence*beta2, concentration))
+```
+
+```{r quantitConcentrationPlot1}
+quantit %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:12])),
+             x = factor(col,levels = 1:24))) + 
+  geom_point(aes(col = concentration), size =6)  +
+  geom_text(aes(label = round(concentration)), size = 2.5, col = "white") +
+  facet_wrap(~ QuantIt, nrow = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r quantitConcentrationPlot2}
+quantit %>% 
+  filter(plate %in% 1:4) %>% 
+  ggplot(aes(y = factor(row_plate,levels = rev(LETTERS[1:8])),
+             x = factor(col_plate,levels = 1:12))) + 
+  geom_point(aes(col = concentration), size =6)  +
+  geom_text(aes(label = round(concentration)), size = 2.5, col = "white") +
+  facet_wrap(~ plate, nrow = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
