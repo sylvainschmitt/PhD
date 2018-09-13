@@ -1,0 +1,200 @@
+---
+title: "Competition model Plot 1"
+author: Sylvain Schmitt, Bruno Hérault
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::pdf_document2:
+    number_sections: false
+    toc: false
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup_BA, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(raster)
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+```
+
+```{r computeBA}
+computeBA <- function(trees, # all trees from the plot
+                      idTreeVal, # from the tree for which BA is computed
+                      CensusYearVal,
+                      XfieldVal, # from the tree for which BA is computed
+                      YfieldVal, # from the tree for which BA is computed
+                      d # maximum distance to be taken into account
+){
+  trees %>% 
+    mutate(Surface = (CircCorr)^2/(4*pi)) %>% 
+    filter(CensusYear == CensusYearVal) %>%
+    filter(idTree != idTreeVal) %>%
+    group_by(idTree) %>% 
+    mutate(distance = sqrt((XfieldVal-Xfield)^2+(YfieldVal-Yfield)^2)) %>% 
+    filter(distance < d) %>% 
+    ungroup() %>% 
+    select(Surface) %>% 
+    summarise(BA = sum(Surface)) %>% 
+    unlist()
+}
+```
+
+```{r data}
+trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot == 1) %>% 
+  filter(CodeAlive == 1) %>% 
+  collect()
+# symphonia <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv')) %>%
+#   filter(CodeAlive == 1) %>%
+#   filter(Plot == 1) %>%
+#   filter(Xfield > 20, Xfield < max(Xfield)-20,
+#          Yfield > 20, Yfield < max(Yfield)-20)
+# symphonia <- symphonia %>%
+#   group_by(CensusYear, idTree) %>%
+#   mutate(BA10 = computeBA(trees, idTree, CensusYear, Xfield, Yfield, d = 10)) %>%
+#   mutate(BA20 = computeBA(trees, idTree, CensusYear, Xfield, Yfield, d = 20))
+# save(symphonia, file = "./Competition_save/symphoniaBA_P1.Rdata")
+load("./Competition_save/symphoniaBA_P1.Rdata")
+symphonia <- symphonia %>%
+  mutate(dbh = CircCorr/pi) %>% 
+  arrange(CensusYear) %>%
+  group_by(idTree) %>%
+  mutate(dt = CensusYear - lag(CensusYear)) %>% 
+  mutate(ddbh = dbh - lag(dbh)) %>% 
+  mutate(dt = ifelse(dt <= 0, NA, dt)) %>% 
+  mutate(ddbh = ifelse(ddbh < 0, NA, ddbh)) %>% 
+  mutate(agr = ddbh/dt) %>% 
+  ungroup() %>% 
+  mutate(BA10 = BA10*10^-4, BA20 = BA20*10^-4) %>% # cm2 to m2
+  mutate(BA10 = BA10/(pi*10^2/10^4), BA20 = BA20/(pi*20^2/10^4)) # divided by surface in ha
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+symphoniaXY <- symphonia
+coordinates(symphoniaXY) <- ~Xutm + Yutm
+proj4string(symphoniaXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+symphoniaXY <- spTransform(symphoniaXY, CRSobj = crs)
+wtd <- shapefile(file.path(path, "hydrology", "WaterTable.shp"))
+wtd <- spTransform(wtd, CRSobj = crs)
+symphonia$wtd <- raster::extract(wtd, symphoniaXY)$TypeWatEN
+
+wetness <- raster(path, "/topography/env/wetness.tiff")
+dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+sympho$wetness <- raster::extract(wetness, symphoXY)
+rm(crs, symphoniaXY, wtd)
+```
+
+# Modelling distribution
+
+## Data
+
+```{r ModelData, fig.cap="Evolution of local basal area (BA) through census years."}
+symphonia %>% 
+  ggplot(aes(wtd, BA20, col = Species, alpha = dbh, size = dbh)) +
+  geom_point(aes(size = dbh)) + 
+  geom_line(aes(group = idTree)) +
+  xlab("Census year") +
+  ylab("Local basal area (BA in m2/ha)") +
+  scale_size(range = c(0.2, 3))
+```
+
+## Model 
+
+Local basal area is not dependant on the tree individual and not on the species, we will simply assume each patch to follow the same evolution trend linearly with a null intercept year $year0_i$ corresponding to a major treefall for the gap and we will assume the trend coefficient to be either equal or not for each patch $i$ thus ignoring intermediate treefall events. **Idea to check on the full dataset, BA decrease after reaching a maximum.**
+
+$$BA20_{patch} \sim \mathcal{N}(year0_{patch}+\beta_{patch}*year,\sigma) $$
+$$\beta_{patch} \sim \mathcal{N}^P(\beta,\sigma_{patch})~or~\beta_{patch}=\beta$$
+
+```{stan M1, output.var="M1", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real BA20[N] ;
+    real year[N] ;
+    int P ; // # of patch
+    int<lower=1,upper=P> patch[N] ;
+  }
+  parameters {
+    real year0[P] ;
+    real beta_patch[P] ;
+    real beta ;
+    real<lower=0> sigma ;
+    real<lower=0> sigma_patch ;
+  }
+  model {
+    beta_patch ~ normal(beta, sigma_patch) ;
+    for(n in 1:N)
+      BA20[n] ~ normal(year0[patch[n]] + beta_patch[patch[n]]*year[n], sigma) ;
+  }
+  generated quantities {
+    real BA20pred[N] ;
+    for(n in 1:N)
+      BA20pred[n] = year0[patch[n]] + beta_patch[patch[n]]*year[n] ;
+  }
+```
+
+```{r fitM1}
+# fit <- sampling(M1,
+#                 data = list(N = nrow(symphonia),
+#                             BA20 = symphonia$BA20,
+#                             year = symphonia$CensusYear,
+#                             P = length(unique(symphonia$idTree)),
+#                             patch = as.numeric(as.factor(symphonia$idTree))))
+# save(fit, file = "./Competition_save/M1_P1.Rdata")
+load("./Competition_save/M1_P1.Rdata")
+pars <- c("beta", "sigma_patch", "sigma")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r betap, fig.cap="Coefficient for each patch."}
+mcmc_intervals(as.array(fit), regex_pars = "beta_p")
+```
+
+```{r year0, fig.cap="Intercept for each patch."}
+mcmc_intervals(as.array(fit), regex_pars = "year0")
+```
+
+```{r T1, fig.cap="Markov chains trace plot after warmup for model Mnull"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 21, fig.cap="Markov chains pairs plot after warmup for model Mnull"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r Y1, fig.cap="Predictions for model M0"}
+cbind(
+  symphonia,
+  pred = apply(as.matrix(fit, pars = "BA20pred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "BA20pred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  filter(idTree %in% sample(unique(symphonia$idTree), 9)) %>% 
+  ggplot(aes(CensusYear, group = idTree, col = Species, 
+             alpha = dbh, size = dbh)) +
+  geom_point(aes(y = BA20)) +
+  geom_line(aes(y = BA20),
+            alpha = 1, size = 0.2, linetype = "dotted") +
+  geom_line(aes(y = pred)) +
+  geom_line(aes(y = `5%`), col = "black", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "black", alpha = 1, size = 0.5, linetype = "dashed") +
+  xlab("Census year") +
+  ylab("Local basal area (BA in m2/ha)") +
+  scale_size(range = c(0.2, 3)) +
+  facet_wrap(~idTree, labeller = "label_both", scales = "free")
+```

@@ -73,20 +73,20 @@ computeBA <- function(trees, # all trees from the plot
 ```
 
 ```{r data}
-trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
-  tbl("Paracou") %>% 
-  filter(Plot != 16) %>% 
-  filter(CodeAlive == 1) %>% 
-  collect()
-symphonia <- trees %>% 
-  filter(Genus == "Symphonia") %>% 
-  filter(Xfield > 20, Xfield < max(Xfield)-20,
-         Yfield > 20, Yfield < max(Yfield)-20)
-symphonia <- symphonia %>%
-  group_by(CensusYear, idTree) %>%
-  mutate(BA10 = computeBA(trees, idTree, CensusYear, Xfield, Yfield, d = 10)) %>%
-  mutate(BA20 = computeBA(trees, idTree, CensusYear, Xfield, Yfield, d = 20))
-save(symphonia, file = "./Competition_save/symphoniaBA.Rdata")
+# trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>%
+#   tbl("Paracou") %>%
+#   filter(Plot != 16) %>%
+#   filter(CodeAlive == 1) %>%
+#   collect()
+# symphonia <- trees %>% 
+#   filter(Genus == "Symphonia") %>% 
+#   filter(Xfield > 20, Xfield < max(Xfield)-20,
+#          Yfield > 20, Yfield < max(Yfield)-20)
+# symphonia <- symphonia %>%
+#   group_by(CensusYear, idTree) %>%
+#   mutate(BA10 = computeBA(trees, idTree, CensusYear, Xfield, Yfield, d = 10)) %>%
+#   mutate(BA20 = computeBA(trees, idTree, CensusYear, Xfield, Yfield, d = 20))
+# save(symphonia, file = "./Competition_save/symphoniaBA.Rdata")
 load("./Competition_save/symphoniaBA.Rdata")
 symphonia <- symphonia %>%
   mutate(dbh = CircCorr/pi) %>% 
@@ -100,6 +100,12 @@ symphonia <- symphonia %>%
   ungroup() %>% 
   mutate(BA10 = BA10*10^-4, BA20 = BA20*10^-4) %>% # cm2 to m2
   mutate(BA10 = BA10/(pi*10^2/10^4), BA20 = BA20/(pi*20^2/10^4)) # divided by surface in ha
+symphonia <- symphonia %>% 
+  mutate(BA10 = BA10/10) %>% 
+  mutate(BA20 = BA20/10) %>% 
+  filter(!(CensusYear %in% c(2008, 2010, 2012, 2014, 2016))) # partial inventory
+symphonia <- symphonia %>% 
+  mutate(Treatment = ifelse(Plot %in% c(1, 6, 11, 13:16), "C", "T"))
 ```
 
 ## Light and competition effect analysis
@@ -117,11 +123,11 @@ We studied `r length(unique(symphonia$idTree))` *Symphonia globulifera* individu
 
 ```{r GeneralStatistics, fig.cap="Local basal area (BA) distribution by morphotype for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
 symphonia %>% 
-  select(BA10, BA20, Species) %>% 
-  reshape2::melt(id.var = "Species") %>% 
+  select(BA10, BA20, Species, Treatment) %>% 
+  reshape2::melt(id.var = c("Species", "Treatment")) %>% 
   ggplot(aes(Species, value, fill = Species)) +
   geom_boxplot() +
-  facet_wrap(~variable, scales = "free") +
+  facet_grid( ~ variable, scales = "free") +
   ylab("Local basal area (BA in m2/ha)") +
   scale_fill_discrete("Symphonia") +
   ggpubr::stat_compare_means(method = "anova")
@@ -131,16 +137,18 @@ symphonia %>%
 ## Census year
 
 Most of individuals showed increasing local basal area through time (figure \@ref(fig:CensusYear)), but few individual showed basal area decrease at certain years indicating neighboring tree death. Increase coefficient of local basal area through time is similar for most individuals besides some individuals show higher rates of increase after a basal area decrease. Logically at broader scale of 20m radius, neighboring *Symphonia globulifera* individuals showed more similar patterns.
+lot(aes(CensusYear, BA)) + geom_point() + geom_line() + facet_wrap(~Plot)
 
 ```{r CensusYear, fig.cap="Evolution of local basal area (BA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
 symphonia %>% 
-  select(Species, idTree, BA10, BA20, CensusYear) %>% 
-  reshape2::melt(id.vars = c("Species", "idTree", "CensusYear"),
+  filter(CensusYear > 1995) %>% 
+  select(Species, idTree, BA10, BA20, CensusYear, Treatment) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "CensusYear", "Treatment"),
                  variable.name = "BAdist", value.name = "BA") %>% 
   ggplot(aes(CensusYear, BA, col = Species)) +
   geom_point() + 
   geom_line(aes(group = idTree)) +
-  facet_wrap(~ BAdist, scale = "free") +
+  facet_grid(Treatment ~ BAdist, scale = "free") +
   scale_color_discrete("Symphonia") +
   xlab("Census year") +
   ylab("Local basal area (BA in m2/ha)")
@@ -152,15 +160,16 @@ Diameter at breast height (dbh) variation seems to be dependent on the local bas
 
 ```{r dbh, fig.cap="Observed diameter at breast height (dbh) depending on local basal area (BA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
 symphonia %>% 
-  select(Species, idTree, BA10, BA20, dbh) %>% 
-  reshape2::melt(id.vars = c("Species", "idTree", "dbh"),
+  select(Species, idTree, BA10, BA20, dbh, Treatment) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "dbh", "Treatment"),
                  variable.name = "BAdist", value.name = "BA") %>% 
-  ggplot(aes(BA, dbh, col = Species)) +
-  geom_point() + 
-  facet_wrap(~ BAdist, scale = "free", nrow = 2) +
-  scale_color_discrete("Symphonia") +
-  xlab("Local basal area (BA in m2/ha)") +
-  ylab("Diameter at breast height (dbh in cm)")
+  ggplot(aes(dbh, BA, col = Species, alpha = dbh, size = dbh)) +
+  geom_point(aes(size = dbh)) + 
+  geom_line(aes(group = idTree)) +
+  xlab("Dimater at breast height (dbh in cm)") +
+  ylab("Local basal area (BA in m2/ha)") +
+  scale_size(range = c(0.2, 3)) +
+  facet_wrap( ~ BAdist, scale = "free", ncol = 2)
 ```
 
 ## Annual growth rate
@@ -169,15 +178,15 @@ We found similar results of observed annual growth rate evolution along increasi
 
 ```{r agr, fig.cap="Observed annual growth rate (AGR) depending on local basal area (BA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
 symphonia %>% 
-  select(Species, idTree, BA10, BA20, agr) %>% 
-  reshape2::melt(id.vars = c("Species", "idTree", "agr"),
+  select(Species, idTree, BA10, BA20, agr, dbh) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "agr", "dbh"),
                  variable.name = "BAdist", value.name = "BA") %>% 
-  ggplot(aes(BA, agr, col = Species)) +
-  geom_point() + 
-  facet_wrap(~ BAdist, scale = "free", nrow = 2) +
-  scale_color_discrete("Symphonia") +
+  ggplot(aes(BA, agr, col = Species, alpha = dbh, size = dbh)) +
+  geom_point(aes(size = dbh)) +
+  ylab("Annual growth rate (AGR in cm/year)") +
   xlab("Local basal area (BA in m2/ha)") +
-  ylab("Annual growth rate (AGR in cm/year)")
+  scale_size(range = c(0.2, 3)) +
+  facet_wrap(~ BAdist, scale = "free", nrow = 2)
 ```
 
 # Discussion

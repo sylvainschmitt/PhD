@@ -1,0 +1,557 @@
+---
+title: "AO6: LT & Environment"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
+  github_document: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(raster)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+```{r traits}
+traits <- googlesheets::gs_title("Measures") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(LT = as.numeric(LT), LT = as.numeric(LT))
+```
+
+```{r trees}
+trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(idTree %in% traits$idTree) %>% 
+  collect() %>% 
+  mutate(DBH = CircCorr*pi)
+```
+
+```{r env}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "aspect_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature",
+#                  "Aspect", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./functional_save/env.Rdata")
+load("./functional_save/env.Rdata")
+```
+
+```{r data}
+data <- traits %>%
+  mutate(Dawkins = as.numeric(substr(Dawkins, 1,1))) %>% 
+  left_join(dplyr::filter(trees, CensusYear == 2015)) %>%
+  left_join(env) %>% 
+  dplyr::filter(!is.na(LT)) %>% 
+  group_by(Bark, idTree) %>% 
+  summarise_if(is.numeric, mean, na.rm =T) %>% 
+  ungroup() %>% 
+  mutate(DBH = DBH/max(DBH)) %>% 
+  mutate(DEM = DEM/max(DEM)) %>% 
+  mutate(TWI = TWI/max(TWI))
+```
+
+# Introduction
+
+First model for LT variation in relation to environment.
+
+# LT - DBH
+
+## Relation
+
+```{r LTDBH}
+data %>% 
+  ggplot(aes(DBH, LT, col = Bark, group = NA)) +
+  geom_point() +
+  geom_smooth()
+```
+
+## Michealis Menten model
+
+We will used an inverted Michealis Menten equation for DBH effect on LT.
+
+$$LT \sim \mathcal{N} (\frac{dbh + \beta}{\alpha * dbh}, \sigma) $$
+
+```{stan Mdbh, output.var="Mdbh", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real LT[N] ;
+    real DBH[N] ;
+  }
+  parameters {
+    real<lower=0> alpha ;
+    real<lower=0> beta ;
+    real<lower=0> sigma ;
+  }
+  model {
+    for(n in 1:N)
+      LT[n] ~ normal((alpha*DBH[n])/(DBH[n] + beta), sigma) ;
+  }
+  generated quantities {
+    real LTpred[N] ;
+    for(n in 1:N)
+      LTpred[n] = (alpha*DBH[n])/(DBH[n] + beta) ;
+  }
+```
+
+```{r fitMdbh}
+# fit <- sampling(Mdbh, chains = 2,
+#                 data = list(N = nrow(data),
+#                             LT = data$LT,
+#                             DBH = data$DBH))
+# save(fit, file = "./functional_save/ModelLTdbh.Rdata")
+load("./functional_save/ModelLTdbh.Rdata")
+pars <- c("alpha", "beta", "sigma")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model dbh only")
+```
+
+```{r Cdbh, fig.cap="Model parameters posterior for model dbh only."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r Tdbh, fig.cap="Markov chains trace plot after warmup for model dbh only"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2dbh, fig.cap="Markov chains pairs plot after warmup for model dbh only"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r Ydbh, fig.cap="Predictions for model dbh only"}
+cbind(
+  data,
+  pred = apply(as.matrix(fit, pars = "LTpred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "LTpred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(x = DBH)) +
+  geom_point(aes(y = LT)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+```
+
+## Linear model
+
+We will used a linear equation for DBH effect on LT.
+
+$$LT \sim \mathcal{N} (\alpha + \beta* dbh, \sigma) $$
+
+```{stan MdbhLinear, output.var="MdbhLinear", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real LT[N] ;
+    real DBH[N] ;
+  }
+  parameters {
+    real alpha ;
+    real beta ;
+    real<lower=0> sigma ;
+  }
+  model {
+    for(n in 1:N)
+      LT[n] ~ normal(alpha + beta*DBH[n], sigma) ;
+  }
+  generated quantities {
+    real LTpred[N] ;
+    for(n in 1:N)
+      LTpred[n] = alpha + beta*DBH[n] ;
+  }
+```
+
+```{r fitMdbhLinear}
+# fit <- sampling(MdbhLinear, chains = 2,
+#                 data = list(N = nrow(data),
+#                             LT = data$LT,
+#                             DBH = data$DBH))
+# save(fit, file = "./functional_save/ModelLTdbhLinear.Rdata")
+load("./functional_save/ModelLTdbhLinear.Rdata")
+pars <- c("alpha", "beta", "sigma")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model dbh only")
+```
+
+```{r CdbhLinear, fig.cap="Model parameters posterior for model dbh only."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r TdbhLinear, fig.cap="Markov chains trace plot after warmup for model dbh only"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2dbhLinear, fig.cap="Markov chains pairs plot after warmup for model dbh only"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r YdbhLinear, fig.cap="Predictions for model dbh only"}
+cbind(
+  data,
+  pred = apply(as.matrix(fit, pars = "LTpred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "LTpred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(x = DBH)) +
+  geom_point(aes(y = LT)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+```
+
+In conclusion the likelihood is better for the Michaelis Menten form that we will use in following models.
+
+# LT - TWI
+
+## Relation
+
+```{r LTTWI}
+data %>% 
+  ggplot(aes(TWI, LT, size = DBH, aes = DBH,
+             col = Bark, group = NA)) +
+  geom_point() +
+  geom_smooth()
+```
+
+## Linear model
+
+We will used a linear equation for TWI effect on LT.
+
+$$LT \sim \mathcal{N} (\alpha + \beta* TWI, \sigma) $$
+
+```{stan MTWI, output.var="MTWI", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real LT[N] ;
+    real TWI[N] ;
+  }
+  parameters {
+    real alpha ;
+    real beta ;
+    real<lower=0> sigma ;
+  }
+  model {
+    for(n in 1:N)
+      LT[n] ~ normal(alpha + beta*TWI[n], sigma) ;
+  }
+  generated quantities {
+    real LTpred[N] ;
+    for(n in 1:N)
+      LTpred[n] = alpha + beta*TWI[n] ;
+  }
+```
+
+```{r fitMTWILinear}
+# fit <- sampling(MTWI, chains = 2,
+#                 data = list(N = nrow(data),
+#                             LT = data$LT,
+#                             TWI = data$TWI))
+# save(fit, file = "./functional_save/ModelLTTWILinear.Rdata")
+load("./functional_save/ModelLTTWILinear.Rdata")
+pars <- c("alpha", "beta", "sigma")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model v only")
+```
+
+```{r CTWILinear, fig.cap="Model parameters posterior for model TWI only."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r TTWILinear, fig.cap="Markov chains trace plot after warmup for model TWI only"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2TWILinear, fig.cap="Markov chains pairs plot after warmup for model TWI only"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r YTWILinear, fig.cap="Predictions for model TWI only"}
+cbind(
+  data,
+  pred = apply(as.matrix(fit, pars = "LTpred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "LTpred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(x = TWI)) +
+  geom_point(aes(y = LT)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+```
+
+Topographic wetness index as a significant negative effect on LT.
+
+# LT - Elevation
+
+## Relation
+
+```{r LTElevation}
+data %>% 
+  ggplot(aes(DEM, LT, size = DBH, aes = DBH,
+             col = Bark, group = NA)) +
+  geom_point() +
+  geom_smooth()
+```
+
+Elevation is strongly correlated to TWI and has a smaller likelihood than TWI, so we should only keep TWI as they give the same information.
+
+## Linear model
+
+We will used a linear equation for elevation effect on LT.
+
+$$LT \sim \mathcal{N} (\alpha + \beta* Elevation, \sigma) $$
+
+```{stan MElevation, output.var="MElevation", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real LT[N] ;
+    real Elevation[N] ;
+  }
+  parameters {
+    real alpha ;
+    real beta ;
+    real<lower=0> sigma ;
+  }
+  model {
+    for(n in 1:N)
+      LT[n] ~ normal(alpha + beta*Elevation[n], sigma) ;
+  }
+  generated quantities {
+    real LTpred[N] ;
+    for(n in 1:N)
+      LTpred[n] = alpha + beta*Elevation[n] ;
+  }
+```
+
+```{r fitMElevation}
+# fit <- sampling(MElevation, chains = 2,
+#                 data = list(N = nrow(data),
+#                             LT = data$LT,
+#                             Elevation = data$DEM))
+# save(fit, file = "./functional_save/ModelLTElevation.Rdata")
+load("./functional_save/ModelLTElevation.Rdata")
+pars <- c("alpha", "beta", "sigma")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model Elevation only")
+```
+
+```{r CElevationLinear, fig.cap="Model parameters posterior for model Elevation only."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r TElevationLinear, fig.cap="Markov chains trace plot after warmup for model Elevation only"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2ElevationLinear, fig.cap="Markov chains pairs plot after warmup for model Elevation only"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r YElevationLinear, fig.cap="Predictions for model Elevation only"}
+cbind(
+  data,
+  pred = apply(as.matrix(fit, pars = "LTpred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "LTpred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(x = DEM)) +
+  geom_point(aes(y = LT)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+```
+
+Elevation is strongly correlated to TWI and has a smaller likelihood than TWI, so we should only keep TWI as they give the same information.
+
+# LT - Competition
+
+```{r dataCompetition}
+# cl <- makeCluster(4)
+# clusterExport(cl, list("data", "path"))
+# Competition <- clusterMap(cl,
+#   function(id, x, y){
+#   library(dplyr)
+#   src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+#     tbl("Paracou") %>% 
+#     mutate(DBH = CircCorr*pi) %>% 
+#     filter(CensusYear == 2005) %>% 
+#     mutate(dij = sqrt((x - Xutm)^2+(y - Yutm)^2)) %>% 
+#     filter(dij < 20) %>% 
+#     mutate(idTreej = idTree) %>% 
+#     mutate(idTreei = id) %>% 
+#     dplyr::select(idTreei, idTreej, DBH, dij) %>% 
+#     collect()},
+#   id = data$idTree,
+#   x = data$Xutm,
+#   y = data$Yutm,
+#   SIMPLIFY = F)
+# stopCluster(cl)
+# rm(cl)
+# Competition <- bind_rows(Competition)
+# save(Competition, file = "./functional_save/CompetitionMatrix.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+```
+
+## Relation
+
+```{r LTCompetition}
+Competition %>% 
+  filter(idTreei != idTreej) %>% 
+  group_by(idTreei) %>% 
+  summarise(NBI = sum(DBH/1000*exp(-dij))) %>% 
+  left_join(data, by = c("idTreei" = "idTree")) %>% 
+  ggplot(aes(NBI, LT, size = DBH, aes = DBH,
+             col = Bark, group = NA)) +
+  geom_point() +
+  geom_smooth()
+```
+
+# LT - Gaps
+
+## Relation
+
+```{r LTGaps}
+
+```
+
+## Disturbance model
+
+$$LT_i \sim \mathcal{N} (\sum _{j<20m} S_j^\beta * e^{-\alpha*d_{i,j}} , \sigma) $$
+
+# LT - All
+
+## Relation
+
+```{r LTAll}
+data %>% 
+  dplyr::select(Bark, LT, DBH, TWI) %>%
+  mutate(DBH0 = DBH) %>% 
+  reshape2::melt(id.vars = c("Bark", "LT", "DBH0")) %>% 
+  ggplot(aes(value, LT, size = DBH0, aes = DBH0,
+             col = Bark, group = NA)) +
+  geom_point() +
+  facet_wrap(~ variable) +
+  geom_smooth()
+```
+
+## Full model
+
+$$LT \sim \mathcal{N} (\frac{\alpha_{DBH} * dbh}{dbh + \beta_{DBH}} +  \beta_{TWI}*TWI, \sigma) $$
+
+```{stan Mall, output.var="Mall", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real LT[N] ;
+    real DBH[N] ;
+    real TWI[N] ;
+  }
+  parameters {
+    real<lower=0> alpha_DBH ;
+    real<lower=0> beta_DBH ;
+    real beta_TWI ;
+    real<lower=0> sigma ;
+  }
+  model {
+    for(n in 1:N)
+      LT[n] ~ normal((alpha_DBH*DBH[n])/(DBH[n] + beta_DBH) + beta_TWI*TWI[n], sigma) ;
+  }
+  generated quantities {
+    real LTpred[N] ;
+    for(n in 1:N)
+      LTpred[n] = (alpha_DBH*DBH[n])/(DBH[n] + beta_DBH) + beta_TWI*TWI[n] ;
+  }
+```
+
+```{r fitMall}
+# fit <- sampling(Mall, chains = 2,
+#                 data = list(N = nrow(data),
+#                             LT = data$LT,
+#                             DBH = data$DBH,
+#                             TWI = data$TWI))
+# save(fit, file = "./functional_save/ModelLTall.Rdata")
+load("./functional_save/ModelLTall.Rdata")
+pars <- c("alpha_DBH", "beta_DBH", "beta_TWI", "sigma")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model dbh only")
+```
+
+```{r Call, fig.cap="Model parameters posterior for full model."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r Tall, fig.cap="Markov chains trace plot after warmup for full model"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2all, fig.cap="Markov chains pairs plot after warmup for full model"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r Yall, fig.cap="Predictions for full model"}
+cbind(
+  data %>% 
+    dplyr::select(Bark, LT, DBH, TWI) %>%
+    mutate(DBH0 = DBH) %>% 
+    reshape2::melt(id.vars = c("Bark", "LT", "DBH0")),
+  pred = apply(as.matrix(fit, pars = "LTpred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "LTpred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+   ggplot(aes(value, group = NA)) +
+  geom_point(aes(y = LT, size = DBH0, aes = DBH0, col = Bark)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  facet_wrap(~ variable, nrow = 2)
+```
+
+# Discussion
+
+# References
+

@@ -1,3 +1,9 @@
+# PhD 0.1.9044
+* competition P1 description and model
+* TopoDerivate script
+* Symphonia dsitribution begin
+* Symphonia functional analysis
+
 # PhD 0.1.9043
 * Library prep
 * competition and light environment
