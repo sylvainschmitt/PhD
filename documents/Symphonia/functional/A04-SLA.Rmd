@@ -432,14 +432,10 @@ Elevation as a slight, almost null, positive effect on SLA.
 # stopCluster(cl)
 # rm(cl)
 # Competition <- bind_rows(Competition)
+# Competition <- Competition %>% 
+#   mutate(dij = ifelse(dij < 0.4, 0.4, dij)) # measure precision error troubling NCI fit 
 # save(Competition, file = "./functional_save/CompetitionMatrix.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
-Competition <- Competition %>% 
-  mutate(dij = ifelse(dij < 0.4, 0.4, dij)) # measure precision error troubling NCI fit 
-dataP16 <- data %>% 
-  filter(Plot == 16)
-CompetitionP16 <- Competition %>% 
-  filter(idTreei %in% dataP16$idTree)
 ```
 
 ## Relation
@@ -469,10 +465,8 @@ $$SLA_i \sim \mathcal{N} (\sum _{j<20m} DBH_j^\beta * e^{-\alpha*d_{i,j}} , \sig
     int individual[J] ;
   }
   parameters {
-    real alpha ;
-    real beta ;
-    real<lower=0, upper=2> alpha_NCI ;
-    real<lower=0, upper=3> beta_NCI ;
+    real<lower=-1, upper=1> alpha ;
+    real<lower=-3, upper=3> beta ;
     real<lower=0> sigma ;
   }
   transformed parameters {
@@ -480,32 +474,32 @@ $$SLA_i \sim \mathcal{N} (\sum _{j<20m} DBH_j^\beta * e^{-\alpha*d_{i,j}} , \sig
     for(n in 1:N)
       NCI[n] = 0 ;
     for(j in 1:J)
-      NCI[individual[j]] = NCI[individual[j]] + DBH[j]^beta_NCI*exp(-alpha_NCI*dij[j]) ;
+      NCI[individual[j]] = NCI[individual[j]] + DBH[j]^beta*exp(-alpha*dij[j]) ;
   }
   model {
     for(n in 1:N)
-      SLA[n] ~ normal(alpha + beta*NCI[n], sigma/NCI[n]) ;
+      SLA[n] ~ normal(NCI[n], sigma) ;
   }
   generated quantities {
     real SLApred[N] ;
     for(n in 1:N)
-      SLApred[n] = alpha + beta*NCI[n] ;
+      SLApred[n] = NCI[n] ;
   }
 ```
 
 ```{r fitMcomp}
 fit <- sampling(Mcomp, chains = 2,
-                data = list(N = nrow(arrange(dataP16, idTree)),
-                            J = nrow(arrange(CompetitionP16, idTreei)),
-                            SLA = arrange(dataP16, idTree)$SLA,
-                            DBH = arrange(CompetitionP16, idTreei)$DBH,
-                            dij = arrange(CompetitionP16, idTreei)$dij,
-                            individual = as.numeric(as.factor(arrange(CompetitionP16, idTreei)$idTreei))))
+                data = list(N = nrow(arrange(data, idTree)),
+                            J = nrow(arrange(Competition, idTreei)),
+                            SLA = arrange(data, idTree)$SLA,
+                            DBH = arrange(Competition, idTreei)$DBH,
+                            dij = arrange(Competition, idTreei)$dij,
+                            individual = as.numeric(as.factor(arrange(Competition, idTreei)$idTreei))))
 save(fit, file = "./functional_save/ModelSLACompetition.Rdata")
 load("./functional_save/ModelSLACompetition.Rdata")
-pars <- c("alpha_NCI", "beta_NCI", "alpha", "beta", "sigma")
-alpha_NCI <- broom::tidyMCMC(fit, pars = "alpha_NCI")$estimate
-beta_NCI <- broom::tidyMCMC(fit, pars = "beta_NCI")$estimate
+pars <- c("alpha", "beta", "sigma")
+alpha <- broom::tidyMCMC(fit, pars = "alpha")$estimate
+beta <- broom::tidyMCMC(fit, pars = "beta")$estimate
 broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
   kable(caption = "Summary table of the model competition only")
 ```
@@ -525,10 +519,10 @@ mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
 
 ```{r Ycomp, fig.cap="Predictions for model competition only"}
 cbind(
-  CompetitionP16 %>% 
+  Competition %>% 
     group_by(idTreei) %>% 
-    summarise(NCI = sum(DBH^beta_NCI*exp(-alpha_NCI*dij))) %>% 
-    left_join(dataP16, by = c("idTreei" = "idTree")),
+    summarise(NCI = sum(DBH^beta*exp(-alpha*dij))) %>% 
+    left_join(data, by = c("idTreei" = "idTree")),
   pred = apply(as.matrix(fit, pars = "SLApred"), 2, mean),
   t(apply(as.matrix(fit, pars = "SLApred"), 2, quantile, probs = c(0.05, 0.95)))
 ) %>% 
@@ -592,9 +586,8 @@ $$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{T
     real<lower=0> alpha_DBH ;
     real<lower=0> beta_DBH ;
     real beta_TWI ;
-    real beta_Competition ;
-    real<lower=0.1, upper=10> alpha_NCI ;
-    real<lower=0> beta_NCI ;
+    real<lower=-1, upper=1> alpha_NCI ;
+    real<lower=-3, upper=3> beta_NCI ;
     real<lower=0> sigma ;
   }
   transformed parameters {
@@ -606,12 +599,12 @@ $$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{T
   }
   model {
     for(n in 1:N)
-      SLA[n] ~ normal((DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + beta_Competition*NCI[n], sigma) ;
+      SLA[n] ~ normal((DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + NCI[n], sigma) ;
   }
   generated quantities {
     real SLApred[N] ;
     for(n in 1:N)
-      SLApred[n] = (DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + beta_Competition*NCI[n] ;
+      SLApred[n] = (DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + NCI[n] ;
   }
 ```
 
