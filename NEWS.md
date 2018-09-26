@@ -1,3 +1,7 @@
+# PhD 0.1.9045
+* Symphonia functional SLA & LDMC full model
+* FTH example
+
 # PhD 0.1.9044
 * competition P1 description and model
 * TopoDerivate script

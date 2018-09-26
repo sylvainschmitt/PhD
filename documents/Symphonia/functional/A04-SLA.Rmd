@@ -2,12 +2,6 @@
 title: "A04: SLA & Environment"
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -15,6 +9,12 @@ output:
     number_sections: false
     toc: false
     keep_tex: true
+  bookdown::word_document2: default
+  github_document: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -441,10 +441,10 @@ load("./functional_save/CompetitionMatrix.Rdata")
 ## Relation
 
 ```{r SLACompetition}
-CompetitionP16 %>% 
+Competition %>% 
   group_by(idTreei) %>% 
   summarise(NCI = sum(DBH*exp(-dij))) %>% 
-  left_join(dataP16, by = c("idTreei" = "idTree")) %>% 
+  left_join(data, by = c("idTreei" = "idTree")) %>% 
   ggplot(aes(NCI, SLA, size = DBH, aes = DBH,
              col = Bark, group = NA)) +
   geom_point() +
@@ -488,14 +488,14 @@ $$SLA_i \sim \mathcal{N} (\sum _{j<20m} DBH_j^\beta * e^{-\alpha*d_{i,j}} , \sig
 ```
 
 ```{r fitMcomp}
-fit <- sampling(Mcomp, chains = 2,
-                data = list(N = nrow(arrange(data, idTree)),
-                            J = nrow(arrange(Competition, idTreei)),
-                            SLA = arrange(data, idTree)$SLA,
-                            DBH = arrange(Competition, idTreei)$DBH,
-                            dij = arrange(Competition, idTreei)$dij,
-                            individual = as.numeric(as.factor(arrange(Competition, idTreei)$idTreei))))
-save(fit, file = "./functional_save/ModelSLACompetition.Rdata")
+# fit <- sampling(Mcomp, chains = 2,
+#                 data = list(N = nrow(arrange(data, idTree)),
+#                             J = nrow(arrange(Competition, idTreei)),
+#                             SLA = arrange(data, idTree)$SLA,
+#                             DBH = arrange(Competition, idTreei)$DBH,
+#                             dij = arrange(Competition, idTreei)$dij,
+#                             individual = as.numeric(as.factor(arrange(Competition, idTreei)$idTreei))))
+# save(fit, file = "./functional_save/ModelSLACompetition.Rdata")
 load("./functional_save/ModelSLACompetition.Rdata")
 pars <- c("alpha", "beta", "sigma")
 alpha <- broom::tidyMCMC(fit, pars = "alpha")$estimate
@@ -537,27 +537,161 @@ cbind(
 
 # SLA - Gaps
 
+```{r dataGaps}
+# gaps <- shapefile(file.path(path, "topography", "Gaps", "gaps4.shp"))
+# crs(gaps) <- crs(raster(file.path(path, "biotic", "MNC_ParacouAvril2009_1m.tif")))
+# gaps <- spTransform(gaps, '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0')
+# cl <- makeCluster(4)
+# clusterExport(cl, list("data", "gaps"))
+# Gaps <- clusterMap(cl,
+#   function(id,  x, y){
+#     d <- 50
+#     gaps_sel <- raster::crop(rgeos::gBuffer(gaps, byid=TRUE, width=0), 
+#                              raster::extent(matrix(c(x-d, y-d, x+d, y+d), nrow=2)))
+#     tree <- data.frame(x = x, y = y)
+#     sp::coordinates(tree) <- ~x+y
+#     raster::crs(tree) <-  '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+#     if(!is.null(gaps_sel))
+#       data.frame(idTree = id,
+#                  idGap = gaps_sel$fid,
+#                  Area = raster::area(gaps_sel),
+#                  Distance = rgeos::gDistance(tree, gaps_sel, byid = T)[,1])
+#     },
+#   id = data$idTree,
+#   x = data$Xutm,
+#   y = data$Yutm,
+#   SIMPLIFY = F)
+# stopCluster(cl)
+# rm(cl)
+# Gaps <- bind_rows(Gaps)
+# Gaps <- Gaps %>% 
+#   filter(Area < 500)
+# Gaps <- Gaps %>%
+#   full_join(dplyr::select(data, idTree)) %>%
+#   mutate(Area = ifelse(is.na(Area), 0, Area)) %>%
+#   mutate(Distance = ifelse(is.na(Distance), 100, Distance))
+# save(Gaps, file = "./functional_save/GapsMatrix.Rdata")
+load("./functional_save/GapsMatrix.Rdata")
+```
+
 ## Relation
 
 ```{r SLAGaps}
-gaps <- shapefile(file.path(path, "topography", "Gaps", "gaps4.shp"))
-
+Gaps %>% 
+  filter(Area < 500) %>%
+  mutate(Area = Area/max(Area)) %>% 
+  mutate(Distance = Distance/max(Distance)) %>% 
+  group_by(idTree) %>% 
+  summarise(Idist = sum(Area*exp(-Distance))) %>% 
+  left_join(data) %>% 
+  ggplot(aes(Idist, SLA, size = DBH, aes = DBH,
+             col = Bark, group = NA)) +
+  geom_point() +
+  geom_smooth()
 ```
 
 ## Disturbance model
 
-$$SLA_i \sim \mathcal{N} (\sum _{j<20m} S_j^\beta * e^{-\alpha*d_{i,j}} , \sigma) $$
+$$SLA_i \sim \mathcal{N} (\alpha + \beta*\sum _{j<20m} S_j^\beta * e^{-\alpha*d_{i,j}} , \sigma) $$
+
+```{stan Mgaps, output.var="Mgaps", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    int J ; // # gaps
+    real SLA[N] ;
+    real Area[J] ;
+    real Distance[J] ;
+    int individual[J] ;
+  }
+  parameters {
+    real alpha ;
+    real beta ;
+    real<lower=0, upper=1> alpha_Idist ;
+    real<lower=0, upper=3> beta_Idist ;
+    real<lower=0> sigma ;
+  }
+  transformed parameters {
+    real Idist[N] ;
+    for(n in 1:N)
+      Idist[n] = 0 ;
+    for(j in 1:J)
+      Idist[individual[j]] = Idist[individual[j]] + Area[j]^beta_Idist*exp(-alpha_Idist*Distance[j]) ;
+  }
+  model {
+    for(n in 1:N)
+      SLA[n] ~ normal(alpha + beta*Idist[n], sigma) ;
+  }
+  generated quantities {
+    real SLApred[N] ;
+    for(n in 1:N)
+      SLApred[n] = alpha + beta*Idist[n] ;
+  }
+```
+
+```{r fitMgaps}
+# fit <- sampling(Mgaps, chains = 2,
+#                 data = list(N = nrow(arrange(data, idTree)),
+#                             J = nrow(arrange(Gaps, idTree)),
+#                             SLA = arrange(data, idTree)$SLA,
+#                             Area = arrange(Gaps, idTree)$Area,
+#                             Distance = arrange(Gaps, idTree)$Distance,
+#                             individual = as.numeric(as.factor(arrange(Gaps, idTree)$idTree))))
+# save(fit, file = "./functional_save/ModelSLAGaps.Rdata")
+load("./functional_save/ModelSLAGaps.Rdata")
+pars <- c("alpha", "beta", "alpha_Idist", "beta_Idist", "sigma")
+alpha <- broom::tidyMCMC(fit, pars = "alpha_Idist")$estimate
+beta <- broom::tidyMCMC(fit, pars = "beta_Idist")$estimate
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model gaps only")
+```
+
+```{r Cgaps, fig.cap="Model parameters posterior for model gaps only."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r Tgaps, fig.cap="Markov chains trace plot after warmup for model gaps only"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2gaps, fig.cap="Markov chains pairs plot after warmup for model gaps only"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r Ygaps, fig.cap="Predictions for model gaps only"}
+cbind(
+  Gaps %>% 
+    group_by(idTree) %>% 
+    summarise(Idisturb = sum(Area^beta*exp(-alpha*Distance))) %>% 
+    left_join(data),
+  pred = apply(as.matrix(fit, pars = "SLApred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "SLApred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(x = Idisturb)) +
+  geom_point(aes(y = SLA, size = DBH)) +
+  geom_text(aes(y = SLA, label = idTree)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+```
 
 # SLA - All
 
 ## Relation
 
 ```{r SLAAll}
-Competition %>% 
-  group_by(idTreei) %>% 
-  summarise(NCI = sum(DBH*exp(-dij))) %>% 
-  left_join(data, by = c("idTreei" = "idTree")) %>% 
-  dplyr::select(Bark, SLA, DBH, TWI, NCI) %>%
+data %>% 
+  left_join(Competition %>% 
+              group_by(idTreei) %>% 
+              summarise(NCI = sum(DBH*exp(-dij))),
+            by = c("idTree" = "idTreei")) %>% 
+  left_join(Gaps %>% 
+              group_by(idTree) %>% 
+              mutate(Area = Area/max(Area)) %>% 
+              mutate(Distance = Distance/max(Distance)) %>% 
+              summarise(Idist = sum(Area*exp(-Distance)))) %>% 
+  dplyr::select(Bark, SLA, DBH, TWI, NCI, Idist) %>%
   mutate(DBH0 = DBH) %>% 
   reshape2::melt(id.vars = c("Bark", "SLA", "DBH0")) %>% 
   ggplot(aes(value, SLA, size = DBH0, aes = DBH0,
@@ -569,7 +703,7 @@ Competition %>%
 
 ## Full model
 
-$$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{TWI}*TWI + \beta_{Competition}*\sum _{j<20m} DBH_j^{\beta_{NCI}} * e^{-\alpha_{NCI}*d_{i,j}}), \sigma) $$
+$$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{TWI}*TWI + \beta_{Competition}*\sum _{j<20m} DBH_j^{\beta_{NCI}} * e^{-\alpha_{NCI}*d_{i,j}} + \beta_Gaps*\sum _{k<50m} S_k^\beta * e^{-\alpha*d_{i,k}}, \sigma) $$
 
 ```{stan Mall, output.var="Mall", echo=T, eval=F}
   data {
@@ -580,31 +714,44 @@ $$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{T
     int J ; // # neighbours
     real DBHj[J] ;
     real dij[J] ;
-    int individual[J] ;
+    int individualJ[J] ;
+    int K ; // # gaps
+    real Area[K] ;
+    real Distance[K] ;
+    int individualK[K] ;
   }
   parameters {
     real<lower=0> alpha_DBH ;
     real<lower=0> beta_DBH ;
     real beta_TWI ;
-    real<lower=-1, upper=1> alpha_NCI ;
-    real<lower=-3, upper=3> beta_NCI ;
+    real beta_Competition ;
+    real<lower=0, upper=1> alpha_NCI ;
+    real<lower=0, upper=3> beta_NCI ;
+    real beta_Gaps ;
+    real<lower=0, upper=1> alpha_Idist ;
+    real<lower=0, upper=3> beta_Idist ;
     real<lower=0> sigma ;
   }
   transformed parameters {
     real NCI[N] ;
-    for(n in 1:N)
+    real Idist[N] ;
+    for(n in 1:N){
       NCI[n] = 0 ;
+      Idist[n] = 0 ;
+    }
     for(j in 1:J)
-      NCI[individual[j]] = NCI[individual[j]] + DBHj[j]^beta_NCI*exp(-alpha_NCI*dij[j]) ;
+      NCI[individualJ[j]] = NCI[individualJ[j]] + DBHj[j]^beta_NCI*exp(-alpha_NCI*dij[j]) ;
+    for(k in 1:K)
+      Idist[individualK[k]] = Idist[individualK[k]] + Area[k]^beta_Idist*exp(-alpha_Idist*Distance[k]) ;
   }
   model {
     for(n in 1:N)
-      SLA[n] ~ normal((DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + NCI[n], sigma) ;
+      SLA[n] ~ normal((DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] +  beta_Competition*NCI[n] + beta_Gaps*Idist[n], sigma) ;
   }
   generated quantities {
     real SLApred[N] ;
     for(n in 1:N)
-      SLApred[n] = (DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + NCI[n] ;
+      SLApred[n] = (DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + NCI[n] + beta_Gaps*Idist[n] ;
   }
 ```
 
@@ -615,22 +762,33 @@ $$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{T
 #                             DBH = arrange(data, idTree)$DBH,
 #                             TWI = arrange(data, idTree)$TWI,
 #                             J = nrow(arrange(Competition, idTreei)),
-#                             SLA = arrange(data, idTree)$SLA,
 #                             DBHj = arrange(Competition, idTreei)$DBH,
 #                             dij = arrange(Competition, idTreei)$dij,
-#                             individual = as.numeric(as.factor(arrange(Competition, idTreei)$idTreei))))
-# save(fit, file = "./functional_save/Mall.Rdata")
-load("./functional_save/Mall.Rdata")
-pars <- c("alpha_DBH", "beta_DBH", "beta_TWI", "beta_Competition",
-          "alpha_NCI", "beta_NCI", "sigma")
+#                             individualJ = as.numeric(as.factor(arrange(Competition, idTreei)$idTreei)),
+#                             K = nrow(arrange(Gaps, idTree)),
+#                             Area = arrange(Gaps, idTree)$Area,
+#                             Distance = arrange(Gaps, idTree)$Distance,
+#                             individualK = as.numeric(as.factor(arrange(Gaps, idTree)$idTree))))
+# save(fit, file = "./functional_save/MSLAall.Rdata")
+load("./functional_save/MSLAall.Rdata")
+pars <- c("alpha_DBH", "beta_DBH", "beta_TWI", 
+          "beta_Competition", "alpha_NCI", "beta_NCI", 
+          "beta_Gaps", "alpha_Idist", "beta_Idist", "sigma")
 alpha_NCI <- broom::tidyMCMC(fit, pars = "alpha_NCI")$estimate
 beta_NCI <- broom::tidyMCMC(fit, pars = "beta_NCI")$estimate
+alpha_Idist <- broom::tidyMCMC(fit, pars = "alpha_Idist")$estimate
+beta_Idist <- broom::tidyMCMC(fit, pars = "beta_Idist")$estimate
 broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
   kable(caption = "Summary table of the model dbh only")
 ```
 
 ```{r Call, fig.cap="Model parameters posterior for full model."}
 mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r CbetaAll, fig.cap="Model parameters posterior for full model."}
+mcmc_intervals(as.array(fit), 
+               pars = c("alpha_DBH", "beta_TWI", "beta_Competition", "beta_Gaps"))
 ```
 
 ```{r Tall, fig.cap="Markov chains trace plot after warmup for full model"}
@@ -644,17 +802,21 @@ mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
 
 ```{r Yall, fig.cap="Predictions for full model"}
 cbind(
-  Competition %>% 
-    group_by(idTreei) %>% 
-    summarise(NCI = sum(DBH^beta_NCI*exp(-alpha_NCI*dij))) %>% 
-    left_join(data, by = c("idTreei" = "idTree")) %>% 
-    dplyr::select(Bark, SLA, DBH, TWI, NCI) %>%
+  data %>% 
+    left_join(Competition %>% 
+                group_by(idTreei) %>% 
+                summarise(NCI = sum(DBH^beta_NCI*exp(-alpha_NCI*dij))),
+              by = c("idTree" = "idTreei")) %>% 
+    left_join(Gaps %>% 
+                group_by(idTree) %>% 
+                summarise(Idist = sum(Area^beta_Idist*exp(-alpha_Idist*Distance)))) %>% 
+    dplyr::select(Bark, SLA, DBH, TWI, NCI, Idist) %>%
     mutate(DBH0 = DBH) %>% 
     reshape2::melt(id.vars = c("Bark", "SLA", "DBH0")),
   pred = apply(as.matrix(fit, pars = "SLApred"), 2, mean),
   t(apply(as.matrix(fit, pars = "SLApred"), 2, quantile, probs = c(0.05, 0.95)))
 ) %>% 
-   ggplot(aes(value, group = NA)) +
+  ggplot(aes(value, group = NA)) +
   geom_point(aes(y = SLA, size = DBH0, aes = DBH0, col = Bark)) +
   geom_line(aes(y = pred), col = "red") +
   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +

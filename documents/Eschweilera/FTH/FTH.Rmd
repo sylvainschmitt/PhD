@@ -1,0 +1,67 @@
+---
+title: "FTH project"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(tidyverse)
+library(knitr)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = T, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+```
+
+
+```{r data}
+individual <- googlesheets::gs_title("Measures Eschweilera FTH") %>%
+  googlesheets::gs_read("Individual") %>% 
+  filter(!is.na(IdGenetic))
+traits <- googlesheets::gs_title("Measures Eschweilera FTH") %>%
+  googlesheets::gs_read("Measures")
+LA <- googlesheets::gs_title("Measures Eschweilera FTH") %>%
+  googlesheets::gs_read("Surface folliaire")
+data <- individual %>% 
+  left_join(traits) %>% 
+  mutate(Fresh_Weight = as.numeric(Fresh_Weight))
+```
+
+# Data preparation
+
+## Leaf attribution in LA
+
+```{r LAsummary}
+LA %>% 
+  select(commentaire) %>% 
+  group_by(commentaire) %>% 
+  summarise(n = n()) %>% 
+  kable()
+```
+
+```{r LA}
+LA <- LA %>% 
+  separate(Label, c("Plot", "SubPlot", "FieldTreeNum"), 
+           "-", convert = T) %>% 
+  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
+  mutate(FieldTreeNum0 = FieldTreeNum) %>% 
+  mutate(FieldTreeNum = as.numeric(gsub('([[:alpha:]])', "", FieldTreeNum0))) %>% 
+  mutate(Scan = gsub('[0-9]+', "", FieldTreeNum0)) %>% 
+  select(-FieldTreeNum0) %>% 
+  arrange(Plot, SubPlot, FieldTreeNum, Area_exclude) %>% 
+  group_by(Plot, SubPlot, FieldTreeNum) %>% 
+  mutate(Leaf_order = (1:6)[1:n()])
+data <- data %>% 
+  arrange(Plot, SubPlot, FieldTreeNum, Fresh_Weight) %>% 
+  group_by(Plot, SubPlot, FieldTreeNum) %>% 
+  mutate(Leaf_order = (1:6)[1:n()])
+data <- data %>% 
+  left_join(LA)
+```
+
+
