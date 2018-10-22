@@ -825,6 +825,132 @@ cbind(
   facet_wrap(~ variable, nrow = 2, scales = "free")
 ```
 
+# SLA - All except Gaps
+
+## Relation
+
+```{r SLAAllexceptGaps}
+data %>% 
+  left_join(Competition %>% 
+              group_by(idTreei) %>% 
+              summarise(NCI = sum(DBH*exp(-dij))),
+            by = c("idTree" = "idTreei")) %>% 
+  dplyr::select(Bark, SLA, DBH, TWI, NCI) %>%
+  mutate(DBH0 = DBH) %>% 
+  reshape2::melt(id.vars = c("Bark", "SLA", "DBH0")) %>% 
+  ggplot(aes(value, SLA, size = DBH0, aes = DBH0,
+             col = Bark, group = NA)) +
+  geom_point() +
+  facet_wrap(~ variable, scales = "free", nrow = 2) +
+  geom_smooth()
+```
+
+## Full model
+
+$$SLA \sim \mathcal{N} (\frac{dbh + \beta_{DBH}}{\alpha_{DBH} * dbh} +  \beta_{TWI}*TWI + \beta_{Competition}*\sum _{j<20m} DBH_j^{\beta_{NCI}} * e^{-\alpha_{NCI}*d_{i,j}}, \sigma) $$
+
+```{stan MallExceptGaps, output.var="MallExceptGaps", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    real SLA[N] ;
+    real DBH[N] ;
+    real TWI[N] ;
+    int J ; // # neighbours
+    real DBHj[J] ;
+    real dij[J] ;
+    int individualJ[J] ;
+  }
+  parameters {
+    real<lower=0> alpha_DBH ;
+    real<lower=0> beta_DBH ;
+    real beta_TWI ;
+    real beta_Competition ;
+    real<lower=0, upper=1> alpha_NCI ;
+    real<lower=0, upper=3> beta_NCI ;
+    real<lower=0> sigma ;
+  }
+  transformed parameters {
+    real NCI[N] ;
+    for(n in 1:N){
+      NCI[n] = 0 ;
+    }
+    for(j in 1:J)
+      NCI[individualJ[j]] = NCI[individualJ[j]] + DBHj[j]^beta_NCI*exp(-alpha_NCI*dij[j]) ;
+  }
+  model {
+    for(n in 1:N)
+      SLA[n] ~ normal((DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] +  beta_Competition*NCI[n], sigma) ;
+  }
+  generated quantities {
+    real SLApred[N] ;
+    for(n in 1:N)
+      SLApred[n] = (DBH[n] + beta_DBH)/(alpha_DBH*DBH[n]) + beta_TWI*TWI[n] + NCI[n] ;
+  }
+```
+
+```{r fitMallExceptGaps}
+fit <- sampling(MallExceptGaps, chains = 2,
+                data = list(N = nrow(arrange(data, idTree)),
+                            SLA = arrange(data, idTree)$SLA,
+                            DBH = arrange(data, idTree)$DBH,
+                            TWI = arrange(data, idTree)$TWI,
+                            J = nrow(arrange(Competition, idTreei)),
+                            DBHj = arrange(Competition, idTreei)$DBH,
+                            dij = arrange(Competition, idTreei)$dij,
+                            individualJ = as.numeric(as.factor(arrange(Competition, idTreei)$idTreei))))
+save(fit, file = "./functional_save/MSLAallExceptGaps.Rdata")
+load("./functional_save/MSLAallExceptGaps.Rdata")
+pars <- c("alpha_DBH", "beta_DBH", "beta_TWI", 
+          "beta_Competition", "alpha_NCI", "beta_NCI", "sigma")
+alpha_NCI <- broom::tidyMCMC(fit, pars = "alpha_NCI")$estimate
+beta_NCI <- broom::tidyMCMC(fit, pars = "beta_NCI")$estimate
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model dbh only")
+```
+
+```{r Call, fig.cap="Model parameters posterior for full model."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r CbetaAll, fig.cap="Model parameters posterior for full model."}
+mcmc_intervals(as.array(fit), 
+               pars = c("alpha_DBH", "beta_TWI", "beta_Competition", "beta_Gaps"))
+```
+
+```{r Tall, fig.cap="Markov chains trace plot after warmup for full model"}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
+```
+
+```{r 2all, fig.cap="Markov chains pairs plot after warmup for full model"}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r Yall, fig.cap="Predictions for full model"}
+cbind(
+  data %>% 
+    left_join(Competition %>% 
+                group_by(idTreei) %>% 
+                summarise(NCI = sum(DBH^beta_NCI*exp(-alpha_NCI*dij))),
+              by = c("idTree" = "idTreei")) %>% 
+    left_join(Gaps %>% 
+                group_by(idTree) %>% 
+                summarise(Idist = sum(Area^beta_Idist*exp(-alpha_Idist*Distance)))) %>% 
+    dplyr::select(Bark, SLA, DBH, TWI, NCI, Idist) %>%
+    mutate(DBH0 = DBH) %>% 
+    reshape2::melt(id.vars = c("Bark", "SLA", "DBH0")),
+  pred = apply(as.matrix(fit, pars = "SLApred"), 2, mean),
+  t(apply(as.matrix(fit, pars = "SLApred"), 2, quantile, probs = c(0.05, 0.95)))
+) %>% 
+  ggplot(aes(value, group = NA)) +
+  geom_point(aes(y = SLA, size = DBH0, aes = DBH0, col = Bark)) +
+  geom_line(aes(y = pred), col = "red") +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  facet_wrap(~ variable, nrow = 2, scales = "free")
+```
+
 # Discussion
 
 # References

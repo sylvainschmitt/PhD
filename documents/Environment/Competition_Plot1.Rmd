@@ -105,7 +105,11 @@ symphonia <- symphonia %>%
   mutate(agr = ddbh/dt) %>% 
   ungroup() %>% 
   mutate(BA10 = BA10*10^-4, BA20 = BA20*10^-4) %>% # cm2 to m2
-  mutate(BA10 = BA10/(pi*10^2/10^4), BA20 = BA20/(pi*20^2/10^4)) # divided by surface in ha
+  mutate(BA10 = BA10/(pi*10^2/10^4), BA20 = BA20/(pi*20^2/10^4)) %>% # divided by surface in ha
+  arrange(idTree, CensusYear) %>% 
+  mutate(DeltaBA10 = BA10 - lag(BA10)) %>% 
+  mutate(DeltaBA20 = BA20 - lag(BA20)) %>% 
+  ungroup()
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 symphoniaXY <- symphonia
 coordinates(symphoniaXY) <- ~Xutm + Yutm
@@ -142,6 +146,19 @@ symphonia %>%
   ggpubr::stat_compare_means(method = "anova")
 ```
 
+```{r GeneralStatisticsDeltaBA, fig.cap="Local basal area variation (DeltaBA) distribution by morphotype for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
+symphonia %>% 
+  dplyr::select(DeltaBA10, DeltaBA20, Species) %>% 
+  reshape2::melt(id.var = "Species") %>% 
+  ggplot(aes(Species, value, fill = Species)) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  ylab("Local basal area variation (DeltaBA in m2/ha)") +
+  scale_fill_discrete("Symphonia") +
+  ggpubr::stat_compare_means(method = "anova") +
+  ylim(-5,5)
+```
+
 ## Habitat
 
 **BA is not linked to the habitat (important for interpretations) !**
@@ -158,6 +175,21 @@ symphonia %>%
   xlab("Census year") +
   ylab("Local basal area (BA in m2/ha)") +
   scale_size(range = c(0.2, 3))
+```
+
+```{r HabitatDeltaBA, fig.cap="Evolution of local basal area (BA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
+symphonia %>% 
+  dplyr::select(Species, idTree, DeltaBA10, DeltaBA20, CensusYear, wtd, dbh) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "CensusYear", "wtd", "dbh"),
+                 variable.name = "BAdist", value.name = "BA") %>% 
+  ggplot(aes(CensusYear, BA, col = Species, alpha = dbh, size = dbh)) +
+  geom_point(aes(size = dbh)) + 
+  geom_line(aes(group = idTree)) +
+  facet_grid(BAdist ~ wtd, scale = "free") +
+  xlab("Census year") +
+  ylab("Local basal area variation (BA in m2/ha)") +
+  scale_size(range = c(0.2, 3)) +
+  ylim(-5,5)
 ```
 
 ## Census year
@@ -178,6 +210,21 @@ symphonia %>%
   ylab("Local basal area (BA in m2/ha)")
 ```
 
+```{r CensusYearDeltaBA, fig.cap="Evolution of local basal area variation (DeltaBA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
+symphonia %>% 
+  select(Species, idTree, DeltaBA10, DeltaBA20, CensusYear) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "CensusYear"),
+                 variable.name = "BAdist", value.name = "BA") %>% 
+  ggplot(aes(CensusYear, BA, col = Species)) +
+  geom_point() + 
+  geom_line(aes(group = idTree)) +
+  facet_wrap(~ BAdist, scale = "free") +
+  scale_color_discrete("Symphonia") +
+  xlab("Census year") +
+  ylab("Local basal area variation (DeltaBA in m2/ha)") +
+  ylim(-5,5)
+```
+
 ## Diameter at breast height
 
 Diameter at breast height (dbh) variation seems to be dependent on the local basal area values, more especially higher dbh values seems allowed only for intermediate local basal area values especially for *S. globulifera* morphotype (figure \@ref(fig:dbh)). In addition *S. globulifera* morphotype seems to grow in a smaller range of local basal area which decrease with increasing dbh value.
@@ -196,6 +243,21 @@ symphonia %>%
   facet_wrap(~ BAdist, scale = "free", ncol = 2)
 ```
 
+```{r dbhDeltaBA, fig.cap="Observed diameter at breast height (dbh) depending on local basal area variation (deltaBA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
+symphonia %>% 
+  select(Species, idTree, DeltaBA10, DeltaBA20, dbh) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "dbh"),
+                 variable.name = "DeltaBAdist", value.name = "DeltaBA") %>% 
+  ggplot(aes(dbh, DeltaBA, col = Species, alpha = dbh, size = dbh)) +
+  geom_point(aes(size = dbh)) + 
+  geom_line(aes(group = idTree)) +
+  xlab("Diameter at breast height (dbh in cm)") +
+  ylab("Local basal area variation (DeltaBA in m2/ha)") +
+  scale_size(range = c(0.2, 3)) +
+  facet_wrap(~ DeltaBAdist, scale = "free", ncol = 2) +
+  ylim(-5,5)
+```
+
 ## Annual growth rate
 
 We found similar results of observed annual growth rate evolution along increasing local basal area to the evolution of diameter at breast height (figure \@ref(fig:agr)). The pattern is only less visible.
@@ -211,6 +273,20 @@ symphonia %>%
   xlab("Local basal area (BA in m2/ha)") +
   scale_size(range = c(0.2, 3)) +
   facet_wrap(~ BAdist, scale = "free", nrow = 2)
+```
+
+```{r agrDeltaBA, fig.cap="Observed annual growth rate (AGR) depending on local basal area variation (DeltaBA) through census years. Figure presented for BA computed in a radius of 10m (BA10, right subgraph) and in a radius of 20m (BA20, left subgraph)."}
+symphonia %>% 
+  select(Species, idTree, DeltaBA10, DeltaBA20, agr, dbh) %>% 
+  reshape2::melt(id.vars = c("Species", "idTree", "agr", "dbh"),
+                 variable.name = "BAdist", value.name = "BA") %>% 
+  ggplot(aes(BA, agr, col = Species, alpha = dbh, size = dbh)) +
+  geom_point(aes(size = dbh)) +
+  ylab("Annual growth rate (AGR in cm/year)") +
+  xlab("Local basal area variation (DeltaBA in m2/ha)") +
+  scale_size(range = c(0.2, 3)) +
+  facet_wrap(~ BAdist, scale = "free", nrow = 2) +
+  xlim(-5,5)
 ```
 
 # Discussion

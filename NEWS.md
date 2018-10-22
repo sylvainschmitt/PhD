@@ -1,3 +1,8 @@
+# PhD 0.1.9050
+* Species complexes distribution
+* FTH project (to be deleted ?)
+* Competition with DeltaBA
+
 # PhD 0.1.9045
 * Symphonia functional SLA & LDMC full model
 * FTH example
