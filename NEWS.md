@@ -1,3 +1,7 @@
+# PhD 0.1.9051
+* Bayes lecture for Msc EFT
+* Species complexes distribution
+
 # PhD 0.1.9050
 * Species complexes distribution
 * FTH project (to be deleted ?)

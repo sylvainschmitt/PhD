@@ -79,37 +79,34 @@ data <- trees %>%
 
 # Introduction
 
-The aim of this document is to study *Symphonia globulifera* distribution for both morphotype, *S. globumlifera* and *S. sp1*, with a bayseian approach including both biotic and abiotic environment and maybe the DBH.
+The aim of this document is to study the distribution at micro-environmental scale of two species complexes : *Symphonia globulifera* morphotypes and *Eschweilera Parvifolia clade* species. *Symphonia globulifera* includes two morphotypes, *S. globumlifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species. We wish to use a bayseian approach including both biotic and abiotic environment and maybe the ontogoeny thourg diameter at breast hieght (DBH).
 
-```{r Allie, fig.cap = "Environmental variables selected in Allie et al 2015, PlosOne including intraspecific variability."}
+One of the first thing aiming this study as such fine micro-scale started from @Allie2015 figure (see figure \@ref(fig:Allie)). Effectivelly for the two species complexes studied she has shown a differentation of habitat (between *S. globulifera* and *S. sp1* and between, *E. coriacea* and *E. sagotiana*). But the ecological niche defined only included the centroid of the niche and we were wondering about the real niche taking into account intraspecific variability of habitat between sistser species within species complexes.
+
+```{r Allie, fig.cap = "Environmental variables selected in @Allie2015 including intraspecific variability."}
 data %>% 
   filter(Genus %in% c("Symphonia", "Eschweilera")) %>% 
   ggplot(aes(RelativeElevation, Slope, 
              col = Species, size = DBH)) +
   geom_point(alpha = 0.2) +
-  facet_wrap(~Genus)
+  facet_wrap(~Genus, nrow = 2)
+```
+```{r Allie2, fig.cap = "Environmental variables selected in @Allie2015 including intraspecific variability."}
+data %>% 
+  filter(Genus %in% c("Symphonia", "Eschweilera")) %>%
+  filter(Species %in% c("coriacea", "sagotiana",
+                        "globulifera", "sp.1")) %>%
+  ggplot(aes(TWI, Slope, 
+             col = Species, size = DBH)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(Genus~Species, nrow = 2)
 ```
 
 # Graphical exploration
 
 ## Abiotic variable
 
-
-> We selected less correlated variable: DEM, TWI, and slope.
-
-```{r densityAbiot,fig.cap="Abiotic variable density plot"}
-data %>% 
-  filter(Genus %in% c("Symphonia", "Eschweilera")) %>% 
-  dplyr::select(Genus, Species, DEM, RelativeElevation, 
-                Slope, Curvature, TRI, TWI) %>% 
-  reshape2::melt(id.var = c("Genus", "Species")) %>% 
-  group_by(variable) %>% 
-  mutate(value = scale(value)) %>% 
-  ungroup() %>% 
-  ggplot(aes(value, fill = Species, col = Species)) + 
-  geom_density(alpha = 0.3) +
-  facet_grid(variable ~ Genus, scales = "free")
-```
+Base on abiotic variable PCA (see figure \@ref(fig:pcaABiot)), We selected less correlated variable: DEM, TWI, and slope.
 
 ```{r pcaABiot, fig.cap="Abiotic variable PCA"}
 autoplot(princomp(~ DEM + RelativeElevation + Slope + Curvature + TRI + TWI, 
@@ -128,19 +125,39 @@ autoplot(princomp(~ DEM + RelativeElevation + Slope + Curvature + TRI + TWI,
   facet_wrap(~ Genus)
 ```
 
+```{r densityAbiot,fig.cap="Abiotic variable density plot for selected variables."}
+data %>% 
+  filter(Genus %in% c("Symphonia", "Eschweilera")) %>% 
+  # dplyr::select(Genus, Species, DEM, RelativeElevation, 
+  #               Slope, Curvature, TRI, TWI) %>%
+  dplyr::select(Genus, Species, DEM, TWI, Slope) %>% 
+  reshape2::melt(id.var = c("Genus", "Species")) %>% 
+  group_by(variable) %>% 
+  mutate(value = scale(value)) %>% 
+  ungroup() %>% 
+  ggplot(aes(value, fill = Species, col = Species)) + 
+  geom_density(alpha = 0.3) +
+  facet_grid(variable ~ Genus, scales = "free")
+```
 
 ## Biotic variable
 
-# Bayesian analysis
+# Niche analysis
 
 ```{r dataReduction}
 # data <- filter(data, Plot == 16) # for tests
 # data <- filter(data, Genus == "Symphonia")
 ```
 
-## Abiotic variable
+To build the niche model, we have several conceptual and technical challenges to solve. But the most important and first questions is how to consider absence data. Effectivelly, what we have for Paracou is the information but where we can fin species individuals, the presence information. But we have to decide how we consider absence from one habitat or putative absence called pseudo-absence. First of all, we can use recommandations of *Barbet Massin ... (to include in Mendely*): *"we recommend the use of a large number (e.g. 10 000) of pseudo‐absences with equal weighting for presences and absences when using regression techniques"*. So last but not least is in which environmental space should we pick pseudo-absences. We have three possibilities :
 
-For each morphotype we will consider tree belonging to all other species as an absence.
+* __PA0 : We will consider random points of the environmental space as an absence.__
+* __PA1 : For each species we will consider tree belonging to all other species as an absence.__
+* __PA2 : For each species we will consider tree belonging to all species from the sepcies complex as an absence.__
+
+In fact __PA0__ and __PA1__ are almost the same if we consider that trees from all species fully explore the available environmental space. We will thus test the two options in following models.
+
+## Abiotic variable: linear form
 
 $$Presence_{morphotype} \sim \mathcal{B} (\theta_{morphotype}) $$
 $$\theta_{morphotype} = logit[ \beta_{{DEM}_{morphotype}}*DEM +  \beta_{{TWI}_{morphotype}}*TWI +  \beta_{{Slope}_{morphotype}}*Slope]$$
@@ -153,80 +170,514 @@ $$ logit(x) = log(\frac{x}{1-x})$$
     real DEM[N] ;
     real TWI[N] ;
     real Slope[N] ;
+    real<lower=0> weights[N] ;
   }
   parameters {
+    real beta_Intercept ;
     real beta_DEM ;
     real beta_TWI ;
     real beta_Slope ;
   }
   model {
     for(n in 1:N)
-      Presence[n] ~ bernoulli_logit(beta_DEM*DEM[n] + beta_TWI*TWI[n] + beta_Slope*Slope[n]) ;
+      target += weights[n]*bernoulli_logit_lpmf (Presence[n] | beta_Intercept + beta_DEM*DEM[n] + beta_TWI*TWI[n] + beta_Slope*Slope[n]) ;
   }
   generated quantities {
     real Theta_pred[N] ;
     for(n in 1:N)
-      Theta_pred[n] = beta_DEM*DEM[n] + beta_TWI*TWI[n] + beta_Slope*Slope[n] ;
+      Theta_pred[n] = beta_Intercept + beta_DEM*DEM[n] + beta_TWI*TWI[n] + beta_Slope*Slope[n] ;
   }
 ```
 
-```{r fitMabiotic}
-# fitGlobu <- sampling(Mabiotic, chains = 2,
-#                      data = list(N = nrow(data),
-#                                  Presence = as.numeric(data$Species == "globulifera"),
-#                                  DEM = data$DEM,
-#                                  TWI = data$TWI,
-#                                  Slope = data$Slope))
-# fitSp1 <- sampling(Mabiotic, chains = 2,
-#                      data = list(N = nrow(data),
-#                                  Presence = as.numeric(data$Species == "sp.1"),
-#                                  DEM = data$DEM,
-#                                  TWI = data$TWI,
-#                                  Slope = data$Slope))
-# save(fitGlobu, fitSp1, file = "./distribution_save/Mabiotic.Rdata")
-load("./distribution_save/Mabiotic.Rdata")
-pars <- c("beta_DEM", "beta_TWI", "beta_Slope")
-broom::tidyMCMC(fitGlobu, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
-  mutate(Species = "S. globulifera") %>% 
-  bind_rows(broom::tidyMCMC(fitSp1, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
-              mutate(Species = "S. sp1")) %>% 
-  kable(caption = "Summary table of the model abiotic only")
+### M1 : Pseudo-absence across all species
+
+#### Symphonia complex
+
+```{r fitMabiotic1Sympho}
+datam <- filter(data, Plot == 1) # Reducing dataset for exploratory analysis
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic1Sympho.Rdata")
+load("./distribution_save/Mabiotic1Sympho.Rdata")
+pars <- c("beta_Intercept", "beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
 ```
 
-```{r Cabiotic, fig.cap="Model parameters posterior for model abiotic only."}
-cowplot::plot_grid(mcmc_intervals(as.array(fitGlobu), pars = pars), 
-                   mcmc_intervals(as.array(fitSp1), pars = pars),
-                   labels = c("S. globulifera", "S. sp1"), nrow = 2)
+```{r Cabiotic1Sympho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
 ```
 
-```{r Tabiotic, fig.cap="Markov chains trace plot after warmup for model abiotic only"}
-cowplot::plot_grid(mcmc_trace(as.array(fitGlobu), pars = c(pars, "lp__"),
-                              facet_args = list(labeller = label_parsed)), 
-                   mcmc_trace(as.array(fitSp1), pars = c(pars, "lp__"),
-                              facet_args = list(labeller = label_parsed)),
-                   labels = c("S. globulifera", "S. sp1"), nrow = 2)
+```{r Tabiotic1Sympho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
 ```
 
-```{r 2dbh, fig.cap="Markov chains pairs plot after warmup for model dbh only"}
-mcmc_pairs(as.array(fitGlobu), pars = c(pars, "lp__"))
-mcmc_pairs(as.array(fitSp1), pars = c(pars, "lp__"))
+```{r 2abiotic1Sympho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
 ```
 
-```{r Ydbh, fig.cap="Predictions for model dbh only"}
-cowplot::plot_grid(
-  cbind(data, 
-        pred = psych::logistic(apply(as.matrix(fitGlobu, pars = "Theta_pred"), 2, mean))) %>% 
+```{r Yabiotic1Sympho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "Theta_pred"), 2, mean))) %>% 
     ggplot(aes(Slope, TWI, col = pred)) + 
-    geom_point(aes(alpha = (Species == "globulifera"), col = pred)) +
-    scale_alpha_manual(values = c(0,1)), 
-  cbind(data, 
-        pred = psych::logistic(apply(as.matrix(fitSp1, pars = "Theta_pred"), 2, mean))) %>% 
-    ggplot(aes(Slope, TWI)) + 
-    geom_point(aes(alpha = (Species == "sp.1"), col = pred)) +
-    scale_alpha_manual(values = c(0,1)),
-  labels = c("S. globulifera", "S. sp1"), nrow = 2)
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+#### Eschweilera complex
+
+```{r fitMabiotic1Maho}
+datam <- filter(data, Plot == 1) # Reducing dataset for exploratory analysis
+# species <- c("sagotiana", "coriacea", 
+#                  "decolorans", "wachenheimii") # using few species for explorations
+species <- c("sagotiana", "coriacea", "wachenheimii") # no decolorans in P1
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic1Maho.Rdata")
+load("./distribution_save/Mabiotic1Maho.Rdata")
+pars <- c("beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic1Maho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic1Maho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic1Maho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic1Maho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "Theta_pred"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+### M2 : Pseudo-absence in the species complex
+
+#### Symphonia complex
+
+```{r fitMabiotic2Sympho}
+datam <- filter(data, Genus == "Symphonia")
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic2Sympho.Rdata")
+load("./distribution_save/Mabiotic2Sympho.Rdata")
+pars <- c("beta_Intercept", "beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic2Sympho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic2Sympho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic2Sympho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic2Sympho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "Theta_pred"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+#### Eschweilera complex
+
+```{r fitMabiotic2Maho}
+datam <- filter(data, Genus == "Eschweilera")
+species <- c("sagotiana", "coriacea", 
+                 "decolorans", "wachenheimii") # using few species for explorations
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic2Maho.Rdata")
+load("./distribution_save/Mabiotic2Maho.Rdata")
+pars <- c("beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic2Maho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic2Maho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic2Maho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic2Maho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "Theta_pred"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+## Abiotic variable: polynomial form
+
+$$Presence_{morphotype} \sim \mathcal{B} (\theta_{morphotype}) $$
+$$\theta_{morphotype} = logit[-(\beta_{Intercept_{morphotype}}*\beta_{{DEM}_{morphotype}}*DEM +  \beta_{{TWI}_{morphotype}}*TWI +  \beta_{{Slope}_{morphotype}}*Slope)^2]$$
+$$ logit(x) = log(\frac{x}{1-x})$$ 
+
+```{stan Mabiotic2, output.var="Mabiotic2", echo=T, eval=F}
+  data {
+    int N ; // # obs
+    int<lower=0, upper=1> Presence[N] ;
+    vector[N] DEM ;
+    vector[N] TWI ;
+    vector[N] Slope ;
+    vector<lower=0>[N] weights ;
+  }
+  parameters {
+    real beta_Intercept ;
+    real beta_DEM ;
+    real beta_TWI ;
+    real beta_Slope ;
+  }
+  transformed parameters {
+    vector[N] theta ;
+    theta = beta_Intercept + beta_DEM*DEM + beta_TWI*TWI + beta_Slope*Slope ;
+    for(n in 1:N)
+      theta[n] = -theta[n]*theta[n] ;
+  }
+  model {
+    target += weights*bernoulli_logit_lpmf (Presence | theta) ;
+  }
+```
+
+### M1 : Pseudo-absence across all species
+
+#### Symphonia complex
+
+```{r fitMabiotic3Sympho}
+datam <- filter(data, Plot == 1) # Reducing dataset for exploratory analysis
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic2, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic3Sympho.Rdata")
+load("./distribution_save/Mabiotic3Sympho.Rdata")
+pars <- c("beta_Intercept", "beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic3Sympho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic3Sympho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic3Sympho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic3Sympho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "theta"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+#### Eschweilera complex
+
+```{r fitMabiotic3Maho}
+datam <- filter(data, Plot == 1) # Reducing dataset for exploratory analysis
+# species <- c("sagotiana", "coriacea", 
+#                  "decolorans", "wachenheimii") # using few species for explorations
+species <- c("sagotiana", "coriacea", "wachenheimii") # no decolorans in P1
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic2, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic3Maho.Rdata")
+load("./distribution_save/Mabiotic3Maho.Rdata")
+pars <- c("beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic3Maho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic3Maho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic3Maho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic3Maho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "theta"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+### M2 with polynomial form
+
+#### Symphonia complex
+
+```{r fitMabiotic4Sympho}
+datam <- filter(data, Genus == "Symphonia")
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic2, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic4Sympho.Rdata")
+load("./distribution_save/Mabiotic4Sympho.Rdata")
+pars <- c("beta_Intercept", "beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic4Sympho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic4Sympho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic4Sympho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic4Sympho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "theta"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+#### Eschweilera complex
+
+```{r fitMabiotic4Maho}
+datam <- filter(data, Genus == "Eschweilera")
+species <- c("sagotiana", "coriacea", 
+                 "decolorans", "wachenheimii") # using few species for explorations
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mabiotic2, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     DEM = datam$DEM,
+#                                     TWI = datam$TWI,
+#                                     Slope = datam$Slope,
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mabiotic4Maho.Rdata")
+load("./distribution_save/Mabiotic4Maho.Rdata")
+pars <- c("beta_DEM", "beta_TWI", "beta_Slope")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>% 
+  bind_rows() %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic4Maho, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic4Maho,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]), 
+             pars = c(pars, "lp__"), 
+             facet_args = list(labeller = label_parsed))),                  
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic4Maho, fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic4Maho, fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam, 
+        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
+                                               pars = "theta"), 2, mean))) %>% 
+    ggplot(aes(Slope, TWI, col = pred)) + 
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
 ```
 
 ## Biotic variable
 
 ## All
+
+# References
+
