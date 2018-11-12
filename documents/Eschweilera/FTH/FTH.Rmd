@@ -37,24 +37,88 @@ data <- individual %>%
 
 ```{r all}
 data <- googlesheets::gs_title("data_complete") %>%
-  googlesheets::gs_read("data_complete")
+  googlesheets::gs_read("data_complete") %>% 
+  select(-X1)
 ```
 
 ## Individuals
 
+The idea is to transform FTH data to the general formatting, i.e. :
+
+* Date (YYYY/MM/DD)
+* Time (HHHMM)
+* Plot
+* SubPlot
+* FieldTreeNum
+* Dawkins
+* Position
+* TrunkForm
+* BarkColor
+* BarkRuggedness
+* BarkAspect
+* Lenticels
+* BladeForm
+* LeafConsistency
+* LeafSurface
+* LeafBase
+* LeafMargin
+* HyperAcuminated
+* BentPrincpalN
+
+
 ```{r ind}
-data %>% 
-  dplyr::select(Date, Time, Plot, SubPlot, FieldTreeNum,
-         Dawkins, Position, `Trunk form`)
-summary(as.factor(data$Position))
-names(data)
+indFTH <- read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+                     "data_FTH.csv"), delim = ",") %>% 
+  rename(TrunkForm = `Trunk form`, BarkColor = `Bark color`, BarkRuggedness = `Bark ruggedness`, 
+         BarkAspect = `Bark aspect`, BladeForm = `Blade form`, 
+         LeafConsistency = `Leaf consistency`, LeafSurface = `Leaf surface`, 
+         LeafBase = `Leaf base`, LeafMargin = `Leaf margin`,
+         HyperAcuminated = `Longue pointe`, BentPrincipalN = `Pli sur nervure principale`) %>% 
+  separate(Date, c("Month", "Day", "Year"), "/") %>% # Date
+  mutate(Date = paste0(Year, "/0", Month, "/", Day)) %>% 
+  select(-Year, -Month, -Day) %>% 
+  mutate(Time = gsub(":", "H", substr(as.character(Time), 1, 5))) %>% # Time
+  mutate(Dawkins = toupper(Dawkins)) %>% # Dawkins
+  mutate(Position = recode_factor(Position, bas = "LOW", haut = "TOP", milieu = "MID",
+                                  `milieu lumière` = "MID/LIGHT", `milieu/haut` = "MID",
+                                  `bas lumière` = "LOW/LIGHT", `haut lumière` = "TOPLIGHT",
+                                  `bas/lumière` = "LOW/LIGHT", `milieu/bas` = "MID")) %>% # Position
+  mutate(TrunkForm = recode_factor(TrunkForm, `B--` = "B-", `B (petits)` = "B-", `B+` = "B",
+                                  BS = "B/S", tordu = "N", C = "B")) %>% # TrunkForm
+  mutate(BarkColor = recode_factor(BarkColor, `B/BR` = "B/RB", BG = "B/G", D = "DB",
+                                   `DB+` = "DB", `DB/B` = "B/DB", GB = "B/G")) %>% # BarkColor
+  mutate(BarkAspect = recode_factor(BarkAspect, `?` = "N", `F+` = "F", `F/D` = "D/F",
+                                    `F/D-` = "D-/F", `F-HM` = "F-/HM", `F/HM+` = "F/HM",
+                                    `F+/HM` = "F/HM", `F/S/HM` = "F/HM/S", 
+                                    `HM/D (?)` = "D/HM", `HM/F` = "F/HM",
+                                    `S+/D` = "D/S+", `S/F/HM`	= "F/HM/S", `S-/HM`	= "HM/S-",
+                                    `S/HM`	= "HM/S", `R/HM` = "F/HM")) %>% # BarkAspect
+  mutate(Lenticels = recode_factor(Lenticels, N = "A", `P+` = "P", `P-` = "P")) %>% # Lenticels
+  mutate(BladeForm = recode_factor(BladeForm, `E+` = "E", `Oblan/E` = "E/Oblan")) %>% # BladeForm
+  mutate(LeafConsistency = recode_factor(LeafConsistency, `Char -` = "Char-", 
+                                         `Char+` = "Char")) %>% # LeafConsistency
+  mutate(LeafBase = recode_factor(LeafBase, `O/A` = "A/O", `O-R` = "O/R", `R/A` = "A/R",
+                                  RO = "O/R", `R/O` = "O/R")) %>% # LeafBase
+  mutate(LeafMargin = recode_factor(LeafMargin, `E/C-` = "C-/E")) %>% # LeafMargin
+  select(Date, Time, Plot, SubPlot, FieldTreeNum, Dawkins, Position,
+         TrunkForm, BarkColor, BarkRuggedness, BarkAspect, Lenticels,
+         BladeForm, LeafConsistency, LeafSurface, LeafBase, LeafMargin,
+         HyperAcuminated, BentPrincipalN, Comment) %>% 
+  unique()
+read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+                     "Indviduals.csv"), delim = ",", col_types = cols(Date = col_character())) %>% 
+  bind_rows(indFTH) %>% 
+  write_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+                     "Indviduals_all.csv"), delim = ",")
 ```
+
+```{r}
+
+```
+
+
 
 # Adding missing individuals
-
-```{r setup}
-path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/"
-```
 
 
 ```{r FTH}
@@ -69,13 +133,6 @@ read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/
               select(CodeParacou)) %>% 
   arrange(CodeParacou)
 ```
-
-We already collected 294 individuals. We still have to collect :
-
-* 28 ind in P11
-* 93 ind in P6
-
-Consequently we have 25 individuals to replace.
 
 # Data preparation
 

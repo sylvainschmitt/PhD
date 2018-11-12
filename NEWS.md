@@ -1,3 +1,8 @@
+# PhD 0.1.9052
+* Bayes lecture for Msc EFT
+* Species complexes distribution
+* data cleaning (FTH.Rmd)
+
 # PhD 0.1.9051
 * Bayes lecture for Msc EFT
 * Species complexes distribution

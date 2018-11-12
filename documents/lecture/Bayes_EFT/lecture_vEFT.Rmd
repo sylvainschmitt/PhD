@@ -117,7 +117,8 @@ $$log(p(y|\theta))=\sum_{n=1}^N{y_n}*log(\theta) + \sum_{n=1}^N(1-y_n)*log(1-\th
 $$p(y|\theta=0.1) = ?$$
 
 ```{r}
-# log_likelihood <- function(theta, y) ?
+log_likelihood <- function(theta, y){exp(sum(y*log(theta)+(1-y)*log(1-theta)))}
+  
 ```
 
 ## Priors - Form ?
@@ -221,40 +222,57 @@ walk <- function(theta_old, y, sigma_explore = 0.1)
 
 $$p(\theta|y) \propto p(\theta)*p(y|\theta)$$
 
-```{r, eval=F}
+```{r }
 walk <- function(theta_old, y, sigma_explore = 0.1){
-   theta_new <- ?
-   ratio <- ?
-   if(runif(1) < ratio) ?
+   theta_new <- rnorm(1, mean = theta_old, sd = sigma_explore)
+   if (theta_new < 0) {
+     theta_new <- 10^-6 
+   }
+   if (theta_new > 1) {
+     theta_new <- 1-10^-6 
+   }
+   ratio <- (likelihood(theta_new, y)*dbeta(theta_new, 1, 1))/(likelihood(theta_old, y)*dbeta(theta_old, 1, 1))
+   if(runif(1) < ratio) {
+     return(theta_new)
+   } else {
+     return(theta_old)
+   }
 }
+walk(0.1, y)
 ```
 
 ##  MCMC - Algorithm - Sampling ?
 
 ```{r, eval=F}
-# Init ?
+y <- c(rep(0, 50), rep(1, 60))
+
+theta_init <- 0.1
+n_iter <- 10000
+
+theta <- rep(NA, n_iter)
+theta[1] <- theta_init
 
 for (i in 2:n_iter)
-  ?
+  theta[i] <- walk(theta[i-1], y)
 ```
 
 ##  MCMC - Algorithm - Diagnostic
 
 ```{r}
-# data.frame(iter = 1:n_iter, theta = theta) %>% 
-#   ggplot(aes(iter, theta)) +  geom_line(col = "blue")
+data.frame(iter = 1:n_iter, theta = theta) %>%
+  ggplot(aes(iter, theta)) +  geom_line(col = "blue")
 ```
 
 ##  MCMC - Algorithm - Posterior
 
 ```{r}
-# data.frame(iter = 1:n_iter, theta = theta) %>% 
-#   ggplot(aes(theta)) +
-#   geom_density(col = "blue", fill = "blue", alpha = 0.3) +
-#   geom_vline(xintercept = sum(y)/length(y), col = "red")
+data.frame(iter = 1:n_iter, theta = theta) %>%
+  ggplot(aes(theta)) +
+  geom_density(col = "blue", fill = "blue", alpha = 0.3) +
+  geom_vline(xintercept = sum(y)/length(y), col = "red")
 ```
 
-# Science & Suicides
+o# Science & Suicides
 
 ## Data - Table
 
@@ -310,13 +328,10 @@ growth <- function(dbh, Gmax = 1.7, Dopt = 30, Ks = 1)
 ```
 
 ```{r, echo=F}
-data.frame(dbh = 0:100, growth = sapply(0:100, growth)) %>% 
+data.frame(dbh = 0:100, growth = sapply(0:100, function(dbh) growth(dbh))) %>% 
   ggplot(aes(dbh, growth)) + geom_line()
 ```
 
-## $G_{max}$ prior
-
-> $G_{max} \sim \mathcal N ( \mu_G , \sigma_G)$
 
 ## $G_{max}$ posterior ?
 
