@@ -328,7 +328,8 @@ growth <- function(dbh, Gmax = 1.7, Dopt = 30, Ks = 1)
 ```
 
 ```{r, echo=F}
-data.frame(dbh = 0:100, growth = sapply(0:100, function(dbh) growth(dbh))) %>% 
+data.frame(dbh = 0:100, growth = sapply(0:100, function(dbh) growth(dbh, Gmax = 1.5, 
+                                                                    Dopt = 50, Ks = 0.8))) %>% 
   ggplot(aes(dbh, growth)) + geom_line()
 ```
 

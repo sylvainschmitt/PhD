@@ -41,7 +41,7 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # globa
 ```
 
 ```{r trees}
-trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
   filter(Species != "Indet.") %>% 
@@ -182,46 +182,73 @@ To build the niche model, we have several conceptual and technical challenges to
 
 ## Model
 
-The general model form is base on a Bernoulli law of parameter $\theta_{taxon}$ representing the habitat suitability for the taxon (the complex or the species). $\theta_{taxon}$  is an hyperparameter depending on abitoic environment represented here by the digital elevation model $DEM$, the topographic wetness index $TWI$ and the slope $Slope$.
+<!-- The general model form is base on a Bernoulli law of parameter $\theta_{taxon}$ representing the habitat suitability for the taxon (the complex or the species). $\theta_{taxon}$  is an hyperparameter depending on abitoic environment represented here by the digital elevation model $DEM$, the topographic wetness index $TWI$ and the slope $Slope$. -->
 
-$$Presence_{taxon} \sim \mathcal{B} (\theta_{taxon})$$
-$$\theta_{taxon} = logit[ \beta_{{DEM}_{taxon}}*DEM +  \beta_{{TWI}_{taxon}}*TWI +  \beta_{{Slope}_{taxon}}*Slope]$$
+<!-- $$Presence_{taxon} \sim \mathcal{B} (\theta_{taxon})$$ -->
+<!-- $$\theta_{taxon} = logit[ \beta_{{DEM}_{taxon}}*DEM +  \beta_{{TWI}_{taxon}}*TWI +  \beta_{{Slope}_{taxon}}*Slope]$$ -->
 
-$$Presence_{taxon} \sim \mathcal{B} (\alpha_{taxon}, \beta_{taxon})$$
+<!-- $$Presence_{taxon} \sim \mathcal{B} (\alpha_{taxon}, \beta_{taxon})$$ -->
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = f(TWI)$ and $\phi = ct$ or $\phi = g(TWI)$
+
+So $0 < \mu < 1$ and $\phi > 0$
+
+Trying with $\mu = \alpha + \beta*TWI$ and $\phi =  c$, with $(a,b,c) \in \mathcal R^3$
+
+We have $0 < \alpha + \beta*TWI < 1$ and $\phi > 0$
+
+If $TWI \in [0,max_{TWI}]$, $0 < \alpha <1$ and $\frac{-\alpha}{max_{TWI}} < \beta < \frac{1-\alpha}{max_{TWI}}$
 
 ```{stan Mtest, output.var="Mtest", echo=T, eval=F}
   data {
-    int N ; // # obs
+    int<lower=1> N ; // # obs
     int<lower=0, upper=1> Presence[N] ;
-    real<lower=0> TWI[N] ;
-    real<lower=0> weights[N] ;
+    real<lower=0, upper=1> TWI[N] ;
+    real<lower=0, upper=1> weights[N] ;
   }
   parameters {
-    real alpha ;
-    real beta ;
+    real<lower=0, upper=1> alpha ;
+    real<lower=-alpha, upper=(1-alpha)> beta ; // for maxTWI = 1
     real<lower=0> phi ;
   }
   model {
+    alpha ~ beta(1,1) ;
+    beta ~ beta(1,1) ;
+    phi ~ gamma(0.000001,0.000001) ;
+    print(alpha, beta, phi)
     for(n in 1:N)
-      target += weights[n]*beta_lpdf(Presence[n] | inv_logit(alpha + beta*TWI[n])*phi, (1.0 - inv_logit(alpha + beta*TWI[n]))*phi) ;
+      target += weights[n]*beta_lpdf(Presence[n] | (alpha + beta*TWI[n])*phi, (1.0 - (alpha + beta*TWI[n]))*phi) ;
   }
   generated quantities {
     real mu[N] ;
     for(n in 1:N)
-      mu[n] = inv_logit(alpha + beta*TWI[n]) ;
+      mu[n] = alpha + beta*TWI[n] ;
   }
 ```
 
+```{r, eval=F}
+a = 0.517754 ; b = 0.0884929 ; c = 2.70395
+mu = a+b
+phi = c
+(A = mu*phi)
+(B = (1-mu)*phi)
+```
+
+
 ### Symphonia complex
 
-```{r fitMabiotic1Sympho}
+```{r fitMabiotic1Sympho, eval=F}
 datam <- filter(data, Genus == "Symphonia")
 species <- c("globulifera", "sp.1")
 fits <- lapply(as.list(species), function(sp)
                sampling(Mtest, chains = 2,
                         data = list(N = nrow(datam),
                                     Presence = as.numeric(datam$Species == sp),
-                                    TWI = datam$TWI,
+                                    TWI = datam$TWI/max(datam$TWI),
                                     weights = ifelse(datam$Species == sp,
                                                      1/(2*sum(datam$Species == sp)),
                                                      1/(2*sum(datam$Species != sp))))))
@@ -231,35 +258,35 @@ load("./distribution_save/Mtest.Rdata")
 pars <- c("alpha_0", "beta_0", "alpha_TWI", "beta_TWI")
 lapply(as.list(species), function(sp)
   broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
-    mutate(Species = sp)) %>% 
-  bind_rows() %>% 
+    mutate(Species = sp)) %>%
+  bind_rows() %>%
   kable(caption = "Summary table of the model")
 ```
 
-```{r Cabiotic1Sympho, fig.cap="Model parameters posterior."}
+```{r Cabiotic1Sympho, fig.cap="Model parameters posterior.", eval=F}
 cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
-  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),   
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),
   labels = species, nrow = 2)
 ```
 
-```{r Tabiotic1Sympho,fig.cap="Markov chains trace plot after warmup."}
+```{r Tabiotic1Sympho,fig.cap="Markov chains trace plot after warmup.", eval=F}
 cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
-  mcmc_trace(as.array(fits[[sp]]), 
-             pars = c(pars, "lp__"), 
-             facet_args = list(labeller = label_parsed))),                  
+  mcmc_trace(as.array(fits[[sp]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
   labels = species, nrow = 2)
 ```
 
-```{r 2abiotic1Sympho, fig.cap="Markov chains pairs plot after warmup."}
+```{r 2abiotic1Sympho, fig.cap="Markov chains pairs plot after warmup.", eval=F}
 mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
 ```
 
-```{r Yabiotic1Sympho, fig.cap="Predictions."}
+```{r Yabiotic1Sympho, fig.cap="Predictions.", eval=F}
 cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
-  cbind(datam, 
-        pred = psych::logistic(apply(as.matrix(fits[[sp]], 
-                                               pars = "Theta_pred"), 2, mean))) %>% 
-    ggplot(aes(Slope, TWI, col = pred)) + 
+  cbind(datam,
+        pred = psych::logistic(apply(as.matrix(fits[[sp]],
+                                               pars = "Theta_pred"), 2, mean))) %>%
+    ggplot(aes(Slope, TWI, col = pred)) +
     geom_point(aes(alpha = (Species == sp), col = pred)) +
     scale_alpha_manual(values = c(0,1))),
   labels = species, nrow = 2)
