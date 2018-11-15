@@ -1,3 +1,6 @@
+# PhD 0.1.9054
+* distribution > beta regression working
+
 # PhD 0.1.9053
 * Repository cleaning
     * online docs removal

@@ -189,6 +189,8 @@ To build the niche model, we have several conceptual and technical challenges to
 
 <!-- $$Presence_{taxon} \sim \mathcal{B} (\alpha_{taxon}, \beta_{taxon})$$ -->
 
+### Model 1
+
 $Habitat~suitability \sim \mathcal B(A, B)$
 
 $A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
@@ -206,48 +208,41 @@ If $TWI \in [0,max_{TWI}]$, $0 < \alpha <1$ and $\frac{-\alpha}{max_{TWI}} < \be
 ```{stan Mtest, output.var="Mtest", echo=T, eval=F}
   data {
     int<lower=1> N ; // # obs
-    int<lower=0, upper=1> Presence[N] ;
+    real<lower=0, upper=1> Presence[N] ;
     real<lower=0, upper=1> TWI[N] ;
     real<lower=0, upper=1> weights[N] ;
   }
   parameters {
-    real<lower=0, upper=1> alpha ;
+    real<lower=1e-22, upper=1-1e-22> alpha ;
     real<lower=-alpha, upper=(1-alpha)> beta ; // for maxTWI = 1
-    real<lower=0> phi ;
+    real<lower=1e-22> phi ;
+  }
+  transformed parameters {
+    real mu[N] ;
+    real A[N] ;
+    real B[N] ;
+    for(n in 1:N) {
+      mu[n] = alpha + beta*TWI[n] ;
+      A[n] = mu[n]*phi ;
+      B[n] = (1.0 - mu[n])*phi ;
+    }
   }
   model {
     alpha ~ beta(1,1) ;
     beta ~ beta(1,1) ;
     phi ~ gamma(0.000001,0.000001) ;
-    print(alpha, beta, phi)
     for(n in 1:N)
-      target += weights[n]*beta_lpdf(Presence[n] | (alpha + beta*TWI[n])*phi, (1.0 - (alpha + beta*TWI[n]))*phi) ;
-  }
-  generated quantities {
-    real mu[N] ;
-    for(n in 1:N)
-      mu[n] = alpha + beta*TWI[n] ;
+      target += weights[n]*beta_lpdf(Presence[n] | A[n], B[n]) ;
   }
 ```
 
-```{r, eval=F}
-a = 0.517754 ; b = 0.0884929 ; c = 2.70395
-mu = a+b
-phi = c
-(A = mu*phi)
-(B = (1-mu)*phi)
-```
-
-
-### Symphonia complex
-
-```{r fitMabiotic1Sympho, eval=F}
+```{r fitMabiotic1Sympho}
 datam <- filter(data, Genus == "Symphonia")
 species <- c("globulifera", "sp.1")
 # fits <- lapply(as.list(species), function(sp)
 #                sampling(Mtest, chains = 2,
 #                         data = list(N = nrow(datam),
-#                                     Presence = as.numeric(datam$Species == sp),
+#                                     Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
 #                                     TWI = datam$TWI/max(datam$TWI),
 #                                     weights = ifelse(datam$Species == sp,
 #                                                      1/(2*sum(datam$Species == sp)),
@@ -255,7 +250,7 @@ species <- c("globulifera", "sp.1")
 # names(fits) <- species
 # save(fits, file = "./distribution_save/Mtest.Rdata")
 load("./distribution_save/Mtest.Rdata")
-pars <- c("alpha_0", "beta_0", "alpha_TWI", "beta_TWI")
+pars <- c("alpha", "beta", "phi")
 lapply(as.list(species), function(sp)
   broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Species = sp)) %>%
@@ -263,13 +258,13 @@ lapply(as.list(species), function(sp)
   kable(caption = "Summary table of the model")
 ```
 
-```{r Cabiotic1Sympho, fig.cap="Model parameters posterior.", eval=F}
+```{r Cabiotic1Sympho, fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
   mcmc_intervals(as.array(fits[[sp]]), pars = pars)),
   labels = species, nrow = 2)
 ```
 
-```{r Tabiotic1Sympho,fig.cap="Markov chains trace plot after warmup.", eval=F}
+```{r Tabiotic1Sympho,fig.cap="Markov chains trace plot after warmup."}
 cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
   mcmc_trace(as.array(fits[[sp]]),
              pars = c(pars, "lp__"),
@@ -277,19 +272,266 @@ cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
   labels = species, nrow = 2)
 ```
 
-```{r 2abiotic1Sympho, fig.cap="Markov chains pairs plot after warmup.", eval=F}
+```{r 2abiotic1Sympho, fig.cap="Markov chains pairs plot after warmup."}
 mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
 ```
 
-```{r Yabiotic1Sympho, fig.cap="Predictions.", eval=F}
+```{r Yabiotic1Sympho, fig.cap="Predictions."}
 cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
   cbind(datam,
-        pred = psych::logistic(apply(as.matrix(fits[[sp]],
-                                               pars = "Theta_pred"), 2, mean))) %>%
-    ggplot(aes(Slope, TWI, col = pred)) +
-    geom_point(aes(alpha = (Species == sp), col = pred)) +
-    scale_alpha_manual(values = c(0,1))),
+        Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
+        mu = apply(as.matrix(fits[[sp]], pars = "mu"), 2, mean)) %>% 
+    ggplot(aes(x = TWI)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu))),
   labels = species, nrow = 2)
+```
+
+### Model 2
+
+$$Habitat~suitability \sim \mathcal B(\alpha_0 + \alpha*TWI, \beta_0 + \beta*TWI)$$
+
+```{stan , output.var="Mtest", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    real<lower=0, upper=1> Presence[N] ;
+    real<lower=0, upper=1> TWI[N] ;
+    real<lower=0, upper=1> weights[N] ;
+  }
+  parameters {
+    real<lower=0> alpha_0 ;
+    real<lower=-alpha_0> alpha ; // for maxTWI = 1
+    real<lower=0> beta_0 ;
+    real<lower=-beta_0> beta ; // for maxTWI = 1
+  }
+  model {
+    for(n in 1:N)
+      target += weights[n]*beta_lpdf(Presence[n] | alpha_0 + alpha*TWI[n], beta_0 + beta*TWI[n]) ;
+  }
+```
+
+```{r }
+datam <- filter(data, Genus == "Symphonia")
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mtest, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
+#                                     TWI = datam$TWI/max(datam$TWI),
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mtest2.Rdata")
+load("./distribution_save/Mtest2.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+```{r, fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),
+  labels = species, nrow = 2)
+```
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = species, nrow = 2)
+```
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam,
+        Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
+        alpha_0 = apply(as.matrix(fits[[sp]], pars = "alpha_0"), 2, mean),
+        alpha = apply(as.matrix(fits[[sp]], pars = "alpha"), 2, mean),
+        beta_0 = apply(as.matrix(fits[[sp]], pars = "beta_0"), 2, mean),
+        beta = apply(as.matrix(fits[[sp]], pars = "beta"), 2, mean)) %>% 
+    ggplot(aes(x = TWI)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = (alpha_0+alpha*TWI)/(alpha_0+alpha*TWI + beta_0+beta*TWI)))),
+  labels = species, nrow = 2)
+```
+
+### Model 3
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI)$ and $\phi = e^{\beta_0 + \beta*TWI}$
+
+```{stan , output.var="Mtest", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real beta_0 ;
+    real beta ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*TWI[n]) ;
+      phi[n] = exp(beta_0 + beta*TWI[n]) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+```{r }
+datam <- filter(data, Genus == "Symphonia")
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mtest, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
+#                                     TWI = datam$TWI/max(datam$TWI),
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mtest3.Rdata")
+load("./distribution_save/Mtest3.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),
+  labels = species, nrow = 2)
+```
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = species, nrow = 2)
+```
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam,
+        Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
+        mu = apply(as.matrix(fits[[sp]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[sp]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = TWI)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_line(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = species, nrow = 2)
+```
+
+### Model 3 with fake data
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI)$ and $\phi = e^{\beta_0 + \beta*TWI}$
+
+```{stan , output.var="Mtest", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real beta_0 ;
+    real beta ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*TWI[n]) ;
+      phi[n] = exp(beta_0 + beta*TWI[n]) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+```{r }
+# fit <- sampling(Mtest, chains = 2,
+#                 data = list(N = 1000,
+#                             TWI = seq(0, 1, length.out = 1000),
+#                             Presence = c(rep(10^-6,350), rep(1-10^-6,300), rep(10^-6,350)),
+#                             weights = c(rep(1/700,350), rep(1/300,300), rep(1/700,350))))
+# save(fit, file = "./distribution_save/Mtest4.Rdata")
+load("./distribution_save/Mtest4.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta")
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the model")
+```
+
+```{r , fig.cap="Model parameters posterior."}
+mcmc_intervals(as.array(fit), pars = pars)
+```
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fit), pars = c(pars, "lp__"))
+```
+
+```{r , fig.cap="Predictions."}
+cbind(TWI = seq(0, 1, length.out = 1000),
+      Presence = c(rep(10^-6,350), rep(1-10^-6,300), rep(10^-6,350)),
+      mu = apply(as.matrix(fit, pars = "mu"), 2, mean),
+      t(apply(as.matrix(fit, pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+  ggplot(aes(x = TWI)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  geom_point(aes(y = mu)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
 ```
 
 # References
