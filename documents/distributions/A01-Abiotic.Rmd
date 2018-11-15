@@ -1,0 +1,296 @@
+---
+title: "A01: Abiotic distributions"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
+  github_document: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(raster)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+```{r trees}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr*pi) %>% 
+  collect()
+```
+
+```{r env}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./distribution_save/env.Rdata")
+load("./distribution_save/env.Rdata")
+```
+
+```{r data}
+data <- trees %>% 
+  left_join(env)
+```
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "Aspidosperma", Genus = "Aspidosperma",
+             Species = c("carapanauba", "shultesii", "excelsum", "oblongum", 
+                         "desmanthum", "album", "spruceanum", "sandwithianum", "helstonei", "sp.1CAY-ATDN")),
+  data.frame(Complex = "Dyospiros", Genus = "Dyospiros",
+             Species = c("capreifolia", "carbonaria", "martinii", "guianensis", "vestitia")),
+  data.frame(Complex = "Eschweilera clade Chartacea",
+             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis", "Lecythis"),
+             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea", "zabucajo")),
+  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
+                         "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Lecythis", Genus = "Lecythis",
+             Species = c("idatimon", "persistens", "persistenssubspaurantiaca", "corrugata")),
+  data.frame(Complex = "Couratari", Genus = "Couratari",
+             Species = c("calcynia", "oblongifolia", "guianensis")),
+  data.frame(Complex = "Pourouma", Genus = "Pourouma",
+             Species = c("guianensis", "saülensis", "sp.2CAY-ATDN", "minor", "melionii", "bicolor",
+                         "villosa", "sp.5CAY-ATDN")),
+  data.frame(Complex = "Cecropia", Genus = c("Pourouma", "Cecropia", "Cecropia"),
+             Species = c("mollis", "obtusa", "sciadophylla")),
+  data.frame(Complex = "Licania1", Genus = "Licania",
+             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
+                         "alba", "majuscula")),
+  data.frame(Complex = "Licania2", Genus = "Licania",
+             Species = c("octandra", "sprucei", "bicornis", "minutiflora")),
+  data.frame(Complex = "Couepia", Genus = c(rep("Couepia", 7), rep("Licania", 2)),
+             Species = c("obovata", "abrantha", "magnolifolia", "joaquinea", "caryophilloides",
+                         "guianensis", "bracteosa", "heteromorpha", "latistipula")),
+    data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1"))
+)
+complexes <- complexes %>% 
+  filter(Complex %in% c("Symphonia", "Eschweilera clade Parvifolia"))
+data <- left_join(complexes, data) %>% 
+  filter(!is.na(Plot))
+```
+
+# Introduction
+
+The aim of this document is to study the distribution at micro-environmental scale with abiotic environment of two species complexes : *Symphonia globulifera* morphotypes and *Eschweilera Parvifolia clade* species. *Symphonia globulifera* includes two morphotypes, *S. globulifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species. We wish to use a bayseian approach including both biotic and abiotic environment and maybe the ontogoeny thourg diameter at breast hieght (DBH).
+
+One of the first thing aiming this study as such fine micro-scale started from @Allie2015 figure (see figure \@ref(fig:Allie)). Effectivelly for the two species complexes studied she has shown a differentation of habitat (between *S. globulifera* and *S. sp1* and between, *E. coriacea* and *E. sagotiana*). But the ecological niche defined only included the centroid of the niche and we were wondering about the real niche taking into account intraspecific variability of habitat between sistser species within species complexes.
+
+```{r Allie, fig.cap = "Environmental variables selected in @Allie2015 including intraspecific variability."}
+data %>% 
+  ggplot(aes(RelativeElevation, Slope, 
+             col = Species, size = DBH)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(~ Complex, nrow = 2)
+```
+```{r Allie2, fig.cap = "Environmental variables selected in @Allie2015 including intraspecific variability."}
+data %>% 
+  filter(Species %in% c("coriacea", "sagotiana",
+                        "globulifera", "sp.1")) %>%
+  ggplot(aes(TWI, Slope, 
+             col = Species, size = DBH)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(Complex ~ Species, nrow = 2)
+```
+
+# Graphical exploration
+
+Base on abiotic variable PCA (see figure \@ref(fig:pcaABiot)), We selected less correlated variable: DEM, TWI, and slope.
+
+```{r pcaABiot, fig.cap="Abiotic variable PCA"}
+autoplot(princomp(~ DEM + RelativeElevation + Slope + Curvature + TRI + TWI, 
+                    data = data, cor = T), data = data,
+         colour = "Species", alpha = 0.1, size = "DBH",
+         loadings.label.size = 6,
+         loadings.label.colour = 'black', loadings.label.vjust = 1.1,
+         loadings = T, loadings.label = T, loadings.colour = 'black') +
+  coord_equal() +
+  geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
+  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+  theme(legend.position = c(1, 1), 
+        legend.justification = c(1, 1)) +
+  scale_color_discrete(guide= "none") +
+  facet_wrap(~ Complex)
+```
+
+```{r densityAbiot,fig.cap="Abiotic variable density plot for selected variables."}
+data %>% 
+  dplyr::select(Complex, Species, DEM, TWI, Slope) %>% 
+  reshape2::melt(id.var = c("Complex", "Species")) %>% 
+  group_by(variable) %>% 
+  mutate(value = scale(value)) %>% 
+  ungroup() %>% 
+  ggplot(aes(value, fill = Species, col = Species)) + 
+  geom_density(alpha = 0.3) +
+  facet_grid(variable ~ Complex, scales = "free")
+```
+
+# Niche analysis
+
+```{r dataReduction}
+# data <- filter(data, Plot == 16) # for tests
+# data <- filter(data, Genus == "Symphonia")
+```
+
+To build the niche model, we have several conceptual and technical challenges to solve. But the most important and first questions is how to consider absence data. Effectivelly, what we have for Paracou is the information but where we can fin species individuals, the presence information. But we have to decide how we consider absence from one habitat or putative absence called pseudo-absence. First of all, we can use recommandations of *Barbet Massin ... (to include in Mendely*): *"we recommend the use of a large number (e.g. 10 000) of pseudo‐absences with equal weighting for presences and absences when using regression techniques"*. Secondly, because the model is partly built on pseudo-absences, we will proceed in two steps: (i) first we will built the complex distribution using individual from all species within the complex as presence and all other trees as absence, (ii) secondly we will built species distribution inside the complex considering all individual from one species inside the complex as presence and all individuals from other species of the complex as absence.
+
+## Model
+
+<!-- The general model form is base on a Bernoulli law of parameter $\theta_{taxon}$ representing the habitat suitability for the taxon (the complex or the species). $\theta_{taxon}$  is an hyperparameter depending on abitoic environment represented here by the digital elevation model $DEM$, the topographic wetness index $TWI$ and the slope $Slope$. -->
+
+<!-- $$Presence_{taxon} \sim \mathcal{B} (\theta_{taxon})$$ -->
+<!-- $$\theta_{taxon} = logit[ \beta_{{DEM}_{taxon}}*DEM +  \beta_{{TWI}_{taxon}}*TWI +  \beta_{{Slope}_{taxon}}*Slope]$$ -->
+
+<!-- $$Presence_{taxon} \sim \mathcal{B} (\alpha_{taxon}, \beta_{taxon})$$ -->
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = f(TWI)$ and $\phi = ct$ or $\phi = g(TWI)$
+
+So $0 < \mu < 1$ and $\phi > 0$
+
+Trying with $\mu = \alpha + \beta*TWI$ and $\phi =  c$, with $(a,b,c) \in \mathcal R^3$
+
+We have $0 < \alpha + \beta*TWI < 1$ and $\phi > 0$
+
+If $TWI \in [0,max_{TWI}]$, $0 < \alpha <1$ and $\frac{-\alpha}{max_{TWI}} < \beta < \frac{1-\alpha}{max_{TWI}}$
+
+```{stan Mtest, output.var="Mtest", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    int<lower=0, upper=1> Presence[N] ;
+    real<lower=0, upper=1> TWI[N] ;
+    real<lower=0, upper=1> weights[N] ;
+  }
+  parameters {
+    real<lower=0, upper=1> alpha ;
+    real<lower=-alpha, upper=(1-alpha)> beta ; // for maxTWI = 1
+    real<lower=0> phi ;
+  }
+  model {
+    alpha ~ beta(1,1) ;
+    beta ~ beta(1,1) ;
+    phi ~ gamma(0.000001,0.000001) ;
+    print(alpha, beta, phi)
+    for(n in 1:N)
+      target += weights[n]*beta_lpdf(Presence[n] | (alpha + beta*TWI[n])*phi, (1.0 - (alpha + beta*TWI[n]))*phi) ;
+  }
+  generated quantities {
+    real mu[N] ;
+    for(n in 1:N)
+      mu[n] = alpha + beta*TWI[n] ;
+  }
+```
+
+```{r, eval=F}
+a = 0.517754 ; b = 0.0884929 ; c = 2.70395
+mu = a+b
+phi = c
+(A = mu*phi)
+(B = (1-mu)*phi)
+```
+
+
+### Symphonia complex
+
+```{r fitMabiotic1Sympho, eval=F}
+datam <- filter(data, Genus == "Symphonia")
+species <- c("globulifera", "sp.1")
+# fits <- lapply(as.list(species), function(sp)
+#                sampling(Mtest, chains = 2,
+#                         data = list(N = nrow(datam),
+#                                     Presence = as.numeric(datam$Species == sp),
+#                                     TWI = datam$TWI/max(datam$TWI),
+#                                     weights = ifelse(datam$Species == sp,
+#                                                      1/(2*sum(datam$Species == sp)),
+#                                                      1/(2*sum(datam$Species != sp))))))
+# names(fits) <- species
+# save(fits, file = "./distribution_save/Mtest.Rdata")
+load("./distribution_save/Mtest.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha_TWI", "beta_TWI")
+lapply(as.list(species), function(sp)
+  broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Species = sp)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+```{r Cabiotic1Sympho, fig.cap="Model parameters posterior.", eval=F}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_intervals(as.array(fits[[sp]]), pars = pars)),
+  labels = species, nrow = 2)
+```
+
+```{r Tabiotic1Sympho,fig.cap="Markov chains trace plot after warmup.", eval=F}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  mcmc_trace(as.array(fits[[sp]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = species, nrow = 2)
+```
+
+```{r 2abiotic1Sympho, fig.cap="Markov chains pairs plot after warmup.", eval=F}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+```{r Yabiotic1Sympho, fig.cap="Predictions.", eval=F}
+cowplot::plot_grid(plotlist = lapply(as.list(species), function(sp)
+  cbind(datam,
+        pred = psych::logistic(apply(as.matrix(fits[[sp]],
+                                               pars = "Theta_pred"), 2, mean))) %>%
+    ggplot(aes(Slope, TWI, col = pred)) +
+    geom_point(aes(alpha = (Species == sp), col = pred)) +
+    scale_alpha_manual(values = c(0,1))),
+  labels = species, nrow = 2)
+```
+
+# References
+

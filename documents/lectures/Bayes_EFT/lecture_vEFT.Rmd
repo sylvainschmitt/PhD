@@ -1,0 +1,560 @@
+---
+title: "Introduction to bayesian modelling with WinBUGS"
+author: Sylvain SCHMITT
+date: "November 7, 2018, EFT Msc, ECOFOG"
+output: 
+  revealjs::revealjs_presentation:
+    theme: blood
+    highlight: pygments
+    center: true
+    fig_caption: true
+    self_contained: false
+    reveal_plugins: ["chalkboard"]
+    reveal_options:
+      slideNumber: true
+      previewLinks: true
+  pdf_document: default
+  html_document:
+     theme: readable
+     toc: true
+     toc_float: yes
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+library(tidyverse)
+opts_chunk$set(echo = T, eval = T, cache = F,
+               fig.height = 5)
+theme_set(bayesplot::theme_default())
+```
+
+# Introduction
+
+## Why
+
+* Cleaned and secured **data**
+* Computer > **R** > Import > Check > Happy :)
+* What is your **question** ?
+* Imagine some strange twisted wavering distorted curves in your scatter plot
+* But you resign yourself to linearity typing `lm()`
+
+## Why Bayes
+
+* Express your **beliefs/expertise** about parameters
+* Properly account for **uncertainty**
+* Handle **small data**
+* **Any form** of model
+
+# Theory
+
+## Bayes theorem- Proba version
+
+$$P(A|B) = \frac{P(A \cap B)}{P(B)}$$
+$$P(A|B)P(B) = P(A \cap B) = P(B|A)P(A)$$
+$$P(A|B) = \frac{P(B|A)P(A)}{P(B)}$$
+
+```{r, echo=F}
+include_graphics("https://qph.fs.quoracdn.net/main-qimg-fe1f9e3bb7d94a6986d3b196bf081682")
+```
+
+## Bayes theorem
+
+$$p(\theta|y) = \frac{p(\theta)*p(y|\theta)}{p(y)}$$
+
+* $p(\theta)$ represents what someone **believes** about $\theta$ **prior** to observing $y$
+* $p(\theta|y)$ represents what someone **believes** about $\theta$ **after** observing $y$
+* $p(y|\theta)$ is the **likelihood** function
+* $p(y)$ is the **marginal likelihood** equal to $\int p(y|\theta)*p(\theta)*d\theta$
+
+## Bayes theorem
+
+$$p(\theta|y) = \frac{p(\theta)*p(y|\theta)}{p(y)}$$
+
+$$p(hypothesis|data) \propto p(hypotheses)*p(data|hypothesis)$$
+
+$$posterior \propto prior*likelihood$$
+
+$$updated~belief \propto prior~belief*current~evidence$$
+
+# Gender example
+
+## Data - Chance to pick a girl to the chalkboard ?
+
+A classroom with boys and girls
+
+```{r}
+y <- c(0, 0, 1, 0, 0, 1, 1, 0, 1) # Observations, 0 boys, 1 girls
+```
+
+$\theta$ approximation
+
+```{r}
+# ?
+```
+
+## Likelihood - Law ?
+
+> $p(y|\theta)$
+
+*Back to maths*
+
+$$Y \sim ?$$
+
+## Likelihood - Formula
+
+> $p(y|\theta)$
+
+*Back to maths*
+
+$$Y \sim \mathcal B(\theta,n)$$
+$$p(y|\theta)=\prod_{n=1}^N \theta^{y_n}*(1-\theta)^{1-y_n}$$
+$$log(p(y|\theta))=\sum_{n=1}^N{y_n}*log(\theta) + \sum_{n=1}^N(1-y_n)*log(1-\theta)$$
+
+## Likelihood - R code ?
+
+$$p(y|\theta)=\prod_{n=1}^N \theta^{y_n}*(1-\theta)^{1-y_n}$$
+$$log(p(y|\theta))=\sum_{n=1}^N{y_n}*log(\theta) + \sum_{n=1}^N(1-y_n)*log(1-\theta)$$
+$$p(y|\theta=0.1) = ?$$
+
+```{r}
+log_likelihood <- function(theta, y){exp(sum(y*log(theta)+(1-y)*log(1-theta)))}
+  
+```
+
+## Priors - Form ?
+
+> $p(\theta)$ ? No information ? Non informative prior !
+
+$$\theta \sim ?$$
+
+## Priors - Gamma law
+
+$$X \sim \Gamma(\alpha,\beta)~,~f(x)=\frac{\beta^\alpha x^{\alpha-1}e^{-\beta x}}{\Gamma(\alpha)}~,~\Gamma(z)=\int_0^1x^{z-1}e^{-x}dx$$
+
+```{r, echo=F, fig.height=6}
+include_graphics("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Gamma_distribution_pdf.svg/800px-Gamma_distribution_pdf.svg.png")
+```
+
+## Priors - Beta law
+
+$$X \sim B (\alpha,\beta)~,~f(x)=\frac{x^{\alpha-1}(1-x)^{\beta-1}}{B(\alpha,\beta)}~,~B(\alpha,\beta)=\frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)}$$
+
+```{r, echo=F}
+include_graphics("https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Beta_distribution_pdf.svg/531px-Beta_distribution_pdf.svg.png")
+```
+
+## Priors - Form
+
+$$p(\theta) \sim \mathcal B(1,1)$$
+
+```{r}
+curve(dbeta(x, 1, 1))
+```
+
+## Posterior - Inference ?
+
+> $p(\theta|y) \propto ~?$
+
+## Posterior - Inference 
+
+* $p(\theta|y) \propto \mathcal L(y|\theta)p(\theta)$
+* Practically: prior $p(\theta)$ + data $y$ => posterior $p(\theta|y)$
+* moving from *a priori* => *a posteriori* is nearly impossible analytically (excepted for conjugated laws, i.e. beta-binomial here)
+* => Numerical methods **MCMC** to infer *a posteriori* laws
+
+## Markov Chain Monte Carlo - Methods
+
+*inference based on the simulation of a high number of random variables*
+
+**Advantages**
+
+* may be applied to a wide range of problems
+* a few underlying hypotheses
+* easy to implement
+
+**Constraints**
+
+* a good random generator
+* computational power
+* likelihood-explicit
+
+## MCMC - Algorithm
+
+* Choose initial parameters = **Initialisation**
+* Compute likelihood and posterior values for those parameters
+* Choose randomly new parameters thanks to a proposition function = **random walk**
+* Compute previous and new posterior fraction $\frac{posterior_{new}}{posterior_{old}}$
+* Accept or reject the new parameters set picking a random value  $u$ in a uniform law $\mathcal U [0,1]$ if  $u \leq \frac{posterior_{new}}{posterior_{old}}$
+* Repeat, repeat, ... thousand of times !
+
+## MCMC - Algorithm
+
+```{r, echo=F}
+include_graphics("./data/MCM.png")
+```
+
+##  MCMC - Algorithm
+
+> Now code your own MCMC in R !
+
+##  MCMC - Algorithm - Likelihood
+
+$$p(y|\theta)=\prod_{n=1}^N \theta^{y_n}*(1-\theta)^{1-y_n}$$
+
+```{r}
+likelihood <- function(theta, y) 
+  exp(sum(log(theta)*y + log(1-theta)*(1 -y)))
+
+likelihood_dbinom <- function(theta, y) 
+  exp(sum(dbinom(y, size = 1, prob = theta, log = T)))
+```
+
+##  MCMC - Algorithm - Random walk ?
+
+$$p(\theta|y) \propto p(\theta)*p(y|\theta)$$
+
+```{r, eval=F}
+walk <- function(theta_old, y, sigma_explore = 0.1)
+  ?
+```
+
+##  MCMC - Algorithm - Random walk ?
+
+$$p(\theta|y) \propto p(\theta)*p(y|\theta)$$
+
+```{r }
+walk <- function(theta_old, y, sigma_explore = 0.1){
+   theta_new <- rnorm(1, mean = theta_old, sd = sigma_explore)
+   if (theta_new < 0) {
+     theta_new <- 10^-6 
+   }
+   if (theta_new > 1) {
+     theta_new <- 1-10^-6 
+   }
+   ratio <- (likelihood(theta_new, y)*dbeta(theta_new, 1, 1))/(likelihood(theta_old, y)*dbeta(theta_old, 1, 1))
+   if(runif(1) < ratio) {
+     return(theta_new)
+   } else {
+     return(theta_old)
+   }
+}
+walk(0.1, y)
+```
+
+##  MCMC - Algorithm - Sampling ?
+
+```{r, eval=F}
+y <- c(rep(0, 50), rep(1, 60))
+
+theta_init <- 0.1
+n_iter <- 10000
+
+theta <- rep(NA, n_iter)
+theta[1] <- theta_init
+
+for (i in 2:n_iter)
+  theta[i] <- walk(theta[i-1], y)
+```
+
+##  MCMC - Algorithm - Diagnostic
+
+```{r}
+data.frame(iter = 1:n_iter, theta = theta) %>%
+  ggplot(aes(iter, theta)) +  geom_line(col = "blue")
+```
+
+##  MCMC - Algorithm - Posterior
+
+```{r}
+data.frame(iter = 1:n_iter, theta = theta) %>%
+  ggplot(aes(theta)) +
+  geom_density(col = "blue", fill = "blue", alpha = 0.3) +
+  geom_vline(xintercept = sum(y)/length(y), col = "red")
+```
+
+o# Science & Suicides
+
+## Data - Table
+
+> US spending on science, space, and technology vs Suicides by hanging, strangulation and suffocation
+
+```{r}
+data <- data.frame(year = 1999:2009,
+                   suicide = c(5247, 5688, 6198, 6462, 6635, 7336, 7248, 
+                               7491, 8161, 8578, 9000),
+                   science = c(18.079, 18.594, 19.753, 20.734, 20.831, 
+                               23.029, 23.597, 23.584, 25.525, 27.731, 29.449))
+```
+
+*Data sources: U.S. Office of Management and Budget and Centers for Disease Control & Prevention*
+
+## Data - Plot
+
+```{r echo=F}
+data %>% 
+  ggplot(aes(science, suicide, col = year)) + 
+  geom_point() +
+  xlab("US spending on science, space, and technology (billion of $)") +
+  ylab("Suicides by hanging, strangulation and suffocation")
+```
+
+## Frequentist vs Bayesian
+
+$$Y \sim ?$$
+
+* Frequentist: ?
+* Bayesian: ?
+
+## Likelihood - Explicit
+
+$$P(Y|(\beta_0,\beta, \sigma)) \sim \mathcal N(\hat{Y},\sigma)$$
+$$P(x) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac12(\frac{x-\mu}{\sigma})^2}$$
+$$P(Y|(\beta_0,\beta, \sigma)) =  \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac12(\frac{Y-\hat Y}{\sigma})^2}$$
+$$\mathcal L(Y|(\beta_0,\beta, \sigma)) = \prod P(Y|(\beta_0,\beta))$$
+$$log \mathcal L(Y|(\beta_0,\beta, \sigma)) = \sum \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac12(\frac{Y-\hat Y}{\sigma})^2}$$
+$$log \mathcal L(Y|(\beta_0,\beta, \sigma)) = \sum \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac12(\frac{Y-\beta_0+\beta*X}{\sigma})^2}$$
+
+# Growth model
+
+## Model form ?
+
+$$log(AGR_i+1) \sim \mathcal N (G_{max} * e^{-\frac12(\frac{log(\frac{DBH}{D_{opt}})}{K_s})^2}, \sigma)$$
+
+## Model form
+
+```{r }
+growth <- function(dbh, Gmax = 1.7, Dopt = 30, Ks = 1)
+  Gmax*exp(-0.5*(log(dbh/Dopt)/Ks)^2)
+```
+
+```{r, echo=F}
+data.frame(dbh = 0:100, growth = sapply(0:100, function(dbh) growth(dbh, Gmax = 1.5, 
+                                                                    Dopt = 50, Ks = 0.8))) %>% 
+  ggplot(aes(dbh, growth)) + geom_line()
+```
+
+
+## $G_{max}$ posterior ?
+
+> $p(G_{max}|K_s, D_{opt}, \sigma) = ~?$
+
+## $G_{max}$ posterior
+
+$$p(G_{max}|K_s, D_{opt}, \sigma) = \prod_1^n \frac1{\sigma\sqrt {2\pi}} e^{-\frac12(\frac{Y-G_{max}*f(DBH)}\sigma)^2}*\frac1{\sigma_G\sqrt{2\pi}}e^{-\frac12(\frac{G_{max}-\mu_G}\sigma)^2}$$
+$$p(G_{max}|K_s, D_{opt}, \sigma) \sim \mathcal N( \frac{\sigma^2\sum_1^n f(DBH)Y+\frac{\mu_G}{\sigma_G^2}}{\sigma^2\sum_1^n f(DBH)^2+\frac{1}{\sigma_G^2}}, \frac{1}{\frac1{\sigma^2}\sum_1^n f(DBH)^2+\frac{1}{\sigma_G^2}})$$
+
+# WinBUGS
+
+## BUGS
+
+> Bayesian inference Using Gibbs Sampling
+
+```{r, eval=F}
+# 1 - a model
+model{ for (i in 1:N)
+  y[i] ∼ f(x[i], parameters)
+  ...
+  parameters ∼ prior
+}
+# 2 - your data
+list(x=c(...), y=c(...), N = ...)
+# 3 - initial values
+list(parameters = ...)
+```
+
+
+## DAG
+
+* **Directed Acyclic Graphs**: Allow to build graphically a model (didactic)
+    * __Node__: _"variables"_
+        * __stochastic__: _"variables"_ following a low
+        * __stochastic__: _"variables"_ resulting from an operation (i.e. $\mu$)
+        * __constant__: _"variables"_ not varying (i.e. data)
+    * __Arrows__: link between _"variables"_
+        * __solid__: stochastic dependence
+        * __hollow__: logical function
+    * __Plates__: define vector with data indices (i.e. $X[i]$)
+    
+## Sience and Suicides - DAG ?
+
+> $$Y \sim \mathcal N ( \beta_0 + \beta X,\sigma)$$
+
+* Doodle > New...
+* Click to create a new node in the model ;
+* select a box and then "Ctrl" + click on the 2 box to create arrows
+(links between nodes)
+* when you’re happy with your doodle, Doodle > Write code... and
+the code corresponding to your model will appear in a new window.
+
+## Sience and Suicides - DAG
+
+```{r}
+include_graphics("./data/DAGlm.png")
+```
+
+## Sience and Suicides - Model 1
+
+```{r, eval=F}
+model;
+{
+   for( i in 1 : 11 ) {
+      Y[i] ~ dnorm(mu[i],tau)
+   }
+   tau ~ dgamma(0.001,0.001)
+   beta_0 ~ dnorm( 0.0,1.0E-6)
+   beta ~ dnorm( 0.0,1.0E-6)
+   for( i in 1 : 11 ) {
+      mu[i] <- beta * X[i] + beta_0
+   }
+}
+```
+
+## Sience and Suicides - Model 2
+
+```{r, eval=F}
+# Model
+model;
+{
+   for( i in 1 : 11 ) {
+      mu[i] <- beta * X[i] + beta_0
+      Y[i] ~ dnorm(mu[i],tau)
+   }
+   tau ~ dgamma(0.001,0.001)
+   beta_0 ~ dnorm( 0.0,1.0E-6)
+   beta ~ dnorm( 0.0,1.0E-6)
+}
+```
+
+## Sience and Suicides - Inference
+
+* Model > Specification...
+* double click on the word "model" (in your script) and then "check model" (in specification tool)
+* upload data from a text file : File > Open...
+* write it as a list : list(X = c(...), Y = c(...))
+* double click on the word "list" and click on "load data" (in specification tool)
+* "Compile" (in specification tool)
+* write a set of initial parameters values : list( tau = ..., beta_0 = ..., beta = ...)
+* double click on the word "list"
+
+## Sience and Suicides - Data
+
+> US spending on science, space, and technology vs Suicides by hanging, strangulation and suffocation
+
+```{r}
+data <- data.frame(year = 1999:2009,
+                   suicide = c(5247, 5688, 6198, 6462, 6635, 7336, 7248, 
+                               7491, 8161, 8578, 9000),
+                   science = c(18.079, 18.594, 19.753, 20.734, 20.831, 
+                               23.029, 23.597, 23.584, 25.525, 27.731, 29.449))
+```
+
+```{r eval=F}
+# Data
+list(Y = c(5247, 5688, 6198, 6462, 6635, 7336, 7248, 7491, 8161, 8578, 9000), X = c(18.079, 18.594, 19.753, 20.734, 20.831, 23.029, 23.597, 23.584, 25.525, 27.731, 29.449))
+```
+
+## Sience and Suicides - Inits
+
+```{r, eval=F}
+# Inits
+list(tau = 1, beta_0=0, beta=100)
+```
+
+## Sience and Suicides - Inference
+
+1. Inference > Samples...
+2. Write nodes (parameters of interest) and "Set"
+3. Model > Update > updates (sets number of iterations) : write a sufficiently large number (eg 10000)
+4. Click on "update" to run the MCMC 
+5. Back to Sample Monitor Tool : choose node to watch and check density (histogram of values taken after the burning period), history (chain of values, stats...)
+
+## Sience and Suicides - Result
+
+$\tau = 2.88*10^-5,~\beta_0 = -154.7, ~\beta = 317.8$
+
+```{r}
+include_graphics("./data/WINBUGSResult.png")
+```
+
+## R2WinBUGS - Packages
+
+```{r}
+library(R2WinBUGS)
+library(coda)
+```
+
+## R2WinBUGS - Inference
+
+```{r}
+model <- "./data/model.txt"
+data <- list(Y = c(5247, 5688, 6198, 6462, 6635, 7336, 7248, 7491, 8161, 8578, 9000), X = c(18.079, 18.594, 19.753, 20.734, 20.831, 23.029, 23.597, 23.584, 25.525, 27.731, 29.449))
+inits <- list(list(tau = 1, beta_0=0, beta=100))
+Niter <- 6e3
+Nburning <- ceiling(Niter/2)
+Nthin <- 5
+parameters <- c('beta_0','beta','tau')
+resu.bugs <- bugs(data, inits, parameters, model,
+                  n.chains = 1, n.iter = Niter, n.burnin = Nburning,
+                  bugs.directory = "./documents/Initiation Bayes et WinBugs/Winbugs/WinBUGS14/",
+                  working.directory = getwd())
+codaobj <- read.bugs('coda1.txt')
+```
+
+## R2WinBUGS - Results
+
+```{r}
+print(resu.bugs)
+```
+
+## R2WinBUGS - Results
+
+```{r}
+plot(resu.bugs)
+```
+
+## R2WinBUGS - Results
+
+```{r}
+plot(codaobj)
+```
+
+# Conclusion
+
+## Bayes theorem
+
+$$p(\theta|y) = \frac{p(\theta)*p(y|\theta)}{p(y)}$$
+
+$$p(hypothesis|data) \propto p(hypotheses)*p(data|hypothesis)$$
+
+$$posterior \propto prior*likelihood$$
+
+## Model choice
+
+* Prior, laws, and model forms knowledge
+* Fitting techniques and tricks
+    * center, reduce, bound, link...
+* **Try and compare**
+    * convergence, parameters number, likelihood, prediction quality
+    * e.g. $\hat{R}$, $K$, $log(\mathcal{L})$, $RMSEP$...
+
+## Other tools -  `stan`
+
+```{r}
+include_graphics("http://mc-stan.org/assets/img/shinystan/explore.png")
+```
+
+
+## Other tools -  `greta`
+
+```{r}
+include_graphics("https://rviews.rstudio.com/post/2018-04-11-Rickert-Greta_files/mod.png")
+```
+
+## References
+
+* WinBUGS help
+* [WinBUGS youtube tutorial](https://www.youtube.com/watch?v=t7lngTuC22Q)
+* [Michael Clark blog](http://m-clark.github.io/workshops/bayesian/index.html#home) *Become a bayesian with R & stan*
+* [`stan` website](mc-stan.org/)
+* [`greta` website](https://greta-dev.github.io/greta/index.html)
+

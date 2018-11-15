@@ -1,0 +1,328 @@
+---
+title: "Data cleaning & exploration"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(tidyverse)
+library(stringdist)
+library(googlesheets)
+library(knitr)
+library(kableExtra)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+```
+
+# Symphonia
+
+```{r SymphoLoad}
+ind <- gs_title("Measures_Symphonia") %>% 
+  gs_read("Individuals", range = cell_cols(2:13))
+SPAD <- gs_title("Measures_Symphonia") %>% 
+  gs_read("LeafSPAD", range = cell_cols(2:9))
+fresh <- gs_title("Measures_Symphonia") %>% 
+  gs_read("LeafFresh", range = cell_cols(2:10))
+# dry <- gs_title("Measures") %>% 
+#   gs_read("Dry", range = cell_cols(2:7))
+# leaves <- SPAD %>% 
+#   left_join(fresh, by = c('Plot', 'SubPlot', 'Numéro', 'Feuille')) %>% 
+#   left_join(dry, by = c('Plot', 'SubPlot', 'Numéro', 'Feuille'))
+# rm(SPAD, fresh, dry)
+```
+
+## Data check
+
+```{r SymphoIndividuals check, warning=TRUE}
+IDs <- list(ind = with(ind, paste0('P', Plot, '-', SubPlot, '-', TreeFieldNum)),
+            SPAD =  unique(with(SPAD, paste0('P', Plot, '-', SubPlot, '-', TreeFieldNum))),
+            fresh = unique(with(fresh, paste0('P', Plot, '-', SubPlot, '-', TreeFieldNum))))
+
+# Number of individuals
+if(!all(unlist(lapply(IDs, length))[-1] == unlist(lapply(IDs, length))[1])){
+  warning("Tables do not have the same number of individuals.\n")
+  invalids <- names(which(unlist(lapply(IDs, length))[-1] != unlist(lapply(IDs, length))[1]))
+  warning(invalids, " table(s) is(are) invalid(s).\n")
+  for(invalid in invalids)
+    diff <- length(IDs[[1]]) - length(IDs[[invalid]])
+    if(diff > 0)
+      warning(invalid, " table is missing ", abs(diff)," individual(s).\n")
+    else
+      warning(invalid, " table have ", abs(diff)," extra individual(s).\n")
+}
+  
+# Individual names 
+## SPAD table
+diff <- max(length(sort(with(IDs, setdiff(ind,SPAD)))),
+length(sort(with(IDs, setdiff(SPAD,ind)))))
+if(diff > 0)
+  warning("There are ", diff, " non matching individuals between individual and SPAD tables.\n")
+ind_IDs_diff <- sort(with(IDs, setdiff(ind,SPAD)))
+SPAD_IDs_diff <- sort(with(IDs, setdiff(SPAD,ind)))
+for(id in ind_IDs_diff)
+  warning(SPAD_IDs_diff[amatch(id, SPAD_IDs_diff, maxDist = Inf)],
+          " is not a misspel of ", id, " ?\n")
+## fresh table
+diff <- max(length(sort(with(IDs, setdiff(ind,fresh)))),
+length(sort(with(IDs, setdiff(fresh,ind)))))
+if(diff > 0)
+  warning("There are ", diff, " non matching individuals between individual and fresh tables.\n")
+ind_IDs_diff <- sort(with(IDs, setdiff(ind,fresh)))
+fresh_IDs_diff <- sort(with(IDs, setdiff(fresh,ind)))
+for(id in ind_IDs_diff)
+  warning(fresh_IDs_diff[amatch(id, fresh_IDs_diff, maxDist = Inf)],
+          " is not a misspel of ", id, " ?\n")
+```
+
+```{r SymphoIndValuesCheck, warning=TRUE}
+## Date
+Date <- ind %>% 
+  dplyr::select(Date) %>% 
+  separate(Date, c("Day", "Month", "Year"))
+if(all(Date$Year > 2017))
+  warning("There is a wrong year in one date.\n")
+if(!all(Date$Month %in% 10:12))
+  warning("There is a wrong month in one date.\n")
+if(!all(as.numeric(Date$Day) %in% 1:31))
+  warning("There is a wrong month in one date.\n")
+## Time
+Time <- ind %>% 
+  dplyr::select(Time) %>% 
+  separate(Time, c('Hour', 'Minute'), 'H')
+if(!all(Time$Hour %in% 1:24))
+  warning("Lines ", paste(which(!(Time$Hour %in% 1:24)), collapse = ', '),
+          " have a wrong hour format.\n")
+if(!all(as.numeric(Time$Minute) %in% 0:59))
+  warning("Lines ", paste(which(!(as.numeric(Time$Minute) %in% 0:59)), collapse = ', '),
+          " have a wrong minutes format.\n")
+## Plot
+if(!all(ind$Plot %in% 1:16))
+  warning("Lines ", paste(which(!(ind$Plot %in% 1:16)), collapse = ', '),
+          " have a wrong Plot number.\n")
+## SubPlot
+if(!all(ind$SubPlot %in% 1:25))
+  warning("Lines ", paste(which(!(ind$SubPlot %in% 1:25)), collapse = ', '),
+          " have a wrong SubPlot number.\n")
+## TreeFieldNum
+if(!all(ind$TreeFieldNum %in% 1:4000))
+  warning("Lines ", paste(which(!(ind$TreeFieldNum %in% 1:4000)), collapse = ', '),
+          " have a wrong TreeFieldNum number.\n")
+## Dawkins
+Dawkins <- c(NA, '1A', '1B', '2A', '2B', '2C', '3A',
+             '3B', '3C', '4A', '4B', '4C', '5A', '5B')
+if(!all(ind$Dawkins %in% Dawkins))
+  warning("Lines ", paste(which(!(ind$Dawkins %in% Dawkins)), collapse = ', '),
+          " have a wrong Dawkins index.\n")
+## Position
+Positions <- c(NA, 'TOP', 'MID-TOP', 'MID', 'MID-LOW', 'LOW',
+             'CANOPY', 'REJET')
+if(!all(ind$Position %in% Positions))
+  warning("Lines ", paste(which(!(ind$Position %in% Positions)), collapse = ', '),
+          " have a wrong Position code.\n")
+## Pneumatophores
+if(!all(ind$Pneumatophores %in% 0:1))
+  warning("Lines ", paste(which(!(ind$Pneumatophores %in% 0:1)), collapse = ', '),
+          " have a wrong Pneumatophores code.\n")
+## Buttress
+if(!all(ind$Buttress %in% 0:300))
+  warning("Lines ", paste(which(!(ind$Buttress %in% 0:300)), collapse = ', '),
+          " have a wrong Buttress value.\n")
+## Stilts
+if(!all(ind$Stilts %in% 0:1000))
+  warning("Lines ", paste(which(!(ind$Stilts %in% 0:300)), collapse = ', '),
+          " have a wrong Stilts value.\n")
+## Bark
+Barks <- c('S', 'G', 'SG')
+if(!all(ind$Bark %in% Barks))
+  warning("Lines ", paste(which(!(ind$Bark %in% Barks)), collapse = ', '),
+          " have a wrong Bark code.\n")
+## Wood
+if(!all(ind$Wood %in% c(NA, 0:1)))
+  warning("Lines ", paste(which(!(ind$Wood %in% c(NA, 0:1))), collapse = ', '),
+          " have a wrong Wood code.\n")
+```
+
+```{r SymphoSPAD values check, warning=TRUE}
+## Plot
+if(!all(SPAD$Plot %in% 1:16))
+  warning("Lines ", paste(which(!(SPAD$Plot %in% 1:16)), collapse = ', '),
+          " have a wrong Plot number.\n")
+## SubPlot
+if(!all(SPAD$SubPlot %in% 1:25))
+  warning("Lines ", paste(which(!(SPAD$SubPlot %in% 1:25)), collapse = ', '),
+          " have a wrong Carré number.\n")
+## TreeFieldNum
+if(!all(SPAD$TreeFieldNum %in% 1:4000))
+  warning("Lines ", paste(which(!(SPAD$TreeFieldNum %in% 1:4000)), collapse = ', '),
+          " have a wrong TreeFieldNum number.\n")
+## Leaf
+if(!all(SPAD$Leaf %in% 1:4000))
+  warning("Lines ", paste(which(!(SPAD$Leaf %in% 1:4000)), collapse = ', '),
+          " have a wrong Leaf number.\n")
+## SPAD
+test <- function(x) ((x > 20 & x < 100) | is.na(x))
+if(!all(apply(SPAD[5:7], 1, function(x) all(sapply(x, test)))))
+  warning("Lines ", paste(which(!apply(SPAD[5:7], 1, function(x) all(sapply(x, test)))), 
+                          collapse = ', '), " have a wrong SPAD value.\n")
+```
+
+```{r SymphoFreshValuesCheck, warning=TRUE}
+## Plot
+if(!all(fresh$Plot %in% 1:16))
+  warning("Lines ", paste(which(!(fresh$Plot %in% 1:16)), collapse = ', '),
+          " have a wrong Plot number.\n")
+## SubPlot
+if(!all(fresh$SubPlot %in% 1:25))
+  warning("Lines ", paste(which(!(fresh$SubPlot %in% 1:25)), collapse = ', '),
+          " have a wrong SubPlot number.\n")
+## TreeFieldNum
+if(!all(fresh$TreeFieldNum %in% 1:4000))
+  warning("Lines ", paste(which(!(fresh$TreeFieldNum %in% 1:4000)), collapse = ', '),
+          " have a wrong TreeFieldNum number.\n")
+## Leaf
+if(!all(fresh$Leaf %in% 1:4000))
+  warning("Lines ", paste(which(!(fresh$Leaf %in% 1:4000)), collapse = ', '),
+          " have a wrong Leaf number.\n")
+## LT
+test <- function(x) ((x > 50 & x < 600) | is.na(x))
+if(!all(apply(fresh[5:7], 1, function(x) all(sapply(x, test)))))
+  warning("Lines ", paste(which(!apply(fresh[5:7], 1, function(x) all(sapply(x, test)))), 
+                          collapse = ', '), " have a wrong LT value.\n")
+## FreshWeight
+test <- function(x) ((x > 0.1 & x < 5) | is.na(x))
+if(!all(sapply(fresh$FreshWeight, test)))
+  warning("Lines ", paste(which(!(sapply(fresh$FreshWeight, test))), 
+                          collapse = ', '), " have a wrong Poids frais value.\n")
+```
+
+## Exploration
+
+```{r SymphoExplore, fig.cap="Symphonia functional traits exploration."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+data <- read_csv2(file.path(path, "Full_traits_data.csv"))
+data  %>% 
+  dplyr::select(morphotype, Dry_Weight, Area_exclude, Wood_infra_density) %>% 
+  mutate(SLA = Area_exclude / Dry_Weight) %>% 
+  mutate(WD = Wood_infra_density) %>% 
+  na.omit() %>% 
+  ggplot(aes(WD, SLA, col = morphotype)) +
+  geom_point() +
+  stat_ellipse()
+```
+
+# Eschweilera
+
+# Data cleaning
+
+## Individuals
+
+The idea is to transform FTH data to the general formatting, i.e. :
+
+* Date (YYYY/MM/DD)
+* Time (HHHMM)
+* Plot
+* SubPlot
+* FieldTreeNum
+* Dawkins
+* Position
+* TrunkForm
+* BarkColor
+* BarkRuggedness
+* BarkAspect
+* Lenticels
+* BladeForm
+* LeafConsistency
+* LeafSurface
+* LeafBase
+* LeafMargin
+* HyperAcuminated
+* BentPrincpalN
+
+
+```{r MahoInd}
+indFTH <- read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+                     "data_FTH.csv"), delim = ",") %>% 
+  rename(TrunkForm = `Trunk form`, BarkColor = `Bark color`, BarkRuggedness = `Bark ruggedness`, 
+         BarkAspect = `Bark aspect`, BladeForm = `Blade form`, 
+         LeafConsistency = `Leaf consistency`, LeafSurface = `Leaf surface`, 
+         LeafBase = `Leaf base`, LeafMargin = `Leaf margin`,
+         HyperAcuminated = `Longue pointe`, BentPrincipalN = `Pli sur nervure principale`) %>% 
+  separate(Date, c("Month", "Day", "Year"), "/") %>% # Date
+  mutate(Date = paste0(Year, "/0", Month, "/", Day)) %>% 
+  select(-Year, -Month, -Day) %>% 
+  mutate(Time = gsub(":", "H", substr(as.character(Time), 1, 5))) %>% # Time
+  mutate(Dawkins = toupper(Dawkins)) %>% # Dawkins
+  mutate(Position = recode_factor(Position, bas = "LOW", haut = "TOP", milieu = "MID",
+                                  `milieu lumière` = "MID/LIGHT", `milieu/haut` = "MID",
+                                  `bas lumière` = "LOW/LIGHT", `haut lumière` = "TOPLIGHT",
+                                  `bas/lumière` = "LOW/LIGHT", `milieu/bas` = "MID")) %>% # Position
+  mutate(TrunkForm = recode_factor(TrunkForm, `B--` = "B-", `B (petits)` = "B-", `B+` = "B",
+                                  BS = "B/S", tordu = "N", C = "B")) %>% # TrunkForm
+  mutate(BarkColor = recode_factor(BarkColor, `B/BR` = "B/RB", BG = "B/G", D = "DB",
+                                   `DB+` = "DB", `DB/B` = "B/DB", GB = "B/G")) %>% # BarkColor
+  mutate(BarkAspect = recode_factor(BarkAspect, `?` = "N", `F+` = "F", `F/D` = "D/F",
+                                    `F/D-` = "D-/F", `F-HM` = "F-/HM", `F/HM+` = "F/HM",
+                                    `F+/HM` = "F/HM", `F/S/HM` = "F/HM/S", 
+                                    `HM/D (?)` = "D/HM", `HM/F` = "F/HM",
+                                    `S+/D` = "D/S+", `S/F/HM`	= "F/HM/S", `S-/HM`	= "HM/S-",
+                                    `S/HM`	= "HM/S", `R/HM` = "F/HM")) %>% # BarkAspect
+  mutate(Lenticels = recode_factor(Lenticels, N = "A", `P+` = "P", `P-` = "P")) %>% # Lenticels
+  mutate(BladeForm = recode_factor(BladeForm, `E+` = "E", `Oblan/E` = "E/Oblan")) %>% # BladeForm
+  mutate(LeafConsistency = recode_factor(LeafConsistency, `Char -` = "Char-", 
+                                         `Char+` = "Char")) %>% # LeafConsistency
+  mutate(LeafBase = recode_factor(LeafBase, `O/A` = "A/O", `O-R` = "O/R", `R/A` = "A/R",
+                                  RO = "O/R", `R/O` = "O/R")) %>% # LeafBase
+  mutate(LeafMargin = recode_factor(LeafMargin, `E/C-` = "C-/E")) %>% # LeafMargin
+  select(Date, Time, Plot, SubPlot, FieldTreeNum, Dawkins, Position,
+         TrunkForm, BarkColor, BarkRuggedness, BarkAspect, Lenticels,
+         BladeForm, LeafConsistency, LeafSurface, LeafBase, LeafMargin,
+         HyperAcuminated, BentPrincipalN, Comment) %>% 
+  unique()
+# read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+#                      "Indviduals.csv"), delim = ",", col_types = cols(Date = col_character())) %>% 
+#   bind_rows(indFTH) %>% 
+#   write_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+#                      "Indviduals_all.csv"), delim = ",")
+```
+
+## Leaf attribution in LA
+
+```{r MahoLAsummary, eval=F}
+LA %>% 
+  select(commentaire) %>% 
+  group_by(commentaire) %>% 
+  summarise(n = n()) %>% 
+  kable()
+```
+
+```{r MahoLA, eval=F}
+LA <- LA %>% 
+  separate(Label, c("Plot", "SubPlot", "FieldTreeNum"), 
+           "-", convert = T) %>% 
+  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
+  mutate(FieldTreeNum0 = FieldTreeNum) %>% 
+  mutate(FieldTreeNum = as.numeric(gsub('([[:alpha:]])', "", FieldTreeNum0))) %>% 
+  mutate(Scan = gsub('[0-9]+', "", FieldTreeNum0)) %>% 
+  select(-FieldTreeNum0) %>% 
+  arrange(Plot, SubPlot, FieldTreeNum, Area_exclude) %>% 
+  group_by(Plot, SubPlot, FieldTreeNum) %>% 
+  mutate(Leaf_order = (1:6)[1:n()])
+data <- data %>% 
+  arrange(Plot, SubPlot, FieldTreeNum, Fresh_Weight) %>% 
+  group_by(Plot, SubPlot, FieldTreeNum) %>% 
+  mutate(Leaf_order = (1:6)[1:n()])
+data <- data %>% 
+  left_join(LA)
+# data %>% 
+#   write_csv("./data.csv")
+```

@@ -1,0 +1,90 @@
+```{r setup_baits, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(Biostrings)
+library(tidyverse)
+# library(rstan)
+# options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Baits/"
+```
+
+# Baits
+
+This chapter introduce the baits selection in collaboration with arbor bioscience staff.
+
+## First design
+
+
+> I have finished the bait design and analysis, and you will receive an invitation to a Dropbox folder to access the data.  Briefly, I:
+
+>- used Repeat Masker to soft-masked the 1.390 input sequences for simple repeats and those in the Clusiaceae repeat database; 2.29% masked (all simple and low complexity repeats)
+>- designed 80 nt baits with 2x tiling density = 29,426 raw unfiltered baits
+>-  BLASTed each bait candidate against the two provided genomes
+>-  kept only baits passing “Moderate” BLAST filtering, that were ≤25% Repeat Masked, had GC content > 20% and < 80% =  20,719 baits 
+
+>These baits cover 76.67% of desired target positions with at least 1 bait, with 91.5% within 100bp of a bait.  If 719 baits are removed, it will fit into our smallest kit (1-20K); you can select the ones to remove, or I can filter them based on GC/deltaG, or remove loci with poor bait coverage.  Please review the files and let me know any changes you would like to make, or if you have any questions.
+
+>Brian
+
+More info are available in the pdf. The main objective so is to select **719 probes to be removed**. We thus want to remove the 719 baits by filtering out loci with poor bait coverage at the exception of loci included in targets with candidate genes \
+(see figure \@ref(fig:targetsBaits)).
+
+```{r targetsTypes}
+neutral_targets <- readDNAStringSet(file.path(path, "..", "..", "Symphonia_Genomes", "neutral_selection", 
+                                      "targets.filtered.masked.fasta"))
+functional_targets <- readDNAStringSet(file.path(path, "..", "..", 
+                                                 "Symphonia_Genomes", "functional_selection2", 
+                                                 "targets.filtered.masked.fasta"))
+candidate_functional_targets <- read_tsv(file.path(path, "..", "..", 
+                                                 "Symphonia_Genomes", "functional_selection2", 
+                                                 "candidate_functional_target.list"), 
+                                         col_names = "target")
+targets_type <- rbind(data.frame(target = names(neutral_targets), type = "neutral"),
+                      data.frame(target = names(functional_targets), type = "functional")) %>% 
+  mutate(type = as.character(type)) %>% 
+  mutate(type = ifelse(target %in% candidate_functional_targets$target, "candidate", type)) %>% 
+  mutate(target = gsub("TRINITY_", "", target)) %>% 
+  mutate(target = gsub("_", "-", target)) %>% 
+  mutate(target = gsub("Ivan-2018-sympho47-2L1-", "Iv18", target))
+```
+
+```{r baits}
+baits <- read_tsv(file.path(path, "files-Symphonia",
+                   "Olsson2017Reference-baits-80-40-filtration.txt")) %>% 
+left_join(read_tsv(file.path(path, "files-Symphonia",
+                   "ScottiUnpublishedReference-baits-80-40-filtration.txt")),
+          by = "Bait(1)", suffix = c(".Olsson", ".Scotti")) %>% 
+  filter(`%GC(2).Olsson` > 20, `%GC(2).Olsson` < 80) %>% 
+  mutate(perc_masked = (80-nchar(gsub("[^::A-Z::]","", X15.Olsson)))/80*100) %>% 
+  filter(perc_masked <= 25) %>% 
+  filter(`Moderate(12).Olsson` == "pass" & `Moderate(12).Scotti` == "pass") %>% 
+  dplyr::rename(bait = `Bait(1)`) %>% 
+  separate(bait, c("target", "baitStart"), sep = "_", remove = F) %>% 
+  dplyr::select(target, bait) %>% 
+  group_by(target) %>% 
+  summarise(n_baits = n())
+```
+
+```{r targetsBaits, fig.cap="Targets baits headcount and coverage by type."}
+targets <- read_tsv(file.path(path, "files-Symphonia",
+                   "baits-moderate-25pcRM.bothGenomes.list.targcovg.table")) %>% 
+  dplyr::rename(target = Target, within100 = `w/in100nt`, 
+                within200 = `w/in200nt`, within500 = `w/in500nt`) %>% 
+  mutate_at(vars(-target), funs(as.numeric(gsub("%", "", .)))) %>% 
+  filter(target != "ALLTARGS")
+targets %>% 
+  left_join(targets_type) %>% 
+  arrange(desc(BaitCovg)) %>% 
+  left_join(baits) %>% 
+  ggplot(aes(BaitCovg, n_baits, col = type)) +
+  geom_point()
+```

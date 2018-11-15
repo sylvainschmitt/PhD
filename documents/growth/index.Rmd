@@ -1,0 +1,129 @@
+--- 
+title: "Symphonia growth"
+author: "Sylvain Schmitt"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+colorlinks: yes
+description: "Growth models of *Symphonia* genus."
+---
+
+`r if (knitr:::is_html_output()) '# Preface {-}'`
+
+`r if (knitr:::is_html_output()) '![stability-wip](https://img.shields.io/badge/stability-work_in_progress-lightgrey.svg)'`
+
+`r if (knitr:::is_html_output()) 'Growth models of *Symphonia* genus.'`
+
+`r if (knitr:::is_html_output()) 'Have a nice reading.'`
+
+`r if (knitr:::is_html_output()) '<div align="right">  *Sylvain*'`
+
+
+```{r setup_index, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(rgdal)
+library(raster)
+library(tidyverse)
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+```{r data}
+# source("~/Documents/BIOGECO/PhD/scripts/dbh_correction.R")
+# path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+# trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+#                   dec=",", stringsAsFactors = F) %>% # dbh correction
+#   filter(n_parcelle %in% 1:16) %>% 
+#   mutate(treatment = c(c('C', 'T1', 'T2', 'T3', 
+#                          'T2', 'C', 'T1', 'T3',
+#                          'T1', 'T2', 'C', 'T3'), 
+#                        rep('B', 4))[n_parcelle]) %>% 
+#   mutate(dbh = circonf/pi) %>% 
+#   group_by(idArbre) %>% 
+#   mutate(dbh_c = correction(dbh, campagne, code_vivant, code_mesure)) %>% 
+#   ungroup() %>% 
+#   arrange(campagne) %>% 
+#   group_by(idArbre) %>% 
+#   mutate(dt = campagne - lag(campagne)) %>% 
+#   mutate(ddbh = dbh_c - lag(dbh_c)) %>% 
+#   filter(dt > 0) %>% 
+#   filter(ddbh >= 0) %>% 
+#   mutate(agr = ddbh/dt) %>% 
+#   select(idArbre, n_parcelle, n_carre, n_arbre, treatment, Xutm, Yutm, dbh_c, agr, espece)
+# # gaps
+# gaps <- shapefile("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/logging/Gaps.shp")
+# gaps <- spTransform(gaps, CRSobj = crs)
+# gaps <- subset(gaps, Plot == 2) # for tests
+# gaps$area <- area(gaps)
+# # trees
+# treesXY <- trees %>%
+#   select(-dbh_c, - agr) %>%
+#   distinct()
+# coordinates(treesXY) <- ~Xutm + Yutm
+# proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# treesXY <- spTransform(treesXY, CRSobj = crs)
+# # gap distance
+# D <- rgeos::gDistance(spTransform(gaps, "+proj=utm +zone=22 +units=m"),
+#                       spTransform(treesXY, "+proj=utm +zone=22 +units=m"),
+#                       byid = T)
+# # wetness
+# wetness <- raster("./environment_save/env/wetness.tiff")
+# dem <- raster(file.path(path, "topography", "MNT_ParacouAvril2009_5m.tif")) # for CRS
+# projection(wetness) <- projection(dem)
+# wetness <- projectRaster(wetness, crs = crs)
+# # adding env in trees
+# trees <- trees %>%
+#   left_join(data.frame(
+#     idArbre = treesXY$idArbre,
+#     Did = as.numeric(row.names(D)),
+#     dmin = apply(D, 1, min),
+#     wetness = raster::extract(wetness, treesXY)
+#   ))
+# rm(crs, path, correction, detect, treesXY, dem, wetness)
+# save(trees, D, gaps, file = "./growth_save/raw_data.Rdata")
+```
+
+```{r model data}
+# load("./growth_save/raw_data.Rdata")
+# 
+# # data function
+# model_data <- function(tree_data, gaps_data, D_data){
+#   tree_data$ind <- as.numeric(as.factor(tree_data$idArbre))
+#   tree_data$sp <- as.numeric(as.factor(tree_data$espece))
+#   list(
+#     N = dim(tree_data)[1], # Nb of measurements
+#     AGR = tree_data$agr, # growth vector
+#     dbh = tree_data$dbh_c, # dbh vector
+#     I = length(unique(tree_data$ind)), # Nb of individuals
+#     ind = tree_data$ind, # Individual number in matrix D
+#     S = length(unique(tree_data$sp)), # Nb of species
+#     sp = tree_data$sp, # Species vector
+#     # J = dim(D_data)[2], # Nb of gaps
+#     # S = gaps_data$area, # gaps surface vector
+#     # D = D_data # tree-gaps distance matrix
+#     trees = tree_data
+#   )
+# }
+# 
+# # model data 1
+# data <- trees %>% # tree selection
+#   filter(treatment != 'B') %>% 
+#   filter(n_parcelle == 2) %>% # for tests
+#   model_data(gaps, D)
+# 
+# # model data 2
+# data2 <- trees %>% 
+#   group_by(idArbre) %>% 
+#   filter(any(dbh_c < 20)) %>% 
+#   filter(any(dbh_c > 30)) %>% 
+#   model_data(gaps, D)
+# 
+# save(data, data2, file = "./growth_save/model_data.Rdata")
+```

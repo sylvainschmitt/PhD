@@ -1,0 +1,340 @@
+---
+title: "Symphonia growth"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(rgdal)
+library(raster)
+library(leaflet)
+library(starmie)
+library(rstan)
+library(bayesplot)
+library(abind)
+library(tidyverse)
+mpath <- "/home/sylvain/Documents/BIOGECO/PhD/documents/Symphonia/symphonia_models/"
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+# Intro
+
+```{r data}
+source("~/Documents/BIOGECO/PhD/scripts/dbh_correction.R")
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- read.csv(file.path(path, 'trees/Symphonia_Paracou.csv'),
+                  dec=",", stringsAsFactors = F)
+trees <- trees %>% # dbh correction
+  filter(n_parcelle %in% 1:16) %>% 
+  mutate(treatment = c(rep(c('C', 'T1', 'T2', 'T3'), 3), rep('B', 4))[n_parcelle]) %>% 
+  mutate(dbh = circonf/pi) %>% 
+  group_by(idArbre) %>% 
+  mutate(dbh_c = correction(dbh, campagne, code_vivant, code_mesure)) %>% 
+  ungroup()
+trees <- trees %>% # tree selection
+  filter(treatment != 'B') %>% 
+  arrange(campagne) %>% 
+  group_by(idArbre) %>% 
+  filter(any(campagne == 1988)) %>% 
+  filter(any(campagne == 1992)) %>% 
+  filter(campagne %in% c(1988, 1992)) %>% 
+  mutate(growth = diff(dbh_c)) %>% 
+  filter(growth > 0) %>% 
+  filter(campagne == 1988) %>% 
+  select(idArbre, n_parcelle, n_carre, n_arbre, Xutm, Yutm, dbh_c, growth)
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# gaps
+gaps <- shapefile("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/logging/Gaps.shp")
+gaps <- spTransform(gaps, CRSobj = crs)
+gaps$area <- area(gaps)
+# trees
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+# gap distance
+d <- raster(extent(treesXY), resolution = 10^-4, crs = crs)
+d <- setValues(d, 0)
+d <-  mask(d, gaps)
+d <- distance(d)
+trees$dgaps <- raster::extract(d, treesXY)
+D <- rgeos::gDistance(spTransform(gaps, "+proj=utm +zone=22 +units=m"),
+                      spTransform(treesXY, "+proj=utm +zone=22 +units=m"),
+                      byid = T)
+mdata <- list(I = dim(trees)[1], # Nb of trees
+              growth = trees$growth, # growth vector
+              dbh = trees$dbh_c/max(trees$dbh_c), # dbh in 1988 vector
+              J = dim(gaps)[1], # Nb of gaps
+              S = gaps$area/max(gaps$area), # gaps surface vector
+              D = D/max(D)) #tree-gaps distance matrix
+rm(crs, path, correction, detect)
+```
+
+## Models
+
+> I wanted to test for an eventual effect of logging through light and disturbance on Symphonia individuals growth. I used control and treatment plots between 1988 and 1992. I kept only trees already present in 1988 and still alive in 1992, and calculate their growth during this time. I then tried to look at the effect of both distance to the closest logging gaps ($d_{gaps}$ in $m$), original dbh of inidividuals in 1998 ($dbh_{1998}$ in $cm$), and their interaction on growth ($growth$ in $cm$). I used a bayesian model following a log normal law for growth :
+$$M_{log}:~~growth \sim log \mathcal{N}(\alpha*log(d_{gaps}+1) + \beta*dbh_{1998} + \gamma*log(d_{gaps}+1)*dbh_{1998}, \sigma) $$
+
+> Then I used the model proposed by @Herault2010:
+$$growth_i \sim \mathcal{N}(\mu*\sum_j^J(e^{-\alpha*d_{i,j}}*S_j^\beta);\sigma)~|~i\in[1:I]~,~j\in[1:J]$$
+where the growth between 1988 and 1992 ($growth$ in $cm$) of an individual $i$ depend on its distance to logging gaps $j$ ($d_{i,j}$ in $m$) and the logging gap surface ($S_j$ in $m$). $\mu$, $\alpha$, and $\beta$ represents are the disturbance parameters. A nul $\alpha$ or $\beta$ indicates a nul effect of logging gaps distance or surface. That i declined in different versions :
+
+### Table 1: Models summary.
+
+```{r}
+mtab <- data.frame(
+  M = c('$M_{\\alpha, \\beta}$', 
+        '$M_{\\mu, \\alpha, \\beta}$', 
+        '$M_{\\mu, \\alpha, \\beta, \\omega}$'),
+  Model = c(
+    '$growth_i \\sim \\mathcal{N}(\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta);\\sigma)$',
+    '$growth_i \\sim \\mathcal{N}(\\mu*\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta);\\sigma)$',
+    '$growth_i \\sim \\mathcal{N}(\\mu*\\sum_j^J(e^{-\\alpha*d_{i,j}}*S_j^\\beta)+\\omega;\\sigma)$'
+  )
+)
+mtab$M <- as.character(mtab$M)
+mtab$Model <- as.character(mtab$Model)
+row.names(mtab) <- c('Mab', 'Mmab', 'Mmabo')
+kable(mtab, row.names = F)
+```
+
+## Map
+
+### Map of Symphonia growth after logging (between 1988 and 1992) and distance to logging gaps. *dots size and label represents the growth in cm between 1988 and 1992*
+
+```{r map}
+leaflet() %>%
+  addRasterImage(log(d+1),
+                 opacity = 0.5) %>% 
+  addCircles(data = treesXY, radius = ~growth, 
+             label = paste("+", round(treesXY$growth,1), "cm")) %>% 
+  addLegend(pal = colorNumeric("Spectral", values(log(d+1))), 
+            values = values(log(d+1)), position = "bottomleft",
+    title = "log of distance\nto logging gaps")
+rm(d, treesXY)
+```
+
+
+# `r mtab['Mab',1]`
+
+```{r M3}
+# fit <- stan(file = file.path(mpath, 'M3.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M3.Rdata'))
+load(file.path(mpath, 'M3.Rdata'))
+pars <- c("alpha", "beta", "sigma")
+pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+> The model seems to have correctly converged but the pair plot shows a strong correlation between $\alpha$ and $\beta$ parameters certainly due to a confounded factor. This correlation have ot be corrected including more parameters.
+
+### Model Predictions.
+
+```{r M3 pred}
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000,
+#          mean = sum(exp(-pars_val[1]*(d/dmax))*(s/smax)^pars_val[2]),
+#          sd = pars_val[3])
+# pred<- sapply(seq_len(mdata$I), function(i)
+#   apply(as.matrix(fit)[,pars], 1, function(p)
+#     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
+# pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
+# pred$mean <- sapply(seq_len(mdata$I), function(i)
+#                     sum(exp(-pars_val[1]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[2]))
+# pred$gaps <- apply(D, 1, min)
+# pred$dbh <- mdata$dbh
+# names(pred)[1:2] <- c('5%', '95%')
+# save(pred, file = file.path(mpath, 'M3p.Rdata'))
+load(file.path(mpath, 'M3p.Rdata'))
+ggplot(data.frame(dgaps = apply(D, 1, min), 
+                  growth = trees$growth),
+       aes(dgaps, growth)) +
+  geom_ribbon(aes(x = pred$gaps, ymin = pred$`5%`, ymax = pred$`95%`), color = 'grey', alpha = 0.2) +
+  geom_line(aes(x = pred$gaps, y = pred$`5%`, color = '5%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$`95%`, color = '95%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$mean, color = 'mean'), linetype = 2) +
+  geom_point() +
+  xlab('distance to the closest logging gap (m)') +
+  ylab('growth between 1988 and 1992 (cm)') +
+  scale_color_manual(name = 'Model',
+                     values = c('5%' = 'black',
+                                '95%' = 'black',
+                                'mean' = 'red'))
+```
+
+### Parameters markov chains.
+
+```{r C3}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Mab',], collapse = ': ')`
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R3}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P3}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
+```
+
+# `r mtab['Mmab',1]`
+
+```{r M2}
+# fit <- stan(file = file.path(mpath, 'M2.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M2.Rdata'))
+load(file.path(mpath, 'M2.Rdata')) #
+pars <- c("mu", "alpha", "beta", "sigma")
+pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+> The model seems to have correctly converged besides the log likelyhood seems to be constrained to a maximal value. Parameters seem correctly uncorrelated. $\alpha$ and $\beta$ present both relatively high values significantly non null indicating a strong effect of logging gaps distance and surface on *Symphonia* tree growth.
+
+### Model Predictions.
+
+```{r M2 pred}
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000, 
+#          mean = pars_val[1]*sum(exp(-pars_val[2]*(d/dmax))*(s/smax)^pars_val[3]),
+#          sd = pars_val[4])
+# pred<- sapply(seq_len(mdata$I), function(i)
+#   apply(as.matrix(fit)[,pars], 1, function(p)
+#     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
+# pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
+# pred$mean <- sapply(seq_len(mdata$I), function(i)
+#                     pars_val[1]*sum(exp(-pars_val[2]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[3]))
+# pred$gaps <- apply(D, 1, min)
+# pred$dbh <- mdata$dbh
+# names(pred)[1:2] <- c('5%', '95%')
+# save(pred, file = file.path(mpath, 'M2p.Rdata'))
+load(file.path(mpath, 'M2p.Rdata'))
+ggplot(data.frame(dgaps = apply(D, 1, min), 
+                  growth = trees$growth),
+       aes(dgaps, growth)) +
+  geom_ribbon(aes(x = pred$gaps, ymin = pred$`5%`, ymax = pred$`95%`), color = 'grey', alpha = 0.2) +
+  geom_line(aes(x = pred$gaps, y = pred$`5%`, color = '5%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$`95%`, color = '95%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$mean, color = 'mean'), linetype = 2) +
+  geom_point() +
+  xlab('distance to the closest logging gap (m)') +
+  ylab('growth between 1988 and 1992 (cm)') +
+  scale_color_manual(name = 'Model',
+                     values = c('5%' = 'black',
+                                '95%' = 'black',
+                                'mean' = 'red'))
+```
+
+### Parameters markov chains.
+
+```{r C2}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Mmab',], collapse = ': ')`
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R2}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P2}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
+```
+
+# `r mtab['Mmabo',1]`
+
+```{r M4}
+# fit <- stan(file = file.path(mpath, 'M4.stan'), data = mdata, chains = 1)
+# save(fit, file = file.path(mpath, 'M4.Rdata'))
+load(file.path(mpath, 'M4.Rdata'))
+pars <- c("mu", "alpha", "beta", "omega", "sigma")
+pars_val <- as.matrix(fit)[which.max(as.matrix(fit)[,'lp__']),pars]
+```
+
+## Column 1 {data-width=200}
+
+> The model seems to have correctly converged besides a spread and high distribution of $\alpha$ parameter. This time $\beta$ parameter is relatively low indicating a lower impact of surface on tree growth besides still non null. Hte high value of $\alpha$ question the fact of a binary effect regarding tree growth in relation to logging gaps. Anyway model $M_{\mu,\alpha,\beta,\omega}$ has a higher likelyhood than $M_{\mu,\alpha,\beta}$, consequently with similar convergence and with less parameters model $M_{\mu,\alpha,\beta}$ should be prefered.
+
+### Model Predictions.
+
+```{r M4 pred}
+# P <- function(d, s, dmax, smax, pars_val)
+#   rnorm(1000,
+#          mean = pars_val[1]*sum(exp(-pars_val[2]*(d/dmax))*(s/smax)^pars_val[3])+pars_val[4],
+#          sd = pars_val[5])
+# pred<- sapply(seq_len(mdata$I), function(i)
+#   apply(as.matrix(fit)[,pars], 1, function(p)
+#     P(D[i,], gaps$area, max(D), max(gaps$area), p)))
+# pred <- data.frame(t(apply(pred, 2, function(x) quantile(x, probs = c(0.05, 0.95)))))
+# pred$mean <- sapply(seq_len(mdata$I), function(i)
+#                     pars_val[1]*sum(exp(-pars_val[2]*(D[i,]/max(D)))*(gaps$area/max(gaps$area))^pars_val[3])+pars_val[4])
+# pred$gaps <- apply(D, 1, min)
+# pred$dbh <- mdata$dbh
+# names(pred)[1:2] <- c('5%', '95%')
+# save(pred, file = file.path(mpath, 'M4p.Rdata'))
+load(file.path(mpath, 'M4p.Rdata'))
+ggplot(data.frame(dgaps = apply(D, 1, min), 
+                  growth = trees$growth),
+       aes(dgaps, growth)) +
+  geom_ribbon(aes(x = pred$gaps, ymin = pred$`5%`, ymax = pred$`95%`), color = 'grey', alpha = 0.2) +
+  geom_line(aes(x = pred$gaps, y = pred$`5%`, color = '5%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$`95%`, color = '95%'), linetype = 2) +
+  geom_line(aes(x = pred$gaps, y = pred$mean, color = 'mean'), linetype = 2) +
+  geom_point() +
+  xlab('distance to the closest logging gap (m)') +
+  ylab('growth between 1988 and 1992 (cm)') +
+  scale_color_manual(name = 'Model',
+                     values = c('5%' = 'black',
+                                '95%' = 'black',
+                                'mean' = 'red'))
+```
+
+### Parameters markov chains.
+
+```{r C4}
+mcmc_trace(as.matrix(fit)[,c(pars, "lp__")], facet_args = list(labeller = label_parsed))
+```
+
+## Column 2 {data-width=200}
+
+> `r paste(mtab['Mmabo',], collapse = ': ')`
+
+### Parameters posterior ditribution. *Light blue area represents 80% confidence interval, and vertical blue line the mean.*
+
+```{r R4}
+mcmc_areas(as.matrix(fit)[,pars],  prob = 0.8)
+```
+
+### Parameters pairs plot. *Parameters density distribution, pairs plot and Pearson's coefficient of correlation.*
+
+```{r P4}
+GGally::ggpairs(data.frame(as.matrix(fit)[,pars]))
+```
+
+# References

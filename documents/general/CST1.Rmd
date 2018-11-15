@@ -1,0 +1,245 @@
+---
+title: Report for the PhD thesis committee
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+output:
+  bookdown::html_document2:
+    theme: readable
+    toc: true
+    toc_float: yes
+    number_sections: yes
+  bookdown::word_document2:
+    toc: false
+  bookdown::pdf_document2:
+    toc: false
+    number_sections: yes
+# rmarkdown::render("./documents/general/subject_new.Rmd", output_format = gdoc::gdoc())
+link-citations: yes
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+---
+
+<!-- https://ed-environnements.u-bordeaux.fr/var/ezdemo_site/storage/images/media/ecole-doctorale-sciences-et-environnements/sources/ed-304-footer-1280x280/70041-3-fre-FR/ED-304-Footer-1280x280_FooterLogoTiers.png -->
+
+```{r setup, cache=FALSE, include=FALSE}
+library(ggplot2)
+library(knitr)
+library(tidyverse)
+library(raster)
+knitr::opts_chunk$set(fig.width = 8, fig.height = 6, 
+                      echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Administrative situation of the PhD
+
+The PhD thesis work conducted by Sylvain SCHMITT is entitled "Ecological genomics of niche exploitation and individual performance in tropical forest trees". The main research field is ecology and evolution. The thesis was September $1^{th}$, 2017 in the UMR Biodiversité Gènes et Communautés (BIOGECO), under the supervision of Bruno Hérault and Myriam Heuertz, under a doctoral contract (contrat doctoral) funded by a grant from the Ministry of Research (bourse du ministère de l'enseignement supérieur et de la recherche, MESR).
+
+# Synthetic description of the PhD subject
+
+Understanding characteristics, causes and consequences of biodiversity is a fundamental challenge in ecology and evolution. Biodiversity presents three nested levels, from individuals, over species, to ecosystems.
+
+Intraspecific variability affects the individual level of biodiversity. High levels of intraspecific variability, notably in ecologically important traits have been reported. Intraspecific trait variability is shaped by the interaction between genetic variability, environmental heterogeneity, and stochastic factors.
+
+However, we still know little about the effects of this variability on population dynamics, species interactions and ecosystem processes. Interestingly though, variability at the level of genotypes and traits has been suggested to  promote local adaptation of populations and to promote species coexistence at the community level, thus suggesting a role for this variability in the origin and maintenance of  biodiversity.
+
+The main objective of the thesis is to further explore the genotype-environment interactions in shaping the intraspecific trait variability of tropical tree species, and  derive its impact on the origin and maintenance of biodiversity. The study site for the thesis is the lowland rainforest in the research station of Paracou, French Guiana, where detailed inventory and tree growth data, as well as environmental characterization are available. We specifically wish to consider the intraspecific genomic variability as a continuum within structured populations of closely related species, and measure its role on individual tree performance through growth over time, while accounting for effects of a finely-characterized environment at the abiotic and biotic level. Eventually, we expect to help building a theory of community ecology starting with individuals, because interactions with environment is based at the individual level.
+
+# Summary of work accomplished
+
+*Symphonia globulifera* (Clusiaceae) represents a species complex in French Guiana, comprising two weakly differentiated morphotypes living in differentiated habitats: *S. globulifera* (sensu stricto) preferentially grows in valley bottoms experiencing seasonal flooding and *S. sp.1* exploits a variety of drier habitats along well-drained slopes and hilltops. We explored in detail the habitat preference of the two morphotypes in the Paracou research station, highlighting topographic wetness index as a good predictor of the distribution of morphotypes (see figure \@ref(fig:allSympho)A). Between October and December, we sampled 402 adult trees for the production of genome scan (sequence capture) and functional trait data. We are using transcriptomic data of a reciprocal transplantation experiment (Tysklind *et al, in prep*)  in conjunction with published (Olsson *et al, 2017*) and unpublished (scotti *et al., pers. com*)  to design a sequence capture experiment (see figure \@ref(fig:allSympho)B). DNA from leaf samples is currently being extracted for the sequence capture. Preliminary, functional trait analysis of leaf and wood traits suggests weak morphotype differentiation (see figure \@ref(fig:allSympho)C). Further analysis of functional traits is being conducted in the framework of Émilie Ducouret's MSc (master 2) thesis.
+
+Next steps include:
+
+* Production of sequence capture data on *Symphonia globulifera* samples from Paracou and outgroups (*S. globulifera* from Africa, *S. nectarifera* and *S. urophylla* from Madagascar, *Pentadesma butyracea*)
+* Discovery of polymorphisms and analysis of gene capture data in a framework of population genetics (estimation of diversity patterns, demographic and introgression history) and environmental genomics on sampled individuals
+* A potential measurement of wood anatomical traits from *Symphonia globulifera* episcopic images already acquired on branch samples from Paracou
+* An association genetic for *Symphonia globulifera* traits, including leaf and wood functional traits, wood anatomical traits, and finally growth patterns.
+* The integration of environmental, genetic, and phenotypic data and analysis into individual performance through an individual growth model (see figure \@ref(fig:allSympho)D).
+* The further study of a second model, probably with the genus *Eschweilera* (Lecythidaceae), which contains three abundant and several rare closely related species occurring in Paracou.
+
+```{r environmentOverlap, fig.cap="Morphotypes distribution along the topographical wetness index (TWI)"}
+path <- "~/Documents/BIOGECO/PhD/data/Paracou"
+docpath <- "~/Documents/BIOGECO/PhD/documents/Symphonia/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+sympho <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  filter(Plot != 18) %>% 
+  mutate(morphotype = Species) %>% 
+  collect()
+symphoXY <- sympho
+coordinates(symphoXY) <- ~Xutm + Yutm
+proj4string(symphoXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+symphoXY <- spTransform(symphoXY, CRSobj = crs)
+wetness <- raster(file.path(path, "topography", "TWI_1m.tif"))
+dem <- raster(file.path(path, "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+sympho$wetness <- raster::extract(wetness, symphoXY)
+ge <- sympho %>% 
+  ggplot(aes(wetness, col = morphotype, fill = morphotype)) +
+  geom_histogram(aes(y = ..density..), binwidth = 0.05,
+                 alpha = 0.1, position = "dodge") +
+  geom_density(alpha = 0.2) +
+  xlab('Tropographic wetness index') +
+  bayesplot::theme_default()
+```
+
+```{r transciptomic, fig.cap="Candidate SNPs for sequence capture from Tysklind et al, in prep."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
+load(file.path(path, "count_SNP.Rdatat"))
+gg <- count_SNP %>% 
+  ungroup() %>% 
+  mutate(type = ifelse(Is_in_CDS == "False" & Is_not_synonymous == "N/A", 
+                       "SNP in untranslated\nregion (UTR)", NA)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "False", 
+                       "Synonymous SNP in\ncoding region", type)) %>% 
+  mutate(type = ifelse(Is_in_CDS == "True" & Is_not_synonymous == "True", 
+                       "SNP in coding region\nwith functional impact", type)) %>% 
+  filter(!is.na(type)) %>% 
+  ggplot(aes(type, n, fill = Is_condition_specific)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  scale_y_continuous(labels = function(x) format(x, big.mark = " ")) +
+  xlab(" ") + scale_x_discrete(limits = c("SNP in coding region\nwith functional impact",
+                                          "Synonymous SNP in\ncoding region",
+                                          "SNP in untranslated\nregion (UTR)")) +
+  scale_fill_discrete("Morphotype-specific", labels = c("no", "yes")) +
+  geom_text(aes(y = n + 10^5, 
+                col = Is_condition_specific,
+                label = paste(format(n, big.mark = " "))), 
+            size = 3,
+            position = position_dodge(width = 1)) +
+  scale_color_discrete(guide = "none") +
+  bayesplot::theme_default()
+```
+
+```{r functionalOverlap, fig.cap="Morphotypes distribution in SLA-BrWD scatterplot."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+load(file.path(path, "data.Rdata"))
+gf <- data  %>% 
+  dplyr::select(morphotype, Dry_Weight, Area_exclude, Wood_infra_density) %>% 
+  mutate(SLA = Area_exclude / Dry_Weight) %>% 
+  mutate(WD = Wood_infra_density) %>% 
+  na.omit() %>% 
+  ggplot(aes(WD, SLA, col = morphotype)) +
+  geom_point() +
+  stat_ellipse() +
+  xlab("Branch wood density (BrWD in g/g)") +
+  ylab("Specific leaf area (SLA in cm/g)") +
+  bayesplot::theme_default()
+```
+
+```{r individualGrowth, fig.cap="Symphonia growth model with individual maximum growth rate (Gmax)."}
+docpath <- "~/Documents/BIOGECO/PhD/documents/Symphonia/growth/"
+mpath <- "./growth_models"
+load(file.path(docpath, "./growth_save/model_data.Rdata"))
+load(file.path(docpath, mpath, 'Nio2.Rdata'))
+pars <- c("AGRmax", "Dopt", "Ks", "sigma", "sigma_ind")
+gp <- data.frame(
+  mean_all = apply(as.matrix(fit, pars = "AGRpred"), 2, mean),
+  mean_ind = apply(as.matrix(fit, pars = "AGRpred_ind"), 2, mean),
+  t(apply(as.matrix(fit, pars = "AGRpred_ind"), 2, quantile, probs = c(0.05, 0.95))),
+  data2$trees
+) %>% 
+  filter(agr < 2) %>% 
+  ggplot(aes(dbh_c, agr)) +
+  geom_point(aes(col = espece)) +
+  geom_line(aes(y = mean_ind, group = idArbre), alpha = 0.4) +
+  geom_ribbon(aes(ymin = X5., ymax = X95., group = idArbre), color = 'grey', alpha = 0.05) +
+  geom_line(aes(y = mean_all), lwd = 1.2) +
+  ylab("Annual growth rate (AGR in cm/yr)") +
+  xlab("Diameter at breast height (dbh in cm)") +
+  scale_color_discrete("morphotype") +
+  bayesplot::theme_default()
+```
+
+```{r allSympho, fig.cap="Preliminary results for the Symphonia globulifera study case. Subplot A shows the distribution of morphotypes along the topographical wetness index. Subplot B shows candidate SNPs for sequence capture from Tysklind et al, in prep. Subplot C shows the distibution of  according to specific leaf area and branch wood density. Subplot D shows a growth model with individual maximum growth rate."}
+cowplot::plot_grid(ge, gg, gf, gp, labels = LETTERS[1:4]) 
+```
+
+# Publications and conferences
+
+## Published {-}
+
+* __Schmitt S.__, Pouteau R., Justeau D., de Boissieu F., & Birnbaum P. (2018). SSDM: An R package to predict distribution of species richness and composition based on stacked species distribution models. *Methods in Ecology and Evolution*. 2017;8:1795–1803. https://doi.org/10.1111/2041-210X.12841
+* __Schmitt S.__, Pouteau R., Justeau D., de Boissieu F., & Birnbaum P. (2017). SSDM: Stacked Species Distribution Modelling. *R package version 0.2.3*. https://github.com/sylvainschmitt/SSDM
+* __Schmitt S.__, Heuertz M., Hérault B., & Tysklind N. (March 2018). Ecological genomics of niche exploitation
+and individual performance in tropical forest trees. *Poster presented at the European Conference of Tropical Ecology*. https://www.soctropecol-conference.eu/download/SocTropEcol_Tagungsband2018.pdf
+
+## In preparation {-}
+
+* __Schmitt, S.__, Raevel, V., Réjou-Méchain, M., Ayyappan, N., Balachandran, N., Barathan N., &
+Munoz, F. (In prep). Wood and leaf strategies in a low-elevation rainforest of Western Ghats.
+*Manuscript in preparation*.
+* __Schmitt, S.__, Chave, J., Fischer, F., Maréchaux, I., Piponiot, C., Traissac, S., & Hérault, B. (In prep). Functional diversity improves tropical forest resilience to disturbance. *Manuscript in preparation*.
+* Fischer, F., & __Schmitt S.__. (In prep). RconTroll: Front and back ends package for individual-based forest growth simulator TROLL. *R package in development*. https://github.com/fischer-fjd/RconTroll
+
+# Trainings courses, internships, and mobility
+
+* Participation to the 4 week online lecture "MOD : Formation Intégrité Scientifique"
+* Supervising of Émilie Ducouret master 2 thesis
+* Presentation of a poster to the international "European conference of tropical ecology"
+* Presentation of a poster to the "Journée des Doctorants 2018" from "Sciences et Environnements" doctoral school
+* Potential future participation to training course "Introduction to next-generation sequencing: applications in ecology and evolution" in Barcelona
+* Mobility to Kourou in French Guiana for field sampling, genetic & functional analysis and supervising
+* Potential future mobility to Yamoussoukro in Ivory Coast for data analysis
+* Potential future mobility to a lab abroad (EIRA)
+
+# Scientific animation
+
+* __Schmitt S__, Heuertz M, Hérault B, Tysklind N. Ecological genomics of niche exploitation
+and individual performance in tropical forest trees. Poster presented at the Journée des Doctorants de l’ED Sciences et Environnements. May 2018. https://jded-2018.sciencesconf.org/
+* Lecture realized at UMR ECOFOG on Bayesian modelling with stan and R languages (https://sylvainschmitt.netlify.com/files/stan/stan.html#/)
+* Participation in meetings of the "Équipe de génétique et écologie des populations", and attendance of seminars organized by the UMR Biodiversité, Gènes et Communautés (BIOGECO) when present in Bordeaux
+* Participation in meetings of the genetics lab and meetings of the research unit UMR Écologie des Forêts de Guyane (ECOFOG) when present in Kourou
+
+# Educational work
+
+Nothing realized or scheduled.
+
+# Other activities
+
+Nothing realized or scheduled.
+
+# Professional perspective
+
+After my PhD thesis, I aim to realize a post-doc at the international or in France to try to further obtain a researcher position.
+
+# Opinion from PhD student
+
+* _Frequency of contacts with the directeur de thèse (not including mail)_: Less than one per month (Directeur de thèse based in Ivory Coast)
+* _Frequency of contacts with the co-directeur de thèse_: Every day when in Bordeaux or several times a month when in Kourou
+* _Relations with other scientist outside from the supervising_:
+    * _Local_: YES (Géraldine Derroire, Éric Marcon, Sabrina Coste, Stéphane Traissac, Katarina Budde, Sébastien Levionnois...)
+    * _National_: YES (Fabian Fischer, Maxime Réjou-Méchain, Jérôme Chave, François Munoz)
+    * International: YES (Scientists met at the European conference of tropical ecology)
+* _General opinion on the PhD precising potential difficulties_: Positive opinion with no peculiar difficulties to be noticed except potential difficulties due to distance (Bordeaux, Kourou, Yamoussoukro) which are easily solved by new technologies !
+
+*Nom, prénom du signataire, date et signature*
+
+`r if (knitr:::is_latex_output()) '\\vspace{3cm}'`
+`r if (knitr:::is_latex_output()) '\\newpage'`
+
+# Opinions of directeurs de thèse
+
+Concise opinion (< 100 words) precising organisation and autonomy from the PhD student in his work justifying his progress in his research project.
+
+`r if (knitr:::is_latex_output()) '\\vspace{5cm}'`
+
+Sylvain Schmitt has successfully appropriated the thesis subject, through a vast literature review and the production of a written conceptual document on the PhD subject. His work on data generation is progressing well and is marked by a high level of resourcefulness and autonomy in the organization of his work, specifically the analysis of preliminary data for diverse aspects of experimental design. The communication with the thesis supervisors is smooth and efficient. To sum up, Sylvain’s work is progressing very well. 
+
+*Nom, prénom du(des) signataire(s), date et signature(s)*
+
+`r if (knitr:::is_latex_output()) '\\vspace{3cm}'`
+
+# Opinion of comité de suivi de thèse
+
+Concise opinion (< 200 words) tackling specific orientation and progress in the research project, training plan for the student, and student insertion in the professional framework (team, lab, école doctorale, institution, ...).
+
+`r if (knitr:::is_latex_output()) '\\vspace{5cm}'`
+
+*Nom, prénom du signataire, date et signature*
+
+`r if (knitr:::is_latex_output()) '\\vspace{3cm}'`

@@ -1,0 +1,530 @@
+```{r setup_plates, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+# Plates
+
+This chapter introduce the plates preparation after the extraction and before libraries preparation. First we will look into plates design after extraction. Then we will quantify their oncentration, volume and DNA quantity, before rearranging them based on their concentration. Finally plates concentration will be adjusted to 20 $ng.\mu L^{-1}$ and sorted by electrophoresis evaluation.
+
+## After extraction
+
+Plates were arranged following figure \@ref(fig:plates) after extraction.
+
+```{r plates, fig.cap="Extraction plates organization"}
+plates <- read_csv(file.path(path, "Symphonia_sequence_capture - Plates.csv"))
+bd <- read_csv(file.path(path, "Base_Données_Symphonia.csv"))
+
+plates %>% 
+  mutate(row = substr(Position, 1, 1)) %>% 
+  mutate(col = substr(Position, 2, 3)) %>% 
+  group_by(Plate) %>% 
+  select(Plate, Position, row, col, ID_genetic) %>% 
+  arrange(Plate, row, col) %>% 
+  ggplot(aes(y = factor(row, levels = rev(LETTERS[1:8])),
+             x = factor(col, levels = 1:12))) + 
+  # geom_point(shape=21, size =10)  +
+  geom_text(aes(label = ID_genetic), size = 2.5) +
+  facet_wrap(~ Plate, ncol = 2) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+## DNA Quantifiaction 
+
+All plates will be quantified through NanoDrop and some of them with Qbit which is more precise. We will use Qbit-NanoDrop relation to have an estimation of concentration for all samples. Finally electrophoresis are also used to asses DNA quality and degradation.
+
+### NanoDrop
+
+NanoDrop evaluated $1 \mu L$ of samples DNA concentration (figure \@ref(fig:nanodrop)) by absorption in addition to contamination. But NanoDrop is known to be inaccurate, especially under 25 $ng.\mu L^{-1}$.
+
+```{r nanodrop, fig.cap="Extraction plate NanoDrop concentration (in ng/microL)"}
+nanodrop <- do.call("rbind", sapply(list.files(file.path(path, "NanoDrop"), full.names = T),
+                                  read.delim2, simplify = F)) %>% 
+  mutate(row = substr(Well, 1, 1)) %>% 
+  mutate(col = substr(Well, 2, 3)) %>% 
+  group_by(`Plate.ID`) %>% 
+  arrange( Well, -Time) %>% 
+  filter(!duplicated(Well)) %>% 
+  mutate(Conc. = ifelse(Conc. < 0, NA, Conc.)) %>% 
+  mutate(Conc. = ifelse(Conc. > 1000, NA, Conc.)) %>% 
+  dplyr::rename(plate = `Plate.ID`, well = Well,
+                concentration = Conc., r260.280 = X260.280, 
+                r260.230 = X260.230)
+nanodrop %>% 
+  select(plate, well, row, col, concentration) %>% 
+  arrange(plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = concentration), size = 2.5) +
+  facet_wrap(~ plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+### Electrophoresis
+
+We evaluated samples quality and degradation by an electrophoresis of 1 to 1.5 $\mu L$ of sample DNA with 1 to 1.5 $\mu L$ of **weight** migrating 20 minutes with 20 V on an agarose gel with 80 $mL$ of 0.1 X TAE with 1 $\mu L$ of red gel. Samples were classified as good, medium and bad. "Good" samples only included a band at high molecular weight, "bad" samples only included a smir at low molecular weight indicating degraded DNA, whereas "medium" samples included both.
+
+### QBit
+
+We used Qbit on 12 samples to have a more precise idea of samples concentration. Qbit is fluorescence to measure samples concentration in $ng.\mu L^{-1}$. We compared QBit estimation of concentration to NanoDrop estimation. We used a bayesian approach to fit the model $Concentration_{Qbit} \sim \mathcal{N}(\beta*Concentration_{NanoDrop},\sigma)$ with a null intercept. We found a pretty strong relation with a beta around 0.3. We thuse used this forumla to estimate better the concentration of all samples.
+
+```{r qbitTable}
+qbit <- read_csv(file.path(path, "Symphonia_sequence_capture - QBit.csv"))
+# qbit %>%
+#   select(Plate, Position, Quality_Electrophoresis, Concentration_Final) %>% 
+#   kable(col.names = c("Plate", "Position", "Electrophoresis", "Concentraion (ng/microL)"),
+#         fig.cap = "Qbit concentrations.")
+```
+
+```{stan qbitModel, output.var="qbitModel", echo=T, eval=F}
+  data {
+    int N ;
+    real Concentration_Qbit[N] ;
+    real Concentration_NanoDrop[N] ;
+  }
+  parameters {
+    real beta ;
+    real sigma ;
+  }
+  model {
+    for(n in 1:N)
+      Concentration_Qbit[n] ~ normal(beta*Concentration_NanoDrop[n], sigma) ;
+  }
+```
+
+```{r fit}
+data <- filter(qbit, Concentration_NanoDrop < 250)
+# fit <- sampling(qbitModel,
+#                 data = list(N = nrow(data),
+#                             Concentration_Qbit = data$Concentration_Final,
+#                             Concentration_NanoDrop = data$Concentration_NanoDrop))
+# save(fit, file = "./probes_save/MQbit.Rdata")
+load("./probes_save/MQbit.Rdata")
+broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>%
+  kable(caption = "Summary table of the model")
+```
+
+```{r pred, fig.cap="Model result of the relation between DNA concentration measured with Qbit and NanoDrop. Color indicates the electrophoresis classification of the samples."}
+beta <- broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>% 
+  filter(term == "beta") %>% select(estimate) %>% unlist()
+qbit %>% 
+  ggplot(aes(Concentration_NanoDrop, Concentration_Final)) +
+  geom_point(aes(color = Quality_Electrophoresis)) +
+  geom_abline(intercept = 0, slope = beta) +
+  xlab("Concentration NanoDrop (ng/microL)") +
+  ylab("Concentration Qbit (ng/microL)") +
+  scale_color_discrete("Electrophoresis") +
+  ggtitle(paste("Y =", round(beta,2), "* X"))
+```
+
+## Library plates design
+
+We first designed new plates based on the samples concentration in order to bring all samples to the same concentration for further easier manipulations in libraries preparation.
+
+```{r data}
+data <- plates %>% 
+  filter(!is.na(ID_genetic)) %>% 
+  left_join(nanodrop %>% 
+              select(plate, well, concentration) %>% 
+              dplyr::rename(Plate = plate, Position = well, nanodrop = concentration)) %>% 
+  mutate(concentration_est = beta*nanodrop) %>%
+  mutate(ID_paracou = paste0("P", Plot, "_", Subplot, "_", Number)) %>% 
+  mutate(ID = ifelse(!is.na(Plot), ID_paracou, ID_genetic))
+```
+
+### Pool
+
+We pooled all individuals  with 2 extraction and with a nanodrop concentration inferior to 25 $ng.\mu L^{-1}$. Those wiht only one extraction will be further concentrated. **Warning, P7-3-2812 has been pooled from P2.C12 to P7.C12 instead of P7.D12.**
+
+```{r pool}
+data %>%
+  group_by(ID) %>% 
+  filter(nanodrop < 25 | is.na(nanodrop)) %>% 
+  filter(n() > 1) %>% 
+  arrange(ID) %>% 
+  select(ID, Plate, Position, nanodrop) %>% 
+  head() %>% 
+  kable(caption = "Preview of Samples to be pooled. From plates 1, 2 and 3 to plate 5, 6 and 7") %>% 
+  kable_styling(full_width = F) %>% 
+  kableExtra::collapse_rows(1)
+```
+
+
+### New nanodrop
+
+Pooled individuals and new individuals from Itubera Brazil (n = 3), La Selva Costa Rica (n = 2) and Baro Colorado Island Panama (n = 2)  has been quantified again with the nanodrop.
+
+```{r nanodrop2}
+america <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_america.txt")) %>% 
+  dplyr::select(Sample.ID, Conc.) %>% 
+  dplyr::rename(ID = Sample.ID, nanodrop = Conc.) %>% 
+  mutate(Plate = "America", Position = NA)
+itubera <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_Itubera.txt")) %>% 
+  dplyr::select(Plate.ID, Well, Conc.) %>% 
+  dplyr::rename(Plate = Plate.ID, Position = Well, nanodrop = Conc.) %>% 
+  mutate(Plate = "Itubera") %>% 
+  mutate(ID = paste0("IT_", Position))
+pull <- read.delim2(file.path(path, "NanoDrop2", "sylvain_symphonia_pull.txt")) %>% 
+  dplyr::select(Sample.ID, Conc.) %>% 
+  dplyr::rename(ID = Sample.ID, nanodrop = Conc.) %>% 
+  mutate(Plate = "Pull", Position = NA)
+rbind(america, itubera, pull) %>% 
+  sample_n(5) %>% 
+  kable(caption = "Preview of New nanodrops.")
+```
+
+### Plates arranged by concentration
+
+We reorganised plates in a new scheme ordered by concentration followinf figure \@ref(fig:concPlatePosition) design with figure \@ref(fig:concPlateConcentration) concentrations.
+
+```{r newData}
+pull <- pull %>% 
+  dplyr::rename(nanodrop2 = nanodrop) %>% 
+  select(ID, nanodrop2) %>% 
+  mutate(ID = gsub("-", "_", ID))
+america <- america %>%
+  mutate(Origin = substr(ID, 1,2)) %>% 
+  mutate(Country = ifelse(Origin == "LS", "Costa Rica", "Panama")) %>% 
+  mutate(Origin = ifelse(Origin == "LS", "La Selva", "BCI")) %>% 
+  mutate(Species = "S. globulifera",
+          ID_genetic = ID, ID_paracou = NA, 
+         Plot = NA, Subplot = NA, Number = NA) %>% 
+  arrange(ID, Plate, Position, nanodrop,
+          Species, Origin, Country,
+          ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
+  group_by(Origin) %>% 
+  arrange(desc(nanodrop)) %>% 
+  dplyr::slice(1:2)
+itubera <- itubera %>% 
+  mutate(Species = "S. globulifera", Origin = "Itubera", Country = "Brazil",
+          ID_genetic = ID, ID_paracou = NA, 
+         Plot = NA, Subplot = NA, Number = NA) %>% 
+  arrange(ID, Plate, Position, nanodrop,
+          Species, Origin, Country,
+          ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
+  mutate_if(is.factor, as.character) %>% 
+  arrange(desc(nanodrop)) %>% 
+  dplyr::slice(1:3)
+data <- data %>% 
+  filter(!(Plate %in% 1:2)) %>% 
+  group_by(ID) %>% 
+  arrange(ID, Plate) %>% 
+  filter(row_number() == n()) %>% 
+  left_join(pull, by = "ID") %>% 
+  mutate(nanodrop = ifelse(is.na(nanodrop2), nanodrop, nanodrop2)) %>% 
+  select(-nanodrop2, -concentration_est, -Comment) %>% 
+  arrange(ID, Plate, Position, nanodrop,
+          Species, Origin, Country,
+          ID_genetic, ID_paracou, Plot, Subplot, Number) %>% 
+  mutate(Plate = as.character(Plate)) %>%
+  bind_rows(america) %>%
+  bind_rows(itubera) %>% 
+  mutate(concentration = beta*nanodrop)
+```
+
+```{r concPlate}
+data <- data %>% 
+  select(ID, Plate, Position, concentration) %>% 
+  arrange(concentration)
+data$new_Plate <- rep(1:5, each = 8*12)[1:432]
+data$new_Position <- rep(unlist(sapply(1:12, function(x) paste0(LETTERS[1:8], x))), 5)[1:432]
+```
+
+```{r concPlatePosition, fig.cap="Previous position in new plates arranged by concentration;"}
+data %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, past_Position, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = past_Position), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r concPlateConcentration, fig.cap="Concentration in plates arranged by concentration."}
+data %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  mutate(past_Position = ifelse(!is.na(Position) & Plate != "Itubera", 
+                                paste0("P", Plate, ".", Position), ID)) %>% 
+  select(new_Plate, row, col, concentration, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = concentration < 20)) + 
+  geom_text(aes(label = round(concentration, 1)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+### Samples volume
+
+In order to adjust samples concentration we need first to assess their current volume, see figure \@ref(fig:volumes). Volume after extraction was around 45 $\mu L$ (estimated loss). Samples have lost volume with NanoDrop, Qbit, electrophoresis, and libraries trial, one or two times. And some sample won volume with pooling. We can consider all samples to have lost 1 $\mu L$ with NanoDrop. Samples used in Qbit lost an additional 1.5 to 3 $\mu L$. Finally samples used in trial libraries lost between 0.5 and 5 $\mu L$ (with library test II repeated). And pooled samples from plate 5, 6 an 7 won 49 $\mu L$ from NanoDroped samples from plate 1, 2, 3 and 4 unused for NanoDrop, Qbit nor libraries trial (original 50 minus 1 nanodropped). Added samples from Itubera, La Selva and Baro Colorado Island have an estimated volume of 10 $\mu L$ (overestimated).
+
+
+```{r volumes, fig.cap="Samples estimated volumes."}
+libraries_test <- read_csv(file.path(path, 
+                                     "Symphonia_sequence_capture - Libraries test.csv")) %>% 
+  mutate(Volume = ifelse(Date == "23/07/2018", Volume*2, Volume)) # repeated library test II
+data <- data %>% 
+  mutate(volume_init = 45) %>% # lost volume
+  mutate(volume_nanodrop = -1) %>% 
+  left_join(mutate(qbit, volume_qbit = -Volume_Sample) %>% 
+              mutate(Plate = as.character(Plate)) %>% 
+            select(Plate, Position, volume_qbit)) %>% 
+  mutate(volume_qbit = ifelse(is.na(volume_qbit), 0, volume_qbit)) %>% 
+  mutate(volume_pool = ifelse(ID %in% pull$ID, 49, 0)) %>% 
+  left_join(mutate(libraries_test, volume_libraries_test = -Volume) %>% 
+              mutate(Plate = as.character(Plate)) %>% 
+              select(Plate, Position, volume_libraries_test)) %>% 
+  mutate(volume_libraries_test = ifelse(is.na(volume_libraries_test), 
+                                        0, volume_libraries_test)) %>% 
+  mutate(volume = sum(volume_init, volume_nanodrop, volume_qbit, 
+                      volume_pool, volume_libraries_test)) %>% 
+  mutate(volume = ifelse(Plate %in% c("America", "Itubera"), 10, volume)) %>% 
+  select(-volume_init, -volume_nanodrop, -volume_qbit, -volume_pool, -volume_libraries_test)
+data  %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  group_by(new_Plate) %>% 
+  select(new_Plate, row, col, volume, Plate) %>% 
+  arrange(new_Plate, row, col) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = volume)) + 
+  geom_text(aes(label = round(volume, 1)), size = 2.5) +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+### DNA quality
+
+We assessed DNA fragment quality and size through electrophoresis and reorganised columns inside plates by quality.
+
+```{r dnaQuality}
+electrophoresis <- read_csv(file.path(path, 
+                                      "Symphonia_sequence_capture - Electrophoresis.csv")) %>% 
+  select(Plate, Position, Status) %>% 
+  mutate(Plate = as.character(Plate))
+data <- data %>%
+  left_join(electrophoresis, by = c("Plate", "Position")) %>% 
+  mutate(Status = ifelse(is.na(Status), "Medium", Status))
+data <- data %>%  
+  mutate(numeric_status = ifelse(Status == "Good", 1, NA)) %>% 
+  mutate(numeric_status = ifelse(Status == "Medium", 2, numeric_status)) %>% 
+   mutate(numeric_status = ifelse(Status == "Bad", 3, numeric_status)) %>% 
+  arrange(new_Plate, desc(numeric_status))
+data$final_Plate <- rep(1:5, each = 8*12)[1:432]
+data$final_Position <- rep(unlist(sapply(1:12, function(x) paste0(LETTERS[1:8], x))), 5)[1:432]
+# data %>%
+#   select(ID,	new_Plate,	new_Position,	volume, concentration,
+#          final_Plate,	final_Position, Status) %>%
+#   write_csv(path = file.path(path, "Final plate.csv"))
+```
+
+```{r robotQuality}
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  mutate(volumeplus5 = ifelse(volume+5 > 50, 50, volumeplus5)) %>% 
+  filter(new_Plate %in% 1:2) %>% 
+  mutate(source_Plate = ifelse(new_Plate == 1, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(new_Plate == 1, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = new_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(ID,	source_Plate,	source_Position,	volumeplus5, concentration,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "arrangement_quality",
+                             "Robot1.csv"))
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  mutate(volumeplus5 = ifelse(volume+5 > 50, 50, volumeplus5)) %>% 
+  filter(new_Plate %in% 3:4) %>% 
+  mutate(source_Plate = ifelse(new_Plate == 3, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(new_Plate == 3, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = new_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(ID,	source_Plate,	source_Position,	volumeplus5, concentration,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "arrangement_quality",
+                             "Robot2.csv"))
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  mutate(volumeplus5 = ifelse(volume+5 > 50, 50, volumeplus5)) %>% 
+  filter(new_Plate %in% 5:6) %>%   
+  mutate(source_Plate = ifelse(new_Plate == 5, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(new_Plate == 5, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = new_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(ID,	source_Plate,	source_Position,	volumeplus5, concentration,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "arrangement_quality",
+                             "Robot3.csv"))
+data %>%
+  mutate(volumeplus5 = volume + 5) %>% 
+  filter(volumeplus5 > 50) %>% 
+  select(ID,	new_Plate,	new_Position,	volumeplus5, concentration,
+         final_Plate,	final_Position) %>% 
+  kable()
+```
+
+```{r dnaQualityPlot1, fig.cap="Plates electrophoresis status before rearrangement."}
+data %>% 
+  mutate(row = substr(new_Position, 1, 1)) %>% 
+  mutate(col = substr(new_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = Status)) + 
+  geom_point(size = 4)  +
+  facet_wrap(~ new_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r dnaQualityPlot2, fig.cap="Plates electrophoresis status after rearrangement."}
+data %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12),
+             col = Status)) + 
+  geom_point(size = 4)  +
+  facet_wrap(~ final_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+### Concentration
+
+All individuals with an estimated concetration inferior to 19 $ng.\mu L^{-1}$ (Plates 1 and 2) have been dried in the speed vacuum centrifuge. And corresponding volume of miliQ water will be added to reach a concentration of 20 $ng.\mu L^{-1}$ (or at least 6.5 $\mu L$ to reach sample volume). Their DNA content in $ng$ has beeen computed multiplying concentration with volume. The volume of water to add is thus the DNA content divided by the objective concentration of 20 $ng.\mu L^{-1}$: $V = \frac{C_0*V_0}{20}$. Corresponding volumes are shown in figure \@ref(fig:concentrationVolume).
+
+```{r concentration, fig.cap="Samples to be concentrated. Estimated concentration in ng/microL"}
+data %>% 
+  filter(final_Plate %in% 1:2) %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(concentration, 2)), size = 2.5) +
+  facet_wrap(~ final_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r concentrationVolume, fig.cap="Volume to resupspend dry samples."}
+data %>% 
+  filter(final_Plate %in% 1:2) %>% 
+  mutate(new_volume = (volume*concentration)/20) %>% 
+  mutate(new_volume = ifelse(new_volume < 10, 10, new_volume)) %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(new_volume, 2)), size = 2.5) +
+  facet_wrap(~ final_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r robotResuspension}
+data %>%
+  ungroup() %>% 
+  filter(final_Plate %in% 1:2) %>% 
+  mutate(new_volume = (volume*concentration)/20) %>% 
+  mutate(new_volume = ifelse(new_volume < 10, 10, new_volume)) %>% 
+  mutate(new_volume = round(new_volume, 1)) %>% 
+  mutate(sample_volume = 0) %>% 
+  mutate(source_Plate = ifelse(final_Plate == 1, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(final_Plate == 1, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  select(source_Plate,	source_Position,	sample_volume, new_volume,
+         dest_Plate,	dest_Position) %>%
+  write_csv(path = file.path(path, "Robot", "resuspension",
+                             "Plate1Plate2.csv"))
+```
+
+### Samples volume
+
+The objective is to get 100 $ng$ of DNA in 6.5 $\mu L$ of sample for the library preparation. Consequently we need to extract with the robot $V = \frac{n}{C} = \frac{100}{C}$ with $C$ the sample concentration in $ng.\mu L^{-1}$.
+
+```{r sampleVolume, fig.cap="Sample volume (microL)"}
+data <- data %>% 
+  mutate(new_concentration = ifelse(final_Plate %in% 1:2, 20, concentration)) %>% 
+  mutate(sample_volume = 100/new_concentration) %>% 
+  mutate(sample_volume = ifelse(sample_volume < 1, 1, sample_volume)) %>% 
+  mutate(sample_volume = ifelse(is.na(sample_volume), 1.5, sample_volume))
+data %>% 
+  mutate(row = substr(final_Position, 1, 1)) %>% 
+  mutate(col = substr(final_Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_text(aes(label = round(sample_volume, 2)), size = 2.5) +
+  facet_wrap(~ final_Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r robotSamples}
+data %>% 
+  filter(final_Plate %in% 3:4) %>% 
+  mutate(source_Plate = ifelse(final_Plate == 3, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(final_Plate == 3, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  mutate(water_volume = 6.5 - sample_volume) %>% 
+  mutate(water_volume = ifelse(water_volume < 2, 0, water_volume)) %>% 
+  mutate(water_volume = round(water_volume, 1)) %>% 
+  mutate(sample_volume = round(sample_volume, 1)) %>% 
+  select(source_Plate,	source_Position,	sample_volume, water_volume,
+         dest_Plate,	dest_Position) %>% 
+    write_csv(path = file.path(path, "Robot", "library_samples",
+                             "Plate3Plate4.csv"))
+data %>% 
+  filter(final_Plate == 5) %>% 
+  mutate(source_Plate = "PCR1") %>% 
+  mutate(dest_Plate = "PCR2") %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  mutate(sample_volume = 2*sample_volume) %>% 
+  mutate(water_volume = 13 - sample_volume) %>% 
+  mutate(water_volume = round(water_volume, 1)) %>% 
+  mutate(sample_volume = round(sample_volume, 1)) %>% 
+  select(source_Plate,	source_Position,	sample_volume, water_volume,
+         dest_Plate,	dest_Position) %>% 
+    write_csv(path = file.path(path, "Robot", "library_samples",
+                             "Plate5.csv"))
+data %>% 
+  ungroup() %>% 
+  filter(final_Plate %in% 3:4) %>% 
+  mutate(source_Plate = ifelse(final_Plate == 3, "PCR1", "PCR3")) %>% 
+  mutate(dest_Plate = ifelse(final_Plate == 3, "PCR2", "PCR4")) %>% 
+  mutate(source_Position = final_Position) %>% 
+  mutate(dest_Position = final_Position) %>% 
+  mutate(water_volume = 6.5 - sample_volume) %>% 
+  select(final_Plate, final_Position, sample_volume, water_volume) %>% 
+  filter(water_volume < 2) %>% kable()
+```

@@ -1,0 +1,167 @@
+```{r setup_Scotti_prep, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(Biostrings)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
+```
+
+
+# Scotti *et al. (in prep)* scaffolds preparation
+
+The Guianan scaffolds from Scotti *et al (in prep)*...
+
+## Filtering scaffolds over $1kbp$
+
+Because of the maybe poor quality of the assembly for scaffolds from Scotti *et al (in prep)*, we first start by filtering scaffolds with a width superior to **1000 bp**.
+
+```{bash filteringScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/
+mkdir scf_1000
+for scf in $( ls raw/ | grep scafSeq$); 
+do
+  echo item: $scf
+  perl ~/Tools/SeqFilter/bin/SeqFilter -l 1000 raw/$scf --out scf_1000/$scf
+done
+```
+
+## Renaming
+
+For all scaffolds we will use following code : **Ivan_2018_[file name without .scafSeq]_[scaffold name]**.
+
+```{r renamingScotti, eval=F, echo=T}
+dir.create(file.path(path, "Ivan_2018", "renamed_scf_1000"))
+files <- list.files(file.path(path, "Ivan_2018", "scf_1000"))
+sapply(files, function(file){
+  scf <- readDNAStringSet(file.path(path, "Ivan_2018", "scf_1000", file))
+  names(scf) <- paste0("Ivan_2018_", gsub(".scafSeq", "", file), "_", gsub(" ", "_", names(scf)))
+  writeXStringSet(scf, file.path(path, "Ivan_2018", "renamed_scf_1000",
+                                 paste0(gsub(".scafSeq", "", file), ".1000.renamed.scafSeq")))
+}, simplify = F)
+unlink(file.path(path, "Ivan_2018", "scf_1000"), recursive = T)
+```
+
+## Libraries merging
+
+We will successively merge scaffolds from all libraries with `quickmerge`. We have 9 libraries resulting in 8 successive merge. We were only able to merge the 6 first libraries due to memory limiitation on my local machine and the absence of `quickmerge` on genotoul/genologin. We will still use this merging as a new reference.
+
+```{bash mergingScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018/renamed_scf_1000
+ref=(sympho47_1L1_002.1000.renamed.scafSeq merge1.fasta merge2.fasta merge3.fasta merge4.fasta merge5.fasta merge6.fasta merge7.fasta)
+query=(sympho47_1L2_001.1000.renamed.scafSeq sympho47_2L1_008.1000.renamed.scafSeq sympho47_2L1_009.1000.renamed.scafSeq sympho47_2L1_010.1000.renamed.scafSeq sympho47_2L1_011.1000.renamed.scafSeq sympho47_2L1_012.1000.renamed.scafSeq sympho47_3L2_013.1000.renamed.scafSeq sympho47_4L1_014.1000.renamed.scafSeq)
+for i in {0..7} 
+do
+  mkdir merge$i
+  cp  "${ref[$i]}" "${query[$i]}" ./merge$i/
+  cd merge$i
+  nucmer -l 100 -prefix out ${ref[$i]} ${query[$i]}
+  delta-filter -i 95 -r -q out.delta > out.rq.delta
+  ~/Tools/quickmerge/quickmerge -d out.rq.delta -q ${query[$i]} -r ${ref[$i]} -hco 5.0 -c 1.5 -l n -ml m
+  cd ..
+  cp merge$i/merged.fasta ./merge$((i+1)).fasta
+done
+```
+
+```{bash dbScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018
+mkdir merged_1000
+cp  renamed_scf_1000/merge5/merged.fasta merged_1000/merged_1000.fa
+cd merged_1000
+makeblastdb -in merged_1000.fa -parse_seqids -dbtype nucl
+```
+
+## Removing scaffolds with multimatch blasted consensus sequence from Torroba-Balmori *et al. (unpublished)*
+
+We used the consensus sequence for French Guianan reads from Torroba-Balmori *et al. (unpublished)* previously assembled with ipyrad. As a first brutal approach we only keep the first sequence of the consensus loci file and transform it to fasta (see loci2fa.py script below). We then blast those consensus sequences on merged scaffolds from Scotti *et al (in prep)* with `blastn` in order to detect scaffolds with repetitive regions thanks to multimapped consensus sequences. Those sequences will be saved as a list to be removed in final selected scaffolds list.
+
+```{python loci2fa, eval=F, echo=T}
+infile = open("symphoGbS2.loci", "r")
+outfile = open("symphoGbS2.firstline.fasta", "w")
+loci = infile.read().split("|\n")[:-1]
+for loc in loci:
+    reads = loc.split("\n")
+    name, seq = reads[0].split()
+    print >>outfile, ">"+name+"\n"+seq
+outfile.close()
+```
+
+```{bash loci2fa2, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Torroba/assembly/symphoGbS2_outfile
+python loci2fa.py
+cat symphoGbS2.firstline.fasta | tr - N >> symphoGbS2.firstline.fasta
+```
+
+```{bash, blastScotti, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/Ivan_2018
+query=~/Documents/BIOGECO/PhD/data/Symphonia_Torroba/assembly/symphoGbS2_outfiles/symphoGbS2.firstline.fasta
+blastn -db merged_1000/merged_1000.fa -query $query -out blast_consensus_torroba2.txt -evalue 1e-10 -best_hit_score_edge 0.05 -best_hit_overhang 0.25 -outfmt 6 -perc_identity 75 -max_target_seqs 10
+```
+
+```{r blastResultScotti, eval=F, echo=T}
+blast <- read_tsv(file.path(path, "Ivan_2018", "blast_consensus_torroba2.txt"), col_names = F)
+names(blast) <- c("Read", "Scaffold", "Perc_Ident", "Alignment_length", "Mismatches",
+                  "Gap_openings", "R_start", "R_end", "S_start", "S_end", "E", "Bits")
+write_file(paste(unique(blast$Scaffold), collapse = "\n"), 
+           file.path(path, "Ivan_2018", "selected_scaffolds_blast_consensus2.list"))
+```
+
+```{bash blastResultScotti2, eval=F, echo=T}
+seqtk subseq merged_1000/merged_1000.fa selected_scaffolds_blast_consensus2.list >> selected_scaffolds_blast_consensus2.fa
+```
+
+In total **542 scaffolds** from Scotti *et al (in prep)* match consensus sequences from Torroba-Balmori et al. (unpublished). But several scaffolds obtained multiple matches that we cannot use for probes. We will thus exclude the whole scaffold if the scaffold is shorter than 2000 bp or the scaffold region matching the raw read if the scaffold is longer than 2000 bp.
+
+```{r blastResultScottiFig, fig.cap="Number of match with Torroba consensus reads vs gene width.", fig.height=4}
+blast_Ivan <- read_tsv(file.path(path, "Ivan_2018", "torroba_blast", "blast_consensus_torroba2.txt"), col_names = F)
+names(blast_Ivan) <- c("Read", "Scaffold", "Perc_Ident", "Alignment_length", "Mismatches",
+                  "Gap_openings", "R_start", "R_end", "S_start", "S_end", "E", "Bits")
+scf_Ivan <- readDNAStringSet(file.path(path, "Ivan_2018", "torroba_blast", "selected_scaffolds_blast_consensus2.fa"))
+blast_Ivan %>%
+  dplyr::left_join(data.frame(Scaffold = names(scf_Ivan), width = width(scf_Ivan))) %>% 
+  select(Scaffold, Read, width) %>%
+  unique() %>%
+  group_by(Scaffold, width) %>%
+  summarise(n = n()) %>% 
+  ggplot(aes(width, n)) +
+  geom_point() +
+  geom_jitter() +
+  ylab("Number of match with consensus sequences from Torroba-Balmori et al (unpublished)") +
+  xlab("Width of scaffolds from Scotti et al. (in prep) (in bp)")
+```
+
+```{r blastResultScottiFilter}
+sel_Ivan <- blast_Ivan %>%
+  dplyr::left_join(data.frame(Scaffold = names(scf_Ivan), width = width(scf_Ivan))) %>% 
+  select(Scaffold, Read, width, S_start, S_end) %>% 
+  group_by(Read) %>%
+  filter(n() > 2) %>% 
+  ungroup() %>% 
+  mutate(remove = ifelse(width < 2000, "X", " ")) %>% 
+  mutate(cut = ifelse(width > 2000, paste0(S_start, "-", S_end), " ")) %>% 
+  select(Scaffold, width, remove, cut)
+sel_Ivan <- list(rm = gsub("Ivan_2018_sympho47_", "", sel_Ivan$Scaffold[sel_Ivan$remove == "X"]),
+                 cut = sel_Ivan[sel_Ivan$remove == " ",])
+kable(sel_Ivan$cut, caption = "Scaffold to cut due to multiple read match.")
+```
+
+Following scaffolds will be removed due to multitple matches and a length $<200bp$: `r paste0(sel_Ivan$rm, collapse = ", ")`. And other will be cut (see table \@ref(tab:blastResultScottiFilter)).
+
+## Total filtered scaffolds
+
+```{r scfIvanFilterFig}
+scf <- readDNAStringSet(file.path(path, "Ivan_2018", "merged_1000", "merged_1000.fa"))
+scf <- scf[-match(paste0("Ivan_2018_sympho47_",sel_Ivan$rm),  names(scf))]
+scf <- data.frame(name = names(scf), width = width(scf))
+scf %>% 
+  ggplot(aes(width)) +
+  geom_histogram() +
+  ggtitle("190 094 scaffolds", "436.118 Mbp") +
+  scale_x_log10() +
+  xlab("Width of filtered scaffolds from Scotti et al. (in prep) (bp)")
+```
+

@@ -1,0 +1,376 @@
+---
+title: "Sampling Eschweilera"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(rgdal)
+library(raster)
+library(leaflet)
+library(starmie)
+library(rstan)
+library(bayesplot)
+library(abind)
+library(ggrepel)
+library(tidyverse)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+# General
+
+##
+
+### To Do
+
+1. Material command:
+    + $\sim 10$ Sac de lancer Libre 250g
+    + $2-4$ Fil de lancer shaoLINE Teufelberger 60m
+    + $\sim 2$ Élastique BIG SHOT
+    + $\sim 6$ Gants fins ?
+    + $\sim 4$ casques ?
+1. Sampling design
+    + Plots: Control & Biodiversity ?
+    + Individuals: 400-500 ?
+    + Traits
+        * Leaf (SLA, LDMC, LT, LA, SPAD) 
+        * Branch (BrWD, BrBD, BrBT)
+        * Trunk (WD, BT) ?
+        * Anatomy ?
+        * Physiology ?
+1. FTH module design
+    + Pre-sampling
+    + Plots
+    + Question / Hypothesis / Analysis
+
+### Docs
+
+* [Field protocol](https://docs.google.com/document/d/1yjYXe50mYG95mUjw61SujkdDBxzIDkbvcJbXg8w6fPo/edit?usp=sharing)
+* [Fresh measurements protocol](https://docs.google.com/document/d/1S-0O5ndADJhtXlrtz6qgRfYZtfS9f1qOgvFlaEF6P8M/edit?usp=sharing)
+* [Symphonia individuals](https://docs.google.com/spreadsheets/d/13BKXG1ETpTvQwcpYcGoTK9eTU002PSWa4Cjyox-OanA/edit?usp=sharing)
+* [Symphonia leaves](https://docs.google.com/spreadsheets/d/1QycHaAmsbBGd76Ma088RXxvFrWT5c_9Md3Eqqob286Q/edit?usp=sharing)
+* [Dawkins index](https://drive.google.com/file/d/0B-lAe8V-ri2SUVZrRGJpQUhUVkU/view?usp=sharing)
+
+##
+
+### Planning
+
+1. 31.07-03.08 Material command
+1. 21.09-14.09 pre-FTH field (2-3 days)
+1. 17.09-21.09 FTH field work (4-5 days)
+1. 24.09-28.09 FTH analysis and defense
+1. 03.08-05.08 post-CEBA field work w Myriam (2-3 days)
+1. +2-4 weeks of field sampling (depending on individuals objective)
+
+### Maps
+
+* [Parcelle 1](./sampling_save/maps/Parcelle1.png)
+* [Parcelle 6](./sampling_save/maps/Parcelle6.png)
+* [Parcelle 11](./sampling_save/maps/Parcelle11.png)
+* [Parcelle 13](./sampling_save/maps/Parcelle13.png)
+* [Parcelle 14](./sampling_save/maps/Parcelle14.png)
+* [Parcelle 15](./sampling_save/maps/Parcelle15.png)
+* [Parcelle 16](./sampling_save/maps/Parcelle16.png)
+
+
+# Samples
+
+```{r Par_trees}
+trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Eschweilera") %>% 
+  filter(Species != "Indet.") %>% 
+  filter(Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+           Plot == 16 & CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  mutate(Clade = ifelse(Species %in% c("congestiflora", "simiorum"),
+                        "Other", "Parvifolia")) %>% 
+  mutate(SpeciesType = ifelse(Clade == "Other", "outgroup", NA)) %>%
+  mutate(SpeciesType = ifelse(Species == "sagotiana", "sagotiana", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species == "coriacea", "coriacea", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species == "decolorans", "decolorans", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species %in% c("pedicellata", "Indet.", "wachenheimii",
+                                             "grandiflora_form2", "collina", 
+                                             "grandiflora"), "other", SpeciesType)) %>%
+  mutate(SpeciesType = ifelse(Species %in% c("micrantha", "parviflora", "squamata"), 
+                              "rare", SpeciesType)) %>% 
+  collect()
+```
+
+```{r filters}
+# Total of 4.5 plates = 4.5*96 = 432
+sagotiana <- trees %>%
+  filter(Species == "sagotiana") %>% 
+  sample_n(144) # 1/3 = 144
+coriacea <- trees %>%
+  filter(Species == "coriacea") %>% 
+  sample_n(144) # 1/3 = 144
+decolorans <- trees %>%
+  filter(Species == "decolorans") %>% 
+  sample_n(72) # 1/6 = 72
+rares_lowcount <- trees %>% 
+  filter(Species %in% c("pedicellata", "wachenheimii", "grandiflora_form2",
+                        "collina", "grandiflora",
+                        "micrantha", "parviflora", "squamata")) %>% 
+  group_by(Species) %>% 
+  filter(n() < 10)
+outgroup <- trees %>% 
+  filter(Clade == "Other") %>% 
+  group_by(Species) %>% 
+  sample_n(3) %>% 
+  ungroup()
+lecythis <- read.csv(file.path(path, 'trees/Lecithis_Paracou.csv'),
+                  dec=".", stringsAsFactors = F) %>% 
+  filter(Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+           Plot == 16 & CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  sample_n(3)
+rares <- trees %>%
+  filter(Species %in% c("pedicellata", "wachenheimii", "grandiflora_form2",
+                        "collina", "grandiflora",
+                        "micrantha", "parviflora", "squamata")) %>% 
+  group_by(Species) %>% 
+  filter(n() > 10) %>% 
+  sample_n((72 - nrow(outgroup) - nrow(lecythis) - 
+            nrow(rares_lowcount)) / 
+           (8 - length(unique(rares_lowcount$Species)))) # 1/6 = 72 - everything else
+selection <- bind_rows(sagotiana, coriacea, decolorans, rares_lowcount, 
+                       outgroup, lecythis, rares) %>% 
+  mutate(selection = 1)
+trees <- trees %>% 
+  full_join(selection)
+```
+
+##
+
+> Original headcounts `r nrow(trees)`
+
+### Species headcount
+
+```{r species}
+trees %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ 1) %>% 
+  arrange(desc(Clade), desc(`1`)) %>% 
+  kable()
+```
+
+###  Species and plot headcount
+
+```{r plot}
+trees %>% 
+  filter(Species != "Indet.") %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ Plot) %>% 
+  arrange(desc(Clade), desc(`16`)) %>% 
+  kable()
+```
+
+###  Species and diameters
+
+```{r diam}
+trees %>% 
+  filter(Species != "Indet.") %>% 
+  ggplot(aes(CircCorr, fill = Species)) + 
+  geom_histogram(position = "dodge")
+```
+
+##
+
+> Number of trees selected: `r sum(trees$selection, na.rm = T)`
+
+### Selected species headcount
+
+```{r speciessel}
+trees %>% 
+  filter(selection == 1) %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ 1) %>% 
+  arrange(desc(Clade), desc(`1`)) %>% 
+  kable()
+```
+
+###  Species and plot headcount
+
+```{r plotsel}
+trees %>% 
+  filter(selection == 1) %>% 
+  reshape2::dcast(Clade + SpeciesType + Genus + Species ~ Plot) %>% 
+  arrange(desc(Clade), desc(`16`)) %>% 
+  kable()
+```
+
+###  Species and diameters
+
+```{r diamsel}
+trees %>% 
+  filter(selection == 1) %>% 
+  ggplot(aes(CircCorr, fill = Species)) + 
+  geom_histogram(position = "dodge")
+```
+
+# Maps
+
+### Dynamic map of selected individuals
+
+```{r selected}
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+sel_pal <- colorBin(c('transparent', 'black'), trees$selection)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+leaflet() %>%
+  addPolygons(data = limits, fillOpacity = 0,
+              opacity = 0.5, col = 'black') %>% 
+  addCircles(data = treesXY, col = 'black', fillOpacity = 1,
+             fillCol = sel_pal(trees$selection), radius= ~CircCorr/25,
+             label = ~as.character(TreeFieldNum)) %>% 
+  addLegend(colors = c('transparent', 'black'), 
+            labels = c('not selected', 'selected'),
+            title = 'Sampling')
+```
+
+```{r maps functions, eval=F}
+rotateProj = function(spobj, angle) {
+    boxpts = SpatialPoints(t(bbox(spobj)), proj4string = CRS(proj4string(spobj)))
+    boxLL = bbox(spTransform(boxpts, CRS("+init=epsg:4326")))
+    llc = apply(boxLL, 1, mean)
+    prj = paste0("+proj=omerc +lat_0=", llc[2], " +lonc=", llc[1], " +alpha=", 
+        angle, " +gamma=0.0 +k=1.000000 +x_0=0.000 +y_0=0.000 +ellps=WGS84 +units=m ")
+    CRS(prj)
+}
+find_angle <- function(spobj){
+  spobj <- subset(spobj, Subplot == unique(spobj$Subplot)[1])
+  spobj <- fortify(spobj) %>% 
+    filter(long == min(long) | lat == min(lat)) %>% 
+    select(long, lat) %>% 
+    distinct()
+  row.names(spobj) <- c('A', 'B')
+  spobj['C',] <- apply(spobj, 2, min)
+  Pab <- sqrt(sum(apply(spobj[c('A', 'B'),], 2, diff)^2))
+  Pac <- sqrt(sum(apply(spobj[c('A', 'C'),], 2, diff)^2))
+  Pbc <- sqrt(sum(apply(spobj[c('B', 'C'),], 2, diff)^2))
+  angle <- acos((Pab^2 + Pac^2 - Pbc^2) / (2 * Pab * Pac))
+  angle <- angle*180/pi
+  angles <- c(angle, angle-90)
+  angle <- angles[which(sapply(c(angle, angle-90), abs) == min(sapply(c(angle, angle-90), abs)))]
+  return(angle)
+}
+make_map <- function(limits, # Limits shp
+                     treesXY, # trees sp.points.data.frame
+                     contour, # contour lines shp
+                     plot, # plot number
+                     subplots # subplot subset for P16
+                     ){
+  limits_plot <-  subset(limits, Plot == plot)
+  newProj <- rotateProj(limits_plot, find_angle(limits_plot))
+  if(plot != 16)
+    limits_plot <-  subset(limits_plot, TypeSub == "Subplots")
+  else {
+    limits_plot <-  subset(limits_plot, TypeSub == "SubplotsP16")
+    limits_plot <-  subset(limits_plot, Subplot %in% subplots)
+  }
+  limits_plot <- spTransform(limits_plot, newProj)
+  treesXY_plot <- subset(treesXY, Plot == plot)
+  if(plot == 16)
+    treesXY_plot <- subset(treesXY_plot, SubPlot %in% subplots)
+  treesXY_plot <- spTransform(treesXY_plot, newProj)
+  contour_plot <- spTransform(contour, newProj)
+  contour_plot <- crop(contour_plot, extent(limits_plot))
+  g <- ggplot() +
+    geom_polygon(data = fortify(limits_plot),
+                 aes(long, lat, group=group),
+                 fill = "transparent", colour = "black", alpha = 0.2) +
+    geom_polygon(data = fortify(contour_plot),
+                 aes(long, lat, group=group),
+                 colour = "grey", alpha = 0) +
+    geom_point(data = as.data.frame(treesXY_plot),
+               aes(x = Xutm, y = Yutm, size=CircCorr/pi*100,
+                   col = selection)) +
+    geom_text_repel(data = as.data.frame(treesXY_plot),
+                    aes(Xutm, Yutm, 
+                        label = TreeFieldNum)) +
+    coord_equal() +
+    theme(axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),legend.position="none",
+          panel.background=element_blank(),panel.border=element_blank(),
+          panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),plot.background=element_blank()) +
+    scale_color_continuous(palette = colorBin( c('lightgrey', 'black'), domain = c(0,1))) +
+    ggsn::north(fortify(limits_plot), symbol = 12, 
+                scale = 0.05, anchor = c(x= 125, y = 140))
+  if(plot != 16)
+    g <-  g + ggtitle(paste('Parcelle', plot), 
+            paste('n =', sum(treesXY_plot$selection)))
+  else {
+    if(1 %in% subplots)
+      orientation <- "North-West"
+    if(5 %in% subplots)
+      orientation <- "North-East"
+    if(21 %in% subplots)
+      orientation <- "South-West"
+    if(25 %in% subplots)
+      orientation <- "South-East"
+    g <-  g + ggtitle(paste('Parcelle', plot, orientation),
+                      paste('n =', sum(treesXY_plot$selection)))
+  }
+  return(g)
+}
+```
+
+```{r maps, eval=F}
+contour <- readOGR(file.path(path, 'topography', "ContourLinesPlots"), 
+                   "ContourLinePlots", verbose = F)
+contour <- spTransform(contour, CRSobj = crs)
+treesXY$selection[is.na(treesXY$selection)] <- 0
+maps <- sapply(sort(c(1,6,11,13:15)), 
+               function(x) make_map(limits, treesXY, contour, x),
+               simplify = F)
+names(maps) <- paste0('P', sort(c(1,6,11,13:15)))
+lapply(maps, function(x)
+  ggsave(x, file = paste0(gsub(' ', '', x$labels$title), '.png'),
+         path = './sampling_save/maps',
+         width = 297, height = 420, unit = 'mm',
+         dpi = 300))
+P16 <- list(
+  "P16 North-West" = make_map(limits, treesXY, contour, 16, c(1:3, 6:8, 11:13)),
+  "P16 North-East" = make_map(limits, treesXY, contour, 16, c(3:5, 8:10, 13:15)),
+  "P16 South-West" = make_map(limits, treesXY, contour, 16, c(11:13, 16:18, 21:23)),
+  "P16 South-East" = make_map(limits, treesXY, contour, 16, c(13:15, 18:20, 23:25))
+)
+lapply(P16, function(x)
+  ggsave(x, file = paste0(gsub(' ', '', x$labels$title), '.png'),
+         path = './sampling_save/maps',
+         width = 297, height = 420, unit = 'mm',
+         dpi = 300))
+```
+
+```{r table, eval=F}
+trees %>%
+  filter(selection == 1) %>%
+  arrange(Plot, SubPlot, TreeFieldNum) %>% 
+  mutate(idGenetic = sapply(paste0("H", LETTERS[15:(15+4)]), 
+                            function(x) paste0(x,1:99))[1:sum(trees$selection, na.rm = T)]) %>% 
+  mutate(idField = paste0("P", Plot, "-", SubPlot, "-", TreeFieldNum)) %>% 
+  mutate(spField = paste0(substr(Genus, 1, 1), ". ", Species)) %>% 
+  mutate(Label = paste(idGenetic, "-", idField, "-", spField)) %>% 
+  write.csv("./sampling_save/trees_sel.csv",
+            row.names = F)
+```
+

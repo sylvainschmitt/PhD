@@ -1,0 +1,28 @@
+# Gaps only
+
+```{r setup_Ng, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(rstan)
+library(bayesplot)
+library(tidyverse)
+mpath <- "./growth_models"
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+rstan_options(auto_write = T)
+options(mc.cores = parallel::detectCores())
+load("./growth_save/model_data.Rdata")
+```
+
+## Introduction
+
+### Demo
+
+From the $I_{disturbance}$ index toward a potential-reductor model form :
+
+$$log(AGR_i+1) = AGR_{max}*\sum_j (e^{-\alpha*d_{i,j}}*S_j^\beta) + \epsilon_i$$
+$$log(AGR_i+1) = AGR_{max}* e^{-\alpha*\sum_j d_{i,j}}*\sum_jS_j^\beta + \epsilon_i$$
+$$log(AGR_i+1) = AGR_{max}* e^{-\alpha*\sum_j d_{i,j}}*e^{log(\sum_jS_j^\beta)} + \epsilon_i$$
+$$log(AGR_i+1) = AGR_{max}* e^{-\alpha*\sum_j d_{i,j} + \beta*log(\sum_jS_j)} + \epsilon_i$$
+$$log(AGR_i+1) \sim \mathcal{N} (AGR_{max}* e^{-\alpha*\sum_j d_{i,j} + \beta*log(\sum_jS_j)} , \sigma)$$

@@ -1,5 +1,15 @@
 # PhD 0.1.9053
-* Anne example
+* Repository cleaning
+    * online docs removal
+    * scripts removal (dbh_correction.R from Camilla)
+    * ToDo removal (moved to GitHub project)
+    * Soctropecol poster figures cleaning
+    * data exploration/Eschweilera.Rmd & Symphonia.Rmd removal (redundant to preliminary studies)
+    * FTH project (data cleaning moved to preliminary > data_cleaning)
+    * environment.Rmd > preliminary/environment
+    * preliminary.Rmd > preliminary/data
+    * sampling.Rmd > preliminary/sampling
+    * growth removal from preliminary_Symphonia.Rmd
 
 # PhD 0.1.9052
 * Bayes lecture for Msc EFT

@@ -1,0 +1,47 @@
+# Introduction to awk
+
+*24/05/2018*
+
+Synthax : awk 'pattterns {actions]}' filenames
+
+patterns:
+
+* nothing
+* BEGIN
+* END
+* BEGINFILE
+* EDNFILE
+* /regular expression/
+* relational expression
+* links: &&, ||, ?, :, ! 
+
+actions:
+
+* variable (pre-integrated)
+* fonctions (int, str, preintegrated)
+* controle (condition, loop)
+* tableaux associatifs
+
+Relational expression, i.e. $1 ~ /^>/ (champ1 match second expr)
+
+Automatic class for var
+
+Dictionary: array[key,key,...]=value
+
+$0 = all line
+$i = one field in the line
+
+```{bash }
+cd data/awk
+awk -f infos_summary_nanopore.awk sequencing_summary_nanopore.txt
+```
+
+```{bash}
+cd data/awk
+awk '{print $1"\t"$2}' test.vcf | tail
+```
+
+```{bash}
+cd data/awk
+awk 'BEGIN {count=0} /^>/ {count++; print ">sequence_" count} $1 !~ /^> / {print $0}' test.fa | tail
+```

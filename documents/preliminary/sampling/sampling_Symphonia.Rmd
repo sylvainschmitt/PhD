@@ -1,0 +1,423 @@
+---
+title: "Sampling Symphonia"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(flexdashboard)
+library(rgdal)
+library(raster)
+library(leaflet)
+library(starmie)
+library(rstan)
+library(bayesplot)
+library(abind)
+library(ggrepel)
+library(tidyverse)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+    cache = T, cache.lazy = F)
+```
+
+# General
+
+##
+
+### To Do
+
+* Book the car for following weeks next week (mail Carole and GHP)
+* Buy/Find touc, porte vue, plastic boxes
+
+### Docs
+
+* [Field protocol](https://docs.google.com/document/d/1yjYXe50mYG95mUjw61SujkdDBxzIDkbvcJbXg8w6fPo/edit?usp=sharing)
+* [Fresh measurements protocol](https://docs.google.com/document/d/1S-0O5ndADJhtXlrtz6qgRfYZtfS9f1qOgvFlaEF6P8M/edit?usp=sharing)
+* [Symphonia individuals](https://docs.google.com/spreadsheets/d/13BKXG1ETpTvQwcpYcGoTK9eTU002PSWa4Cjyox-OanA/edit?usp=sharing)
+* [Symphonia leaves](https://docs.google.com/spreadsheets/d/1QycHaAmsbBGd76Ma088RXxvFrWT5c_9Md3Eqqob286Q/edit?usp=sharing)
+* [Dawkins index](https://drive.google.com/file/d/0B-lAe8V-ri2SUVZrRGJpQUhUVkU/view?usp=sharing)
+
+##
+
+### Planning
+
+* Starting from $30^{th}$ of October
+* During 25 to 30 days
+* End between $4^{th}$ of December and $11^{th}$ of December
+* Sampling from 7 AM until 3 PM
+* Fresh measurement and herbarium preparation to finsih the day
+
+### Maps
+
+* [Parcelle 1](./symphonia_save/maps/Parcelle1.png)
+* [Parcelle 2](./symphonia_save/maps/Parcelle2.png)
+* [Parcelle 3](./symphonia_save/maps/Parcelle3.png)
+* [Parcelle 4](./symphonia_save/maps/Parcelle4.png)
+* [Parcelle 5](./symphonia_save/maps/Parcelle5.png)
+* [Parcelle 6](./symphonia_save/maps/Parcelle6.png)
+* [Parcelle 7](./symphonia_save/maps/Parcelle7.png)
+* [Parcelle 8](./symphonia_save/maps/Parcelle8.png)
+* [Parcelle 9](./symphonia_save/maps/Parcelle9.png)
+* [Parcelle 10](./symphonia_save/maps/Parcelle10.png)
+* [Parcelle 11](./symphonia_save/maps/Parcelle11.png)
+* [Parcelle 12](./symphonia_save/maps/Parcelle12.png)
+* [Parcelle 13](./symphonia_save/maps/Parcelle13.png)
+* [Parcelle 14](./symphonia_save/maps/Parcelle14.png)
+* [Parcelle 15](./symphonia_save/maps/Parcelle15.png)
+* [Parcelle 16](./symphonia_save/maps/Parcelle16.png)
+
+# Samples
+
+```{r trees}
+path <- "/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/"
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  filter(Plot != 18) %>% 
+  collect() %>% 
+  mutate(treatment = c(c('C', 'T1', 'T2', 'T3', 
+                         'T2', 'C', 'T1', 'T3',
+                         'T1', 'T2', 'C', 'T3'), 
+                       rep('B', 4))[Plot])
+```
+
+```{r env}
+# global crs definition
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+# limits
+limits <- readOGR(file.path(path, 'limits'), "OverallPlots", verbose = F)
+limits <- spTransform(limits, CRSobj = crs)
+# plot(limits)
+# contour
+contour <- readOGR(file.path(path, 'topography', "ContourLinesPlots"), "ContourLinePlots", verbose = F)
+contour <- spTransform(contour, CRSobj = crs)
+# plot(contour)
+# water table
+WT <- readOGR(file.path(path, 'hydrology'), "WaterTable", verbose = F)
+WT <- spTransform(WT, CRSobj = crs)
+WT_pal <- colorFactor('Blues', as.factor(WT$TypeWatEN), reverse = T)
+# plot(WT, col = WT_pal(WT$TypeWatEN))
+# topo
+topo <- readOGR(file.path(path, 'hydrology'), "TopographicLevels", verbose = F)
+topo <- spTransform(topo, CRSobj = crs)
+topo_pal <- colorFactor('Set3', as.factor(topo$TypeTopoEN), reverse = T)
+# plot(topo, col = topo_pal(topo$TypeTopoEN))
+# gaps
+gaps <- readOGR(file.path(path, 'logging'), "Gaps", verbose = F)
+gaps <- spTransform(gaps, CRSobj = crs)
+# plot(gaps, col = 'green')
+# Trees to plot
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+tree_pal <- colorFactor(c('darkgreen', 'black', 'firebrick'), as.factor(treesXY$Species))
+# plot(treesXY, col = tree_pal(treesXY$Species), pch = 16)
+```
+
+```{r interpolation}
+trees <- trees %>% 
+  mutate(WT = as.character((treesXY %over% WT)$TypeWatEN)) %>% 
+  mutate(WT = ifelse(is.na(WT), 'unknwon', WT)) %>% 
+  mutate(topo = as.character((treesXY %over% topo)$TypeTopoEN)) %>% 
+  mutate(topo = ifelse(is.na(topo), 'unknwon', topo)) %>% 
+  mutate(gap = as.numeric(!(is.na((treesXY %over% gaps)$Plot))))
+```
+
+```{r previous sampling}
+path <- "/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Torroba/links/"
+SymphoGrowth <- read.csv(file.path(path, 'Symphonia_SymphoGrowth.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  mutate(individual = gsub('P', '', individual)) %>% 
+  separate(individual, c("Plot", "SubPlot", "TreeFieldNum"), '-', convert = T) %>% 
+  distinct() %>% 
+  mutate(SymphoGrowth = 1)
+GbS <- read.csv(file.path(path, 'Symphonia_Match_btw_Gbs_otherDatasets.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  select(Code_Par) %>% 
+  mutate(Code_Par = gsub('P', '', Code_Par)) %>% 
+  separate(Code_Par, c("Plot", "SubPlot", "TreeFieldNum"), '-', convert = T) %>% 
+  distinct() %>% 
+  mutate(GbS = 1)
+CROPS <- read.csv(file.path(path, 'Symphonia_CROPS.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  mutate(individual = gsub('P', '', individual)) %>% 
+  separate(individual, c("Plot", "SubPlot", "TreeFieldNum"), '-', convert = T) %>% 
+  distinct() %>% 
+  mutate(CROPS = 1)
+DROUGHT <- read.csv(file.path(path, 'Symphonia_DROUGHT.csv'),
+                  dec=",", stringsAsFactors = F) %>% 
+  select(Plot, Carre, Arbre) %>% 
+  rename(SubPlot = Carre, TreeFieldNum = Arbre) %>% 
+  distinct() %>% 
+  mutate(DROUGHT = 1)
+trees <- trees %>% 
+  left_join(GbS) %>% 
+  mutate(GbS = ifelse(is.na(GbS), 0, GbS)) %>% 
+  left_join(SymphoGrowth) %>% 
+  mutate(SymphoGrowth = ifelse(is.na(SymphoGrowth), 0, SymphoGrowth)) %>% 
+  left_join(CROPS) %>% 
+  mutate(CROPS = ifelse(is.na(CROPS), 0, CROPS)) %>% 
+  left_join(DROUGHT) %>% 
+  mutate(DROUGHT = ifelse(is.na(DROUGHT), 0, DROUGHT))
+rm(SymphoGrowth, GbS, CROPS, DROUGHT)
+```
+
+##
+
+> Original headcounts
+
+### Species headcount
+
+```{r species}
+trees %>% 
+  reshape2::dcast(Species ~ 1) %>%
+  kable()
+```
+
+### Species and gaps headcount
+
+```{r gap}
+trees %>% 
+  reshape2::dcast(gap ~ Species) %>%
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Species and water table depth headcount
+
+```{r WT}
+trees %>% 
+  reshape2::dcast(WT ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Species and topography headcount
+
+```{r topo}
+trees %>% 
+  reshape2::dcast(topo ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Species and treatment headcount
+
+```{r treatment}
+trees %>% 
+  reshape2::dcast(treatment ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+###  Species and plot headcount
+
+```{r plot}
+trees %>% 
+  reshape2::dcast(Plot ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+##
+
+```{r selection}
+trees <- trees %>% 
+  mutate(sel = 0) %>% 
+  mutate(sel = ifelse(SymphoGrowth == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(GbS == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(CROPS == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(DROUGHT == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(Species == "globulifera", 1, sel)) %>% 
+  mutate(sel = ifelse(gap == 1, 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "unknwon", 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "0 : accompanying water-table of the stream", 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "Watertable between 0 and 60 cm", 1, sel)) %>% 
+  mutate(sel = ifelse(WT == "Watertable between 60 and 100 cm", 1, sel)) %>% 
+  mutate(sel = ifelse(topo == "unknwon", 1, sel))
+P <- row.names(trees[trees$topo == 'Plateau' & trees$sel != 1,])  
+S <- row.names(trees[trees$topo == 'Slope' & trees$sel != 1,])
+nb <- (400-sum(trees$sel))/2
+P <- sample(P, floor(nb))
+S <- sample(S, ceiling(nb))
+trees[P,]$sel <- 1
+trees[S,]$sel <- 1
+treesXY@data$sel <- trees$sel
+rm(nb, P, S)
+```
+
+> Number of trees selected: `r sum(trees$sel)`
+
+### Selected species headcount
+
+```{r speciessel}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(Species ~ 1) %>%
+  kable()
+```
+
+### Selected species and gaps headcount
+
+```{r gapsel}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(gap ~ Species) %>%
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Selected species and water table depth headcount
+
+```{r WTsel}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(WT ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Selected species and topography headcount
+
+```{r toposel}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(topo ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+### Selected species and treatment headcount
+
+```{r treatmentsel}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(treatment ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+###  Selected species and plot headcount
+
+```{r plotsel}
+trees %>% 
+  filter(sel == 1) %>% 
+  reshape2::dcast(Plot ~ Species) %>% 
+  mutate(Total = globulifera + Indet. + sp.1) %>% 
+  kable()
+```
+
+# Maps
+
+### Dynamic map of selected individuals
+
+```{r selected}
+sel_pal <-colorBin(c('transparent', 'black'), trees$sel)
+leaflet() %>%
+  addPolygons(data = limits, fillOpacity = 0,
+              opacity = 0.5, col = 'black') %>% 
+  addCircles(data = treesXY, col = 'black', fillOpacity = 1,
+             fillCol = sel_pal(trees$sel), radius= ~Circ/25,
+             label = ~as.character(TreeFieldNum)) %>% 
+  addLegend(colors = c('transparent', 'black'), 
+            labels = c('not selected', 'selected'),
+            title = 'Sampling')
+```
+
+```{r maps functions}
+rotateProj = function(spobj, angle) {
+    boxpts = SpatialPoints(t(bbox(spobj)), proj4string = CRS(proj4string(spobj)))
+    boxLL = bbox(spTransform(boxpts, CRS("+init=epsg:4326")))
+    llc = apply(boxLL, 1, mean)
+    prj = paste0("+proj=omerc +lat_0=", llc[2], " +lonc=", llc[1], " +alpha=", 
+        angle, " +gamma=0.0 +k=1.000000 +x_0=0.000 +y_0=0.000 +ellps=WGS84 +units=m ")
+    CRS(prj)
+}
+find_angle <- function(spobj){
+  spobj <- subset(spobj, Subplot == unique(spobj$Subplot)[1])
+  spobj <- fortify(spobj) %>% 
+    filter(long == min(long) | lat == min(lat)) %>% 
+    select(long, lat) %>% 
+    distinct()
+  row.names(spobj) <- c('A', 'B')
+  spobj['C',] <- apply(spobj, 2, min)
+  Pab <- sqrt(sum(apply(spobj[c('A', 'B'),], 2, diff)^2))
+  Pac <- sqrt(sum(apply(spobj[c('A', 'C'),], 2, diff)^2))
+  Pbc <- sqrt(sum(apply(spobj[c('B', 'C'),], 2, diff)^2))
+  angle <- acos((Pab^2 + Pac^2 - Pbc^2) / (2 * Pab * Pac))
+  angle <- angle*180/pi
+  angles <- c(angle, angle-90)
+  angle <- angles[which(sapply(c(angle, angle-90), abs) == min(sapply(c(angle, angle-90), abs)))]
+  return(angle)
+}
+make_map <- function(limits, treesXY, contour, p){
+  limits_plot <-  subset(limits, Plot == p)
+  if(p != 16)
+    limits_plot <-  subset(limits_plot, TypeSub == "Subplots")
+  else
+    limits_plot <-  subset(limits_plot, TypeSub == "SubplotsP16")
+  newProj <- rotateProj(limits_plot, find_angle(limits_plot))
+  limits_plot <- spTransform(limits_plot, newProj)
+  treesXY_plot <- subset(treesXY, Plot == p)
+  treesXY_plot <- spTransform(treesXY_plot, newProj)
+  contour_plot <- spTransform(contour, newProj)
+  contour_plot <- crop(contour_plot, extent(limits_plot))
+  g <- ggplot() +
+    geom_polygon(data = fortify(limits_plot),
+                 aes(long, lat, group=group),
+                 fill = "transparent", colour = "black", alpha = 0.2) +
+    geom_polygon(data = fortify(contour_plot),
+                 aes(long, lat, group=group),
+                 colour = "grey", alpha = 0) +
+    geom_point(data = as.data.frame(treesXY_plot),
+               aes(x = Xutm, y = Yutm, size=Circ/pi*100,
+                   col = sel)) +
+    geom_text_repel(data = as.data.frame(treesXY_plot),
+                    aes(Xutm, Yutm, 
+                        label = TreeFieldNum)) +
+    ggtitle(paste('Parcelle', p)) +
+    coord_equal() +
+    theme(axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank(),legend.position="none",
+          panel.background=element_blank(),panel.border=element_blank(),panel.grid.major=element_blank(),
+          panel.grid.minor=element_blank(),plot.background=element_blank()) +
+    scale_color_continuous(palette = colorBin( c('lightgrey', 'black'), domain = c(0,1))) +
+    ggsn::north(fortify(limits_plot), symbol = 12, 
+                scale = 0.05, anchor = c(x= 125, y = 140))
+  return(g)
+}
+```
+
+```{r maps}
+maps <- sapply(sort(unique(trees$Plot)), 
+               function(x) make_map(limits, treesXY, contour, x),
+               simplify = F)
+names(maps) <- paste0('P', sort(unique(trees$Plot)))
+# lapply(maps, function(x)
+#   ggsave(x, file = paste0(gsub(' ', '', x$labels$title), '.png'),
+#          path = './symphonia_save/maps/',
+#          width = 297, height = 420, unit = 'mm',
+#          dpi = 300))
+```
+
+```{r table}
+# trees_sel <- trees %>% 
+#   filter(sel == 1) %>% 
+#   arrange(Plot, SubPlot, TreeFieldNum)
+# write.csv(trees_sel, "./symphonia_save/trees_sel.csv",
+#           row.names = F)
+```
+
