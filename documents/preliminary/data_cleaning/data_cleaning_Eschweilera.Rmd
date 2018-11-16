@@ -1,0 +1,129 @@
+---
+title: "Eschweilera data cleaning"
+date: '`r Sys.Date()`'
+author: Anne Baranger & Sylvain Schmitt
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(tidyverse)
+library(stringdist)
+library(googlesheets)
+library(knitr)
+library(kableExtra)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+```
+
+# Eschweilera
+
+## Individuals
+
+The idea is to transform FTH data to the general formatting, i.e. :
+
+* Date (YYYY/MM/DD)
+* Time (HHHMM)
+* Plot
+* SubPlot
+* FieldTreeNum
+* Dawkins
+* Position
+* TrunkForm
+* BarkColor
+* BarkRuggedness
+* BarkAspect
+* Lenticels
+* BladeForm
+* LeafConsistency
+* LeafSurface
+* LeafBase
+* LeafMargin
+* HyperAcuminated
+* BentPrincpalN
+
+
+```{r MahoInd}
+indFTH <- read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+                     "data_FTH.csv"), delim = ",") %>% 
+  rename(TrunkForm = `Trunk form`, BarkColor = `Bark color`, BarkRuggedness = `Bark ruggedness`, 
+         BarkAspect = `Bark aspect`, BladeForm = `Blade form`, 
+         LeafConsistency = `Leaf consistency`, LeafSurface = `Leaf surface`, 
+         LeafBase = `Leaf base`, LeafMargin = `Leaf margin`,
+         HyperAcuminated = `Longue pointe`, BentPrincipalN = `Pli sur nervure principale`) %>% 
+  separate(Date, c("Month", "Day", "Year"), "/") %>% # Date
+  mutate(Date = paste0(Year, "/0", Month, "/", Day)) %>% 
+  select(-Year, -Month, -Day) %>% 
+  mutate(Time = gsub(":", "H", substr(as.character(Time), 1, 5))) %>% # Time
+  mutate(Dawkins = toupper(Dawkins)) %>% # Dawkins
+  mutate(Position = recode_factor(Position, bas = "LOW", haut = "TOP", milieu = "MID",
+                                  `milieu lumière` = "MID/LIGHT", `milieu/haut` = "MID",
+                                  `bas lumière` = "LOW/LIGHT", `haut lumière` = "TOPLIGHT",
+                                  `bas/lumière` = "LOW/LIGHT", `milieu/bas` = "MID")) %>% # Position
+  mutate(TrunkForm = recode_factor(TrunkForm, `B--` = "B-", `B (petits)` = "B-", `B+` = "B",
+                                  BS = "B/S", tordu = "N", C = "B")) %>% # TrunkForm
+  mutate(BarkColor = recode_factor(BarkColor, `B/BR` = "B/RB", BG = "B/G", D = "DB",
+                                   `DB+` = "DB", `DB/B` = "B/DB", GB = "B/G")) %>% # BarkColor
+  mutate(BarkAspect = recode_factor(BarkAspect, `?` = "N", `F+` = "F", `F/D` = "D/F",
+                                    `F/D-` = "D-/F", `F-HM` = "F-/HM", `F/HM+` = "F/HM",
+                                    `F+/HM` = "F/HM", `F/S/HM` = "F/HM/S", 
+                                    `HM/D (?)` = "D/HM", `HM/F` = "F/HM",
+                                    `S+/D` = "D/S+", `S/F/HM`	= "F/HM/S", `S-/HM`	= "HM/S-",
+                                    `S/HM`	= "HM/S", `R/HM` = "F/HM")) %>% # BarkAspect
+  mutate(Lenticels = recode_factor(Lenticels, N = "A", `P+` = "P", `P-` = "P")) %>% # Lenticels
+  mutate(BladeForm = recode_factor(BladeForm, `E+` = "E", `Oblan/E` = "E/Oblan")) %>% # BladeForm
+  mutate(LeafConsistency = recode_factor(LeafConsistency, `Char -` = "Char-", 
+                                         `Char+` = "Char")) %>% # LeafConsistency
+  mutate(LeafBase = recode_factor(LeafBase, `O/A` = "A/O", `O-R` = "O/R", `R/A` = "A/R",
+                                  RO = "O/R", `R/O` = "O/R")) %>% # LeafBase
+  mutate(LeafMargin = recode_factor(LeafMargin, `E/C-` = "C-/E")) %>% # LeafMargin
+  select(Date, Time, Plot, SubPlot, FieldTreeNum, Dawkins, Position,
+         TrunkForm, BarkColor, BarkRuggedness, BarkAspect, Lenticels,
+         BladeForm, LeafConsistency, LeafSurface, LeafBase, LeafMargin,
+         HyperAcuminated, BentPrincipalN, Comment) %>% 
+  unique()
+# read_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+#                      "Indviduals.csv"), delim = ",", col_types = cols(Date = col_character())) %>% 
+#   bind_rows(indFTH) %>% 
+#   write_delim(file.path("~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/",
+#                      "Indviduals_all.csv"), delim = ",")
+```
+
+## Leaf attribution in LA
+
+```{r MahoLAsummary, eval=F}
+LA %>% 
+  select(commentaire) %>% 
+  group_by(commentaire) %>% 
+  summarise(n = n()) %>% 
+  kable()
+```
+
+```{r MahoLA, eval=F}
+LA <- LA %>% 
+  separate(Label, c("Plot", "SubPlot", "FieldTreeNum"), 
+           "-", convert = T) %>% 
+  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
+  mutate(FieldTreeNum0 = FieldTreeNum) %>% 
+  mutate(FieldTreeNum = as.numeric(gsub('([[:alpha:]])', "", FieldTreeNum0))) %>% 
+  mutate(Scan = gsub('[0-9]+', "", FieldTreeNum0)) %>% 
+  select(-FieldTreeNum0) %>% 
+  arrange(Plot, SubPlot, FieldTreeNum, Area_exclude) %>% 
+  group_by(Plot, SubPlot, FieldTreeNum) %>% 
+  mutate(Leaf_order = (1:6)[1:n()])
+data <- data %>% 
+  arrange(Plot, SubPlot, FieldTreeNum, Fresh_Weight) %>% 
+  group_by(Plot, SubPlot, FieldTreeNum) %>% 
+  mutate(Leaf_order = (1:6)[1:n()])
+data <- data %>% 
+  left_join(LA)
+# data %>% 
+#   write_csv("./data.csv")
+```
+
