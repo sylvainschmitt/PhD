@@ -7,6 +7,9 @@ output:
     number_sections: false
     toc: true
     toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -20,14 +23,19 @@ theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
   cache = T, cache.lazy = F)
-path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures/"
+path <- "../../../data/Eschweilera_Paracou/Measures/"
 ```
 
 # Introduction
 
+Those documents aims to correct all *Eschweilera* raw data in order to prepare functional analysis. For each table, we need to join files and check IDs correspondance and data values. Those operations concern following tables: (i) Individuals, (ii) LeafFresh, (iii) LeafDry and (iv) LeafArea. Finally we will need to prepare the two final tables from all the previous ones:
+
+* __AllMeasures__ with all corrected measures
+* __AllTraits__ All corrected and computed functional traits
+
 # Individuals
 
-## First correction
+## Data formatting
 
 The idea is to transform FTH data to the general formatting, i.e. :
 
@@ -52,7 +60,7 @@ The idea is to transform FTH data to the general formatting, i.e. :
 * BentPrincpalN
 
 
-```{r ind, echo=T}
+```{r ind}
 indFTH <- read_delim(file.path(path, "data_FTH.csv"), delim = ",") %>% 
   rename(TrunkForm = `Trunk form`, BarkColor = `Bark color`, BarkRuggedness = `Bark ruggedness`, 
          BarkAspect = `Bark aspect`, BladeForm = `Blade form`, 
@@ -90,18 +98,50 @@ indFTH <- read_delim(file.path(path, "data_FTH.csv"), delim = ",") %>%
          BladeForm, LeafConsistency, LeafSurface, LeafBase, LeafMargin,
          HyperAcuminated, BentPrincipalN, Comment) %>% 
   unique()
-# read_delim(file.path(path, "Indviduals.csv"), delim = ",", col_types = cols(Date = col_character())) %>% 
-#   bind_rows(indFTH) %>% 
+# read_delim(file.path(path, "Indviduals.csv"), delim = ",", col_types = cols(Date = col_character())) %>%
+#   bind_rows(indFTH, .) %>%
 #   write_delim(file.path(path, "Indviduals_all.csv"), delim = ",")
 ```
 
-## Individuals to add
+## IDs check
 
-* P13-1-1
-* P13-1-816
-* P13-1-991
+```{r IndData}
+individuals <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("Individuals") %>% 
+  dplyr::select(-X1) %>% 
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum)))
+trees <- src_sqlite(file.path("../../../data/Paracou/", 
+                                 "trees/Paracou.sqlite")) %>% 
+              tbl("Paracou") %>% 
+              mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum))) %>% 
+              filter(CodeParacou %in% individuals$CodeParacou) %>% 
+              filter(Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+                       Plot == 16 & CensusYear == 2015) %>% 
+              mutate(DBH = CircCorr*pi) %>% 
+              mutate(SpeciesLong = paste(Genus, Species)) %>% 
+              collect()
+```
 
-# Fresh measurements
+Wrong IDs have been corrected.
+
+```{r IndParacou}
+ref <- setdiff(trees$CodeParacou, individuals$CodeParacou)
+cor <- setdiff(individuals$CodeParacou, trees$CodeParacou)
+data.frame(FreshID = cor,
+           Suggestion = ref[stringdist::amatch(cor, ref, maxDist = Inf)]) %>% 
+  group_by(Suggestion) %>% 
+  mutate(TimeSuggested = n()) %>% 
+  mutate(TimeSuggested = cell_spec(TimeSuggested, bold = ifelse(TimeSuggested > 1, T, F))) %>% 
+  kable(format = "html", escape = F,
+        caption = "Individual to be corrected in Individuals table.") %>%
+  kable_styling("striped", full_width = F)
+```
+
+# Leaf Fresh
 
 ## Join files
 
@@ -113,7 +153,7 @@ Fresh measurements have three different format of files :
 
 Consequently for the ODS files we will only use those collected in October with pattern 2018.10.*.ods .
 
-```{bash, eval=F, echo=T}
+```{bash, eval=F}
 cd ~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Measures
 mkdir csv
 for file in ./2018.10.*.ods
@@ -126,7 +166,7 @@ done
 ```
 
 
-```{r FreshMeasurements, eval=F, echo=T}
+```{r FreshMeasurements, eval=F}
 FTH <- read_delim(file.path(path, "data_FTH.csv"), delim = ",") %>% 
   rename(Leaf = Numero_feuille, FreshWeight = Fresh_Weight, SPAD1 = `SPAD 1`) %>% 
   select(IdGenetic, Plot, SubPlot, FieldTreeNum, Leaf, 
@@ -150,7 +190,7 @@ bind_rows(All, Tom, FTH) %>%
   write_delim(file.path(path, "LeafFresh_all.csv"), delim = ",")
 ```
 
-## Individuals
+## IDs check
 
 Now we need to check and correct individual codes. 
 
@@ -158,21 +198,27 @@ Now we need to check and correct individual codes.
 individuals <- googlesheets::gs_title("Measures_Eschweilera") %>% 
   googlesheets::gs_read("Individuals") %>% 
   dplyr::select(-X1) %>% 
-  mutate(CodeParacou = paste0("P", Plot, "-", SubPlot, "-", TreeFieldNum)) 
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum)))
 fresh <- googlesheets::gs_title("Measures_Eschweilera") %>% 
   googlesheets::gs_read("LeafFresh") %>% 
   dplyr::select(-X1) %>% 
-  mutate(CodeParacou = paste0("P", Plot, "-", SubPlot, "-", TreeFieldNum))
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum)))
 ```
 
+The number of individuals now correctly match between the two tables.
 
-First of all there 3 more individuals in fresh measurements compared to the individual dataset that have not be entered as data. To locate theim we need first to correct other mispelled code.
-
-```{r IndCount, echo=T}
-length(unique(individuals$CodeParacou))
-length(unique(fresh$CodeParacou))
+```{r FreshIndCount}
+data.frame(Table = c("Individual", "LeafFresh"),
+           N = c(length(unique(individuals$CodeParacou)), 
+                 length(unique(fresh$CodeParacou)))) %>% 
+  kable(caption = "Individual count in Individual and LeafFresh tables.")
 ```
 
+Wrong IDs have been corrected.
 
 ```{r FreshInd}
 ref <- setdiff(individuals$CodeParacou, fresh$CodeParacou)
@@ -182,7 +228,120 @@ data.frame(FreshID = cor,
   group_by(Suggestion) %>% 
   mutate(TimeSuggested = n()) %>% 
   mutate(TimeSuggested = cell_spec(TimeSuggested, bold = ifelse(TimeSuggested > 1, T, F))) %>% 
-  kable(format = "html", escape = F) %>%
+  kable(format = "html", escape = F,
+        caption = "Individual to be corrected in LeafFresh table.") %>%
+  kable_styling("striped", full_width = F)
+```
+
+## Values check
+
+```{r FreshValues}
+fresh %>% 
+  filter_at(vars(starts_with("SPAD")), any_vars(. > 100)) %>% 
+  select(IdGenetic, CodeParacou, Leaf, SPAD1, SPAD2, SPAD3) %>% 
+  kable(format = "html", escape = F,
+        caption = "SPAD to be corrected in LeafFresh table.") %>%
+  kable_styling("striped", full_width = F)
+fresh %>% 
+  filter_at(vars(starts_with("LT")), any_vars(. > 500)) %>% 
+  select(IdGenetic, CodeParacou, Leaf, LT1, LT2, LT3) %>% 
+  kable(format = "html", escape = F,
+        caption = "LT to be corrected in LeafFresh table.") %>%
+  kable_styling("striped", full_width = F)
+fresh %>% 
+  filter(FreshWeight > 13) %>% 
+  select(IdGenetic, CodeParacou, Leaf, FreshWeight) %>% 
+  kable(format = "html", escape = F,
+        caption = "FreshWeight to be corrected in LeafFresh table.") %>%
+  kable_styling("striped", full_width = F)
+```
+
+# Leaf Dry
+
+## Join files
+
+Dry measurements have three different format of files :
+
+1. the FTH file (*data_FTH.csv*) mixing individual data and fresh measurement which might be differently encoded
+1. Anne file (*LeafDry_Anne.csv*) in the correct format which might integrate typo issues
+
+```{r DryMeasurements, eval=F}
+FTH <- read_delim(file.path(path, "data_FTH.csv"), delim = ",") %>% 
+  mutate(TreeFieldNum = FieldTreeNum, Leaf = Numero_feuille,
+         DryWeight = Dry_Weight) %>% 
+  select(IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, DryWeight) %>% 
+  mutate_at(vars(Leaf, DryWeight), as.numeric)
+Anne <- read.csv(file.path(path, "LeafDry_Anne.csv"), 
+         dec = ",", stringsAsFactors = F) %>% 
+  select(-X) %>% 
+  mutate(IdGenetic = ifelse(IdGenetic == "", NA, IdGenetic)) %>% 
+  fill(IdGenetic, Plot, SubPlot, TreeFieldNum)
+bind_rows(Anne, FTH) %>% 
+  write_delim(file.path(path, "LeafDry_all.csv"), delim = ",")
+```
+
+## IDs check
+
+Now we need to check and correct individual codes. 
+
+```{r DryIndData}
+individuals <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("Individuals") %>% 
+  dplyr::select(-X1) %>% 
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum)))
+dry <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("LeafDry") %>% 
+  dplyr::select(-X1) %>% 
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum)))
+```
+
+The number of individuals now correctly match between the two tables.
+
+```{r DryIndCount}
+data.frame(Table = c("Individual", "LeafDry"),
+           N = c(length(unique(individuals$CodeParacou)), 
+                 length(unique(dry$CodeParacou)))) %>% 
+  kable(caption = "Individual count in Individual and LeafDry tables.")
+```
+
+Wrong IDs have been corrected.
+
+```{r DryInd}
+ref <- setdiff(individuals$CodeParacou, dry$CodeParacou)
+cor <- setdiff(dry$CodeParacou, individuals$CodeParacou)
+data.frame(DryID = cor,
+           Suggestion = ref[stringdist::amatch(cor, ref, maxDist = Inf)]) %>% 
+  group_by(Suggestion) %>% 
+  mutate(TimeSuggested = n()) %>% 
+  mutate(TimeSuggested = cell_spec(TimeSuggested, bold = ifelse(TimeSuggested > 1, T, F))) %>% 
+  kable(format = "html", escape = F,
+        caption = "Individual to be corrected in LeafDry table.") %>%
+  kable_styling("striped", full_width = F)
+```
+
+Three individuals are lacking dry measurements and are currently in the oven for 48H in waiting for new measurements.
+
+```{r DryMissing}
+individuals %>% 
+  anti_join(dry, by = "CodeParacou") %>% 
+  select(CodeParacou, Date, Time) %>% 
+  kable(format = "html", escape = F,
+        caption = "Missing individuals in LeafDry table.") %>%
+  kable_styling("striped", full_width = F)
+```
+
+## Values check
+
+```{r DryValues}
+dry %>% 
+  filter(DryWeight > 5) %>% 
+  select(IdGenetic, CodeParacou, DryWeight) %>% 
+  kable(format = "html", escape = F,
+        caption = "DryWeight to be corrected in LeafFresh table.") %>%
   kable_styling("striped", full_width = F)
 ```
 
@@ -213,4 +372,97 @@ data <- data %>%
 # data %>% 
 #   write_csv("./data.csv")
 ```
+
+# All measures
+
+AllMeasures table contains the follwoing fields with table from origin in bracket:
+
+* idTree _(Paracou)_
+* IdGenetic _(LeafFresh & LeafDry)_
+* Plot _(All)_
+* SubPlot _(All)_
+* TreeFieldNum _(All)_
+* Leaf _(LeafFresh, LeafDry and LeafArea)_
+* Genus _(Paracou)_
+* Species _(Paracou)_
+* DBH _(Paracou)_
+* Dawkins _(Individuals)_
+* LAexclude _(LeafArea)_
+* LAinclude _(LeafArea)_
+* FreshWeight _(LeafFresh)_
+* DryWeight _(LeafDry)_
+* SPADmean _(LeafFresh, mean(SPAD1, SPAD2, SPAD3))_
+* LTmean _(LeafFresh, mean(LT1, LT2, LT3))_
+
+```{r AllMeasuresData}
+individuals <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("Individuals") %>% 
+  dplyr::select(-X1) %>% 
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum)))
+paracou <- src_sqlite(file.path("../../../data/Paracou/", 
+                                "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  mutate(CodeParacou = paste0("P", as.character(Plot), 
+                              "-", as.character(SubPlot),
+                              "-", as.character(TreeFieldNum))) %>% 
+  filter(CodeParacou %in% individuals$CodeParacou) %>% 
+  select(-CodeParacou) %>% 
+  filter(Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+           Plot == 16 & CensusYear == 2015) %>% 
+  mutate(DBH = CircCorr*pi) %>% 
+  mutate(SpeciesLong = paste(Genus, Species)) %>% 
+  collect()
+individuals <- select(individuals, -CodeParacou)
+fresh <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("LeafFresh") %>% 
+  dplyr::select(-X1)
+dry <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("LeafDry") %>% 
+  dplyr::select(-X1)
+# area <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+#   googlesheets::gs_read("LeafArea") %>% 
+#   dplyr::select(-X1)
+```
+
+```{r AllMeasuresJoin, eval=F}
+paracou %>% 
+  left_join(individuals, by = c("Plot", "SubPlot", "TreeFieldNum"), 
+            suffix = c("", ".individuals")) %>% 
+  left_join(fresh, by = c("Plot", "SubPlot", "TreeFieldNum"),
+            suffix = c("", ".fresh")) %>% 
+  group_by(idTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf) %>% 
+  mutate(SPADmean = mean(c(SPAD1, SPAD2, SPAD3), na.rm = T)) %>% 
+  mutate(LTmean = mean(c(LT1, LT2, LT3), na.rm = T)) %>% 
+  ungroup() %>% 
+  left_join(dry, by = c("IdGenetic", "Plot", "SubPlot", "TreeFieldNum", "Leaf"),
+  suffix = c("", ".dry")) %>%
+  mutate(LAexclude = NA, LAinclude = NA) %>% 
+  # left_join(area, by = c("Plot", "SubPlot", "TreeFieldNum", "Leaf"),
+  #           suffix = c("", ".area")) %>% 
+  select(idTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species, DBH,
+         Dawkins, LAexclude, LAinclude, FreshWeight, DryWeight, SPADmean, LTmean) %>%
+  write_delim(file.path(path, "AllMeasures.csv"), delim = ",")
+```
+
+# All traits
+
+AllTraits have fields similar to AllMeasures (idTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species, DBH, Dawkins) and following final functional traits:
+
+* $SLA = \frac{DryWeight}{LAexclude}$
+* $LDMC = \frac{DryWeight}{FreshWeight}$
+* $LT = LTmean$
+* $LA = LAexclude$
+* $CC = \frac{117.1*SPAD}{148.84*SPAD}$ Homographic model for all species from @Coste2010
+
+```{r AllTraits}
+measures <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("AllMeasures")
+```
+
+# Conclusion
+
+# References
+
 
