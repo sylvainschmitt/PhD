@@ -1,3 +1,11 @@
+# PhD 0.1.9057
+* Maho LeafFresh cleaning 1
+* distribution
+   * Model form
+   * Symphonia abiotic
+   * Maho morphology
+* gitignore .zip
+
 # PhD 0.1.9056
 * Data_cleaning > Sympho/Maho split
 

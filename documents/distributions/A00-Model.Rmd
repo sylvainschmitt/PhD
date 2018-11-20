@@ -1,0 +1,858 @@
+---
+title: "Model form"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+vertical_layout: scroll
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+```
+
+Intro
+==================
+
+Issue {data-width=200}
+-------------------------------------
+
+The aim of this document is to find the best general form of model to fit a distribution model. Especially we are thinking for a model that can deal with three specific cases :
+
+* The environmental variable has no effect
+* The niche optimum is in a intermediate value of the environmental variable range
+* The niche optimum is at a limit of the environmental variable range
+
+For this we will build three fake data sets distributed along our environmental variable as follow :
+
+Data {data-width=200}
+-------------------------------------
+
+### Fake data
+
+```{r fakeData}
+data <- list(
+  no = data.frame(Environment = seq(0, 1, length.out = 1000), Presence = rep(c(0,1), 500)),
+  intermediate = data.frame(Environment = seq(0, 1, length.out = 1000),
+                            Presence = c(rep(0,350), rep(1,300), rep(0,350))),
+  limit = data.frame(Environment = seq(0, 1, length.out = 1000), Presence = c(rep(0,700), rep(1,300)))
+)
+bind_rows(data, .id = "id") %>% 
+  ggplot(aes(x = Environment)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  facet_wrap(~id, nrow = 3)
+```
+
+Model 1
+==================
+
+Column 1
+-------------------------------------
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = f(TWI)$ and $\phi = ct$ or $\phi = g(TWI)$
+
+So $0 < \mu < 1$ and $\phi > 0$
+
+Trying with $\mu = \alpha + \beta*TWI$ and $\phi =  c$, with $(a,b,c) \in \mathcal R^3$
+
+We have $0 < \alpha + \beta*TWI < 1$ and $\phi > 0$
+
+If $TWI \in [0,max_{TWI}]$, $0 < \alpha <1$ and $\frac{-\alpha}{max_{TWI}} < \beta < \frac{1-\alpha}{max_{TWI}}$
+
+
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    real<lower=0, upper=1> Presence[N] ;
+    real<lower=0, upper=1> TWI[N] ;
+    real<lower=0, upper=1> weights[N] ;
+  }
+  parameters {
+    real<lower=1e-22, upper=1-1e-22> alpha ;
+    real<lower=-alpha, upper=(1-alpha)> beta ; // for maxTWI = 1
+    real<lower=1e-22> phi ;
+  }
+  transformed parameters {
+    real mu[N] ;
+    real A[N] ;
+    real B[N] ;
+    for(n in 1:N) {
+      mu[n] = alpha + beta*TWI[n] ;
+      A[n] = mu[n]*phi ;
+      B[n] = (1.0 - mu[n])*phi ;
+    }
+  }
+  model {
+    alpha ~ beta(1,1) ;
+    beta ~ beta(1,1) ;
+    phi ~ gamma(0.000001,0.000001) ;
+    for(n in 1:N)
+      target += weights[n]*beta_lpdf(Presence[n] | A[n], B[n]) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M1test.Rdata")
+load("./distribution_save/M1test.Rdata")
+pars <- c("alpha", "beta", "phi")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = names(data), nrow = 3)
+```
+
+Model 2
+==================
+
+Column 1
+-------------------------------------
+
+$$Habitat~suitability \sim \mathcal B(\alpha_0 + \alpha*TWI, \beta_0 + \beta*TWI)$$
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    real<lower=0, upper=1> Presence[N] ;
+    real<lower=0, upper=1> TWI[N] ;
+    real<lower=0, upper=1> weights[N] ;
+  }
+  parameters {
+    real<lower=0> alpha_0 ;
+    real<lower=-alpha_0> alpha ; // for maxTWI = 1
+    real<lower=0> beta_0 ;
+    real<lower=-beta_0> beta ; // for maxTWI = 1
+  }
+  model {
+    for(n in 1:N)
+      target += weights[n]*beta_lpdf(Presence[n] | alpha_0 + alpha*TWI[n], beta_0 + beta*TWI[n]) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M2test.Rdata")
+load("./distribution_save/M2test.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        alpha_0 = apply(as.matrix(fits[[type]], pars = "alpha_0"), 2, mean),
+        alpha = apply(as.matrix(fits[[type]], pars = "alpha"), 2, mean),
+        beta_0 = apply(as.matrix(fits[[type]], pars = "beta_0"), 2, mean),
+        beta = apply(as.matrix(fits[[type]], pars = "beta"), 2, mean)) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = (alpha_0+alpha*Environment)/(alpha_0+alpha*Environment + beta_0+beta*Environment)))
+  ),
+  labels = names(data), nrow = 3)
+```
+
+Model 3
+==================
+
+Column 1
+-------------------------------------
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI)$ and $\phi = e^{\beta_0 + \beta*TWI}$
+
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real beta_0 ;
+    real beta ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*TWI[n]) ;
+      phi[n] = exp(beta_0 + beta*TWI[n]) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M3test.Rdata")
+load("./distribution_save/M3test.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = names(data), nrow = 3)
+```
+
+Model 4
+==================
+
+Column 1
+-------------------------------------
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI + \alpha_2*TWI^2)$ and $\phi = e^{\beta_0 + \beta*TWI + \beta_2*TWI^2}$
+
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real alpha_2 ;
+    real beta_0 ;
+    real beta ;
+    real beta_2 ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*TWI[n] + alpha_2*TWI[n]*TWI[n]) ;
+      phi[n] = exp(beta_0 + beta*TWI[n] + beta_2*TWI[n]*TWI[n]) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M4test.Rdata")
+load("./distribution_save/M4test.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta", "alpha_2", "beta_2")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Probability density
+
+```{r , fig.cap="Probability density (mu)."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = names(data), nrow = 3)
+```
+
+#### Habitat suitability
+
+```{r , fig.cap="Habitat suitability Beta(A,B)."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        A = apply(as.matrix(fits[[type]], pars = "A"), 2, mean),
+        B = apply(as.matrix(fits[[type]], pars = "B"), 2, mean)) %>% 
+    cbind(t(apply(as.matrix(fits[[type]], pars = "A"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    rename(A5 = `5%`, A95 = `95%`) %>% 
+    cbind(t(apply(as.matrix(fits[[type]], pars = "B"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    rename(B5 = `5%`, B95 = `95%`) %>% 
+    cbind(t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    rename(mu5 = `5%`, mu95 = `95%`) %>% 
+    mutate(HabitatSuitability = qbeta(mu, A, B)) %>% 
+    mutate(HabitatSuitability5 = qbeta(mu5, A5, B5)) %>% 
+    mutate(HabitatSuitability95 = qbeta(mu95, A95, B95)) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_line(aes(y = HabitatSuitability), col = "red") +
+    geom_ribbon(aes(ymin = HabitatSuitability5, ymax = HabitatSuitability95), color = 'black', alpha = 0.2)
+),
+labels = names(data), nrow = 3)
+```
+
+Model 5
+==================
+
+Column 1
+-------------------------------------
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI^{\alpha_p})$ and $\phi = e^{\beta_0 + \beta*TWI^{\beta_p}}$
+
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real<lower=0, upper=3> alpha_p ;
+    real beta_0 ;
+    real beta ;
+    real<lower=0, upper=3> beta_p ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*pow(TWI[n], alpha_p)) ;
+      phi[n] = exp(beta_0 + beta*pow(TWI[n], beta_p)) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M5test.Rdata")
+load("./distribution_save/M5test.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta", "alpha_p", "beta_p")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = names(data), nrow = 3)
+```
+
+Model 6
+==================
+
+Column 1
+-------------------------------------
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI^2 + \alpha_2*TWI^2)$ and $\phi = e^{\beta_0}$
+
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real alpha_2 ;
+    real beta_0 ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*TWI[n] + alpha_2*TWI[n]*TWI[n]) ;
+      phi[n] = exp(beta_0) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M6test.Rdata")
+load("./distribution_save/M6test.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "alpha_2")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = names(data), nrow = 3)
+```
+
+Model 7
+==================
+
+Column 1
+-------------------------------------
+
+$Habitat~suitability \sim \mathcal B(A, B)$
+
+$A = \mu * \phi > 0$ and $B = (1 - \mu)*\phi > 0$
+
+$\mu = logit^{-1}(\alpha_0 + \alpha*TWI + \alpha_2*TWI^4)$ and $\phi = e^{\beta_0 + \beta*TWI + \beta_2*TWI^4}$
+
+#### Code
+
+```{stan , output.var="Model", echo=T, eval=F}
+  data {
+    int<lower=1> N ; // # obs
+    vector<lower=0, upper=1>[N] Presence ;
+    vector<lower=0, upper=1>[N] TWI ;
+    vector<lower=0, upper=1>[N] weights ;
+  }
+  parameters {
+    real alpha_0 ;
+    real alpha ;
+    real alpha_2 ;
+    real beta_0 ;
+    real beta ;
+    real beta_2 ;
+  }
+  transformed parameters {
+    vector<lower=0, upper=1>[N] mu ;
+    vector<lower=0>[N] phi ;
+    vector<lower=0>[N] A ;
+    vector<lower=0>[N] B ;
+    for(n in 1:N) {
+      mu[n] = inv_logit(alpha_0 + alpha*TWI[n] + alpha_2*TWI[n]*TWI[n]*TWI[n]*TWI[n]) ;
+      phi[n] = exp(beta_0 + beta*TWI[n] + beta_2*TWI[n]*TWI[n]*TWI[n]*TWI[n]) ;
+    }
+    A = mu .* phi ;
+    B = (1.0 - mu) .* phi ;
+  }
+  model {
+    target += weights*beta_lpdf(Presence | A, B) ;
+  }
+```
+
+#### Summary
+
+```{r }
+# fits <- lapply(data, function(x)
+#                sampling(Model, chains = 2,
+#                         data = list(N = nrow(x),
+#                                     Presence = c(10^-6, 1-10^-6)[x$Presence+1],
+#                                     TWI = x$Environment,
+#                                     weights = ifelse(x$Presence == 0,
+#                                                      1/(2*sum(x$Presence == 1)),
+#                                                      1/(2*sum(x$Presence == 0))))))
+# names(fits) <- names(data)
+# save(fits, file = "./distribution_save/M7test.Rdata")
+load("./distribution_save/M7test.Rdata")
+pars <- c("alpha_0", "beta_0", "alpha", "beta", "alpha_2")
+lapply(as.list(names(data)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable(caption = "Summary table of the model")
+```
+
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+Column 2
+-------------------------------------
+
+#### Chains
+
+```{r ,fig.cap="Markov chains trace plot after warmup."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  mcmc_trace(as.array(fits[[type]]),
+             pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))),
+  labels = names(data), nrow = 2)
+```
+
+#### Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup."}
+mcmc_pairs(as.array(fits[[1]]), pars = c(pars, "lp__"))
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+cowplot::plot_grid(plotlist = lapply(as.list(names(data)), function(type)
+  cbind(data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
+    ggplot(aes(x = Environment)) +
+    geom_point(aes(y = Presence, col = as.factor(Presence))) +
+    geom_point(aes(y = mu)) +
+    geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+    geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+    geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed")
+  ),
+  labels = names(data), nrow = 3)
+```
+
+# Conclusion
+
+## Conclusion
+
+## References
