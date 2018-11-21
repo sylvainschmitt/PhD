@@ -412,7 +412,6 @@ paracou <- src_sqlite(file.path("../../../data/Paracou/",
   filter(Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
            Plot == 16 & CensusYear == 2015) %>% 
   mutate(DBH = CircCorr*pi) %>% 
-  mutate(SpeciesLong = paste(Genus, Species)) %>% 
   collect()
 individuals <- select(individuals, -CodeParacou)
 fresh <- googlesheets::gs_title("Measures_Eschweilera") %>% 
@@ -421,9 +420,9 @@ fresh <- googlesheets::gs_title("Measures_Eschweilera") %>%
 dry <- googlesheets::gs_title("Measures_Eschweilera") %>% 
   googlesheets::gs_read("LeafDry") %>% 
   dplyr::select(-X1)
-# area <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-#   googlesheets::gs_read("LeafArea") %>% 
-#   dplyr::select(-X1)
+area <- googlesheets::gs_title("Measures_Eschweilera") %>%
+  googlesheets::gs_read("LeafArea") %>%
+  dplyr::select(-X1)
 ```
 
 ```{r AllMeasuresJoin, eval=F}
@@ -436,13 +435,12 @@ paracou %>%
   mutate(SPADmean = mean(c(SPAD1, SPAD2, SPAD3), na.rm = T)) %>% 
   mutate(LTmean = mean(c(LT1, LT2, LT3), na.rm = T)) %>% 
   ungroup() %>% 
-  left_join(dry, by = c("IdGenetic", "Plot", "SubPlot", "TreeFieldNum", "Leaf"),
+  left_join(dry, by = c("Plot", "SubPlot", "TreeFieldNum", "Leaf"),
   suffix = c("", ".dry")) %>%
-  mutate(LAexclude = NA, LAinclude = NA) %>% 
-  # left_join(area, by = c("Plot", "SubPlot", "TreeFieldNum", "Leaf"),
-  #           suffix = c("", ".area")) %>% 
+  left_join(area, by = c("Plot", "SubPlot", "TreeFieldNum", "Leaf"),
+            suffix = c("", ".area")) %>%
   select(idTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species, DBH,
-         Dawkins, LAexclude, LAinclude, FreshWeight, DryWeight, SPADmean, LTmean) %>%
+         Dawkins, LAexclude, LAinclude, FreshWeight, DryWeight, SPADmean, LTmean) %>% 
   write_delim(file.path(path, "AllMeasures.csv"), delim = ",")
 ```
 
@@ -456,12 +454,24 @@ AllTraits have fields similar to AllMeasures (idTree, IdGenetic, Plot, SubPlot, 
 * $LA = LAexclude$
 * $CC = \frac{117.1*SPAD}{148.84*SPAD}$ Homographic model for all species from @Coste2010
 
-```{r AllTraits}
-measures <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-  googlesheets::gs_read("AllMeasures")
+```{r AllTraits, eval=F}
+googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("AllMeasures") %>% 
+  mutate(SLA = LAexclude/DryWeight) %>% 
+  mutate(LDMC = DryWeight/FreshWeight) %>% 
+  mutate(LT = LTmean) %>% 
+  mutate(LT = ifelse(is.nan(LT), NA, LT)) %>% 
+  mutate(LA = LAexclude) %>% 
+  mutate(CC = (117.1*SPADmean)/(148.84-SPADmean)) %>% 
+  mutate(CC = ifelse(is.nan(CC), NA, CC)) %>% 
+  select(IdTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species, DBH,
+         Dawkins, SLA, LDMC, LT, LA, CC) %>% 
+  write_delim(file.path(path, "AllTraits.csv"), delim = ",")
 ```
 
 # Conclusion
+
+Data are ready, so enjoy analysis now ;)
 
 # References
 
