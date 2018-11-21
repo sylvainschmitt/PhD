@@ -413,16 +413,16 @@ if(!all(LA$TreeFieldNum %in% 1:4000))
 individuals <- googlesheets::gs_title("Measures_Eschweilera") %>% 
   googlesheets::gs_read("Individuals") %>% 
   select(Date,Time,Plot,SubPlot,TreeFieldNum)
-Lacks <- anti_join(individuals,LA,by=c("Plot","SubPlot","TreeFieldNum")) %>% 
+(Lacks <- anti_join(individuals,LA,by=c("Plot","SubPlot","TreeFieldNum")) %>% 
   select(Plot,SubPlot,TreeFieldNum) %>% 
   distinct() %>% 
   unite(Lacks,Plot,SubPlot,TreeFieldNum,sep="-") %>% 
-  kable()
-Lacks2 <- anti_join(LA,individuals,by=c("Plot","SubPlot","TreeFieldNum")) %>%
+  kable())
+(Lacks2 <- anti_join(LA,individuals,by=c("Plot","SubPlot","TreeFieldNum")) %>%
   select(Plot,SubPlot,TreeFieldNum) %>% 
   distinct() %>%
   unite(Lacks,Plot,SubPlot,TreeFieldNum,sep="-") %>% 
-  kable()
+  kable())
 #for (x in Lacks[,1]){
 #  print(Lacks2[amatch(x,as.character(Lacks2[,1]),maxDist=Inf),])}
 #  warning(Lacks2[amatch(as.character(x),Lacks2,maxDist=Inf)],"is not a misspel of", x, "?\n")
@@ -445,12 +445,12 @@ Here we checked wether leaves measures were missing or not.
 
 ```{r LeafNumber, warning=TRUE}
 if(dim(distinct(select(LAcor,Plot,SubPlot,TreeFieldNum)))[1]!=dim(individuals)[1])
-   warning(paste(dim(distinct(select(LAcor,Plot,SubPlot,TreeFieldNum)))[1],collapse=",")," individuals in LAcor wheareas ",paste(dim(individuals)[1],collapse=",")," in Individual")
+   warning(paste(dim(distinct(select(LAcor,Plot,SubPlot,TreeFieldNum)))[1],collapse=",")," individuals in LAcor wheareas ",paste(dim(individuals)[1],collapse=",")," in Individuals")
 ```
 
 After ordering leaves, we still can observe some individuals where leaves number isn't equal to 5:
 ```{r LeavesNumberPerInd,warning=TRUE}
-LAfinal <- read_delim(file.path(path1,"Individuals_all.csv"),delim=",") %>% 
+read_delim(file.path(path1,"Individuals_all.csv"),delim=",") %>% 
   group_by(Plot,SubPlot,TreeFieldNum) %>% 
   count() %>% 
   filter(n!=5) %>% 
