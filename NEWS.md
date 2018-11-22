@@ -1,3 +1,7 @@
+# PhD 0.1.9059
+* Maho cleaning LeafArea & AllTraits
+* Maho Outliers 1
+
 # PhD 0.1.9058
 * Maho cleaning AllMeasure
 
