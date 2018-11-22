@@ -1,14 +1,10 @@
-<<<<<<< HEAD
-# PhD 0.1.9060
+# PhD 0.1.9062
 * outliers - spotting other abnormal individuals
 
-# PhD 0.1.9059
-=======
 # PhD 0.1.9061
 * functional analysis PCA analysis v1 & templates for environment, data exploration and models
 
 # PhD 0.1.9060
->>>>>>> d7e7633b048d85762a4c9afec0bb042c96857094
 * outliers > data cleaning
 * competition > sampling/extra_girth
 
