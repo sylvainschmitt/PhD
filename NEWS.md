@@ -1,3 +1,6 @@
+# PhD 0.1.9060
+* outliers - spotting other abnormal individuals
+
 # PhD 0.1.9059
 * outliers > data cleaning
 * competition > sampling/extra_girth
