@@ -1,13 +1,13 @@
 ---
-title: "A3: Environment"
+title: "A02: Environmental descriptors selection"
 date: '`r Sys.Date()`'
+author: Sylvain Schmitt
 output:
   bookdown::html_document2:
     number_sections: false
     toc: true
     toc_float: yes
   bookdown::word_document2: default
-  github_document: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -36,22 +36,30 @@ opts_chunk$set(
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
-path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+path <- "../../data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
-```{r traits}
-traits <- googlesheets::gs_title("Measures_Symphonia") %>% 
+```{r data}
+traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
   googlesheets::gs_read("AllTraits") %>% 
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC))
-```
-
-```{r trees}
-trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
-  tbl("Paracou") %>% 
-  filter(idTree %in% traits$idTree) %>% 
-  collect() %>% 
-  mutate(DBH = CircCorr*pi)
+  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
+  mutate(Genus = "Symphonia") %>% 
+  rename(Species = Morphotype)
+traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  dplyr::select(-DBH)
+traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) ; rm(traitsEschweilera, traitsSymphonia)
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(idTree %in% traits$idTree) %>%
+  filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+         Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
+         Genus == "Symphonia" & CensusYear == 2015) %>%
+  mutate(DBH = CircCorr*pi) %>% 
+  collect()
+trees <- left_join(traits, paracou) ; rm(traits, paracou)
 ```
 
 ```{r env}
@@ -77,35 +85,29 @@ trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>%
 # rm(topo)
 # save(env, file = "./functional_save/env.Rdata")
 load("./functional_save/env.Rdata")
-load("../../Environment/Competition_save/symphoniaBA.Rdata")
-competition <- symphonia ; rm(symphonia)
-```
-
-```{r data}
-data <- env %>% 
-  left_join(competition %>% 
-              dplyr::filter(CensusYear == 2015))
 ```
 
 # Introduction
 
-This document test for environmental descriptors correlation i order to help select best biotic and abiotic descriptors.
+This document test for environmental descriptors correlation in order to help select best biotic and abiotic descriptors.
 
-# Method
+# Material & Methods
 
-# Result
+**We need to add biotic environment with local basal area ($BA10$ and $BA20$), DAwkins for light, and DBH for ontogeny !**
+
+# Results
 
 ```{r pairs, fig.cap="Pairs plot"}
-data %>% 
+env %>% 
   dplyr::select(DEM, RelativeElevation, Slope, Curvature, 
-                Aspect, TRI, TWI, BA10, BA20) %>% 
+                Aspect, TRI, TWI) %>% 
   GGally::ggpairs()
 ```
 
 ```{r corrplot, fig.cap="Correlation plot"}
-data %>% 
+env %>% 
   dplyr::select(DEM, RelativeElevation, Slope, Curvature, 
-                Aspect, TRI, TWI, BA10, BA20) %>% 
+                Aspect, TRI, TWI) %>% 
   na.omit() %>% 
   cor(.) %>% 
   corrplot::corrplot.mixed()
@@ -113,7 +115,7 @@ data %>%
 
 ```{r PCA, fig.cap="Principal compoonent analysis plot"}
 pca <- princomp(~ DEM + RelativeElevation + Slope + Curvature + 
-                Aspect + TRI + TWI + BA10 + BA20, data, cor = T)
+                Aspect + TRI + TWI, env, cor = T)
 autoplot(pca, 
          colour = "lightgrey",
          loadings.label.size = 6,
@@ -128,6 +130,8 @@ autoplot(pca,
 
 # Conclusion
 
+**Following conclusion is wrong, to be changed !**
+
 We consequently decided to use 5 weakly ($r < 0.75$) correlated descriptors to model functional traits variation :
 
 * 2 abiotic variables
@@ -138,3 +142,6 @@ We consequently decided to use 5 weakly ($r < 0.75$) correlated descriptors to m
      * A disturbance index
 * 1 indvidual variable
      * DBH as the ontogenetic descriptor
+     
+# References
+

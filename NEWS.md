@@ -1,4 +1,7 @@
-# PhD 0.1.9059
+# PhD 0.1.9061
+* functional analysis PCA analysis v1 & templates for environment, data exploration and models
+
+# PhD 0.1.9060
 * outliers > data cleaning
 * competition > sampling/extra_girth
 
