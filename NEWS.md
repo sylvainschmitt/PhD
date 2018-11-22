@@ -1,4 +1,8 @@
 # PhD 0.1.9059
+* outliers > data cleaning
+* competition > sampling/extra_girth
+
+# PhD 0.1.9059
 * Maho cleaning LeafArea & AllTraits
 * Maho Outliers 1
 
