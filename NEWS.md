@@ -1,3 +1,8 @@
+# PhD 0.1.9063
+* distribution models Bernoulli converged
+* distribution models abiotic with bernoulli
+* extra girth update
+
 # PhD 0.1.9062
 * distribution models > Bernoulli
 

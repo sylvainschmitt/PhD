@@ -45,11 +45,14 @@ For this we will build three fake data sets distributed along our environmental 
 ```{r ModelsTable, render="pandoc"}
 data.frame(
   Type = c("Bernoulli"),
-  Name = c("$B_0$", "$B_{\\alpha}$", "$B_{\\alpha, \\alpha_2}$", "$B_{\\alpha, \\beta}$"),
-  Formula = c("$Presence \\sim \\mathcal{Bernoulli}(\\theta)$",
-              "$Presence \\sim \\mathcal{Bernoulli}(logit(\\alpha_0+\\alpha*Environment))$",
-              "$Presence \\sim \\mathcal{Bernoulli}(logit(\\alpha*Environment+\\alpha_2*Environment^2))$",
-              "$Presence \\sim \\mathcal{Bernoulli}(logit(\\alpha*Environment+Environment^{\\beta}))$")  
+  Name = c("$B_0$", "$B_{\\alpha}$", "$B_{\\alpha, \\alpha_2}$", "$B_{\\alpha, \\beta}$",
+           "$B_{\\alpha, \\beta}2$", "$B_{\\alpha, \\beta}3$"),
+  Formula = c("$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*Environment))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*Environment+\\alpha_2*Environment^2))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*Environment+Environment^{\\beta}))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*(Environment+Environment^{\\beta})))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+Environment^{\\alpha}+Environment^{\\beta}))$")  
 ) %>% 
   kable(caption = "Models summary.",
         format = "html", escape = F) %>% 
@@ -66,14 +69,16 @@ Data {data-width=200}
 ```{r fakeData}
 n <- 100
 data <- list(
-  no = data.frame(Environment = seq(0, 1, length.out = n),
-                  Presence = c(rep(0:1, n))),
+  no = data.frame(Environment = seq(0, 1, length.out = 100),
+                  Presence = c(rep(0:1, 50))),
   intermediate = data.frame(Environment = seq(0, 1, length.out = n),
-                            Presence = c(rep(0,round((n-round(n/3))/2)), 
-                                         rep(1,round(n/3)), 
-                                         rep(0,(n-round((n-round(n/3))/2)-round(n/3))))),
+                            Presence = c(rep(0, 20), 
+                                         rep(0:1,10),
+                                         rep(1,20),
+                                         rep(0:1,10),
+                                         rep(0,20))),
   limit = data.frame(Environment = seq(0, 1, length.out = n), 
-                     Presence = c(rep(0,(n-round(n/3))), rep(1,round(n/3))))
+                     Presence = c(rep(0,30), rep(0:1,20), rep(1,30)))
 )
 mdata <- lapply(data, function(x) list(N = nrow(x),
                                        Presence = x$Presence,
@@ -95,9 +100,9 @@ Column 1
 
 #### Model
 
-The first family of model are Bernoulli law to model the probability of presence. $B_0$ is the null model estimating a single theta along the whole environmental gradient.
+The first family of model are Bernoulli law to model the probability of presence. $B_0$ is the null model estimating a single theta along the whole environmental gradient. Thus $B_0$ cannot include any environmental effect.
 
-$$Presence \sim \mathcal{Bernoulli}(\theta)$$
+$$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0))$$
 
 #### Code
 
@@ -108,10 +113,15 @@ $$Presence \sim \mathcal{Bernoulli}(\theta)$$
     vector<lower=0, upper=1>[N] weights ;
   }
   parameters {
-    real<lower=0, upper=1> theta ;
+    real alpha_0 ;
   }
   model {
-    target += weights*bernoulli_lpmf(Presence | theta) ;
+    target += weights*bernoulli_logit_lpmf(Presence | alpha_0) ;
+  }
+  generated quantities {
+    vector<lower=0, upper=1>[N] mu ;
+    for(n in 1:N)
+       mu[n] = inv_logit(alpha_0) ;
   }
 ```
 
@@ -122,7 +132,7 @@ $$Presence \sim \mathcal{Bernoulli}(\theta)$$
 # names(fits) <- names(mdata)
 # save(fits, file = "./distribution_save/B0.Rdata")
 load("./distribution_save/B0.Rdata")
-pars <- c("theta")
+pars <- c("alpha_0")
 lapply(as.list(names(mdata)), function(type)
   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Type = type)) %>%
@@ -159,8 +169,8 @@ mcmc_pairs(as.array(fits$intermediate), pars = c(pars, "lp__"))
 ```{r , fig.cap="Predictions."}
 lapply(as.list(names(data)), function(type)
   cbind(type = type, data[[type]],
-        mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
+        mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
   bind_rows() %>% 
   ggplot(aes(x = Environment)) +
   geom_point(aes(y = Presence, col = as.factor(Presence))) +
@@ -179,7 +189,7 @@ Column 1
 
 #### Model
 
-$B_{\alpha}$ is a Bernoulli logistic regression estimating a sigmoidal incresing or decreasing $\alpha$ along the whole environmental gradient in addition to the intercept $\alpha_0$.
+$B_{\alpha}$ is a Bernoulli logistic regression estimating a sigmoidal incresing or decreasing $\alpha$ along the whole environmental gradient in addition to the intercept $\alpha_0$. $B_{\alpha}$ is responding well to the optimum in the limit of the environmental range and to no effect from the environmental variable. But $B_{\alpha}$ can't detect ecological optimum in the middle of the ecological range besides it's the most commonly used model !
 
 $$Presence \sim \mathcal{Bernoulli}(logit(\alpha_0+\alpha*Environment))$$
 
@@ -234,14 +244,14 @@ Column 2
 #### Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$intermediate), pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$limit), pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 #### Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$intermediate), pars = c(pars, "lp__"))
+mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__"))
 ```
 
 #### Predictions
@@ -271,7 +281,7 @@ Column 1
 
 $B_{\alpha, \alpha_2}$is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter.
 
-$$Presence \sim \mathcal{Bernoulli}(logit(\alpha*Environment+\alpha_2*Environment^2))$$
+$$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*Environment+\alpha_2*Environment^2))$$
 
 #### Code
 
@@ -283,15 +293,16 @@ $$Presence \sim \mathcal{Bernoulli}(logit(\alpha*Environment+\alpha_2*Environmen
     vector<lower=0, upper=1>[N] weights ;
   }
   parameters {
+    real alpha_0 ; // intercept
     real alpha ; // sigmoidal slope
     real alpha_2 ; // quadratic form
   }
   model {
-    target += weights*bernoulli_logit_lpmf(Presence | alpha*Environment + alpha_2 * Environment .* Environment) ;
+    target += weights*bernoulli_logit_lpmf(Presence | alpha_0 + alpha*Environment + alpha_2 * Environment .* Environment) ;
   }
   generated quantities {
     vector<lower=0, upper=1>[N] theta ;
-    theta = inv_logit(alpha * Environment  + alpha_2 * Environment .* Environment) ;
+    theta = inv_logit(alpha_0 + alpha * Environment  + alpha_2 * Environment .* Environment) ;
   }
 ```
 
@@ -302,7 +313,7 @@ $$Presence \sim \mathcal{Bernoulli}(logit(\alpha*Environment+\alpha_2*Environmen
 # names(fits) <- names(mdata)
 # save(fits, file = "./distribution_save/Balpha2.Rdata")
 load("./distribution_save/Balpha2.Rdata")
-pars <- c("alpha", "alpha_2")
+pars <- c("alpha_0", "alpha", "alpha_2")
 lapply(as.list(names(mdata)), function(type)
   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Type = type)) %>%
@@ -340,8 +351,8 @@ mcmc_pairs(as.array(fits$intermediate), pars = c(pars, "lp__"))
 lapply(as.list(names(data)), function(type)
   cbind(type = type, data[[type]],
         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
-  bind_rows() %>% 
+        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>%
+  bind_rows() %>%
   ggplot(aes(x = Environment)) +
   geom_point(aes(y = Presence, col = as.factor(Presence))) +
   geom_point(aes(y = mu)) +
@@ -361,7 +372,7 @@ Column 1
 
 $B_{\alpha, \beta}$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
 
-$$Presence \sim \mathcal{Bernoulli}(logit(\alpha*Environment+Environment^{\beta}))$$
+$$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*Environment+Environment^{\beta}))$$
 
 #### Code
 
@@ -379,12 +390,12 @@ $$Presence \sim \mathcal{Bernoulli}(logit(\alpha*Environment+Environment^{\beta}
   }
   model {
     for(n in 1:N)
-      target += weights*bernoulli_logit_lpmf(Presence[n] | alpha*Environment[n] + pow(Environment[n], beta)) ;
+      target += weights*bernoulli_logit_lpmf(Presence[n] | alpha_0 + alpha*Environment[n] + pow(Environment[n], beta)) ;
   }
   generated quantities {
     vector<lower=0, upper=1>[N] theta ;
     for(n in 1:N)
-      theta[n] = inv_logit(alpha * Environment[n]  + pow(Environment[n], beta)) ;
+      theta[n] = inv_logit(alpha_0 + alpha * Environment[n]  + pow(Environment[n], beta)) ;
   }
 ```
 
@@ -395,7 +406,7 @@ $$Presence \sim \mathcal{Bernoulli}(logit(\alpha*Environment+Environment^{\beta}
 # names(fits) <- names(mdata)
 # save(fits, file = "./distribution_save/Bbeta.Rdata")
 load("./distribution_save/Bbeta.Rdata")
-pars <- c("alpha", "beta")
+pars <- c("alpha_0", "alpha", "beta")
 lapply(as.list(names(mdata)), function(type)
   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Type = type)) %>%
@@ -433,8 +444,8 @@ mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__"))
 lapply(as.list(names(data)), function(type)
   cbind(type = type, data[[type]],
         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
-  bind_rows() %>% 
+        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>%
+  bind_rows() %>%
   ggplot(aes(x = Environment)) +
   geom_point(aes(y = Presence, col = as.factor(Presence))) +
   geom_point(aes(y = mu)) +
@@ -454,7 +465,7 @@ Column 1
 
 $B_{\alpha, \beta}2$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
 
-$$Presence \sim \mathcal{Bernoulli}(logit(\alpha*(Environment+Environment^{\beta})))$$
+$$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*(Environment+Environment^{\beta})))$$
 
 #### Code
 
@@ -466,18 +477,18 @@ $$Presence \sim \mathcal{Bernoulli}(logit(\alpha*(Environment+Environment^{\beta
     vector<lower=0, upper=1>[N] weights ;
   }
   parameters {
-    real alpha_0 ; // Intercept
+    real alpha_0 ; // intercept
     real alpha ; // sigmoidal slope
     real<lower=0, upper=4> beta ; // power form
   }
   model {
     for(n in 1:N)
-      target += weights*bernoulli_logit_lpmf(Presence[n] | alpha*(Environment[n] + pow(Environment[n], beta))) ;
+      target += weights*bernoulli_logit_lpmf(Presence[n] | alpha_0 + alpha*(Environment[n] + pow(Environment[n], beta))) ;
   }
   generated quantities {
     vector<lower=0, upper=1>[N] theta ;
     for(n in 1:N)
-      theta[n] = inv_logit(alpha*(Environment[n]  + pow(Environment[n], beta))) ;
+      theta[n] = inv_logit(alpha_0 + alpha*(Environment[n]  + pow(Environment[n], beta))) ;
   }
 ```
 
@@ -488,8 +499,8 @@ $$Presence \sim \mathcal{Bernoulli}(logit(\alpha*(Environment+Environment^{\beta
 # names(fits) <- names(mdata)
 # save(fits, file = "./distribution_save/Bbeta2.Rdata")
 load("./distribution_save/Bbeta2.Rdata")
-pars <- c("alpha", "beta")
-lapply(as.list(names(mdata)[-1]), function(type)
+pars <- c("alpha_0", "alpha", "beta")
+lapply(as.list(names(mdata)), function(type)
   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Type = type)) %>%
   bind_rows() %>%
@@ -499,7 +510,7 @@ lapply(as.list(names(mdata)[-1]), function(type)
 #### Posteriors
 
 ```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(names(data)[-1], function(type)
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
   mcmc_intervals(as.array(fits[[type]]), pars = pars)),
   labels = names(data), nrow = 2)
 ```
@@ -523,11 +534,11 @@ mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__"))
 #### Predictions
 
 ```{r , fig.cap="Predictions."}
-lapply(as.list(names(data)[-1]), function(type)
+lapply(as.list(names(data)), function(type)
   cbind(type = type, data[[type]],
         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
-  bind_rows() %>% 
+        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>%
+  bind_rows() %>%
   ggplot(aes(x = Environment)) +
   geom_point(aes(y = Presence, col = as.factor(Presence))) +
   geom_point(aes(y = mu)) +
@@ -547,7 +558,7 @@ Column 1
 
 $B_{\alpha, \beta}3$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
 
-$$Presence \sim \mathcal{Bernoulli}(logit(Environment^{\alpha}+Environment^{\beta})))~|~\alpha<\beta$$
+$$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0+Environment^{\alpha}+Environment^{\beta})))~|~\alpha<\beta$$
 
 #### Code
 
@@ -559,18 +570,18 @@ $$Presence \sim \mathcal{Bernoulli}(logit(Environment^{\alpha}+Environment^{\bet
     vector<lower=0, upper=1>[N] weights ;
   }
   parameters {
-    real alpha_0 ; // Intercept
-    real<lower=0, upper=beta> alpha ; // first power form
+    real alpha_0 ; // intercept
     real<lower=0, upper=4> beta ; // second power form
+    real<lower=0, upper=beta> alpha ; // first power form
   }
   model {
     for(n in 1:N)
-      target += weights*bernoulli_logit_lpmf(Presence[n] | pow(Environment[n], alpha) + pow(Environment[n], beta)) ;
+      target += weights*bernoulli_logit_lpmf(Presence[n] | alpha_0 + pow(Environment[n], alpha) + pow(Environment[n], beta)) ;
   }
   generated quantities {
     vector<lower=0, upper=1>[N] theta ;
     for(n in 1:N)
-      theta[n] = inv_logit(pow(Environment[n], alpha) + pow(Environment[n], beta)) ;
+      theta[n] = inv_logit(alpha_0 + pow(Environment[n], alpha) + pow(Environment[n], beta)) ;
   }
 ```
 
@@ -581,8 +592,8 @@ $$Presence \sim \mathcal{Bernoulli}(logit(Environment^{\alpha}+Environment^{\bet
 # names(fits) <- names(mdata)
 # save(fits, file = "./distribution_save/Bbeta3.Rdata")
 load("./distribution_save/Bbeta3.Rdata")
-pars <- c("alpha", "beta")
-lapply(as.list(names(mdata)[-1]), function(type)
+pars <- c("alpha_0", "alpha", "beta")
+lapply(as.list(names(mdata)), function(type)
   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Type = type)) %>%
   bind_rows() %>%
@@ -592,7 +603,7 @@ lapply(as.list(names(mdata)[-1]), function(type)
 #### Posteriors
 
 ```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(names(data)[-1], function(type)
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
   mcmc_intervals(as.array(fits[[type]]), pars = pars)),
   labels = names(data), nrow = 2)
 ```
@@ -616,11 +627,11 @@ mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__"))
 #### Predictions
 
 ```{r , fig.cap="Predictions."}
-lapply(as.list(names(data)[-1]), function(type)
+lapply(as.list(names(data)), function(type)
   cbind(type = type, data[[type]],
         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
-  bind_rows() %>% 
+        t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>%
+  bind_rows() %>%
   ggplot(aes(x = Environment)) +
   geom_point(aes(y = Presence, col = as.factor(Presence))) +
   geom_point(aes(y = mu)) +
