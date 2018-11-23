@@ -4,6 +4,7 @@
 
 # PhD 0.1.9062
 * outliers - spotting other abnormal individuals
+* distribution models > Bernoulli
 
 # PhD 0.1.9061
 * functional analysis PCA analysis v1 & templates for environment, data exploration and models
