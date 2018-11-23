@@ -81,6 +81,10 @@ data <- list(
 # Introduction
 
 *What and why...*
+Dataset gathers measures of leaves and wood's trait over 838 trees. From those were calculated different functionnal traits. 
+For leaf traits, each individual (although there are few exceptions) had 5 leaves sampled. Functionnal traits were averaged per individual for this part of the anylisis.
+
+Starting with all those traits we want to understand how they are correlated between them, and how individuals shared out and how they distinguished according to those traits.
 
 # Material & Methods
 
@@ -109,6 +113,13 @@ data$leaf %>%
         legend.justification = c(1, 1))
 # g <- ggExtra::ggMarginal(g, groupFill = T)
 ```
+69,54% of total variance is conserved on the two first axis of PCA. On this representation
+* CC and LT seem quite correlated
+* while CC/LT and SLA are really anti-correlated
+* LDMC and LA seem well correlated
+* SLA and LA aren't correlated (which is a strange interpretation)
+The two species complexes are well separated on this decomposition, what shows they react diferently regarding the axis of LDMC/LA.
+Moreover for the two complexes we observed a general trend for DBH repartition along the CC/SLA axis. Apparently smaller DBH seems to be correlated with a higher SLA, which could reflect a strategy of high investment in leaves development for youngest tree (as far as ontogeny and DBH are well correlated)
 
 ### Within complexes
 
@@ -127,6 +138,12 @@ data$leaf %>%
   theme(legend.position = c(1, 1), 
         legend.justification = c(1, 1))
 ```
+75,12% of total variance is conserved on the two first axis of PCA. On this representation
+* CC/LDMC and LT seem not  correlated
+* aswell as SLA and LA aren't correlated (which is a strange interpretation)
+* while LT and SLA are really anti-correlated
+* LDMC and CC seem well correlated
+Among Symphonia complex, the two morphotypes seem to well diferenciate along an LDMC/LA axis. As well as for the intercomplex analysis, DBH seems also to create a more obvious gradient along the same LT/SLA axis. 
 
 ```{r PCAleafEschweilera, fig.cap='Principal Component Analysis (PCA) of leaf trait wihtin Eschweilera complex.'}
 data$leaf %>% 
@@ -141,6 +158,13 @@ data$leaf %>%
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted")
 ```
+65,86% of total variance is conserved on the two first axis of PCA. On this representation:
+* CC and LT seem not  correlated
+* aswell as SLA and LA aren't correlated (which is a strange interpretation)
+* while LT and SLA are really anti-correlated
+* LA and CC seem well correlated
+First PCA axis is well described by LT/SLA, which draw an axis of conservation/acquisition strategy. The second axis is supported mostly by CC and LA. 
+Species which were most sampled show a real diferenciation along axis. Sagotiana and Coriacea diferenciate really well along first axis.
 
 ## Within *Symphonia* species
 
