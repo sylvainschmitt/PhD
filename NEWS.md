@@ -1,9 +1,17 @@
-# PhD 0.1.9063
-* A01 - PCA - PCA analysis for intracomplex and intercomplex data
+# PhD 0.1.9065
+* A01 - PCA 
+* A02 - Environment, analysis of DBH versus Dawkins
 
+# PhD 0.1.9064
+* distribution models Bernoulli converged
+* distribution models abiotic with bernoulli
+* extra girth update
+
+# PhD 0.1.9063
+* outliers - spotting other abnormal individuals
 
 # PhD 0.1.9062
-* outliers - spotting other abnormal individuals
+* distribution models > Bernoulli
 
 # PhD 0.1.9061
 * functional analysis PCA analysis v1 & templates for environment, data exploration and models
