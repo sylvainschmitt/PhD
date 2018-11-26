@@ -1,5 +1,5 @@
 ---
-title: "Model form"
+title: "A01: Single taxon model"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output: 
@@ -279,7 +279,7 @@ Column 1
 
 #### Model
 
-$B_{\alpha, \alpha_2}$is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter.
+$B_{\alpha, \alpha_2}$ is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter. $B_{\alpha, \alpha_2}$ is giving the expected result in every case.
 
 $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*Environment+\alpha_2*Environment^2))$$
 
@@ -370,7 +370,7 @@ Column 1
 
 #### Model
 
-$B_{\alpha, \beta}$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
+$B_{\alpha, \beta}$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}$ is not dealing well with the intermediate niche optimum case.
 
 $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*Environment+Environment^{\beta}))$$
 
@@ -463,7 +463,7 @@ Column 1
 
 #### Model
 
-$B_{\alpha, \beta}2$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
+$B_{\alpha, \beta}2$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}2$ is not dealing well with the intermediate niche optimum case.
 
 $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*(Environment+Environment^{\beta})))$$
 
@@ -556,7 +556,7 @@ Column 1
 
 #### Model
 
-$B_{\alpha, \beta}3$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
+$B_{\alpha, \beta}3$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.$B_{\alpha, \beta}3$ is not dealing well with the intermediate niche optimum case.
 
 $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0+Environment^{\alpha}+Environment^{\beta})))~|~\alpha<\beta$$
 
@@ -643,10 +643,4 @@ lapply(as.list(names(data)), function(type)
 
 # Discussion
 
-*Discuss and summarise all built models, if possible in regard of litterature...*
-
-### Conclusion
-
-*Models that we will test...*
-
-### References
+In conclusion, $B_{\alpha, \alpha_2}$ is the best model in terms of convergence, likelihood, number of parameters, and prediction quality. Consequently we will retain $B_{\alpha, \alpha_2}$ to model species complex against the whole forest, and for species within species complex of two species (i.e. *Symphonia* complex). We now need to develop a multinomial Dirichlet model to model joint niches of several species within complexes.

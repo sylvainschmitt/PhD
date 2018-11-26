@@ -1,3 +1,10 @@
+# PhD 0.1.9066
+* single model ok
+* joint model start
+* Symphonia niche
+* new extraction plates
+* extra girth density
+
 # PhD 0.1.9063
 * distribution models Bernoulli converged
 * distribution models abiotic with bernoulli

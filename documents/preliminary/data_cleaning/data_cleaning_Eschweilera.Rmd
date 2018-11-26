@@ -1,7 +1,7 @@
 ---
 title: "Eschweilera data cleaning"
 date: '`r Sys.Date()`'
-author: Anne Baranger & Sylvain Schmitt
+author: Sylvain Schmitt & Anne Baranger
 output:
   bookdown::html_document2:
     number_sections: false
@@ -357,7 +357,7 @@ Leaf Areas have two different types of files :
 
 Thus, for each days of sampling (19 days), those two types of files where created. The LeafArea table needs to join data of areas for each leaves, and to bind all sampling values.
 
-```{r LeafAreaData}
+```{r LeafAreaData, eval=F}
 pathsHI<-list.files(path = path1, pattern="holesincluded.csv",full.names=TRUE,recursive = TRUE)
 LAHI <-read_delim(pathsHI[1],delim=",")
 for(path0 in pathsHI[2:length(pathsHI)]){
@@ -373,7 +373,7 @@ LA<-full_join(LAHI,LAHE,by=c(" ","Label")) %>%
 
 Now we need to organize data and to give each leaf a number:
 
-```{r DataOrganization}
+```{r DataOrganization, eval=F}
 LA <- LA %>%
   separate(Label,c("Date","Tree"),":") %>% 
   select(-Date) %>% 
@@ -394,7 +394,7 @@ LA <- LA %>%
 
 Now we need to check and correct individual codes. 
 
-```{r labelsvalues, warning=TRUE}
+```{r labelsvalues, warning=TRUE, eval=F}
 ## Plot
 if(!all(LA$Plot %in% 1:16))
   warning("Lines ", paste(which(!(LA$Plot %in% 1:16)), collapse = ', '),
@@ -409,7 +409,7 @@ if(!all(LA$TreeFieldNum %in% 1:4000))
           " have a wrong TreeFieldNum number.\n")
 ```
 
-```{r DataIndCheck, warning=TRUE}
+```{r DataIndCheck, warning=TRUE, eval=F}
 individuals <- googlesheets::gs_title("Measures_Eschweilera") %>% 
   googlesheets::gs_read("Individuals") %>% 
   select(Date,Time,Plot,SubPlot,TreeFieldNum)

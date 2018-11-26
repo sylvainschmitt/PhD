@@ -213,20 +213,6 @@ To build the niche model, we have several conceptual and technical challenges to
   }
 ```
 
-## Complex
-
-```{r}
-data %>% 
-  mutate(Complex = ifelse(Complex %in% c("Eschweilera clade Parvifolia", "Symphonia"),
-                          Complex, "Other")) %>% 
-  dplyr::select(Complex, DEM, TWI, Slope) %>% 
-  reshape2::melt(id.vars = c("Complex")) %>% 
-  ggplot(aes(value, col = Complex, fill = Complex)) +
-  geom_density(alpha = 0.3) +
-  facet_wrap(~ variable, scales = "free", nrow = 3)
-```
-
-
 ## Symphonia
 
 ```{r fitMabiotic1Sympho}
@@ -270,20 +256,52 @@ mcmc_pairs(as.array(fits$globulifera), pars = c(pars, "lp__"))
 ```
 
 ```{r Abiotic1Sympho, fig.cap="Probability density (mu)."}
-lapply(as.list(species), function(sp)
-  cbind(species = sp, datam,
+pars_val <- lapply(fits, function(fit) apply(as.matrix(fit, pars = c("alpha_0", "alpha_DEM", "alpha_DEM2", "alpha_TWI", "alpha_TWI2", "alpha_Slope", "alpha_Slope2")), 2, mean))
+
+proj <- lapply(as.list(species), function(sp)
+  data.frame(cbind(model = sp, species = datam$Species,
         Presence = as.numeric(datam$Species == sp),
         mu = apply(as.matrix(fits[[sp]], pars = "theta"), 2, mean),
-        t(apply(as.matrix(fits[[sp]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
-  bind_rows() %>% 
-  dplyr::select(species, Presence, mu, `5%`, `95%`, DEM, TWI, Slope) %>% 
-  reshape2::melt(id.vars = c("species", "Presence", "mu", "5%", "95%")) %>% 
+        t(apply(as.matrix(fits[[sp]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))),
+        DEM = paste0(psych::logistic(pars_val[[sp]]["alpha_0"] + 
+                                   pars_val[[sp]]["alpha_DEM"]*datam$DEM/max(datam$DEM) +
+                                   pars_val[[sp]]["alpha_DEM2"]*(datam$DEM/max(datam$DEM))^2 +  
+                                   pars_val[[sp]]["alpha_TWI"]*mean(datam$TWI/max(datam$TWI)) + 
+                                   pars_val[[sp]]["alpha_TWI"]*mean(datam$TWI/max(datam$TWI))^2 +
+                                   pars_val[[sp]]["alpha_Slope"]*mean(datam$Slope/max(datam$Slope)) +
+                                   pars_val[[sp]]["alpha_Slope2"]*mean(datam$Slope/max(datam$Slope))^2),
+                     "/", datam$DEM),
+        TWI = paste0(psych::logistic(pars_val[[sp]]["alpha_0"] + 
+                                   pars_val[[sp]]["alpha_DEM"]*mean(datam$DEM/max(datam$DEM)) +
+                                   pars_val[[sp]]["alpha_DEM2"]*mean(datam$DEM/max(datam$DEM))^2 +  
+                                   pars_val[[sp]]["alpha_TWI"]*datam$TWI/max(datam$TWI) + 
+                                   pars_val[[sp]]["alpha_TWI"]*datam$TWI/max(datam$TWI)^2 +
+                                   pars_val[[sp]]["alpha_Slope"]*mean(datam$Slope/max(datam$Slope)) +
+                                   pars_val[[sp]]["alpha_Slope2"]*mean(datam$Slope/max(datam$Slope))^2),
+                     "/", datam$TWI),
+        Slope = paste0(psych::logistic(pars_val[[sp]]["alpha_0"] + 
+                                   pars_val[[sp]]["alpha_DEM"]*mean(datam$DEM/max(datam$DEM)) +
+                                   pars_val[[sp]]["alpha_DEM2"]*mean(datam$DEM/max(datam$DEM))^2 +  
+                                   pars_val[[sp]]["alpha_TWI"]*mean(datam$TWI/max(datam$TWI)) + 
+                                   pars_val[[sp]]["alpha_TWI"]*mean(datam$TWI/max(datam$TWI))^2 +
+                                   pars_val[[sp]]["alpha_Slope"]*datam$Slope/max(datam$Slope) +
+                                   pars_val[[sp]]["alpha_Slope2"]*datam$Slope/max(datam$Slope)^2),
+                       "/", datam$Slope))))
+names(proj) <- species
+bind_rows(proj) %>% 
+  rename(`5%` = X5., `95%` = X95.) %>% 
+  mutate(Presence = as.numeric(as.character(Presence))) %>% 
+  mutate_at(vars("mu", "5%", "95%"), as.numeric) %>% 
+  dplyr::select(model, species, Presence, mu, `5%`, `95%`, DEM, TWI, Slope) %>% 
+  reshape2::melt(id.vars = c("model", "species", "Presence", "mu", "5%", "95%")) %>% 
+  separate(value, c("mu_var", "value"), "/", convert = T) %>% 
   ggplot(aes(x = value)) +
   geom_point(aes(y = Presence, col = as.factor(Presence))) +
   scale_color_discrete("Presence") +
   geom_point(aes(y = mu, alpha = mu)) +
   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = NA, alpha = 0.2) +
-  facet_grid(species ~ variable, scales = "free") +
+  geom_line(aes(y = mu_var, col = "Prediciton"), lwd = 2) +
+  facet_grid(model ~ variable, scales = "free") +
   ylab("Probability density")
 ```
 
@@ -295,18 +313,45 @@ lapply(as.list(species), function(sp)
         mu = apply(as.matrix(fits[[sp]], pars = "theta"), 2, mean))) %>% 
   bind_rows() %>%
   filter(Model == Species) %>% 
-  ggplot(aes(TWI, DEM, col = mu, size = DBH)) +
+  dplyr::select(Species, DBH, mu, TWI, DEM, Slope) %>% 
+  reshape2::melt(id.vars = c("Species", "DBH", "mu", "TWI")) %>% 
+  ggplot(aes(TWI, value, col = mu, size = DBH)) +
   geom_point() +
-  facet_wrap(~Species) +
-  scale_color_gradient2("Probability\ndensity", low = scales::muted("blue"), mid = "white",
+  facet_grid(variable~Species, scales = "free") +
+  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
                         high = scales::muted("red"), midpoint = 0.5)
 ```
 
+```{r NicheAbiotic2Sympho, fig.cap="Niche (HabitatSuitability)."}
+pars_val <- apply(as.matrix(fits$globulifera, pars = c("alpha_0", "alpha_DEM", "alpha_DEM2", "alpha_TWI",
+                                           "alpha_TWI2", "alpha_Slope", "alpha_Slope2")), 2, mean)
+n <- 100
+HS <- matrix(nrow = n, ncol = n)
+DEM <- seq(0, 1, length.out = n)
+TWI <- seq(0, 1, length.out = n)
+for(i in 1:n)
+  for(j in 1:n)
+    HS[i, j] <- psych::logistic(pars_val["alpha_0"] + 
+                                   pars_val["alpha_DEM"]*DEM[i] +
+                                   pars_val["alpha_DEM2"]*DEM[i]^2 +
+                                   pars_val["alpha_TWI"]*TWI[j] +
+                                   pars_val["alpha_TWI"]*TWI[j]^2 +
+                                   pars_val["alpha_Slope"]*0.5 +
+                                   pars_val["alpha_Slope2"]*0.5^2)
+reshape2::melt(HS, value.name = "HS") %>% 
+  mutate(Var1 = DEM[Var1]*max(datam$DEM), Var2 = TWI[Var2]*max(datam$TWI)) %>% 
+  rename(DEM = Var1, TWI = Var2) %>% 
+  ggplot(aes(x = DEM, y = TWI, z = HS, fill = HS)) +
+  geom_raster() +
+  geom_contour() +
+  scale_fill_distiller("S. globulifera\nHabitat\nsuitability (%)", palette = "Spectral")
+```
+
 ```{r projection, fig.cap="Symphonia globulifera morphotype globulifera distribution in the Plot 16."}
+limits <- subset(shapefile(file.path(path, "limits", "OverallPlots.shp")))
 # env <- stack(raster(file.path(path, "topography", "DEM_1m_2015.tif")),
 #              raster(file.path(path, "topography", "TWI_1m.tif")),
 #              raster(file.path(path, "topography", "slope_1m.tif")))
-# limits <- subset(shapefile(file.path(path, "limits", "OverallPlots.shp")), Plot == 16)
 # env <- crop(env, limits)
 # names(env) <- c("DEM", "TWI", "Slope")
 # pars_val <- apply(as.matrix(fits$globulifera, pars = c("alpha_0", "alpha_DEM", "alpha_DEM2", "alpha_TWI",
@@ -314,15 +359,20 @@ lapply(as.list(species), function(sp)
 # projection <- calc(env, function(x){psych::logistic(sum(pars_val["alpha_0"],
 #                                           pars_val["alpha_DEM"]*x[1], pars_val["alpha_DEM2"]*x[1]*x[1],
 #                                           pars_val["alpha_TWI"]*x[2], pars_val["alpha_TWI2"]*x[2]*x[2],
-#                                           pars_val["alpha_Slope"]*x[3], pars_val["alpha_Slope2"]*x[3]*x[2]))})
-# crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
-# limits <- spTransform(limits, CRSobj = crs)
-# env <- projectRaster(env, crs = crs)
-# projection <- projectRaster(projection, crs = crs)
-# leaflet() %>%
-#   addRasterImage(projection) %>%
-#   addPolygons(data = rasterToContour(env$DEM), fillOpacity = 0,
-#               opacity = 0.5, col = 'black')
+#                                           pars_val["alpha_Slope"]*x[3], pars_val["alpha_Slope2"]*x[3]*x[3]))})
+# save(projection, file = "./distribution_save/SymphoProj.Rdata")
+load("./distribution_save/SymphoProj.Rdata")
+projection_df <- as(aggregate(projection, 4), "SpatialPixelsDataFrame")
+projection_df <- as.data.frame(projection_df)
+colnames(projection_df) <- c("HS", "x", "y")
+ggplot() +  
+  geom_tile(data=projection_df, aes(x=x, y=y, fill=(1-HS)*100)) +
+  geom_polygon(data = fortify(limits),
+                 aes(long, lat, group=group),
+                 colour = "black", lwd = 1.1, alpha = 0) +
+  coord_equal() +
+  cowplot::theme_map() +
+  scale_fill_distiller("S. globulifera\nHabitat\nsuitability (%)", palette = "Spectral")
 ```
 
 `dismo::nicheOverlap`  functions as other compute niche overlap from distribution projected on rasters which miss the overlap computation of the theoritical niche in the full environmental space tested. We will build an overlap index as the intersection of habitat suitability distribution (product of distribution functions) divided by the total sum of habitat suitability distribution (sum of distribution functions) :

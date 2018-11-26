@@ -66,14 +66,28 @@ extraGirth10 <- buffer(trees, 10) - limits
 extraGirth20 <- buffer(trees, 20) - limits
 ```
 
+```{r density}
+density <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot %in% 1:15 & CensusYear == 2017) %>% 
+  group_by(Plot, PlotArea) %>% 
+  summarise(n = n()) %>% 
+  mutate(density = n/PlotArea) %>% 
+  ungroup() %>% 
+  summarise(density = mean(density)) %>% 
+  collect() %>% 
+  unlist()
+```
+
 The aim of this document is to help planning the circonference measurement of trees outside of the plot for the competition submodel. Figure \@ref(fig:plot) shows sampled individuals distribution in Paracou with plots limit  and individuals buffer areas (10m in blue, 20m in red) outside of plots. We thus obtain following surface to explore depending on the buffer areas around each individual :
 
 ```{r table}
 data.frame(Buffer = c(10, 20), 
            Area = unlist(lapply(list(extraGirth10, extraGirth20), area))) %>% 
   mutate(Area = Area / 10^4) %>% 
+  mutate(EstimatedTreeNumber = Area*density) %>% 
   kable(caption = "Surface to be explored for extra girth measurement depending on buffer size.", 
-        col.names = c("Buffer (m)", "Area (ha)"))
+        col.names = c("Buffer (m)", "Area (ha)", "Estimated tree number"))
 ```
 
 
