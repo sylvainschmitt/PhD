@@ -185,59 +185,31 @@ To build the niche model, we have several conceptual and technical challenges to
 
  representing the habitat suitability for the taxon (the complex or the species). $\theta_{taxon}$  is an hyperparameter depending on abitoic environment represented here by the digital elevation model $DEM$, the topographic wetness index $TWI$ and the slope $Slope$.
 
-The general model form is base on a Beta law of parameters shape $A$ and rate $B$:
-
-$$Presence \sim \mathcal B(A, B)$$
-
-If we define the mean as $\mu$ and the variance as $\phi$, we can caluclate the shape $A$ and the rate $B$ as follow:
-
-$$A = \mu * \phi > 0$$
-$$B = (1 - \mu)*\phi > 0$$
-
-We thus have $\mu \in [0,1]$ and $\phi > 0$, we will consequently use the $logit^-1$ and the $exponential$ functions as transfer functions for respectivelly $\mu$ and $\phi$. Finally, $\mu$ and $\phi$ will depend of our environmental variables following a polynomial form of degree 2 allowing the niche to have its optimum both within the environmental range or at the limit of the environmental range. $\mu$ represents the mean probability to observe the species in the given environmental conditions and can thus be interpreted as habitat suitability. Abitoic environment is represented here by the digital elevation model $DEM$, the topographic wetness index $TWI$ and the slope $Slope$.
-
-$$\mu = logit^{-1}(\alpha_0 + \alpha_{DEM}*DEM + \alpha_{DEM^2}*DEM^2 + \alpha_{TWI}*TWI + \alpha_{TWI^2}*TWI^2 + \alpha_{Slope}*Slope + \alpha_{Slope^2}*Slope^2)$$
-$$\phi = e^{\beta_0 + \beta_{DEM}*DEM + \beta_{DEM^2}*DEM^2 + \beta_{TWI}*TWI + \beta_{TWI^2}*TWI^2 + \beta_{Slope}*Slope + \beta_{Slope^2}*Slope^2}$$
 
 ```{stan Model, output.var="Model", echo=T, eval=F}
   data {
     int<lower=1> N ; // # obs
-    vector<lower=0, upper=1>[N] Presence ;
+    int<lower=0, upper=1> Presence[N] ;
     vector<lower=0, upper=1>[N] DEM ;
     vector<lower=0, upper=1>[N] TWI ;
     vector<lower=0, upper=1>[N] Slope ;
     vector<lower=0, upper=1>[N] weights ;
   }
   parameters {
-    real alpha_0 ;
-    real alpha_DEM ;
-    real alpha_DEM2 ;
-    real alpha_TWI ;
-    real alpha_TWI2 ;
-    real alpha_Slope ;
-    real alpha_Slope2 ;
-    real beta_0 ;
-    real beta_DEM ;
-    real beta_DEM2 ;
-    real beta_TWI ;
-    real beta_TWI2 ;
-    real beta_Slope ;
-    real beta_Slope2 ;
-  }
-  transformed parameters {
-    vector<lower=0, upper=1>[N] mu ;
-    vector<lower=0>[N] phi ;
-    vector<lower=0>[N] A ;
-    vector<lower=0>[N] B ;
-    for(n in 1:N) {
-      mu[n] = inv_logit(alpha_0 + alpha_DEM*DEM[n] + alpha_DEM2*DEM[n]*DEM[n] + alpha_TWI*TWI[n] + alpha_TWI2*TWI[n]*TWI[n] + alpha_Slope*Slope[n] + alpha_Slope2*Slope[n]*Slope[n]) ;
-      phi[n] = exp(beta_0 + beta_DEM*DEM[n] + beta_DEM2*DEM[n]*DEM[n] + beta_TWI*TWI[n] + beta_TWI2*TWI[n]*TWI[n] + beta_Slope*Slope[n] + beta_Slope2*Slope[n]*Slope[n]) ;
-    }
-    A = mu .* phi ;
-    B = (1.0 - mu) .* phi ;
+    real alpha_0 ; // intercept
+    real alpha_TWI ; // sigmoidal slope
+    real alpha_TWI2 ; // quadratic form
+    real alpha_DEM ; // sigmoidal slope
+    real alpha_DEM2 ; // quadratic form
+    real alpha_Slope ; // sigmoidal slope
+    real alpha_Slope2 ; // quadratic form
   }
   model {
-    target += weights*beta_lpdf(Presence | A, B) ;
+    target += weights*bernoulli_logit_lpmf(Presence | alpha_0 + alpha_TWI*TWI + alpha_TWI2 * TWI .* TWI + alpha_DEM*DEM + alpha_DEM2 * DEM .* DEM + alpha_Slope*Slope + alpha_Slope2 * Slope .* Slope) ;
+  }
+  generated quantities {
+    vector<lower=0, upper=1>[N] theta ;
+    theta = inv_logit(alpha_0 + alpha_TWI*TWI + alpha_TWI2 * TWI .* TWI + alpha_DEM*DEM + alpha_DEM2 * DEM .* DEM + alpha_Slope*Slope + alpha_Slope2 * Slope .* Slope) ;
   }
 ```
 
@@ -258,12 +230,12 @@ data %>%
 ## Symphonia
 
 ```{r fitMabiotic1Sympho}
-datam <- filter(data, Genus == "Symphonia")
+datam <- dplyr::filter(data, Genus == "Symphonia")
 species <- c("globulifera", "sp.1")
 # fits <- lapply(as.list(species), function(sp)
 #                sampling(Model, chains = 2,
 #                         data = list(N = nrow(datam),
-#                                     Presence = c(10^-6, 1-10^-6)[as.numeric(datam$Species == sp)+1],
+#                                     Presence = as.numeric(datam$Species == sp),
 #                                     DEM = datam$DEM/max(datam$DEM),
 #                                     TWI = datam$TWI/max(datam$TWI),
 #                                     Slope = datam$Slope/max(datam$Slope),
@@ -274,8 +246,7 @@ species <- c("globulifera", "sp.1")
 # save(fits, file = "./distribution_save/MSympho.Rdata")
 load("./distribution_save/MSympho.Rdata")
 pars <- c("alpha_0", "alpha_DEM", "alpha_DEM2", "alpha_TWI", "alpha_TWI2",
-          "alpha_Slope", "alpha_Slope2", "beta_0", "beta_DEM", "beta_DEM2",
-          "beta_TWI", "beta_TWI2", "beta_Slope", "beta_Slope2")
+          "alpha_Slope", "alpha_Slope2")
 lapply(as.list(species), function(sp)
   broom::tidyMCMC(fits[[sp]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Species = sp)) %>%
@@ -298,12 +269,12 @@ mcmc_trace(as.array(fits$globulifera), pars = c(pars, "lp__")) +
 mcmc_pairs(as.array(fits$globulifera), pars = c(pars, "lp__"))
 ```
 
-```{r muAbiotic1Sympho, fig.cap="Probability density (mu)."}
+```{r Abiotic1Sympho, fig.cap="Probability density (mu)."}
 lapply(as.list(species), function(sp)
   cbind(species = sp, datam,
         Presence = as.numeric(datam$Species == sp),
-        mu = apply(as.matrix(fits[[sp]], pars = "mu"), 2, mean),
-        t(apply(as.matrix(fits[[sp]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
+        mu = apply(as.matrix(fits[[sp]], pars = "theta"), 2, mean),
+        t(apply(as.matrix(fits[[sp]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% 
   bind_rows() %>% 
   dplyr::select(species, Presence, mu, `5%`, `95%`, DEM, TWI, Slope) %>% 
   reshape2::melt(id.vars = c("species", "Presence", "mu", "5%", "95%")) %>% 
@@ -316,68 +287,18 @@ lapply(as.list(species), function(sp)
   ylab("Probability density")
 ```
 
-```{r HSAbiotic1Sympho, fig.cap="Probability density (mu)."}
-lapply(as.list(species), function(sp)
-  cbind(Model = sp, datam,
-        Presence = as.numeric(datam$Species == sp),
-        mu = apply(as.matrix(fits[[sp]], pars = "mu"), 2, mean),
-        A = apply(as.matrix(fits[[sp]], pars = "A"), 2, mean),
-        B = apply(as.matrix(fits[[sp]], pars = "B"), 2, mean)) %>% 
-    cbind(t(apply(as.matrix(fits[[sp]], pars = "A"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
-    rename(A5 = `5%`, A95 = `95%`) %>% 
-    cbind(t(apply(as.matrix(fits[[sp]], pars = "B"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
-    rename(B5 = `5%`, B95 = `95%`) %>% 
-    cbind(t(apply(as.matrix(fits[[sp]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95)))) %>% 
-    rename(mu5 = `5%`, mu95 = `95%`) %>% 
-    mutate(HabitatSuitability = qbeta(mu, A, B)) %>% 
-    mutate(HabitatSuitability5 = qbeta(mu5, A5, B5)) %>% 
-    mutate(HabitatSuitability95 = qbeta(mu95, A95, B95))) %>%
-  bind_rows() %>% 
-  dplyr::select(Model, Presence, HabitatSuitability, HabitatSuitability5,
-                HabitatSuitability95, DEM, TWI, Slope) %>% 
-  reshape2::melt(id.vars = c("Model", "Presence", "HabitatSuitability", 
-                             "HabitatSuitability5", "HabitatSuitability95")) %>% 
-  ggplot(aes(x = value)) +
-  geom_point(aes(y = HabitatSuitability, col = HabitatSuitability)) +
-  geom_ribbon(aes(ymin = `HabitatSuitability5`, ymax = `HabitatSuitability95`), 
-              color = NA, alpha = 0.2) +
-  facet_grid(Model ~ variable, scales = "free") +
-  ylab("Presence") +
-  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
-                        high = scales::muted("red"), midpoint = 0.5)
-```
 
-```{r NicheAbiotic1SymphoPDF, fig.cap="Niche (HabitatSuitability."}
+```{r NicheAbiotic1Sympho, fig.cap="Niche (HabitatSuitability)."}
 lapply(as.list(species), function(sp)
   cbind(Model = sp, datam,
         Presence = as.numeric(datam$Species == sp),
-        mu = apply(as.matrix(fits[[sp]], pars = "mu"), 2, mean),
-        A = apply(as.matrix(fits[[sp]], pars = "A"), 2, mean),
-        B = apply(as.matrix(fits[[sp]], pars = "B"), 2, mean)) %>% 
-    mutate(HabitatSuitability = qbeta(mu, A, B))) %>% 
+        mu = apply(as.matrix(fits[[sp]], pars = "theta"), 2, mean))) %>% 
   bind_rows() %>%
   filter(Model == Species) %>% 
   ggplot(aes(TWI, DEM, col = mu, size = DBH)) +
   geom_point() +
   facet_wrap(~Species) +
   scale_color_gradient2("Probability\ndensity", low = scales::muted("blue"), mid = "white",
-                        high = scales::muted("red"), midpoint = 0.5)
-```
-
-```{r NicheAbiotic1SymphoHS, fig.cap="Niche (HabitatSuitability."}
-lapply(as.list(species), function(sp)
-  cbind(Model = sp, datam,
-        Presence = as.numeric(datam$Species == sp),
-        mu = apply(as.matrix(fits[[sp]], pars = "mu"), 2, mean),
-        A = apply(as.matrix(fits[[sp]], pars = "A"), 2, mean),
-        B = apply(as.matrix(fits[[sp]], pars = "B"), 2, mean)) %>% 
-    mutate(HabitatSuitability = qbeta(mu, A, B))) %>% 
-  bind_rows() %>%
-  filter(Model == Species) %>% 
-  ggplot(aes(TWI, DEM, col = HabitatSuitability, size = DBH)) +
-  geom_point() +
-  facet_wrap(~Species) +
-  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
                         high = scales::muted("red"), midpoint = 0.5)
 ```
 
@@ -408,7 +329,7 @@ lapply(as.list(species), function(sp)
 
 $$I_{overlap} = \frac{\cap niche}{\sum niche} = \frac{\prod_sdistribution_s}{\sum_sdistribution_s} =  \frac{\prod_s f_s(DEM, TWI, Slope)}{\sum_s f_s(DEM, TWI, Slope)}$$
 
-```{r overlap}
+```{r overlap, eval=F}
 distribution <- function(DEM, TWI, Slope, pars)
   psych::logistic(sum(pars_val["alpha_0"],
                       pars_val["alpha_DEM"]*DEM, pars_val["alpha_DEM2"]*DEM,
