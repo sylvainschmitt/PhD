@@ -1,7 +1,12 @@
+# PhD 0.1.9065
+* A01 - PCA 
+* A02 - Environment, analysis of DBH versus Dawkins
+
 # PhD 0.1.9063
 * distribution models Bernoulli converged
 * distribution models abiotic with bernoulli
 * extra girth update
+* outliers - spotting other abnormal individuals
 
 # PhD 0.1.9062
 * distribution models > Bernoulli

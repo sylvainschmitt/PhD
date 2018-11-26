@@ -28,14 +28,14 @@ library(parallel)
 library(tidyverse)
 library(ggfortify)
 library(raster)
-library(rstan)
+#library(rstan)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = T)
+# rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
@@ -59,13 +59,12 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
          Genus == "Symphonia" & CensusYear == 2015) %>%
   mutate(DBH = CircCorr*pi) %>% 
   collect()
-trees <- left_join(traits, paracou) ; rm(traits, paracou)
 ```
 
 ```{r env}
 # env <- trees %>%
-#   dplyr::select(idTree, Xutm, Yutm) %>%
-#   unique()
+#    dplyr::select(idTree, Xutm, Yutm, DBH, Dawkins) %>%
+#    unique()
 # coordinates(env) <- ~Xutm + Yutm
 # proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 # env <- spTransform(env, CRSobj = crs)
@@ -90,20 +89,52 @@ load("./functional_save/env.Rdata")
 # Introduction
 
 This document test for environmental descriptors correlation in order to help select best biotic and abiotic descriptors.
+Which descriptors will fit better to the description of the environment?
+
 
 # Material & Methods
+Biotic descriptors available are the following:
+* DBH
+* Dawkins
+* Local basal area
+* Competition index
 
-**We need to add biotic environment with local basal area ($BA10$ and $BA20$), DAwkins for light, and DBH for ontogeny !**
+Abiotic descriptors available are the following:
+* DEM : gathers topographic data from Lidar's campaigns. It enables to represent the topographical forms of the field
+* relative elevation : calculate the diference of elevation between a point and the closest creek
+* Slope : quantify the value of escarpment of the topography,
+* Curvature : quantify the shape of the surface 
+* Aspect : quantify cardinal orientation of surfaces
+* TRI, or topographic ruggedness index (Riley, et al. (1999)): used to quantify local altitude variations at one point, with adjacent microenvironments.
+* TWI, or topographic wetness index: used to quantify the effect of topography on hydrological processes. It is based on the determination of different watersheds, which control the flow of water.
+
+**We need to add biotic environment with local basal area ($BA10$ and $BA20$), Dawkins for light, and DBH for ontogeny !**
 
 # Results
+
+## Ontogeny index
+
+```{r boxplotDawkinsDBH }
+env %>%
+  dplyr::select(Dawkins,DBH) %>% 
+  mutate(Dawkins = substr(Dawkins, 1,1)) %>% 
+  ggplot(aes(x=DBH, y=Dawkins)) + 
+  geom_boxplot()
+
+```
+
+## Abiotic descriptors correlation
 
 ```{r pairs, fig.cap="Pairs plot"}
 env %>% 
   dplyr::select(DEM, RelativeElevation, Slope, Curvature, 
-                Aspect, TRI, TWI) %>% 
+                Aspect, TRI, TWI, DBH) %>% 
   GGally::ggpairs()
 ```
 
+DEM correlated to relative elevation
+Slope correlated to TRI
+TWI anti correlated with a lot of indexes: DEM, relative elevation, slope, tri. Log form
 ```{r corrplot, fig.cap="Correlation plot"}
 env %>% 
   dplyr::select(DEM, RelativeElevation, Slope, Curvature, 
@@ -127,6 +158,10 @@ autoplot(pca,
   theme(legend.position = c(1, 1), 
         legend.justification = c(1, 1))
 ```
+
+--> faire l'acp dans un autre plan
+
+garder TWI
 
 # Conclusion
 
