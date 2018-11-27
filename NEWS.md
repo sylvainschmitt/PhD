@@ -1,13 +1,21 @@
+# PhD 0.1.9067
+* PCA correction
+
+# PhD 0.1.9066
+* single model ok
+* joint model start
+* Symphonia niche
+* new extraction plates
+* extra girth density
+
 # PhD 0.1.9065
 * A01 - PCA 
 * A02 - Environment, analysis of DBH versus Dawkins
 
-# PhD 0.1.9064
+# PhD 0.1.9063
 * distribution models Bernoulli converged
 * distribution models abiotic with bernoulli
 * extra girth update
-
-# PhD 0.1.9063
 * outliers - spotting other abnormal individuals
 
 # PhD 0.1.9062

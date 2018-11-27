@@ -1,21 +1,9 @@
 ---
 title: "Extra girth measurement"
+author: Sylvain Schmitt
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-linestretch: 1.5
+  bookdown::html_document2: default
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
@@ -66,64 +54,51 @@ trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>%
 ```
 
 ```{r env}
-limits <- shapefile(file.path(path, "limits", "OverallPlots.shp"))
-limits <- subset(limits, TypePlot %in% c("DisturbancesPlots", "BiodiversityPlots"))
-limits <- subset(limits, TypeSub != "Buffer25m")
+limits <- shapefile(file.path(path, "limits", "Plots.shp"))
 limits <- spTransform(limits, CRSobj = crs)
 coordinates(trees) <- ~ Xutm + Yutm
 proj4string(trees) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 trees <- spTransform(trees, CRSobj = crs)
 ```
 
-# Introduction
+```{r buffers}
+extraGirth10 <- buffer(trees, 10) - limits
+extraGirth20 <- buffer(trees, 20) - limits
+```
 
-The aim of this document is to plan the circonference measurement of trees outside of the plot for the competition submodel. Figure \@ref(fig:plot) shows sampled individuals distribution in Paracou with plots limit. We need to check how many individuals are close to the plot limits.
+```{r density}
+density <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot %in% 1:15 & CensusYear == 2017) %>% 
+  group_by(Plot, PlotArea) %>% 
+  summarise(n = n()) %>% 
+  mutate(density = n/PlotArea) %>% 
+  ungroup() %>% 
+  summarise(density = mean(density)) %>% 
+  collect() %>% 
+  unlist()
+```
 
-```{r plot, fig.cap="Sampled individuals distribution in Paracou."}
-treesPal <- colorFactor(RColorBrewer::brewer.pal(length(unique(trees$Genus)), "Accent"),
-                        as.factor(trees$Genus))
+The aim of this document is to help planning the circonference measurement of trees outside of the plot for the competition submodel. Figure \@ref(fig:plot) shows sampled individuals distribution in Paracou with plots limit  and individuals buffer areas (10m in blue, 20m in red) outside of plots. We thus obtain following surface to explore depending on the buffer areas around each individual :
+
+```{r table}
+data.frame(Buffer = c(10, 20), 
+           Area = unlist(lapply(list(extraGirth10, extraGirth20), area))) %>% 
+  mutate(Area = Area / 10^4) %>% 
+  mutate(EstimatedTreeNumber = Area*density) %>% 
+  kable(caption = "Surface to be explored for extra girth measurement depending on buffer size.", 
+        col.names = c("Buffer (m)", "Area (ha)", "Estimated tree number"))
+```
+
+
+```{r plot, fig.cap="Sampled individuals distribution in Paracou and individuals buffer areas (10m in blue, 20m in red) outside of plots."}
 leaflet() %>%
   addPolylines(data = limits, group = 'Limits', color = 'black') %>%
-  addLayersControl(overlayGroups = c('Limits', "Trees"),
+  addLayersControl(overlayGroups = c('Limits', "Trees", 
+                                     "Extra girth 10m", "Extra girth 20m"),
                    options = layersControlOptions(collapsed = F)) %>%
-  addCircles(data = trees, radius = ~DBH/50, color = treesPal(trees$Genus),
+  addCircles(data = trees, radius = 1, color = "black",
              label = paste(trees$Genus, trees$Species), group = "Trees") %>%
-  addLegend(pal = treesPal, values = levels(as.factor(trees$Genus)),
-            title = 'Trees')
+  addPolygons(data = extraGirth20, group = "Extra girth 20m", col = "red") %>% 
+  addPolygons(data = extraGirth10, group = "Extra girth 10m", col = "blue")
 ```
-
-# Distance
-
-```{r dist, echo=T}
-library(spatstat)
-test <- trees@data %>% 
-  filter(Plot != 16) %>% 
-  rename(X = "Xfield", Y="Yfield") %>% 
-  mutate(species = paste(Genus,Species, sep="_")) %>% 
-  mutate(PointWeight = DBH) %>% 
-  mutate(PointName = CodeParacou) %>%
-  rename(PointType = species)
-test <- dbmss::wmppp(as.data.frame(test), window = owin(c(0,250), c(0,250)),
-                     unitname=c("metres", "metres"))
-summary(unlist(lapply(lapply(mapply(function(x,y) disc(10, centre = c(x, y)), 
-              x = test$x, y = test$y, SIMPLIFY = F), function(tree)
-                intersect.owin(test$window, tree)), area)) < 314.0331)
-
-test16 <- trees@data %>% 
-  filter(Plot == 16) %>% 
-  mutate(row = ceiling(SubPlot/5)) %>% 
-  mutate(col = SubPlot - (row-1)*5) %>% 
-  mutate(Xfield = Xfield + (5-row)*100) %>% 
-  mutate(Yfield = Yfield + (col-1)*100) %>% 
-  rename(X = "Xfield", Y="Yfield") %>% 
-  mutate(species = paste(Genus,Species, sep="_")) %>% 
-  mutate(PointWeight = DBH) %>% 
-  mutate(PointName = CodeParacou) %>%
-  rename(PointType = species)
-test16 <- dbmss::wmppp(as.data.frame(test16), window = owin(c(0,500), c(0,500)),
-                     unitname=c("metres", "metres"))
-summary(unlist(lapply(lapply(mapply(function(x,y) disc(10, centre = c(x, y)), 
-              x = test16$x, y = test16$y, SIMPLIFY = F), function(tree)
-                intersect.owin(test16$window, tree)), area)) < 314.0331)
-```
-

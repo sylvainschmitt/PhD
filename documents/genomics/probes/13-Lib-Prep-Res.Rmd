@@ -464,4 +464,28 @@ badlyAmplified %>%
   labs(x=NULL, y = NULL)
 ```
 
+## November $18^{th}$ extraction
+
+```{r}
+# extraction <- googlesheets::gs_title("Symphonia_sequence_capture") %>% 
+#   googlesheets::gs_read("18.11Extraction")
+# plates <- googlesheets::gs_title("Symphonia_sequence_capture") %>% 
+#   googlesheets::gs_read("Plates") %>% 
+#   mutate(geneticId = paste0("P", Plot, "_", Subplot, "_", Number)) %>% 
+#   mutate(geneticId = ifelse(is.na(Origin), ID_genetic, geneticId)) %>% 
+#   select(geneticId, Plate, Position)
+# left_join(extraction, plates, by = "geneticId") %>%
+#   write_csv(path = file.path(path, "18.11Extraction.csv"))
+googlesheets::gs_title("Symphonia_sequence_capture") %>% 
+  googlesheets::gs_read("18.11Extraction") %>% 
+  filter(!is.na(Plate)) %>% 
+  mutate(row = substr(Position, 1, 1)) %>% 
+  mutate(col = substr(Position, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(shape=21, size =3, fill = "blue")  +
+  facet_wrap(~ Plate, nrow = 3) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
 
