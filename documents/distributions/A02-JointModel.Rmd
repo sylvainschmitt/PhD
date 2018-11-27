@@ -98,109 +98,154 @@ data <- list(
                            rep(0,20)),
                      C = c(rep(1,30), rep(0:1,20), rep(0,30)))
 )
-# mdata <- lapply(data, function(x) list(N = nrow(x),
-#                                        Presence = x$Presence,
-#                                        Environment = x$Environment,
-#                                        weights = ifelse(x$Presence == 0,
-#                                                         1/(2*sum(x$Presence == 1)),
-#                                                         1/(2*sum(x$Presence == 0)))))
+data <- lapply(data, function(x) x %>% 
+         reshape2::melt(id.vars = "Environment", 
+                        variable.name = "Species", value.name = "Presence") %>% 
+         filter(Presence != 0) %>% 
+         select(-Presence))
+mdata <- lapply(data, function(x) list(N = nrow(x),
+                                       S = length(unique(x$Species)),
+                                       Species = as.numeric(x$Species),
+                                       Environment = x$Environment))
 bind_rows(data, .id = "id") %>% 
-  reshape2::melt(id.vars = c("id", "Environment"), 
-                 variable.name = "Species", value.name = "Presence") %>% 
-  filter(Presence != 0) %>% 
   ggplot(aes(Environment, fill = Species, col = Species)) + 
   geom_density(alpha = 0.3) +  
   facet_wrap(~id, nrow = 3)
 ```
 
-<!-- $B_0$ -->
-<!-- ================== -->
+$D_0$
+==================
 
-<!-- Column 1 -->
-<!-- ------------------------------------- -->
+Column 1
+-------------------------------------
 
-<!-- #### Model -->
+#### Model
 
-<!-- The first family of model are Bernoulli law to model the probability of presence. $B_0$ is the null model estimating a single theta along the whole environmental gradient. Thus $B_0$ cannot include any environmental effect. -->
+...
 
-<!-- $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0))$$ -->
+$$Presence \sim \mathcal{DirichletProcess}(\alpha,\mathcal{N}(\mu_0,\sum0))$$
 
-<!-- #### Code -->
+#### Code
 
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!--   data { -->
-<!--     int<lower=1> N ; // # obs -->
-<!--     int<lower=0, upper=1> Presence[N] ; -->
-<!--     vector<lower=0, upper=1>[N] weights ; -->
-<!--   } -->
-<!--   parameters { -->
-<!--     real alpha_0 ; -->
-<!--   } -->
-<!--   model { -->
-<!--     target += weights*bernoulli_logit_lpmf(Presence | alpha_0) ; -->
-<!--   } -->
-<!--   generated quantities { -->
-<!--     vector<lower=0, upper=1>[N] mu ; -->
-<!--     for(n in 1:N) -->
-<!--        mu[n] = inv_logit(alpha_0) ; -->
-<!--   } -->
-<!-- ``` -->
+```{stan , output.var="Model", echo=T, eval=F}
+// from https://ecosang.github.io/blog/study/dirichlet-process-with-stan/
+data{
+  int<lower=0> S ; // # Species
+  int<lower=0> N ; // # Observations
+  real Environment[N] ;
+}
+parameters {
+  real mu[S] ; //species mean
+  real <lower=0,upper=1> v[S] ;
+  real<lower=0> sigma[S] ; // species variance
+  //real<lower=0> alpha ; // hyper prior DP(alpha,base)
+}
+transformed parameters{
+  simplex [S] pi ;
+  pi[1] = v[1] ;
+  // stick-break process based on The BUGS book Chapter 11 (p.294)
+  for(s in 2:(S-1))
+      pi[s]= v[s]*(1-v[s-1])*pi[s-1]/v[s-1] ; 
+  pi[S]=1-sum(pi[1:(S-1)]) ; // to make a simplex.
+}
+model {
+  real alpha = 1 ;
+  real a=0.001 ;
+  real b=0.001 ;
+  real ps[S] ;
+  sigma ~ inv_gamma(a,b) ;
+  mu ~ normal(0,5) ;
+  //alpha~gamma(6,1) ;
+  v ~ beta(1,alpha) ;
+  for(n in 1:N){
+    for(s in 1:S){
+      ps[s]=log(pi[s])+normal_lpdf(Environment[n] | mu[s], sigma[s]) ;
+    }
+    target += log_sum_exp(ps) ;
+  }
+}
+generated quantities {
+  // pred
+}
+```
 
-<!-- #### Summary -->
+```{stan , output.var="Model", echo=T, eval=F}
+// from https://ecosang.github.io/blog/study/dirichlet-process-with-stan/
+data{
+  int<lower=0> S ; // # Species
+  int<lower=0> N ; // # Observations
+  vector<lower=0>[N] Species ;
+}
+parameters {
+  vector<lower=0>[S] alpha ;
+}
+model {
+  target += dirichlet_lpdf(Species | alpha) ;
+}
+generated quantities {
+  // pred
+}
+```
 
-<!-- ```{r } -->
-<!-- # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x)) -->
-<!-- # names(fits) <- names(mdata) -->
-<!-- # save(fits, file = "./distribution_save/B0.Rdata") -->
-<!-- load("./distribution_save/B0.Rdata") -->
-<!-- pars <- c("alpha_0") -->
-<!-- lapply(as.list(names(mdata)), function(type) -->
-<!--   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% -->
-<!--     mutate(Type = type)) %>% -->
-<!--   bind_rows() %>% -->
-<!--   kable() -->
-<!-- ``` -->
+#### Summary
 
-<!-- #### Posteriors -->
+```{r }
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- names(mdata)
+# save(fits, file = "./distribution_save/D0.Rdata")
+load("./distribution_save/D0.Rdata")
+pars <- c("alpha")
+lapply(as.list(names(mdata)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable()
+```
 
-<!-- ```{r , fig.cap="Model parameters posterior."} -->
-<!-- cowplot::plot_grid(plotlist = lapply(names(data), function(type) -->
-<!--   mcmc_intervals(as.array(fits[[type]]), pars = pars)), -->
-<!--   labels = names(data), nrow = 2) -->
-<!-- ``` -->
+#### Posteriors
 
-<!-- Column 2 -->
-<!-- ------------------------------------- -->
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]]), regex_pars = pars)),
+  labels = names(data), nrow = 2)
+```
 
-<!-- #### Chains -->
+Column 2
+-------------------------------------
 
-<!-- ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."} -->
-<!-- mcmc_trace(as.array(fits$intermediate), pars = c(pars, "lp__"), -->
-<!--              facet_args = list(labeller = label_parsed)) -->
-<!-- ``` -->
+#### Chains
 
-<!-- #### Pairs -->
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
+mcmc_trace(as.array(fits$intermediate), regex_pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))
+```
 
-<!-- ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."} -->
-<!-- mcmc_pairs(as.array(fits$intermediate), pars = c(pars, "lp__")) -->
-<!-- ``` -->
+#### Pairs
 
-<!-- #### Predictions -->
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+mcmc_pairs(as.array(fits$intermediate), regex_pars = c(pars, "lp__"))
+```
 
-<!-- ```{r , fig.cap="Predictions."} -->
-<!-- lapply(as.list(names(data)), function(type) -->
-<!--   cbind(type = type, data[[type]], -->
-<!--         mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean), -->
-<!--         t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95))))) %>%  -->
-<!--   bind_rows() %>%  -->
-<!--   ggplot(aes(x = Environment)) + -->
-<!--   geom_point(aes(y = Presence, col = as.factor(Presence))) + -->
-<!--   geom_point(aes(y = mu)) + -->
-<!--   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) + -->
-<!--   geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   facet_wrap(~ type, scales = "free", nrow = 3) -->
-<!-- ``` -->
+#### Predictions
+
+```{r , fig.cap="Predictions."}
+lapply(as.list(names(data)), function(type)
+  cbind(type = type, data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu_species"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95))))) %>%
+  bind_rows() %>%
+  ggplot(aes(x = Environment)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  geom_point(aes(y = mu)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  facet_wrap(~ type, scales = "free", nrow = 3)
+
+cbind(type = type, data[[type]],
+        mu = apply(as.matrix(fits[[type]], pars = "mu_species"), 2, mean),
+        t(apply(as.matrix(fits[[type]], pars = "mu_species"), 2, quantile, probs = c(0.05, 0.95))))
+```
 
 <!-- $B_{\alpha}$ -->
 <!-- ================== -->

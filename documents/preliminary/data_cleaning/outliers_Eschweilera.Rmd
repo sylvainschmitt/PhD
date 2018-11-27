@@ -39,14 +39,18 @@ data <- googlesheets::gs_title("Measures_Eschweilera") %>%
 
 # Introduction
 
-This document aims to detect leaf measurements outliers within functional traits (either individually with boxplots or together with principal component analysis). Then we need to check if outliers are natural or measurement errors. If measurment errors are detected they should be further cleaned either by removing them, making the good link or reproducing the measure.
+Subsequent analysis aimed to detect leaf measurements outliers within functional traits (either individually with boxplots or together with principal component analysis). Then, we checked if outliers were natural or measurement errors. If measurment errors were detected they have been further cleaned either by removing them, making the good link or reproducing the measure.
 
 # Outliers
 
 ## Identified
 
-* __P14-1-760__ all leaves, is a natural outlier identified in the PCA due to an anormally high SLA due to the fact that the sample comse from a tree rejection grown on a beheaded tree. Was removed from the datatable for further outliers detection
+Thanks to subsequent boxplot (fig \@ref(fig:outliersBoxplot) and principal component analysis (PCA, fig \@ref(fig:outliersPCA), we detected following outliers:
 
+* __P14-1-760__ all leaves, is a natural outlier identified in the PCA due to an anormally high SLA due to the fact that the sample comse from a tree rejection grown on a beheaded tree. Was removed from the datatable for further outliers detection and analysis.
+* __13-2-881__ seemed to be offset on the PCA, but after checking value all traits were in a normal range except for the CC. Leaves sampled seemed to be young ones and wich could explain low SPAD values.
+* __16-3-260__ seemed to be offset on the PCA, what could be due to abnormal values of LDMC and SLA. We discovered spurious value of dry weight that were repeated and corrected.
+* __16-7-185-5__ have a particularly high SLA regarding other leaves of the same individual. LA values were badly attributed regarding leaves scan. Subsequently, LA data table has been corrected and updated.
 
 ## Boxplot
 
@@ -128,11 +132,6 @@ data %>%
       "}")))
 ```
 
-On the PCA we spotted other indviduals that could be considered as outliers:
-1. __13-2-881__ seemed to be offset on the PCA, but after checking value all traits were in a normal range except for the CC. Leaves sampled seemed to be young ones and consequently were light, what can explain a low SPAD
-1. __16-3-260__ seemed to be offset on the PCA, what could be due to abnormal values of LDMC and SLA. We checked value of LeafDry, and they me be should be done again 
-1. __16-7-185-5__ have a particularly high SLA regarding other leaves of the same individual. LA values seemed to be not well attributed regarding leaves scan. LA values weren't well attributed. LA data table has been updated for this purpose
-
 # Conclusion
 
-Now we need to note and check identified outliers.
+Finally, we need to remove sampled species from outgroups that does not belong to *Eschweilera clade Parvifolia* and the dataset will be fully ready for functional analysis in addition to the *Symphonia globulifera* dataset (traits covariation by principal component analysis and trait-environment relation by bayesian inferences).

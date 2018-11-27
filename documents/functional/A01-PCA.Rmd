@@ -16,14 +16,17 @@ output:
     toc: false
     keep_tex: true
 linestretch: 1.5
-#csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-#bibliography: /home/sylvain/Documents/Bibliography/library.bib
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
 library(ggfortify)
 theme_set(bayesplot::theme_default())
@@ -81,21 +84,35 @@ data <- list(
 
 # Introduction
 
-<!-- Studying biodiversity structure -->
+<!-- what did we do for reader opening the analysis -->
 
-Tropical forests host over half of worlwide biodiversity [@Scheffers2012]. Biodiversity can be divided into three fundamental levels: genetic, species and ecosystem. Understanding how is structured each level is a keypoint to apprehend its complexity and to potentially make forecasts for its evolution [@Messier2010a]. Interplay of individuals structuration within and among species, i.e. within ecosystem, enlightens processes of resources partitioning and the impacts of biotic and abiotic paramaters **Still not rellay clear**. To such an extent, functional traits studies spotlight different ecological strategies among and between species **Unclear**.
+Subsequent analysis aimed to explore co-variations of leaf and wood functional traits from *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes. More especially, we investigated traits covariation at several ecological scales: (i) between species complexes, (ii) wihtin species complexes, and (iii) within species from complexes. Co-variations have been explored on leaf traits for every ecological scale, and on leaf and wood traits only within *Symphonia globulifera* complex because wood traits were availble only for a 50 individuals from the latter.
 
-<!-- Definition of functional traits and ecological signification -->
+<!-- functional traits known covariations -->
 
-Functional traits are defined as morpho-physio-phenological **(I'm not fan of the morpho-physio-pheno...)** traits impacting fitness indirectly through their effect on individual performance, which comprises growth, reproduction, and survival [@violle_let_2007]. Consequently **why?**, functional traits appear to be a perfect approach to study the effect of environment on the structure of intraspecific variability within population **what is population ?**.
+Functional traits have been defined as phenotypic traits impacting fitness indirectly through their effect on individual performance, which can be related to tree abilities to grow, survive and reproduce in a given environment [@violle_let_2007]. Consequently, functional traits expresses fundamental trade-offs determining individual, and thus species and species complexes, occurrence and co-occurrence along environmental gradients [@Wright2002]. For instance, specific leaf area varies along soil fertility and shade gradients and represents a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Evans2001a; @hodgson_is_2011]. Functional traits covary at species level according to basic leaf [@wright_worldwide_2004; but see @lloyd_photosynthetically_2013; @osnas_global_2013] and wood [@chave_towards_2009] economics spectra. Similar patterns of covariation have been even found at the community level [@Bruelheide2018]. But some authors argue for a unique economics spectra [@reich_world-wide_2014] evidenced in subarctic grasslands [@freschet_evidence_2010]. The leaf economics spectrum opposes acquisitive to conservative ecological strategies, often expressed at leaf level (but not only). The wood economics spectrum opposes slow to fast growing species, expressed both at leaf, twigs, and stem levels [@chave_towards_2009]. The position of tree indivdual, species, or species complex along these economics spectra can be assessed using functional traits. How the leaf and wood economic spectra contribute to individual dynamics at different ecological scales in tropical forests, such as individual, species, and speciex complexes levels, remains an open question. For instance, @Messier2017 have underlined that the leaf economic spectrum basically expresses changes in ecological strategies along broad-scale environmental gradients and that, consequently it does not underlie species coexistence at local scale [@fortunel_leaf_2012; @Paine2011]. 
 
-<!-- Correlation of traits and signification -->
-
-Many studies of functional traits highlighted general trends of variation between traits **Which variation ? Introduce here major known variation from litterature to be further discussed in discussion**. Those trade-offs between traits define different strategies to maximise individual performance. We'll focus on the way functional traits describe variation within diferent ecological scales, thus how they enable to distinguish thoses groups and what ecological consequences it might draw.
+*What about and why those different ecological scales (species complexes, species, and individuals)...*
 
 # Material & Methods
 
-Datasets gather leaf and wood functional traits from 838 individuals belonging to *Symphonia globulifera* and *Escwheilera clade Parvifolia* complexes. For leaf traits, each individual had 5 leaves sampled (excepted for **n** individuals with only 4 leaves). Functionnal traits were averaged per individual in subsequent analysis **Why ?**. Traits covariation will be investigated by principal component analysis (PCA) on diferent ecological levels.
+Datasets gathered leaf and wood functional traits from 838 individuals belonging to *Symphonia globulifera* and *Escwheilera clade Parvifolia* species complexes (table \@ref(tab:Traits)). For leaf traits, each individual had 5 leaves sampled (excepted for 6 individuals with only 4 leaves). Functionnal traits were averaged per individual in subsequent analysis. Traits covariation will be investigated by principal component analysis (PCA) on each ecological level (species complexes, species, and individuals). Ecological level distribution within the PCA will be explored by tests of means comparison  on PCA axis from the first plan (student T-test or anova for respectivelly two or more than two groups).
+
+```{r Traits}
+data.frame(
+  Traits = c("Specific Leaf Area", "Leaf Dry Matter Content", "Leaf Thickness", "Leaf Area", 
+             "Chlorophyll content", "Branch Bark Thickness" , "Branch Bark density", 
+             "Branch Wood density "),
+  Unit = c("$g.cm^2$","$g·g^{-1}$","$\\mu m$","$cm^2$", "$g.cm^{-2}$","$mm$","$g.cm^{-3}$","$g.cm^{-3}$"),
+  Abbreviation = c("SLA", "LDMC","LT", "LA", "CC", "brBT", "brBD", "brWD"),
+  Function = c("Resource acquisition and defence", "Resource conservation", "Resource conservation", 
+               "Resource acquisition", "Resource acquisition", "Structure and defence", 
+               "Structure and water-save", "Structure and defence")
+) %>% 
+  kable(format = "pandoc", escape = F,
+        caption = "Functional traits measured, with trait unit, abbreviation and principal function.") %>%
+  kable_styling("striped", full_width = T)
+```
 
 # Results
 
@@ -103,10 +120,12 @@ Datasets gather leaf and wood functional traits from 838 individuals belonging t
 
 ### Between complexes
 
-Between the two species complexes, 69.54% of the total variance was conserved on the two first axes from the PCA of leaf traits (figure \@ref(fig:PCAleafComplexes)). The first axis opposed SLA to CC and LT, from high SLA leaves to thick leaves rich in chlorophyll, whereas the second axis is related to LA and LDMC, increasing with leaf area and dry matter **maybe redundant, I know I wrote it, but you can keep either one form or the other or both**. The first axis highlighted a correlation between CC and LT. SLA and LA decoupled relation is enlightened is the PCA plane, drawing the two spectra of leaf economics and wood economics. Moreover for the two complexes, we observed a general trend of diameters distribution along the first PCA axis. Smaller diameter seemed linked to thinner leaves with increased SLA and less chlorophyll. Consequently, the second PCA axis was seggregating the two complexes.
+Between the two species complexes, 69.54% of the total variance was conserved on the two first axes from the PCA of leaf traits (figure \@ref(fig:PCAleafComplexes)). The first axis opposed SLA to CC and LT, from high SLA leaves to thick leaves rich in chlorophyll, whereas the second axis is related to LA and LDMC, increasing with leaf area and dry matter. The first axis highlighted a correlation between CC and LT. SLA and LA decoupled relation is enlightened within the PCA plane. Moreover for the two complexes, we observed a general trend of diameters distribution along the first PCA axis. Smaller diameter seemed linked to thinner leaves with increased SLA and less chlorophyll. Besides both axes showed significative complex seggregation ($p-value < 0.0001$), the second PCA axis seggregated the two complexes with no overlap.
+
+e second PCA axis was seggregating the two complexes.
 
 ```{r PCAleafComplexes, fig.cap='Principal Component Analysis (PCA) of leaf trait  between complexes.'}
-data$leaf %>% 
+pca.plot <- data$leaf %>% 
   autoplot(princomp(~ SLA + LDMC + LT + LA + CC, data = ., cor = T), 
            data = .,
            colour = "Genus", alpha = 0.5, size = "DBH",
@@ -116,20 +135,32 @@ data$leaf %>%
   coord_equal() +
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+  scale_color_discrete(guide = "none") +
   theme(legend.position = c(1, 1), 
-        legend.justification = c(1, 1))
-# g <- ggExtra::ggMarginal(g, groupFill = T)
+        legend.justification = c(1, 1)) +
+  ggtitle("", paste0("n = ", nrow(data$leaf)))
+axes.boxplots <- pca.plot$data %>%
+  select(Comp.1, Comp.2, Genus) %>%
+  reshape2::melt(id.vars = "Genus", variable.name = "axis") %>%
+  ggplot(aes(Genus, value, fill = Genus)) +
+  ggpubr::stat_compare_means(method = "t.test", aes(label = paste("T-test", ..p.signif..))) +
+  geom_boxplot() +
+  facet_wrap(~axis, nrow = 2) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
 ```
 
 ### Within complexes
 
-Whithin *Symphonia globulifera* complex, 75.1% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAleafSymphonia)). The first axis was mainly supported by SLA opposed to LDMC and CC, i.e. with higher SLA, dry matter and chlorophyll content tended to diminish. Nevertheless the weights of the two remaining variables (LA and LT) on this axis were also significant. The first axis highlighted a strong correlation between CC and LDMC, whereas SLA and LA were still decoupled. The second axis was more related with LT and LA. The two morphotypes (*S. sp1* and *S. globulifera*) were seggregated along the second axis, with decreasing LT and LA from *S. globulifera* to *S. sp1*. Finaly, the same observation can be raised about diameter repartition along the first axis of PCA between complexes (figure \@ref(fig:PCAleafComplexes)) and within *Symphonia complexes*, with decreasing diameter, SLA and LA increase wheareas dry matter, chlorophyll content and leaf thickness lessen.
+Whithin *Symphonia globulifera* complex, 75.1% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAleafSymphonia)). The first axis was mainly supported by SLA opposed to LDMC and CC, i.e. while SLA increased, leaf dry matter and chlorophyll diminished. Nevertheless the weights of the two remaining variables (LA and LT) on this axis were also significant. The first axis highlighted a strong correlation between CC and LDMC, whereas SLA and LA were still decoupled. The second axis was more related with LT and LA. Similarly to results between complexes, besides both axes showed significative morphotype seggregation ($p-value < 0.001$), the two morphotypes (*S. sp1* and *S. globulifera*) were seggregated with no overlap along the second axis, with decreasing LT and LA from *S. globulifera* to *S. sp1*. Finaly, the same observation can be raised about diameter repartition along the first axis of PCA between complexes (figure \@ref(fig:PCAleafComplexes)) and within *Symphonia complexes*, with decreasing diameter, SLA and LA increase wheareas dry matter, chlorophyll content and leaf thickness lessen.
 
-Whithin *Eschweilera clade Parvifolia* complex, 65.16% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAleafEschweilera)). The opposition of increasing SLA with low LT and LDMC mostly draw the first axis of PCA. In addition, the first axis seemed to seggregate the two predominant species: *E sagotiana*, mostly investing in a thick leaves with high dry matter content but with low SLA, with *E coriacea*, adopting the reverse strategy. The second axis was related to increasing CC and LA, which were well correlated. As already seen in previous PCAs, SLA and LA seem to have a decoupled relations.
+Whithin *Eschweilera clade Parvifolia* complex, 65.16% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAleafEschweilera)). The opposition of increasing SLA with low LT and LDMC mostly draw the first axis of PCA. Both axes showed significative species seggregation ($p-value < 0.0001$). In addition, the first axis seggregated the two predominant species with no overlap: *E sagotiana*, mostly investing in a thick leaves with high dry matter content but with low SLA, with *E coriacea*, adopting the reverse strategy. The second axis was related to increasing CC and LA, which were well correlated. As already seen in previous PCAs, SLA and LA seem had a decoupled relations.
 
 
 ```{r PCAleafSymphonia, fig.cap='Principal Component Analysis (PCA) of leaf trait wihtin Symphonia complex.'}
-data$leaf %>% 
+pca.plot <- pca.leaf <- data$leaf %>% 
   filter(Genus == "Symphonia") %>% 
   autoplot(princomp(~ SLA + LDMC + LT + LA + CC, data = ., cor = T), 
            data = .,
@@ -140,13 +171,26 @@ data$leaf %>%
   coord_equal() +
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+  scale_color_discrete(guide = "none") +
   theme(legend.position = c(1, 1), 
-        legend.justification = c(1, 1))
+        legend.justification = c(1, 1)) +
+  ggtitle("", paste0("n = ", nrow(filter(data$leaf, Genus == "Symphonia"))))
+axes.boxplots <- pca.plot$data %>%
+  select(Comp.1, Comp.2, SpeciesLong) %>%
+  reshape2::melt(id.vars = "SpeciesLong", variable.name = "axis") %>%
+  ggplot(aes(SpeciesLong, value, fill = SpeciesLong)) +
+  ggpubr::stat_compare_means(method = "anova", aes(label = paste("Anova", ..p.signif..))) +
+  geom_boxplot() +
+  facet_wrap(~axis, nrow = 2) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
 ```
 
 
 ```{r PCAleafEschweilera, fig.cap='Principal Component Analysis (PCA) of leaf trait wihtin Eschweilera complex.'}
-data$leaf %>% 
+pca.plot <- data$leaf %>% 
   filter(Genus != "Symphonia") %>% 
   autoplot(princomp(~ SLA + LDMC + LT + LA + CC, data = ., cor = T), 
            data = .,
@@ -156,15 +200,28 @@ data$leaf %>%
            loadings = T, loadings.label = T, loadings.colour = 'black') +
   coord_equal() +
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
-  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted")
+  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+    scale_color_discrete(guide = "none") +
+  theme(legend.position = c(1, 1), 
+        legend.justification = c(1, 1)) +
+  ggtitle("", paste0("n = ", nrow(filter(data$leaf, Genus != "Symphonia"))))
+axes.boxplots <- pca.plot$data %>%
+  select(Comp.1, Comp.2, SpeciesLong) %>%
+  reshape2::melt(id.vars = "SpeciesLong", variable.name = "axis") %>%
+  ggplot(aes(SpeciesLong, value, fill = SpeciesLong)) +
+  ggpubr::stat_compare_means(method = "anova", aes(label = paste("Anova", ..p.signif..))) +
+  geom_boxplot() +
+  facet_wrap(~axis, nrow = 2) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(1,1))
 ```
 
 
 ### Within *Symphonia* species
 
-Within  *S. globulifera* and *S sp.1* species, respectively 72.33% and 72,56% of the total variance was conserved on the two first axes from the PCAs of leaf traits (figure \@ref(fig:PCAleafSymphoniaSpecies)). *What about PCA1 variance compared to others ?*  For both *S. globulifera* and *S sp.1*, the first axis from the PCAs were mostly supported by the opposition of the increasing SLA and LA with decreasing LDMC, CC and LT. For both *S sp.1* and *S. globulifera*, LA seemed  anti-correlated with LT, but for *S. sp.1* SLA seemed also strongly linked with LA wheareas the relation is uncoupled for *S. globulifera*. The total variance conserved on this axis was respectively 50,24% and 53,91%. The second PCA axis of both  *S. globulifera* and *S sp.1*  was directed by LT decrease with dry matter and chlorophyll content increasing. In addition, *S glubulifera* second axis was also strongly supported by LA decrease. *What about the second axis of *S. sp.1* ?* Reverse evolution of diameter with SLA increase can again be put forward on both *S. globulifera* and *S sp.1* PCAs.
-
-Within  *S. globulifera* and *S sp.1* species, respectively 73.04% and 74.22% of the total variance was conserved on the two first axes from the PCAs of leaf traits (figure \@ref(fig:PCAleafSymphoniaSpecies)). **What about PCA1 variance compared to others ?**. For both *S. globulifera* and *S sp.1*, the first axis from the PCAs were mostly supported by the opposition of the increasing SLA and LA with decreasing LDMC, CC and LT. For S *S sp.1*, LA seemed more specifically anti-correlated with LT, wheareas for *S. globulifera* the opposition implied more LDMC. The second axis of *S. globulifera* PCA was directed by LT and LA decrease. LA seemed to have again a decoupled relation with SLA. **What about the second axis of *S. sp.1* ?** Reverse evolution of diameter with SLA increase can again be put forward on both *S. globulifera* and *S sp.1* PCAs.
+Within  *S. globulifera* and *S sp.1* species, respectively 72.33% and 72.56% of the total variance was conserved on the two first axes from the PCAs of leaf traits (figure \@ref(fig:PCAleafSymphoniaSpecies)). Moreover, the first axis alone explained over half of the total variance. For both *S. globulifera* and *S sp.1*, the first axis from the PCAs were mostly supported by the opposition of the increasing SLA and LA with decreasing LDMC, CC and LT. For both *S sp.1* and *S. globulifera*, LA was opposed to LT, but for *S. sp.1* SLA was also strongly linked with LA wheareas the relation is uncoupled for *S. globulifera*. The second PCA axis, bearing less than a fifth of the remaining variance, of both  *S. globulifera* and *S sp.1*  was directed by LT decrease with dry matter and chlorophyll content increasing. In addition, *S glubulifera* second axis was also strongly supported by LA decrease. Reverse evolution of diameter with SLA increase can again be put forward on both *S. globulifera* and *S sp.1* PCAs.
 
 ```{r PCAleafSymphoniaSpecies, fig.cap='Principal Component Analysis (PCA) of leaf trait wihtin Symphonia species.'}
 pcas <- data$leaf %>% 
@@ -187,10 +244,7 @@ cowplot::plot_grid(plotlist = pcas$pcas, labels = pcas$SpeciesLong)
 
 ### Within *Eschweilera* species
 
-PCAs from leaf traits for the 6 main sampled species of *Eschweilera clade parvifolia* complex (*E. coriacea*, *E. decolorans*, *E. grandiflora form 2*,  *E. sagotiana*,, *E pedicellata* and *E wachenheimii*) displayed a total variance ranging from 61.33% to 78,79% on the two main axes (figure \@ref(fig:PCAleafEschweileraSpecies)). *What about PCA1 variance compared to others ?*. On every PCA, the first axes conserved between 39.95% and 55.75% of total variance and highlighted the opposition between increasing SLA and other variables, except for *E sagotiana* where increasing LA was more correlated to SLA *really ?*.  For *E. sagotiana* and *E. pedicellata*' the second axis was mainly supported by CC and LA reduction, whereas for *E decolorans*, *E. coriacea* and *E. grandiflora form 2* the second axis was more linked to an increase in dry matter and chlorophyll content. *E wachenheimii* second axis drew an evolution toward higher chlorophyll content and leaf area smaller dry matter. DBH distribution along first axes is not as clear as seen before. 
-*The whole paragraph stay a bit blur, try to keep the whole information but condense besides it's hard.*
-
-PCAs from leaf traits for the 4 main sampled species of *Eschweilera clade parvifolia* complex (*E. coriacea*, *E. decolorans*, *E. grandiflora form 2*, and *E. sagotiana*) displayed a total variance ranging from 61.33% to 77.95% on the two main axes (figure \@ref(fig:PCAleafEschweileraSpecies)). **What about PCA1 variance compared to others ?**. On every PCA, the first axes highlighted the opposition between increasing SLA and other variables, except for *E sagotiana* where increasing LA was more correlated to SLA **really ?**. Finally, repartition of variables on the second axis was more assorted between species **useless ?**. *E. sagotiana* and *E. decolorans*' second axis was mainly supported by CC reduction, whereas for *E. coriacea* and *E. grandiflora form 2* the second axis was more linked to an increase in dry matter and chlorophyll content, leading to thinner and smaller leaves for *E. grandiflora form 2*. **The whole paragraph stay a bit blur, try to keep the whole information but condense besides it's hard.**
+PCAs from leaf traits for the 6 main sampled species of *Eschweilera clade parvifolia* complex (*E. coriacea*, *E. decolorans*, *E. grandiflora form 2*,  *E. sagotiana*, *E pedicellata* and *E wachenheimii*) displayed a total variance ranging from 61.33% to 78,79% on the two main axes (figure \@ref(fig:PCAleafEschweileraSpecies)). On every PCA, the first axes conserved between 39.95% and 55.75% of total variance and highlighted the opposition between increasing SLA and other variables, except for *E sagotiana* where increasing LA was more correlated to SLA.  For *E. sagotiana* and *E. pedicellata* the second axis was mainly supported by CC and LA reduction, whereas for *E decolorans*, *E. coriacea* and *E. grandiflora form 2* the second axis was more linked to an increase in dry matter and chlorophyll content. *E wachenheimii* second axis drew an evolution toward small leaves with increased chlorophyll and dry matter content. DBH distribution along first axes is not as clear as seen before. 
 
 ```{r PCAleafEschweileraSpecies, fig.cap='Principal Component Analysis (PCA) of leaf trait wihtin Eschweilera species.'}
 pcas <- data$leaf %>% 
@@ -207,17 +261,22 @@ pcas <- data$leaf %>%
   coord_equal() +
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted"))
-cowplot::plot_grid(plotlist = pcas$pcas, labels = pcas$SpeciesLong,nrow=3)
+pcas$pcas[c(1,3:5)] <- lapply(pcas$pcas[c(1,3,5)], function(x) x +
+         scale_size_continuous(guide = "none") +
+         scale_color_discrete(guide = "none"))
+pcas$pcas[[2]] <- pcas$pcas[[2]] + scale_size_continuous(guide = "none")
+pcas$pcas[[6]] <- pcas$pcas[[6]] + scale_color_discrete(guide = "none")
+cowplot::plot_grid(plotlist = pcas$pcas, labels = pcas$SpeciesLong, nrow=3)
 ```
 
 ## Wood traits
 
 ### Within complexes
 
-Within *Symphonia globulifera* complex, 57.9% of the total viarance was conserved on the two main axis from the PCA of wood traits. The first axis was mainly supported by SLA opposed to LDMC, LT and CC. The second axis was opposed increasing wood and bark densities.
+Within *Symphonia globulifera* complex, 57.9% of the total viarance was conserved on the two main axis from the PCA of leaf and wood traits. The first axis was mainly supported by SLA opposed to LT and brBT, and moderatly to LDMC and CC. The second axis increased with denser wood and bark asscoiated to leaves with increased chlorophyll and dry matter content. Only the second PCA axis seggregated significatively the two morphotypes ($p-value < 0.0001$).
 
 ```{r PCAwoodSymphonia, fig.cap='Principal Component Analysis (PCA) of wood trait wihtin Symphonia complex.'}
-data$wood %>% 
+pca.plot <- data$wood %>% 
   filter(Genus == "Symphonia") %>% 
   autoplot(princomp(~ SLA + LDMC + LT + LA + CC + brBT + brBD + brWD, data = ., cor = T), 
            data = .,
@@ -229,7 +288,20 @@ data$wood %>%
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
   theme(legend.position = c(1, 1), 
-        legend.justification = c(1, 1))
+        legend.justification = c(1, 1)) +
+  scale_color_discrete(guide = "none") +
+  ggtitle("", paste0("n = ", nrow(data$wood)))
+axes.boxplots <- pca.plot$data %>%
+  select(Comp.1, Comp.2, SpeciesLong) %>%
+  reshape2::melt(id.vars = "SpeciesLong", variable.name = "axis") %>%
+  ggplot(aes(SpeciesLong, value, fill = SpeciesLong)) +
+  ggpubr::stat_compare_means(method = "anova", aes(label = paste("Anova", ..p.signif..))) +
+  geom_boxplot() +
+  facet_wrap(~axis, nrow = 2) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
 ```
 
 # Discussion
@@ -240,10 +312,6 @@ However, in the majority of cases, LA presented a decoupled relationship with SL
 The distinction of the *Escheweilera* and *Symphonia* complexes according to the second axis of the PCA indicated a different compromise, ie. species of the *Symphonia* complex tended to invest in leaves with high dry matter and large leaf area, when species of *Eschweilera* complex developed rather thick leaves.
 
 Within the complexes, the distinction of the species did not take place on the same axes. For *Eschweilera* the distribution of major species showed a distinction along an axis directed by SLA opposed LDMC and LT, drawing a conservation / acquisition axis. For *Symphonia*, the two morphotypes differed mainly on the second axis.
-
-*Discuss and summarise all observed relations in regard of litterature...*
-
-*Maybe list first all the point you want to summarise and explain in the discussion, e.g. - Between complexes...*
 
 ## Conclusion
 

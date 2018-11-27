@@ -1,0 +1,56 @@
+---
+title: Title
+author: "Anne Barranger & Sylvain Schmitts"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r config, message=FALSE, warning=FALSE, include=FALSE}
+rm(list = ls()); invisible(gc())
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(broom)
+theme_set(bayesplot::theme_default())
+opts_chunk$set( echo = F, message = F, warning = F, 
+                fig.height = 8, fig.width = 12,
+                cache = T, cache.lazy = F)
+```
+
+# Introduction
+
+<!-- Studying biodiversity structure -->
+
+Tropical forests host over half of worlwide biodiversity [@Scheffers2012]. Biodiversity can be divided into three fundamental levels: genetic, species and ecosystem. Understanding how is structured each level is a keypoint to apprehend its complexity and to potentially make forecasts for its evolution [@Messier2010a]. Interplay of individuals structuration within and among species, i.e. within ecosystem, enlightens processes of resources partitioning and the impacts of biotic and abiotic paramaters **Still not rellay clear**. To such an extent, functional traits studies spotlight different ecological strategies among and between species **Unclear**.
+
+<!-- Definition of functional traits and ecological signification -->
+
+Functional traits are defined as morpho-physio-phenological **(I'm not fan of the morpho-physio-pheno...)** traits impacting fitness indirectly through their effect on individual performance, which comprises growth, reproduction, and survival [@violle_let_2007]. Consequently **why?**, functional traits appear to be a perfect approach to study the effect of environment on the structure of intraspecific variability within population **what is population ?**.
+
+<!-- Correlation of traits and signification -->
+
+Many studies of functional traits highlighted general trends of variation between traits **Which variation ? Introduce here major known variation from litterature to be further discussed in discussion**. Those trade-offs between traits define different strategies to maximise individual performance. We'll focus on the way functional traits describe variation within diferent ecological scales, thus how they enable to distinguish thoses groups and what ecological consequences it might draw.
+
+# Material & Methods
+
+# Results
+
+# References

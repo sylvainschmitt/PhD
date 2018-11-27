@@ -1,3 +1,9 @@
+# PhD 0.1.9068
+* PCA intro, M&M, & results revision
+* data_cleaning final v1 (pre-share)
+* outlier final v1 (pre-share)
+* report_Anne opening
+
 # PhD 0.1.9067
 * PCA correction & discussion
 * Environment descriptors analysis
