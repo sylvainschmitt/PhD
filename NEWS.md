@@ -1,10 +1,6 @@
 # PhD 0.1.9067
-<<<<<<< HEAD
 * PCA correction & discussion
 * Environment descriptors analysis
-=======
-* PCA correction
->>>>>>> bdff11d0eec86b9fc78c865700fb13793b5b2a17
 
 # PhD 0.1.9066
 * single model ok
