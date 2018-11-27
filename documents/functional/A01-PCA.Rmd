@@ -54,26 +54,27 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect()
 data <- left_join(traits, paracou) ; rm(traits, paracou)
 data <- data %>% # outliers removal
-  filter(Plot != 14 & SubPlot != 1 & TreeFieldNum != 760) # rejection individual
+  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # rejection individual
+  filter(!(SpeciesLong %in% c("E congestiflora","E simiorum","L persistens")))
 data <- list(
-  leaf = data %>% 
+  leaf = data %>%
   dplyr::select(Plot, SubPlot, TreeFieldNum, Leaf,
                 Genus, Species, SpeciesLong, Bark, Dawkins, DBH,
-                SLA, LDMC, LT, LA, CC) %>% 
+                SLA, LDMC, LT, LA, CC) %>%
   group_by(Plot, SubPlot, TreeFieldNum,
-           Genus, Species, SpeciesLong, Bark, Dawkins, DBH) %>% 
-  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC"), mean, na.rm = T) %>% 
-  ungroup() %>% 
+           Genus, Species, SpeciesLong, Bark, Dawkins, DBH) %>%
+  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC"), mean, na.rm = T) %>%
+  ungroup() %>%
   drop_na(SLA, LDMC, LT, LA, CC),
-  wood = data %>% 
+  wood = data %>%
     dplyr::select(Plot, SubPlot, TreeFieldNum, Leaf,
                 Genus, Species, SpeciesLong, Bark, Dawkins, DBH,
-                SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
+                SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>%
   group_by(Plot, SubPlot, TreeFieldNum,
-           Genus, Species, SpeciesLong, Bark, Dawkins, DBH) %>% 
-  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", "brBT", "brBD", "brWD"), 
-               mean, na.rm = T) %>% 
-  ungroup() %>% 
+           Genus, Species, SpeciesLong, Bark, Dawkins, DBH) %>%
+  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", "brBT", "brBD", "brWD"),
+               mean, na.rm = T) %>%
+  ungroup() %>%
   drop_na(SLA, LDMC, LT, LA, CC, brBT, brBD, brWD)
 )
 ```
