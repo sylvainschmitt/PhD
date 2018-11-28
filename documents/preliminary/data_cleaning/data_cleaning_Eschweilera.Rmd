@@ -504,7 +504,6 @@ AllMeasures table contains the follwoing fields with table from origin in bracke
 * Leaf _(LeafFresh, LeafDry and LeafArea)_
 * Genus _(Paracou)_
 * Species _(Paracou)_
-* DBH _(Paracou)_
 * Dawkins _(Individuals)_
 * LAexclude _(LeafArea)_
 * LAinclude _(LeafArea)_
@@ -530,7 +529,6 @@ paracou <- src_sqlite(file.path("../../../data/Paracou/",
   select(-CodeParacou) %>% 
   filter(Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
            Plot == 16 & CensusYear == 2015) %>% 
-  mutate(DBH = CircCorr*pi) %>% 
   collect()
 individuals <- select(individuals, -CodeParacou)
 fresh <- googlesheets::gs_title("Measures_Eschweilera") %>% 
@@ -558,7 +556,7 @@ paracou %>%
   suffix = c("", ".dry")) %>%
   left_join(area, by = c("Plot", "SubPlot", "TreeFieldNum", "Leaf"),
             suffix = c("", ".area")) %>%
-  select(idTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species, DBH,
+  select(idTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species,
          Dawkins, LAexclude, LAinclude, FreshWeight, DryWeight, SPADmean, LTmean) %>% 
   write_delim(file.path(path, "AllMeasures.csv"), delim = ",")
 ```
@@ -583,7 +581,7 @@ googlesheets::gs_title("Measures_Eschweilera") %>%
   mutate(LA = LAexclude) %>% 
   mutate(CC = (117.1*SPADmean)/(148.84-SPADmean)) %>% 
   mutate(CC = ifelse(is.nan(CC), NA, CC)) %>% 
-  select(IdTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species, DBH,
+  select(IdTree, IdGenetic, Plot, SubPlot, TreeFieldNum, Leaf, Genus, Species,
          Dawkins, SLA, LDMC, LT, LA, CC) %>% 
   write_delim(file.path(path, "AllTraits.csv"), delim = ",")
 ```

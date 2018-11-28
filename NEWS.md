@@ -1,3 +1,7 @@
+# PhD 0.1.9069
+* PCA discussion and v1
+* dbh formula correction
+
 # PhD 0.1.9068
 * PCA intro, M&M, & results revision
 * data_cleaning final v1 (pre-share)
