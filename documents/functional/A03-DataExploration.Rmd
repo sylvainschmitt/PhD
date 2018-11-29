@@ -55,16 +55,16 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect()
 load("./functional_save/env.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
-Comp <- Competition %>% 
+LBA <- Competition %>% 
   group_by(idTreei) %>% 
   summarise(LBA=((sum((DBH*0.01)^2)*pi)/4)/(20^2*pi*0.0001))%>% 
   rename(idTree="idTreei")
-data <- left_join(traits, paracou) %>% 
+Individuals <- left_join(traits, paracou) %>% 
   left_join(env) %>% 
-  left_join(Comp, by="idTree")  %>% 
+  left_join(LBA, by="idTree")  %>% 
   group_by(Plot, SubPlot, TreeFieldNum, Genus, Species, SpeciesLong, Bark, Dawkins, DBH, TWI, Curvature, LBA) %>%
   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", "brBT", "brBD", "brWD"), mean, na.rm = T)  %>% 
-  ungroup() ; rm(traits, paracou, Comp)
+  ungroup() ; rm(traits, paracou, LBA, env, Competition)
 ```
 
 
@@ -83,7 +83,7 @@ data <- left_join(traits, paracou) %>%
 ## DBH
 
 ```{r DBH, fig.height=12, fig.width=12 }
-data %>% 
+Individuals %>% 
   #filter(Genus=="Eschweilera" & Species %in% c("coriacea","sagotiana")) %>%
   dplyr::select(DBH, Genus, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>%
   reshape2::melt(id.var= c("DBH", "SpeciesLong","Genus"), variable.name = "Trait") %>%
@@ -96,7 +96,7 @@ data %>%
 ## LBA
 
 ```{r  LBA, fig.height=12, fig.width=12}
-data %>% 
+Individuals %>% 
   dplyr::select(LBA, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
   reshape2::melt(id.var= c("LBA", "SpeciesLong"),
                            variable.name = "Trait") %>%
@@ -107,7 +107,7 @@ data %>%
 ```
 
 ```{r  LBA2}
-d <- data %>% 
+d <- Individuals %>% 
   dplyr::select(LBA, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
   reshape2::melt(id.var= c("LBA", "SpeciesLong"),
                            variable.name = "Trait") %>%
@@ -120,8 +120,8 @@ d$g
 ```
 
 ## TWI
-```{r TWI }
-data %>% 
+```{r TWI, fig.height=12, fig.width=12 }
+Individuals %>% 
   dplyr::select(TWI, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
   reshape2::melt(id.var= c("TWI", "SpeciesLong"), variable.name = "Trait") %>% 
   ggplot(aes(TWI, value, col = SpeciesLong, group = NA)) +
@@ -131,8 +131,8 @@ data %>%
 ```
 
 ## Curvature
-```{r Curvature}
-data %>% 
+```{r Curvature, fig.height=12, fig.width=12}
+Individuals %>% 
   dplyr::select(Curvature, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
   reshape2::melt(id.var= c("Curvature", "SpeciesLong"),
                            variable.name = "Trait") %>% 
