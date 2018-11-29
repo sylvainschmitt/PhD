@@ -16,8 +16,8 @@ output:
     toc: false
     keep_tex: true
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+#csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+#bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
@@ -42,8 +42,7 @@ traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
   mutate(Genus = "Symphonia") %>% 
   rename(Species = Morphotype)
 traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  dplyr::select(-DBH)
+  googlesheets::gs_read("AllTraits")
 traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) ; rm(traitsEschweilera, traitsSymphonia)
 paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
@@ -52,11 +51,20 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
          Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
          Genus == "Symphonia" & CensusYear == 2015) %>%
-  mutate(DBH = CircCorr*pi) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
   collect()
 load("./functional_save/env.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+Comp <- Competition %>% 
+  group_by(idTreei) %>% 
+  summarise(LBA=((sum((DBH*0.01)^2)*pi)/4)/(20^2*pi*0.0001))%>% 
+  rename(idTree="idTreei")
 data <- left_join(traits, paracou) %>% 
-  left_join(env) ; rm(traits, paracou, env)
+  left_join(env) %>% 
+  left_join(Comp, by="idTree")  %>% 
+  group_by(Plot, SubPlot, TreeFieldNum, Genus, Species, SpeciesLong, Bark, Dawkins, DBH, TWI, Curvature, LBA) %>%
+  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", "brBT", "brBD", "brWD"), mean, na.rm = T)  %>% 
+  ungroup() ; rm(traits, paracou, Comp)
 ```
 
 
@@ -72,12 +80,63 @@ data <- left_join(traits, paracou) %>%
 
 *Briefly describe traits relations to environment and orient models (below is a chunk example to have a start) ...*
 
-```{r CodeExample}
+## DBH
+
+```{r DBH, fig.height=12, fig.width=12 }
 data %>% 
-  dplyr::select(DBH, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
-  reshape2::melt(id.var= c("DBH", "SpeciesLong"),
+  #filter(Genus=="Eschweilera" & Species %in% c("coriacea","sagotiana")) %>%
+  dplyr::select(DBH, Genus, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>%
+  reshape2::melt(id.var= c("DBH", "SpeciesLong","Genus"), variable.name = "Trait") %>%
+  ggplot(aes(DBH, value, col = SpeciesLong, group = Genus)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ Trait, scales = "free")
+```
+
+## LBA
+
+```{r  LBA, fig.height=12, fig.width=12}
+data %>% 
+  dplyr::select(LBA, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
+  reshape2::melt(id.var= c("LBA", "SpeciesLong"),
+                           variable.name = "Trait") %>%
+  ggplot(aes(LBA, value, col = SpeciesLong, group = NA)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ Trait, scales = "free")
+```
+
+```{r  LBA2}
+d <- data %>% 
+  dplyr::select(LBA, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
+  reshape2::melt(id.var= c("LBA", "SpeciesLong"),
+                           variable.name = "Trait") %>%
+  group_by(Trait) %>% 
+  do(g = ggplot(., aes(LBA, value, col = SpeciesLong, group = NA)) +
+       geom_point() +
+       geom_smooth() +
+       facet_wrap(~ Trait, scales = "free"))
+d$g
+```
+
+## TWI
+```{r TWI }
+data %>% 
+  dplyr::select(TWI, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
+  reshape2::melt(id.var= c("TWI", "SpeciesLong"), variable.name = "Trait") %>% 
+  ggplot(aes(TWI, value, col = SpeciesLong, group = NA)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ Trait, scales = "free")
+```
+
+## Curvature
+```{r Curvature}
+data %>% 
+  dplyr::select(Curvature, SpeciesLong, SLA, LDMC, LT, LA, CC, brBT, brBD, brWD) %>% 
+  reshape2::melt(id.var= c("Curvature", "SpeciesLong"),
                            variable.name = "Trait") %>% 
-  ggplot(aes(DBH, value, col = SpeciesLong, group = NA)) +
+  ggplot(aes(Curvature, value, col = SpeciesLong, group = NA)) +
   geom_point() +
   geom_smooth() +
   facet_wrap(~ Trait, scales = "free")

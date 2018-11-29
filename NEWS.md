@@ -1,3 +1,7 @@
+# PhD 0.1.9070
+* Functional A02, LBA correction
+* Functional A03, analysis of environmental descriptors over all individuals
+
 # PhD 0.1.9069
 * PCA discussion and v1
 * dbh formula correction
