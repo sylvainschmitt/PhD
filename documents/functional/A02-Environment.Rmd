@@ -48,8 +48,7 @@ traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
   mutate(Genus = "Symphonia") %>% 
   rename(Species = Morphotype)
 traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  dplyr::select(-DBH)
+  googlesheets::gs_read("AllTraits") 
 traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) ; rm(traitsEschweilera, traitsSymphonia)
 paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
@@ -58,12 +57,13 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
          Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
          Genus == "Symphonia" & CensusYear == 2015) %>%
-  mutate(DBH = CircCorr*pi) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
   collect()
+data <- left_join(traits, paracou); rm(traits, paracou)
 ```
 
 ```{r env}
-# env <- trees %>%
+# env <- data %>%
 #    dplyr::select(idTree, Xutm, Yutm, DBH, Dawkins) %>%
 #    unique()
 # coordinates(env) <- ~Xutm + Yutm
@@ -135,8 +135,13 @@ This corresponds to rare events where a large-diameter tree has been beheaded an
 ## Local basal area
 
 ```{r CompetitionMatrix}
+# Data <- data %>% 
+#   left_join(env) %>% 
+#   dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, CensusYear, Xutm, Yutm) %>% 
+#   unique()
+# Sys.time()
 # cl <- makeCluster(4)
-# clusterExport(cl, list("paracou", "path"))
+# clusterExport(cl, list("Data", "path"))
 # Competition <- clusterMap(cl,
 #   function(id, plot, census, x, y){
 #   library(dplyr)
@@ -145,21 +150,22 @@ This corresponds to rare events where a large-diameter tree has been beheaded an
 #     filter(CensusYear == census) %>%
 #     filter(Plot == plot) %>%
 #     filter(idTree != id) %>%
-#     mutate(DBH = CircCorr*pi) %>%
+#     mutate(DBH = CircCorr/pi) %>%
 #     mutate(dij = sqrt((x - Xutm)^2+(y - Yutm)^2)) %>%
 #     filter(dij < 20) %>%
-#     mutate(idTreej = idTree) %>%
+#     rename(idTreej = idTree) %>%
 #     mutate(idTreei = id) %>%
 #     dplyr::select(idTreei, idTreej, DBH, dij) %>%
 #     collect()},
-#   id = paracou$idTree,
-#   plot = paracou$Plot,
-#   x = paracou$Xutm,
-#   y = paracou$Yutm,
-#   census = paracou$CensusYear,
+#   id = Data$idTree,
+#   plot = Data$Plot,
+#   x = Data$Xutm,
+#   y = Data$Yutm,
+#   census = Data$CensusYear,
 #   SIMPLIFY = F)
 # stopCluster(cl)
 # rm(cl)
+# Sys.time()
 # Competition <- bind_rows(Competition)
 # Competition <- Competition %>%
 #   mutate(dij = ifelse(dij < 0.4, 0.4, dij)) # measure precision error troubling NCI fit
@@ -170,7 +176,7 @@ load("./functional_save/CompetitionMatrix.Rdata")
 ```{r LocalBasalAreaIndex, fig.cap='Boxplot of Dawkins and LBA'}
 Comp <- Competition %>% 
   group_by(idTreei) %>% 
-  summarise(LBA=(sum((DBH^2)*pi/4))/(pi*10000*20^2)) %>% 
+  summarise(LBA=((sum((DBH*0.01)^2)*pi)/4)/(20^2*pi*0.0001))%>% 
   rename(idTree="idTreei")
 env <- env %>%
   left_join(Comp, by="idTree")
@@ -180,6 +186,7 @@ env %>%
   ggplot(aes(x=Dawkins, y=LBA,fill=Dawkins)) +
   geom_boxplot() +
   coord_flip()
+
 ```
 Boxplot between Dawkins and Local Basal Area (figure \@ref(fig:LocalBasalAreaIndex)) do not display any significant correlation between the two indexes. Whatever the Dawkins index is, individuals range almost in the same values, from 0.1 up to 0.5 m/ha.
 Competition index and position in forest strata seem to be uncoupled.
