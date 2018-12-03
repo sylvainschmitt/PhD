@@ -64,7 +64,9 @@ Individuals <- left_join(traits, paracou) %>%
   left_join(LBA, by="idTree")  %>% 
   group_by(Plot, SubPlot, TreeFieldNum, Genus, Species, SpeciesLong, Bark, Dawkins, DBH, TWI, Curvature, LBA) %>%
   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", "brBT", "brBD", "brWD"), mean, na.rm = T)  %>% 
-  ungroup() ; rm(traits, paracou, LBA, env, Competition)
+  ungroup() %>% 
+  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # rejection individual
+  filter(!(SpeciesLong %in% c("E congestiflora","E simiorum","L persistens"))) ; rm(traits, paracou, LBA, env, Competition)
 ```
 
 

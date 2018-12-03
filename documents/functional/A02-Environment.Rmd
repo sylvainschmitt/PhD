@@ -60,6 +60,82 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 data <- left_join(traits, paracou); rm(traits, paracou)
 ```
 
+<<<<<<< HEAD
+```{r env}
+# env <- data %>%
+#    dplyr::select(idTree, Xutm, Yutm, DBH, Dawkins) %>%
+#    unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "aspect_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature",
+#                  "Aspect", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./functional_save/env.Rdata")
+load("./functional_save/env.Rdata")
+```
+
+
+# Introduction
+
+This document test for environmental descriptors correlation in order to help select best biotic and abiotic descriptors.
+Which descriptors will fit better to the description of the environment?
+
+
+# Material & Methods
+Biotic descriptors available are the following:
+
+* DBH 
+* Dawkins 
+* Local basal area 
+* Competition index
+* Canopy height
+
+
+Abiotic descriptors available are the following:
+
+* DEM : gathers topographic data from Lidar's campaigns. It enables to represent the topographical forms of the field
+* relative elevation : calculate the diference of elevation between a point and the closest creek
+* Slope : quantify the value of escarpment of the topography,
+* Curvature : quantify the shape of the surface 
+* Aspect : quantify cardinal orientation of surfaces
+* TRI, or topographic ruggedness index (Riley, et al. (1999)): used to quantify local altitude variations at one point, with adjacent microenvironments.
+* TWI, or topographic wetness index: used to quantify the effect of topography on hydrological processes. It is based on the determination of different watersheds, which control the flow of water.
+
+**We need to add biotic environment with local basal area ($BA10$ and $BA20$), Dawkins for light, and DBH for ontogeny !**
+
+# Results
+
+## Ontogeny index
+
+```{r boxplotDawkinsDBH, fig.cap='Boxplot of Dawkins and DBH'  }
+env %>%
+  dplyr::select(Dawkins,DBH) %>% 
+  mutate(Dawkins = substr(Dawkins, 1,1)) %>%
+  drop_na(Dawkins) %>% 
+  ggplot(aes(x=Dawkins, y=DBH,fill=Dawkins)) + 
+  geom_boxplot() + 
+  coord_flip()
+```
+Boxplot between Dawkins and DBH (figure \@ref(fig:boxplotDawkinsDBH)) display a strong correlation both variables. With higher DBH, Dawkins index is also higher, showing that light access and ontogeny are strongly linked.
+Nevertheless for 3 individuals,  DBH is very outside the usual ranks of individuals of the same Dawkins. 
+This corresponds to rare events where a large-diameter tree has been beheaded and started to develop again in a lower stratum, or, when some young individuals take advantage of gaps to reach quickly the upper strata.
+
+## Local basal area
+
+=======
+>>>>>>> df45cd1ea26e77ce2d20caffabd5e13d2353a2b5
 ```{r CompetitionMatrix}
 # Data <- data %>% 
 #   left_join(env) %>% 

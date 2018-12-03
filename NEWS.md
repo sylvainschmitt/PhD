@@ -5,6 +5,9 @@
 * Functional A02 environment v1
 
 # PhD 0.1.9070
+* A04 - models building
+
+# PhD 0.1.9070
 * Functional A02, LBA correction
 * Functional A03, analysis of environmental descriptors over all individuals
 
