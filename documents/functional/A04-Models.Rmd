@@ -253,7 +253,7 @@ $T$ law was chosen as a normal distribution and following a linear model :
 T_i \sim \mathcal{N}(\alpha_{TWI} + \beta_{TWI}\times TWI_i ,\sigma_{TWI})
 \\(\alpha_{TWI}, \sigma_{comp}) \sim \Gamma^{2}(- \infty, + \infty)
 \\(\beta_{TWI}) \sim \mathcal{N}(0, + \infty) 
-(\#eq:Competition)
+(\#eq:Abiotic)
 \end{equation}
 
 where:
@@ -328,11 +328,19 @@ where:
 In previous models, ecological levels weren't integrated in variables. But we saw individuals displayed different trends depending on complex species and species they belonged to. This effect will be integrated in the model by understanding ecological levels effect as a factor of variance of several parameters of general model. 
 We chose to deal with ecological matters through a random nested effect that will be fitted on three levels corresponding to the different ecological levels explored in dataset, ie: variability of individuals between complexes ($C$ level), variability of individuals within a complex and between species ($S$ level), variability of indiduals within a species ($I$ level).
 
-Consequently:
+Consequently for the additional model form:
 \begin{equation} 
-$$ For~a~parameter~\beta~of~general~model: 
-\\ \beta_{C} \sim \mathcal{N}(\beta,\sigma_{C})
-\\ \beta_{C,S} \sim \mathcal{N}(\beta_S,\sigma_{S})
-\\ \beta_{C,S,I} \sim \mathcal{N}(\beta_{C,S}~,\sigma_{I})$$
+T_{c,s,i} \sim \mathcal{N}(\cfrac{\alpha_{DBH,c,s,i} * DBH_i}{\beta_{DBH,c,s,i} + DBH_i} + \beta_{TWI,c,s,i} \times TWI_i + \sum_{j=1}^{J} (DBH_j^{2} \times \exp(-\alpha_{NCI,c,s,i}\times\delta_{i,j})), \sigma_{c,s,i})    \\ For~a~parameter~\beta~of~general~model:    \\ 
+\beta_{c,s,i} \sim \mathcal{N}(\beta_{c,i}~,\sigma_{i})   \\ 
+\beta_{c,s} \sim \mathcal{N}(\beta_s,\sigma_{s})    \\ 
+\beta_{c} \sim \mathcal{N}(\beta,\sigma_{c})
 (\#eq:Randomeffect)
 \end{equation}
+
+where:
+* $T_{c,s,i}$ is a trait of an individual i, from the species s, and the complex c;
+* $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
+* $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
+* $c \in [1,C]$ where $C$ is the number of complexes.
+
+We'll have to investigate on whether it is relevant to apply a random nested effect on each parameter. As far as $\beta_{DBH}$ is the DBH for which the trait account for half of its saturation value, it is conditional on  $\alpha_{DBH,c,s,i}$ value, which already integrate random nested effects.
