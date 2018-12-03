@@ -1,3 +1,9 @@
+# PhD 0.1.9071
+* Outliers, PCA, and environment @GeraldineDerroire corr1
+
+# PhD 0.1.9071
+* Functional A02 environment v1
+
 # PhD 0.1.9070
 * A04 - models building
 
