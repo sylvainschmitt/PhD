@@ -1,3 +1,6 @@
+# PhD 0.1.9072
+* A03 Models cor1
+
 # PhD 0.1.9071
 * Outliers, PCA, and environment @GeraldineDerroire corr1
 
