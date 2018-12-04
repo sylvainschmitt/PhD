@@ -1,0 +1,31 @@
+---
+title: "A04 : AbioticModel"
+# date: '`r Sys.Date()`'
+# author: Sylvain Schmitt & Anne Baranger
+output: 
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: scroll
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+#library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+# options(mc.cores = parallel::detectCores())
+# rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```

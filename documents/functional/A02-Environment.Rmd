@@ -39,6 +39,7 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # globa
 
 ```{r data}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
+  
   googlesheets::gs_read("AllTraits") %>% 
   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
   mutate(Genus = "Symphonia") %>% 
@@ -60,7 +61,6 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 data <- left_join(traits, paracou); rm(traits, paracou)
 ```
 
-<<<<<<< HEAD
 ```{r env}
 # env <- data %>%
 #    dplyr::select(idTree, Xutm, Yutm, DBH, Dawkins) %>%
@@ -134,8 +134,6 @@ This corresponds to rare events where a large-diameter tree has been beheaded an
 
 ## Local basal area
 
-=======
->>>>>>> df45cd1ea26e77ce2d20caffabd5e13d2353a2b5
 ```{r CompetitionMatrix}
 # Data <- data %>% 
 #   left_join(env) %>% 
