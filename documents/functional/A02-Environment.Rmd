@@ -7,6 +7,7 @@ output:
     number_sections: false
     toc: true
     toc_float: yes
+    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -57,17 +58,15 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
            Genus == "Symphonia" & CensusYear == 2015) %>%
   mutate(DBH = CircCorr/pi) %>% 
   collect()
-data <- left_join(traits, paracou); rm(traits, paracou)
+data <- left_join(traits, paracou) %>% 
+  dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, CensusYear, Xutm, Yutm) %>%
+  unique()
+rm(traits, paracou)
 ```
 
 ```{r CompetitionMatrix}
-# Data <- data %>% 
-#   left_join(env) %>% 
-#   dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, CensusYear, Xutm, Yutm) %>% 
-#   unique()
-# Sys.time()
 # cl <- makeCluster(4)
-# clusterExport(cl, list("Data", "path"))
+# clusterExport(cl, list("data", "path"))
 # Competition <- clusterMap(cl,
 #   function(id, plot, census, x, y){
 #   library(dplyr)
@@ -76,25 +75,29 @@ data <- left_join(traits, paracou); rm(traits, paracou)
 #     filter(CensusYear == census) %>%
 #     filter(Plot == plot) %>%
 #     filter(idTree != id) %>%
-#     mutate(DBH = CircCorr/pi) %>%
+#     mutate(DBHj = CircCorr/pi) %>%
+#     filter(DBHj >= 10) %>% # != INRA plots
+#     # filter(Xfield < 250) %>% # Buffer trees
+#     # filter(Xfield > 0) %>%
+#     # filter(Yfield < 250) %>%
+#     # filter(Yfield > 0) %>%
 #     mutate(dij = sqrt((x - Xutm)^2+(y - Yutm)^2)) %>%
 #     filter(dij < 20) %>%
 #     rename(idTreej = idTree) %>%
-#     mutate(idTreei = id) %>%
-#     dplyr::select(idTreei, idTreej, DBH, dij) %>%
+#     mutate(idTree = id) %>%
+#     dplyr::select(idTree, idTreej, DBHj, dij) %>%
 #     collect()},
-#   id = Data$idTree,
-#   plot = Data$Plot,
-#   x = Data$Xutm,
-#   y = Data$Yutm,
-#   census = Data$CensusYear,
+#   id = data$idTree,
+#   plot = data$Plot,
+#   x = data$Xutm,
+#   y = data$Yutm,
+#   census = data$CensusYear,
 #   SIMPLIFY = F)
 # stopCluster(cl)
 # rm(cl)
-# Sys.time()
 # Competition <- bind_rows(Competition)
 # Competition <- Competition %>%
-#   mutate(dij = ifelse(dij < 0.4, 0.4, dij)) # measure precision error troubling NCI fit
+#   mutate(dij = ifelse(dij < 1, 1, round(dij))) # measure precision error troubling NCI fit
 # save(Competition, file = "./functional_save/CompetitionMatrix.Rdata")
 # load("./functional_save/CompetitionMatrix.Rdata")
 ```
@@ -125,16 +128,11 @@ data <- left_join(traits, paracou); rm(traits, paracou)
 # env <- data.frame(cbind(env@data, 
 #                         raster::extract(topo, env),
 #                         canopy = raster::extract(canopy, env)))
-# env <- env %>% 
-#   left_join(Competition %>% 
-#   group_by(idTreei) %>% 
-#   summarise(LBA20 = ((sum((DBH*0.01)^2)*pi)/4)/(20^2*pi*0.0001)) %>% 
-#   rename(idTree = idTreei)) %>% 
-#   left_join(Competition %>% 
-#               filter(dij < 10) %>% 
-#               group_by(idTreei) %>% 
-#               summarise(LBA10 = ((sum((DBH*0.01)^2)*pi)/4)/(10^2*pi*0.0001)) %>% 
-#               rename(idTree = idTreei))
+# env <- env %>%
+#   dplyr::select(-starts_with("NCI")) %>%
+#   left_join(Competition %>%
+#               group_by(idTree) %>%
+#               summarise(NCI = sum((DBHj*10^-2)^2*exp(-1*dij))))
 # env <- env %>%
 #   mutate(Dawkins = substr(Dawkins, 1, 1))
 # rm(topo, canopy, Competition)
@@ -157,9 +155,12 @@ Study site was the Paracou station, thus limiting descriptors to available data.
 
 We used diameter at breast height (DBH) as an indirect proxy for ontogeny [@herault_functional_2011; but see @roggy_links_2005].
 
-Biotic descriptors included the Dawkins index [@Dawkins1958] and local basal area. Dawkins index was directly measured on the field and represents both individual abiotic light environment, and thus biotic asymmetric competition through tree neighborhood. Local basal area was computed from field censuses corresponding to functional traits sampling by summing tree neighbors area at breast height in a radius of 10 and 20m (respectively $LBA_{10}$ and $LBA_{20}$). Local basal area (LBA) is used here as a proxy of neighborhood crowding index [NCI; @Uriarte2004], including both tree neighbors DBH and distance. LBA represents biotic asymmetric competition through tree neighborhood.
+Biotic descriptors included the Dawkins index [@Dawkins1958] and the neighborhood crowding index [NCI; @Uriarte2004]. Dawkins index was directly measured on the field and represents both individual position within canopy layers and abiotic light environment, and thus biotic asymmetric competition through tree neighborhood. NCI was calculated with following formula:
 
-Used abiotic descriptors were all derived from a 1-m resolution digital elevation model (DEM) built using LiDAR campaign done in 2015, because it was the only abiotic variable available on every sampled plots. We derived from the DEM (i) the elevation, (ii) the relative elevation, (iii) the slope, (iv) the curvature, (v) the aspect, (vi) the topographic ruggedness index (TRI) and (vii) the topographic wetness index (TWI), using GRASS and SAGA geographic information system (GIS) softwares [**references**]. Elevation, relative elevation (the difference of elevation between a point and the closest creek), slope, and TRI (local altitude variations) may all have both a strong effect on forest dynamics and on nutrient/water availability [@Ferry2010]. TWI, based on watersheds and water flows, highlight water accumulation areas over the whole study area. Curvature represents local water flow paths and soil accumulation areas. And aspect may represent insolation and wind orientation, besides not supposed as strong factor in Guianan tropical rainforests.
+$$NCI_i = \sum _{j~|~\delta_{i,j}<\delta_{max}} ^{J_i} DBHj^\beta e^{-\alpha*\delta_{i,j}} ~|~ \begin{bmatrix} \beta \\ \alpha \\ \delta_{max} \end{bmatrix} = \begin{bmatrix} 2 \\ 1 \\ 20 \end{bmatrix}$$
+with neighborhood crowding index $NCI_i$ from tree individual $i$ equal to the sum of neighboring trees $j$ diameters $DBH_j$ power $\beta$ times the negative exponential of their distance $\delta_{i,j}$ times $\alpha$ for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance $\delta_{max}$. $\beta$ represents the power of neighbors $DBH$ effect, here set to 2 to consider neighbors surface. $\alpha$ represents the decrease of neighbors $DBH$ effect with distance, arbitrarily set to 1 here for exploration (note that $\alpha$ set to 0 represent local basal area). $\delta_{max}$ represents the neighboring radius considered for $NCI$, here set to 20 meters as often observed in literature (note that with $\alpha$ set to 1, neighbors $DBH$ have only an effect of 0.1% after 2.3 meters). $NCI$ represents biotic asymmetric competition through tree neighborhood.
+
+Used abiotic descriptors were all derived from a 1-m resolution digital elevation model (DEM) built using LiDAR campaign done in 2015, because it was the only abiotic variable available on every sampled plots. We derived from the DEM (i) the elevation, (ii) the relative elevation, (iii) the slope, (iv) the curvature, (v) the aspect, (vi) the topographic ruggedness index (TRI) and (vii) the topographic wetness index (TWI), using GRASS and SAGA geographic information system (GIS) softwares. Elevation, relative elevation (the difference of elevation between a point and the closest creek), slope, and TRI (local altitude variations) may all have both a strong effect on forest dynamics and on nutrient/water availability [@Ferry2010]. TWI, based on watersheds and water flows, highlight water accumulation areas over the whole study area. Curvature represents local water flow paths and soil accumulation areas. And aspect may represent insolation and wind orientation, besides not supposed as strong factor in Guianan tropical rainforests.
 
 We investigated descriptors co-variation by pairs correlations, Anova with post-hoc groups investigated by Tukey Honest Significant Differences for qualitative variable, and principal component analysis (PCA). We tested separately ontogeny with biotic interactions and abiotic environment.
 
@@ -167,11 +168,11 @@ We investigated descriptors co-variation by pairs correlations, Anova with post-
 
 ## Ontogeny & Biotic interactions
 
-Dawkins index showed a significative distribution along all ontogenetic and biotic variables (Anova $p-value < 0.05$, figure \@ref(fig:dawkins)). Nevertheless, Tukey Honest Significant Differences test revealed the strongest organisation with diameter at breast height (one category for each Dawkins level), whereas for local basal area only two blur groups were differentiated. Diameter increased with Dawkins index, highlighting that light access and ontogeny are strongly auto-correlated in our data set and thus totally confounded (besides 3 marked outliers corresponding to rare event of large-diameters beheaded tree in lower stratum or small-diameters within gaps). Finally, besides a weak differentiation signal with local basal area, we can note that the correlation decrease when increasing the radius in which local basal area is measured, meaning that considering distance in the neighborhood crowding index (NCI) could remove the correlation with the Dawkins index. Finally, diameter at breast height and local basal area are uncorrelated and orthogonal in the principal component analysis (figure \@ref(fig:biotic)), allowing to keep both to represent ontogeny and biotic interactions respectively.
+Dawkins index showed a significative distribution along all ontogenetic and biotic variables (Anova $p-value < 0.05$, figure \@ref(fig:dawkins)). Nevertheless, Tukey Honest Significant Differences test revealed the strongest organisation with diameter at breast height (DBH, one category for each Dawkins level), whereas for NCI only three blur groups were differentiated. DBH increased with Dawkins index, highlighting that light access and ontogeny are strongly auto-correlated in our data set and thus totally confounded (besides 3 marked outliers corresponding to rare event of large-diameters beheaded tree in lower stratum or small-diameters within gaps). Finally, besides a weak differentiation signal with NCI, we can note that the correlation decrease when decreasing the distance negative effect (decreasing $\alpha$), i.e. considering more further neighbors in NCI. Finally, DBH and NCI were uncorrelated and orthogonal in the principal component analysis (figure \@ref(fig:biotic)), allowing to keep both to represent ontogeny and biotic interactions respectively.
 
 ```{r dawkins, fig.cap='Ontogenetic and biotic variables correlation with Dawkins index. Box colors indicates the Dawkins index. Ontogenetic and biotic variables correlation has been investigated by Anova. **** indicates a $p-value < 0.0001$ and * indicates a $p-value < 0.05$. Letters indicate post-hoc groups investigated by Tukey Honest Significant Differences.'}
 tHSD <- env %>% 
-  dplyr::select(Dawkins, DBH, LBA10, LBA20) %>% 
+  dplyr::select(Dawkins, DBH, NCI) %>% 
   reshape2::melt(id.vars = "Dawkins") %>% 
   drop_na(Dawkins) %>% 
   group_by(variable) %>% 
@@ -180,9 +181,9 @@ tHSD <- env %>%
   lapply(tHSD, function(x) multcompView::multcompLetters(x[,4])) %>% 
   lapply(function(x) data.frame(Dawkins = names(x$Letters), group = x$Letters)) %>% 
   bind_rows() %>% 
-  mutate(variable = c(rep("DBH", 5), rep("LBA10", 5), rep("LBA20", 5)))
+  mutate(variable = c(rep("DBH", 5), rep("NCI", 5)))
 env %>% 
-  dplyr::select(Dawkins, DBH, LBA10, LBA20) %>% 
+  dplyr::select(Dawkins, DBH, NCI) %>% 
   reshape2::melt(id.vars = "Dawkins") %>% 
   drop_na(Dawkins) %>% 
   left_join(tHSD) %>% 
@@ -190,14 +191,14 @@ env %>%
   geom_boxplot() + 
   facet_wrap(~variable, scales = "free") +
   ggpubr::stat_compare_means(method = "anova", aes(label = paste0("Anova", ..p.signif..))) +
-  geom_text(aes(y = 5)) +
+  geom_text(aes(y = 0)) +
   theme(axis.title.x=element_blank(),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 ```
 
 ```{r biotic, fig.cap='Principal Component Analysis (PCA) of ontogenetic and biotic variables.'}
-fviz_pca_var(princomp(~ DBH + LBA10 + LBA20, data = env, cor = T),
+fviz_pca_var(princomp(~ DBH + NCI, data = env, cor = T),
              axes = c(1,2), geom = c("arrow", "text"), col.var = "contrib") +
   ggtitle("","")
 ```
@@ -208,11 +209,11 @@ The first axis of principal component analysis (PCA) of abiotic variables conser
 
 ```{r abiotic, fig.cap='Principal Component Analysis (PCA) of abiotic variables.', fig.width=12, fig.height=12}
 cowplot::plot_grid(
-  fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature + 
+  fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature +
                           Aspect + TRI + TWI, env, cor = T),
                axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib") +
     ggtitle("Plane 1-2"),
-  fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature + 
+  fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature +
                           Aspect + TRI + TWI, env, cor = T),
                axes = c(1, 3), geom = c("arrow", "text"), col.var = "contrib") +
     ggtitle("Plane 1-3"), nrow = 2)
@@ -220,11 +221,11 @@ cowplot::plot_grid(
 
 # Conclusion
 
-We consequently decided to use 3 or 4 weakly correlated descriptors ($r < 0.15$, figure \@ref(fig:selected)) to model functional traits variation : (i) diameter at breast height (DBH) to represent ontogeny with a confounding effect with light environment (highlighted by Dawkins correlation, figure \@ref(fig:dawkins)), neighborhood crowding index (NCI tested here with local basal area) to represent biotic interactions and more especially competition, and topographic wetness index with or without curvature to represent abiotic environment and more especially water/nutrient availability [@Ferry2010].
+We consequently decided to use 3 or 4 weakly correlated descriptors ($r < 0.15$, figure \@ref(fig:selected)) to model functional traits variation : (i) diameter at breast height (DBH) to represent ontogeny with a confounding effect with light environment (highlighted by Dawkins correlation, figure \@ref(fig:dawkins)), neighborhood crowding index (NCI tested here with arbitrary set values) to represent biotic interactions and more especially competition, and topographic wetness index with or without curvature to represent abiotic environment and more especially water/nutrient availability [@Ferry2010].
 
 ```{r selected, fig.cap="Selected variables correlations."}
 env %>%
-  dplyr::select(DBH, LBA10, TWI, Curvature) %>% 
+  dplyr::select(DBH, NCI, TWI, Curvature) %>% 
   na.omit() %>% 
   cor(.) %>% 
   corrplot::corrplot.mixed()
