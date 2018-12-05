@@ -7,6 +7,7 @@ output:
     number_sections: yes
     toc: true
     toc_float: yes
+    theme: flatly
   bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
@@ -43,7 +44,12 @@ traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
 traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
   googlesheets::gs_read("AllTraits")
 traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) ; rm(traitsEschweilera, traitsSymphonia)
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+   group_by(idTree, Plot, SubPlot, TreeFieldNum, 
+            Genus, Species, SpeciesLong, Bark) %>% 
+  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", 
+                    "brBT", "brBD", "brWD"), mean, na.rm = T) %>% 
+  ungroup()
 paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(idTree %in% traits$idTree) %>%
@@ -54,40 +60,17 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect()
 load("./functional_save/env.Rdata")
 Individuals <- left_join(traits, paracou) %>% 
-  left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
-  group_by(Plot, SubPlot, TreeFieldNum, Genus, Species, 
-           SpeciesLong, Bark, Dawkins, DBH, TWI, Curvature, LBA20, LBA10) %>%
-  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC", 
-                    "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%   
-  ungroup()
-rm(traits, paracou, env)
+  left_join(env)
+rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 ```
-
 
 # Introduction {-}
 
-<!-- what did we do for reader opening the analysis -->
-
-The subsequent analysis aimed to graphically explore variations in leaf traits of individuals tree from *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes according to 3 descriptors: (i) tree ontogeny, (ii) biotic interactions and (iii) abiotic environment. From these observations we developed a generic model linking individual phenotype to its descriptors. The generic model will be inferred later using Bayesian inference.
-
-<!-- dealing with phenotype definition and its variation within ecological levels -->
-
-**Introduction in progress and under correction,  please ignore for the moment.**
-
-_Ecological community has been defined as a collection of species occurring at the same place, circumscribed by natural or arbitrary boundaries. Species within a community are presupposed to have intereactions, would they be genetical (ie gene flow) or ecological (ie competition). Therefore, these intereactions shape a variability in individuals morphological and physiological caracteristics **trop vague?**  within a community, that could lead to different ability of an ecological group to adapt in a specific environment. This variability could be assessed by a phenotype approach as phenotypic variation relies on genotypic information, ontogeny of individuals, environmental influences and random stochastic factors. Genetic heritage data wasn't available yet for these sets of analysis, but in a first approach, taxonomic levels within a community (ie species complex, species and individuals) are supposed to reflect this information. **taxonomic or ecological levels?** Phenotype description was assessed through a set of functionnal traits which are to be related with individuals abilities to grow, survive and reproduce in a given environment._
-
-_We will develop a general form of model that will be able to best explain phenotype caracteristics (ie functionnal traits) according to environmental, ecological and ontogenitical inputs._
-
-
-<!-- * Community description -->
-<!-- * what's the inputs of phenotype? -->
-<!-- * objective: explain phenotype in a communauty regarding env descriptors -->
-<!-- * ecological level approach -->
-<!-- *The aim of this document is to find the best general form of model for...* -->
+The subsequent analysis aimed to graphically explore variations in leaf traits of individuals tree from *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes according to 4 descriptors: (i) tree ontogeny, (ii) biotic interactions and (iii) abiotic environment, and (iv) phylogeny through taxonomic levels. From these observations we developed a generic model linking individual phenotype to its descriptors. The generic model will be inferred later using Bayesian inference.
 
 # Material & Methods {-}
 
-Dataset used to build submodels gathers measures of 838 trees from Paracou field station. Sampling was made over  *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes and 5 functional leaf traits were calculated (Table \@ref(tab:Traits)). Each individual was sampled on five leaves, and functional traits were then averaged for following analysis.
+Dataset used to build submodels gathered measures of 838 trees from Paracou field station. Sampling was made over  *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes and 5 functional leaf traits were calculated (Table \@ref(tab:Traits)). Each individual was sampled with five leaves, and functional traits were then averaged by individual for subsequent analysis.
 
 ```{r Traits, fig.cap="Functional traits measured, with trait unit, and abbreviation."}
 data.frame(
@@ -103,28 +86,17 @@ data.frame(
 ```
 
 Descriptors discussed then were measured on the field (DBH) or derived from a 1-m resolution digital elevation model (DEM) built using LiDAR campaign done in 2015 (TWI).
-Environmental and ontogenetic descriptors were chosen according to a previous analysis. Diameter at breast height (DBH) was chosen to describe the ontogeny of individuals. A competition index was used as a descriptor of biotic environment effect, implying that herbivory and pathogens effects were not taken into account. As a first approach, the local basal area (LBA) was chosen as a competition index, but its formula will be discussed in model building. Finally, topographic wetness index (TWI) was selected within various environmental descriptors available. TWI was the abiotic descriptor that brought the most relevant information on physical conditions, highlighting water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
+Environmental and ontogenetic descriptors were chosen according to a previous analysis (see A02-Environment). Diameter at breast height (DBH) was chosen to describe the ontogeny of individuals. A neighbor crowding index (NCI) was used as a descriptor of biotic environment effect, implying that herbivory and pathogens effects were not taken into account. Finally, topographic wetness index (TWI) was selected between various environmental descriptors available. TWI was the abiotic descriptor that brought the most relevant information on physical conditions, highlighting water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
 
-As a first approach to explore possible model shapes, measures on both complexes were plotted for each trait according to environmental data. An indicative local regression was drawn on each graph by applying loess method to each complex.
-
-
-<!-- * which traits describ better phenotype and why -->
-<!-- * how are they calculated -->
-<!-- * which env descriptors and ecological signification -->
-<!-- * which individuals -->
+As a first approach to explore possible model shapes, measures on both complexes were plotted for each trait according to descriptors. An indicative local regression was drawn on each graph by applying loess method to each complex.
 
 # Ontogenic model
 
 ## Data exploration {data-width=200}
 
-Previous analysis highlighted a strong correlation between DBH and Dawkins in our dataset. Thus, we decided to analyze trait variation according to DBH, that depict here both light access and ontogeny effect ( see figure \@ref(fig:DBH)).
-<!-- see if it's necessary to speak about Dawkins index or just too say that DBH account for both light access and ontogeny effect -->
+We used diameter at breast height (DBH) as an indirect proxy for ontogeny, besides DBH depicted here both light access and ontogeny effect ( see figure \@ref(fig:DBH)).
 
-We observed SLA and LA decrease with DBH, i.e. largest individuals invested less in large leaves and high SLA. On the contrary LDMC, LT and CC tended to increase with DBH. For model building, it would be more consistent to select traits which evolved in the same way as ontogeny, thus arguing for selecting $\frac{1}{SLA}$ and $\frac{1}{LA}$ respectively instead of ${SLA}$ and ${LA}$.
-
-Furthermore, LDMC, CC and LA didn't have a significant trend with DBH. Thus, model form must be able to integrate a null effect of ontogeny on traits.  
-
-Finally, we interpreted three possible model shapes from scatter graphs:
+We observed SLA and LA decrease with DBH, i.e. largest individuals invested less in large leaves and high SLA. On the contrary LDMC, LT and CC tended to increase with DBH. Because we further chose a model form only increasing, it would be more consistent to select traits which evolved in the same way as ontogeny, thus arguing for selecting $\frac{1}{SLA}$ and $\frac{1}{LA}$ respectively instead of ${SLA}$ and ${LA}$. Furthermore, LDMC, CC and LA didn't have a significant trend with DBH. Thus, model form must be able to integrate a null effect of ontogeny on traits. Finally, we interpreted three possible model shapes from scatter graphs:
 
 1. Michaelis-menten model because of the saturation of trait evolution (i.e. LDMC);
 1. LogNormal model because of a progressive deceleration of trait evolution (i.e. LT);
@@ -145,18 +117,18 @@ Individuals %>%
 
 ## Model
 
-We explained leaf trait $T$ according to ontogeny following a normal law with a Michaelis-Menten model form:
+We explained leaf trait $Trait$ according to ontogeny following a normal law with a Michaelis-Menten model form:
 
 \begin{equation} 
-T_i \sim \mathcal{N}(\cfrac{\alpha_{DBH} . DBH_i}{\beta_{DBH} + DBH_i},\sigma_{DBH}) 
-\\ (\alpha_{DBH},\beta_{DBH},\sigma_{DBH}) \sim \Gamma^{3}(- \infty, + \infty)
-(\#eq:Ontegeny)
+Trait_i \sim \mathcal{N}(\cfrac{\alpha_{DBH} . DBH_i}{\beta_{DBH} + DBH_i},\sigma_{DBH}) 
+\\ (\alpha_{DBH},\beta_{DBH},\sigma_{DBH}) \sim \Gamma^{3}(- \infty, - \infty)
+(\#eq:Ontogeny)
 \end{equation}
 
 
 where:
 
-* $T_i$ is a functional trait of an individual i associated to a $DBH_i$ value ;
+* $Trait_i$ is a functional trait of an individual i associated to a $DBH_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals, i.e. 838 in our dataset;
 * $\alpha_{DBH}$ represents the value of the saturation plateau, i.e. the highest trait value reached with higher development stage. Consequently, it must range in positive values;
 * $\beta_{DBH}$ which is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
@@ -170,21 +142,21 @@ Random nested effect will be discussed in part [Full model].
 
 ## Data exploration
 
-Local Basal Area (LBA) was used as a proxy of Neighborhood Competition Index and represented biotic interactions effect on traits. LBA can be already considered as a form of competition model which sets $DBH$ of neighbors within a specific area $\pi \times \delta_{max}^2$ around the individual as variable.
-$$ LBA = \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{2} . \frac \pi 4 $$
-The effect of neighbors distance wasn't taken into account for this part of data exploration but yet, could have been integrated and we'll be discussed in competition model form paragraph.
+We used the Neighborhood Competition Index (NCI) to depict competition. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with following formula:
+$$NCI_i = \sum _{j~|~\delta_{i,j}<\delta_{max}} ^{J_i} DBHj^\beta e^{-\alpha*\delta_{i,j}} ~|~ \begin{bmatrix} \beta \\ \alpha \\ \delta_{max} \end{bmatrix} = \begin{bmatrix} 2 \\ 1 \\ 20 \end{bmatrix}$$
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance $\delta_{max}$. $\beta$ represents the power of neighbors $DBH$ effect, here set to 2 to consider neighbors surface. $\alpha$ represents the decrease of neighbors $DBH$ effect with distance, arbitrarily set to 1 here for exploration (note that $\alpha$ set to 0 represent local basal area). $\delta_{max}$ represents the neighboring radius considered for $NCI$, here set to 20 meters as often observed in literature (note that with $\alpha$ set to 1, neighbors $DBH$ have only an effect of 0.1% after 2.3 meters). $NCI$ represents biotic asymmetric competition through tree neighborhood.
 
-Traits evolution within scatter plots (see figure \@ref(fig:LBA)) highlighted an increasing relation of SLA with LBA, whereas LT had a reverse evolution. LDMC, LA and CC's evolution were not influenced by LBA evolution, and thus compel the model to integrate a null effect of biotic effect on traits. In addition, local regressions displayed an increasing standard error deviation in extreme values of LBA, which could be attributed to a sampling headcount effect, i.e. less individuals were sampled in high and low value of LBA as far as density of trees was quite constant. Finally, regarding scatter plots we took on a linear model because of a constant evolution of traits with LBA.
+Traits evolution within scatter plots (see figure \@ref(fig:NCI)) highlighted a possible linear model form but with the possibility of a null effect. In addition, local regressions displayed an increasing standard error deviation in extreme values of NCI, which could be attributed to a sampling effect, i.e. less individuals were sampled in high value of NCI due to the strong effect of distance ($\alpha = 1$) implying that individuals with large neighbors have an explosive NCI (the pattern reduce when reducing $\alpha$ value). Finally, regarding scatter plots we took on a linear model because of a constant evolution of traits with NCI
 
 Same observations on taxonomic levels as in [Ontogenic model] were noticed, and we'll be discussed further in part [Full model].
 
-```{r LBA, fig.height=12, fig.width=12, fig.cap="Traits evolution, with LBA"}
+```{r NCI, fig.height=12, fig.width=12, fig.cap="Traits evolution with NCI."}
 Individuals %>% 
   filter(!(Genus=="Lecythis")) %>%
-  dplyr::select(LBA10, SpeciesLong, Genus, SLA, LDMC, LT, LA, CC) %>% 
-  reshape2::melt(id.var= c("LBA10", "SpeciesLong", "Genus"),
-                           variable.name = "Trait") %>%
-  ggplot(aes(LBA10, value, col = SpeciesLong, group = Genus)) +
+  dplyr::select(NCI, SpeciesLong, Genus, SLA, LDMC, LT, LA, CC) %>% 
+  reshape2::melt(id.vars = c("NCI", "SpeciesLong", "Genus"),
+                 variable.name = "Trait") %>% 
+  ggplot(aes(NCI, value, col = SpeciesLong, group = Genus)) +
   geom_point() +
   geom_smooth() +
   facet_wrap(~ Trait, scales = "free")
@@ -192,25 +164,25 @@ Individuals %>%
 
 ## Model
 
-We explained leaf trait $T$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
+We explained leaf trait $Trait$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
 
 \begin{equation} 
-T_i \sim \mathcal{N}(\alpha_{comp} + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma_{comp}) \\
+Trait_i \sim \mathcal{N}(\alpha_{comp} + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma_{comp}) \\
 (\alpha_{comp}, \beta_{comp}, \beta_{NCI}) \sim \mathcal{N}^{3}(0, + \infty) \\
-(\alpha_{NCI}, \sigma_{comp}) \sim \Gamma(- \infty, + \infty) 
+(\alpha_{NCI}, \sigma_{comp}) \sim \Gamma(- \infty, - \infty) 
 (\#eq:Competition)
 \end{equation}
 
 where:
 
-* $T_i$ is a functional trait of an individual i associated to a $DBH_i$ value ;
+* $Trait_i$ is a functional trait of an individual i associated to a $DBH_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals, i.e. 838 in our dataset;
 * $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the radius $\delta_{max}$ surrounding the individual i, and DBH_j the value of DBH for neighbor j;
 * $\delta_{i,j}$ is the distance between the individual i and one of its neighbors j;
-* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual, lower $\alpha_{comp}$ enable to strengthen competition effects from trees farther to the individual i. $\alpha_{comp}$ will be computed with positive values;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual, lower $\alpha_{NCI}$ enable to strengthen competition effects from trees farther to the individual $i$. $\alpha_{NCI}$ will be computed with positive values;
 * $\beta_{NCI}$ represents the idea that bigger neighbor will increase competition on the focal individual, thus $\beta_{NCI}$ was chosen equal to 2 to represent neighbor surface.
 * $\alpha_{comp}$ and $\beta_{comp}$ are linear model parameters and could range in positive or negative value. Normal flat laws were chosen as non informative flat priors on on $\mathbb{R}$;
-* $\sigma_{DBH}$ is normal law standard error, and will, therefore, be chosen with positive values;
+* $\sigma_{Comp}$ is normal law standard error, and will, therefore, be chosen with positive values;
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
 Random nested effect will be discussed in part [Full model].
@@ -219,10 +191,9 @@ Random nested effect will be discussed in part [Full model].
 
 ## Data exploration
 
-TWI was chosen as the most relevant abiotic variable to depict the impact of physical conditions variations in the community studied. 
+TWI was chosen to depict the impact of physical conditions variations in the community studied. 
 
 For LDMC, SLA and CC we did not observe a significant trend with TWI, which implied to integrate a null effect of TWI in the submodel. LT and LA were slightly decreasing with higher values of TWI, but yet the evolution was quite blur. Therefore, linear form was chosen to model phenotype regarding TWI.
-
 
 Same observations on taxonomic levels as in [Ontogenic model] were noticed, and we'll be discussed further in part [Full model].
 
@@ -239,96 +210,136 @@ Individuals %>%
 
 ## Model
 
-We explained leaf trait $T$ according to abiotic environment following a normal law with a linear model form:
+We explained leaf trait $Trait$ according to abiotic environment following a normal law with a linear model form:
 
 \begin{equation} 
-T_i \sim \mathcal{N}(\alpha_{TWI} + \beta_{TWI}. TWI_i ,\sigma_{TWI})
-\\(\alpha_{TWI}, \sigma_{comp}) \sim \Gamma^{2}(- \infty, + \infty)
+Trait_i \sim \mathcal{N}(\alpha_{TWI} + \beta_{TWI}. TWI_i ,\sigma_{TWI})
+\\(\alpha_{TWI}, \sigma_{comp}) \sim \Gamma^{2}(- \infty, - \infty)
 \\(\beta_{TWI}) \sim \mathcal{N}(0, + \infty) 
 (\#eq:Competition)
 \end{equation}
 
 where:
 
-* $T_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
+* $Trait_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals;
 * $\alpha_{TWI}$ and $\beta_{TWI}$ are linear model parameters. $\alpha_{TWI}$ can range in positive or negative value, and as $\beta_{TWI}$ is the intercept and has to range in positive value as $TWI$. Normal flat law and gamma law were respectively chosen as non informative flat priors on $\mathbb{R}$ and $\mathbb{R}^+$;
-* $\sigma_{DBH}$ is normal law standard error, and will, be chosen with positive values. Therefore, a gamma law was chosen as non informative flat prior on $\mathbb{R}^+$.
+* $\sigma_{TWI}$ is normal law standard error, and will, be chosen with positive values. Therefore, a gamma law was chosen as non informative flat prior on $\mathbb{R}^+$.
 
 Random nested effect will be discussed in part [Full model].
 
+# Descriptors interactions
+
+We explored interactions by exploring previous scatter form for each descriptor regarding SLA with different subset of another descriptor (e.g. low, middle and high values, see figure \@ref(fig:Interactions)). Globally, scatter did not seem to show interactions at the exception of two: SLA seemed to have a decreasing plateau for a similar slope with DBH when increasing either NCI or TWI. At low TWI or NCI the relation between SLA and DBH seemed even null, indicating an interaction of DBH with other descriptors.
+
+```{r Interactions, fig.height=12, fig.width=16, fig.cap="DBH, TWI and NCI interactions effect on SLA."}
+cowplot::plot_grid(
+  Individuals %>% 
+    filter(!(Genus=="Lecythis")) %>%
+    dplyr::select(DBH, NCI, TWI, SpeciesLong, Genus, SLA) %>% 
+    reshape2::melt(id.vars = c("SLA", "DBH", "SpeciesLong", "Genus")) %>%
+    mutate(DBH = gtools::quantcut(DBH, 3)) %>% 
+    ggplot(aes(value, SLA, col = SpeciesLong, group = Genus)) +
+    geom_point() +
+    geom_smooth() +
+    facet_grid(DBH ~ variable, scales = "free", labeller = "label_both"),
+  Individuals %>% 
+    filter(!(Genus=="Lecythis")) %>%
+    dplyr::select(DBH, NCI, TWI, SpeciesLong, Genus, SLA) %>% 
+    reshape2::melt(id.vars = c("SLA", "NCI", "SpeciesLong", "Genus")) %>% 
+    mutate(NCI = gtools::quantcut(NCI, 3)) %>% 
+    ggplot(aes(value, SLA, col = SpeciesLong, group = Genus)) +
+    geom_point() +
+    geom_smooth() +
+    facet_grid(NCI ~ variable, scales = "free", labeller = "label_both"),
+  Individuals %>% 
+    filter(!(Genus=="Lecythis")) %>%
+    dplyr::select(DBH, NCI, TWI, SpeciesLong, Genus, SLA) %>% 
+    reshape2::melt(id.vars = c("SLA", "TWI", "SpeciesLong", "Genus")) %>% 
+    mutate(TWI = gtools::quantcut(TWI, 3)) %>%  
+    ggplot(aes(value, SLA, col = SpeciesLong, group = Genus)) +
+    geom_point() +
+    geom_smooth() +
+    facet_grid(TWI ~ variable, scales = "free", labeller = "label_both"),
+  labels = c("DBH", "NCI", "TWI")) 
+```
 
 # Full model
 
 After defining each submodel, we tried to gather them all in a full model including ontogeny, biotic and abiotic effects to explain individual phenotype.
 
-## Additional
+## Additive
 
-First model form to be investigated is a model where phenotype would be explained by each submodel with the same strength through an additional model form. All constraints related in submodels remain true for full model building. Namely, a possibility of null response will have to be integrated, while avoiding to add non identifiable parameters.
+First model form to be investigated is a model where phenotype would be explained by each submodel independently in an additive model form. All constraints related in submodels remain true for full model building. Namely, a possibility of null response will have to be integrated, while avoiding to add non identifiable parameters.
 
 \begin{equation} 
-T_i \sim \mathcal{N}(\frac{\alpha_{DBH}.DBH_i}{\beta_{DBH} + DBH_i} + \beta_{TWI}.TWI_i +  \beta_{comp}.\sum_{j=1}^{J} DBH_j^2 . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
-(\alpha_{DBH},\beta_{DBH},\alpha_{NCI},\sigma) \sim \Gamma^{4}(- \infty, + \infty) \\
+Trait_i \sim \mathcal{N}(\alpha.\frac{DBH_i}{\beta_{DBH} + DBH_i} + \beta_{TWI}.TWI_i +  \beta_{comp}.\sum_{j=1}^{J} DBH_j^2 . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
+(\alpha, \beta_{DBH}, \alpha_{NCI}, \sigma) \sim \Gamma^{4}(- \infty, - \infty) \\
 (\beta_{TWI}, \beta_{comp}) \sim \mathcal{N}(0, + \infty)
 (\#eq:Aditional)
 \end{equation}
 
 where:
 
-* $T_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
+* $Trait_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals;
 * $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
-* $\alpha_{DBH}$ represents the value of the saturation plateau and must range in positive values while $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values. With a null $\beta_{DBH}$, the ontogeny part get equal to $\alpha_{DBH}$, and therefore, become an intercept;
-* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value. The intercept of the linear model was combined with the ontogeny part;
-* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive. The intercept of biotic submodel was combined with the ontogeny part;
-* $\sigma_{DBH}$ is normal law standard error, and will, be chosen with positive values. 
-* Therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha_{DBH}$, $\beta_{DBH}$, $\alpha_{NCI}$ and $\sigma$. Normal flat law was chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$.
+* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
+* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
+* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
+* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
+* $\sigma$ is the normal law standard error, and will, be chosen with positive values;
+* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$ and $\sigma$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{Comp}$.
 
 
 ## Hierarchical
 
-Another way to combine models is to understand them through a hierarchy of descriptor effects. Thus, ontogeny effect will be assumed the major descriptor of phenotype. Michaelis-menten model form used for ontogeny reach a saturation plateau, which value will be influenced by the two environmental descriptor, namely, abiotic and biotic effect.
+Another way to combine models is to understand them through a hierarchy of interacting descriptors. Thus, ontogeny effect will be assumed as the major descriptor of phenotype interacting with environment. Michaelis-menten model form used for ontogeny reach a saturation plateau, which value will be influenced by the two environmental descriptor, namely, abiotic and biotic effect.
 
 \begin{equation} 
-T_i \sim \mathcal{N}(\frac{\alpha.DBH_i}{\beta_{DBH} + DBH_i},\sigma) \\
-\alpha \sim \mathcal{N}(\alpha_{DBH} + \beta_{TWI}.TWI_i  +  \beta_{comp}.\sum_{j=1}^{J} DBH_j^2 . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma_{DBH}) \\
-(\alpha_{DBH}, \beta_{DBH}, \alpha_{NCI}, \sigma_{DBH}, \alpha, \sigma) \sim \Gamma^{6}(- \infty, + \infty) \\
+Trait_i \sim \mathcal{N}(\frac{\alpha_{env}.DBH_i}{\beta_{DBH} + DBH_i},\sigma) \\
+\alpha_{env} \sim \mathcal{N}(\alpha + \beta_{TWI}.TWI_i  +  \beta_{comp}.\sum_{j=1}^{J} DBH_j^2 . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma_{DBH}) \\
+(\alpha_{env}, \beta_{DBH}, \alpha_{NCI}, \sigma_{DBH}, \alpha, \sigma) \sim \Gamma^{6}(- \infty, - \infty) \\
 (\beta_{TWI}, \beta_{comp}) \sim \mathcal{N}^2(0, + \infty)
 (\#eq:Hierarchical)
 \end{equation}
 
 where:
 
-* $T_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
+* $Trait_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals;
-* $\alpha_{DBH}$ represents the value of the saturation plateau and must range in positive values while $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values. With a null $\beta_{DBH}$, the ontogeny part get equal to $\alpha_{DBH}$, and therefore, become an intercept;
-* $\alpha$ is the intercept of $\alpha_{DBH}$, and thus, has to range in positive values;
-* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value. The intercept of the linear model was combined with $\alpha_DBH$;
-* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive. The intercept of biotic submodel was combined with $\alpha_DBH$;
-* $\sigma_{DBH}$ and  $\sigma$ are normal law standard errors, and will be chosen with positive values;
-* Therefore, gamma laws were chosen as non informative flat prior on $\mathbb{R}^+$ for $\alpha_{DBH}$, $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$, $\sigma_{DBH}$ and $sigma$. Normal flat law was chosen as non informative flat priors on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{comp}$.
+* $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
+* $\alpha_{env}$ is the saturation value for a given biotic and abiotic environment;
+* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
+* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
+* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
+* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
+* $\sigma$ is the normal law standard error, and will, be chosen with positive values;
+* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha_{env}$, $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$ and $\sigma$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{Comp}$.
 
 # Random nested effects
 
-In previous models, taxonomic levels were not integrated, but individuals displayed different trends depending on complex and species they belonged to. We chose to deal with taxonomic levels as random nested effects of three levels on several parameters from the full model: (i) variability of individuals between complexes ($C$ levels), (ii) variability of individuals within a complex and between species ($S_c$ level), and (iii) variability of individuals within a species ($I_{s}$ level). Consequently, the additional full model become:
+In previous models, taxonomic levels were not integrated, but individuals displayed different trends depending on complex and species they belonged to. We chose to deal with taxonomic levels as random nested effects of three levels on all parameters from the mean of the full model (i.e. except $\sigma$): (i) variability of individuals between complexes ($C$ levels), (ii) variability of individuals within a complex and between species ($S_c$ level), and (iii) variability of individuals within a species ($I_{s}$ level). Consequently, the additional full model become:
 
 \begin{equation} 
-T_{c,s,i} \sim \mathcal{N}(\frac{{\alpha_{DBH}}_{c,s,i}.DBH_i}{{\beta_{DBH}}_{c,s,i} + DBH_i} + {\beta_{TWI}}_{c,s,i}.TWI_i + {\beta_{Comp}}_{c,s,i}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s,i}.\delta_{i,j}}, \sigma)    \\ 
-|~\forall \beta ~parameters, \\
-\beta_{c,s,i} \sim \mathcal{N}(\beta_{c,s}~,\sigma_{individual})   \\ 
-\beta_{c,s} \sim \mathcal{N}(\beta_s,\sigma_{species})    \\ 
-\beta_{c} \sim \mathcal{N}(\beta,\sigma_{complex}) \\
+Trait_{c,s,i} \sim \mathcal{N}(\frac{{\alpha_{DBH}}_{c,s,i}.DBH_i}{{\beta_{DBH}}_{c,s,i} + DBH_i} + {\beta_{TWI}}_{c,s,i}.TWI_i + {\beta_{Comp}}_{c,s,i}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s,i}.\delta_{i,j}}, \sigma)    \\ 
+|~\forall \theta ~parameters \neq \sigma, \\
+\theta_{c,s,i} \sim \mathcal{N}(\theta{c,s}~,\sigma_{individual})   \\ 
+\theta_{c,s} \sim \mathcal{N}(\theta_s,\sigma_{species})    \\ 
+\theta_{c} \sim \mathcal{N}(\theta,\sigma_{complex}) \\
 (\#eq:Randomeffect)
 \end{equation}
 
 where:
 
-* $T_{c,s,i}$ is a trait of an individual i, from the species s, and the complex c;
+* $Trait_{c,s,i}$ is a trait of an individual i, from the species s, and the complex c;
 * $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
 * $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
 * $c \in [1,C]$ where $C$ is the number of complexes.
 
-We will have to investigate on whether it is relevant to apply a random nested effect on each parameter. Because $\beta_{DBH}$ is the DBH for which the trait account for half of its saturation value, it is conditional to  ${\alpha_{DBH}}_{c,s,i}$, which already integrate random nested effects. Consequently, nested random effect could be removed of $\beta_{DBH}$, and similarly for $\alpha_{NCI}$.
+> **Anyway, when analyzing parameters variance between taxonomic levels (complex, species and individuals) we have to think about the issue of uneven sampling ($C=2$ , $S=17$, $I=838$).**
 
 # Inference strategy
 
@@ -341,6 +352,7 @@ To help the model convergence following tricks might be used:
 * Scale and/or center descriptors ($DBH_i$, $TWI$, $DBH_j$, $\delta_{i,j}$) 
 * Check for parameters relation, especially suspected one between $\beta_{Comp}$ and  $\alpha_{NCI}$ (non identifiable when $\alpha_{NCI} \to \infty$), and decorrelate with intermediate parameter inference (e.g. $\beta_{Comp}'=f(\beta_{Comp}, \alpha_{NCI})$)
 * Use a transformed parameter $\beta_{DBH}' = e^{-\beta_{DBH}}$ for $\beta_{DBH}$ inference to help $\beta_{DBH}$ explore a null effect of ontogeny
+* __Hierarchical model sampling trick ?__
 
 ## Data - Traits
 
@@ -440,6 +452,19 @@ In conclusion, we obtained the following full model to explain functional traits
 (\#eq:final)
 \end{equation}
 
-See previous paragraphs for parameters definitions and interpretations.
+* $Trait_{c,s,i}$ is a trait of an individual i, from the species s, and the complex c;
+* $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
+* $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
+* $c \in [1,C]$ where $C$ is the number of complexes.
+* $i \in [1,I]$ where I is the number of individuals;
+* $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
+* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
+* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
+* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
+* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
+* all $\sigma_{complex}$, $\sigma_{species}$ and $\sigma_{individual}$ represents parameters variance for each corresponding taxonomic level;
+* $\sigma$ is the normal law standard error, and will, be chosen with positive values;
+* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$ and all $\sigma$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{Comp}$.
 
 # References {-}

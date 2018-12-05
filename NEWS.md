@@ -1,5 +1,11 @@
-# PhD 0.1.9074
+# PhD 0.1.9076
 * A04 AbioticModel without random nested effect
+
+# PhD 0.1.9075
+* A02 & A03 Models @annebaranger comments
+
+# PhD 0.1.9074
+* A02 & A03 Models post-meeting correction
 
 # PhD 0.1.9073
 * A03 Models corr2 and presentation
