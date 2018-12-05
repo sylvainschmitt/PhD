@@ -3,12 +3,6 @@ title: "A03 : Model"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt & Anne Baranger
 output:
-  bookdown::html_document2:
-    number_sections: yes
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -16,6 +10,12 @@ output:
     number_sections: false
     toc: false
     keep_tex: true
+  bookdown::html_document2:
+    number_sections: yes
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -120,11 +120,10 @@ Individuals %>%
 We explained leaf trait $Trait$ according to ontogeny following a normal law with a Michaelis-Menten model form:
 
 \begin{equation} 
-Trait_i \sim \mathcal{N}(\cfrac{\alpha_{DBH} . DBH_i}{\beta_{DBH} + DBH_i},\sigma_{DBH}) 
-\\ (\alpha_{DBH},\beta_{DBH},\sigma_{DBH}) \sim \Gamma^{3}(- \infty, - \infty)
+Trait_i \sim \mathcal{N}(\cfrac{\alpha_{DBH} . DBH_i}{\beta_{DBH} + DBH_i},\sigma_{DBH}) \\
+(\alpha_{DBH},\beta_{DBH},\sigma_{DBH}) \sim \Gamma^{3}(- \infty, - \infty)
 (\#eq:Ontogeny)
 \end{equation}
-
 
 where:
 
