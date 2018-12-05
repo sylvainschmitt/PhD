@@ -142,11 +142,11 @@ Random nested effect will be discussed in part [Full model].
 
 ## Data exploration
 
-We used the Neighborhood Competition Index (NCI) to depict competition. NCI was calculated with following formula:
+We used the Neighborhood Competition Index (NCI) to depict competition. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with following formula:
 $$NCI_i = \sum _{j~|~\delta_{i,j}<\delta_{max}} ^{J_i} DBHj^\beta e^{-\alpha*\delta_{i,j}} ~|~ \begin{bmatrix} \beta \\ \alpha \\ \delta_{max} \end{bmatrix} = \begin{bmatrix} 2 \\ 1 \\ 20 \end{bmatrix}$$
-with neighborhood crowding index $NCI_i$ from tree individual $i$ equal to the sum of neighboring trees $j$ diameters $DBH_j$ power $\beta$ times the negative exponential of their distance $\delta_{i,j}$ times $\alpha$ for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance $\delta_{max}$. $\beta$ represents the power of neighbors $DBH$ effect, here set to 2 to consider neighbors surface. $\alpha$ represents the decrease of neighbors $DBH$ effect with distance, arbitrarily set to 1 here for exploration (note that $\alpha$ set to 0 represent local basal area). $\delta_{max}$ represents the neighboring radius considered for $NCI$, here set to 20 meters as often observed in literature (note that with $\alpha$ set to 1, neighbors $DBH$ have only an effect of 0.1% after 2.3 meters). $NCI$ represents biotic asymmetric competition through tree neighborhood.
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance $\delta_{max}$. $\beta$ represents the power of neighbors $DBH$ effect, here set to 2 to consider neighbors surface. $\alpha$ represents the decrease of neighbors $DBH$ effect with distance, arbitrarily set to 1 here for exploration (note that $\alpha$ set to 0 represent local basal area). $\delta_{max}$ represents the neighboring radius considered for $NCI$, here set to 20 meters as often observed in literature (note that with $\alpha$ set to 1, neighbors $DBH$ have only an effect of 0.1% after 2.3 meters). $NCI$ represents biotic asymmetric competition through tree neighborhood.
 
-Traits evolution within scatter plots (see figure \@ref(fig:NCI)) highlighted an increasing relation of SLA with NCI, whereas LA and LT had a reverse evolution. LDMC and CC's evolution were not influenced by NCI evolution, and thus compel the model to integrate a null effect of biotic effect on traits. In addition, local regressions displayed an increasing standard error deviation in extreme values of NCI, which could be attributed to a sampling effect, i.e. less individuals were sampled in high value of NCI due to the strong effect of distance ($\alpha = 1$) implying that individuals with large neighbors have an explosive NCI (the pattern reduce when reducing $\alpha$ value). Finally, regarding scatter plots we took on a linear model because of a constant evolution of traits with NCI
+Traits evolution within scatter plots (see figure \@ref(fig:NCI)) highlighted a possible linear model form but with the possibility of a null effect. In addition, local regressions displayed an increasing standard error deviation in extreme values of NCI, which could be attributed to a sampling effect, i.e. less individuals were sampled in high value of NCI due to the strong effect of distance ($\alpha = 1$) implying that individuals with large neighbors have an explosive NCI (the pattern reduce when reducing $\alpha$ value). Finally, regarding scatter plots we took on a linear model because of a constant evolution of traits with NCI
 
 Same observations on taxonomic levels as in [Ontogenic model] were noticed, and we'll be discussed further in part [Full model].
 
@@ -179,7 +179,7 @@ where:
 * $i \in [1,I]$ where I is the number of individuals, i.e. 838 in our dataset;
 * $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the radius $\delta_{max}$ surrounding the individual i, and DBH_j the value of DBH for neighbor j;
 * $\delta_{i,j}$ is the distance between the individual i and one of its neighbors j;
-* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual, lower $\alpha_{comp}$ enable to strengthen competition effects from trees farther to the individual i. $\alpha_{comp}$ will be computed with positive values;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual, lower $\alpha_{NCI}$ enable to strengthen competition effects from trees farther to the individual $i$. $\alpha_{NCI}$ will be computed with positive values;
 * $\beta_{NCI}$ represents the idea that bigger neighbor will increase competition on the focal individual, thus $\beta_{NCI}$ was chosen equal to 2 to represent neighbor surface.
 * $\alpha_{comp}$ and $\beta_{comp}$ are linear model parameters and could range in positive or negative value. Normal flat laws were chosen as non informative flat priors on on $\mathbb{R}$;
 * $\sigma_{Comp}$ is normal law standard error, and will, therefore, be chosen with positive values;
@@ -191,7 +191,7 @@ Random nested effect will be discussed in part [Full model].
 
 ## Data exploration
 
-TWI was chosen as the most relevant abiotic variable to depict the impact of physical conditions variations in the community studied. 
+TWI was chosen to depict the impact of physical conditions variations in the community studied. 
 
 For LDMC, SLA and CC we did not observe a significant trend with TWI, which implied to integrate a null effect of TWI in the submodel. LT and LA were slightly decreasing with higher values of TWI, but yet the evolution was quite blur. Therefore, linear form was chosen to model phenotype regarding TWI.
 
@@ -310,9 +310,9 @@ where:
 * $Trait_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals;
 * $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
-* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
 * $\alpha_{env}$ is the saturation value for a given biotic and abiotic environment;
 * $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
+* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
 * $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
 * $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
 * $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
