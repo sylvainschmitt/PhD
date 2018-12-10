@@ -68,7 +68,9 @@ Individuals <- left_join(traits, paracou) %>%
            SpeciesLong, Bark, Dawkins, DBH, TWI, NCI) %>%
   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
                     "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
-  ungroup()
+  ungroup() %>% 
+  mutate(invSLA=1/SLA) %>% 
+  mutate(invLA=1/LA)
 load("./functional_save/CompetitionMatrix.Rdata")
 rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 ```
@@ -78,7 +80,7 @@ rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 The aim of this document is to fit the biotic model with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the abiotic model with (1) and without mixed effects (2).
 
 ```{r mdata, fig.cap="prepared data"}
-traits <- c("SLA", "LDMC", "LT", "LA", "CC")
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
   list(N = nrow(data_trait),

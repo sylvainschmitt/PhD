@@ -1,6 +1,6 @@
 # PhD 0.1.9078
-* Symphonia species fixed
-* A04 Abiotic & AO6 shape
+* A04 Abiotic & AO6 invSLA & invLA
+* A07 Full Model template
 
 # PhD 0.1.9077
 * AO5 Ontogenic Model
