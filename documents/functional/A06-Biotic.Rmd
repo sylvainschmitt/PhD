@@ -23,7 +23,7 @@ link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -39,40 +39,41 @@ path <- "../../data/Paracou/"
 ```
 
 ```{r data, eval=T}
-traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
-  mutate(Genus = "Symphonia") %>% 
-  rename(Species = Morphotype) %>% 
-  mutate(Species = ifelse(Species == "Indet.", 
-                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G", 
-                                     "sp.1" =  "S")], Species))
-traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
-  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) 
-paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(idTree %in% traits$idTree) %>%
-  filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
-         Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
-         Genus == "Symphonia" & CensusYear == 2015) %>%
-  mutate(DBH = CircCorr/pi) %>% 
-  collect()
-load("./functional_save/env.Rdata")
-Individuals <- left_join(traits, paracou) %>% 
-  left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
-  group_by(Plot, SubPlot, TreeFieldNum, Genus, Species,
-           SpeciesLong, Bark, Dawkins, DBH, TWI, NCI) %>%
-  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
-                    "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
-  ungroup() %>% 
-  mutate(invSLA=1/SLA) %>% 
-  mutate(invLA=1/LA)
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
+#   googlesheets::gs_read("AllTraits") %>% 
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
+#   mutate(Genus = "Symphonia") %>% 
+#   rename(Species = Morphotype) %>% 
+#   mutate(Species = ifelse(Species == "Indet.", 
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G", 
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+#   googlesheets::gs_read("AllTraits") %>% 
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) 
+# paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+#   tbl("Paracou") %>%
+#   filter(idTree %in% traits$idTree) %>%
+#   filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+#          Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
+#          Genus == "Symphonia" & CensusYear == 2015) %>%
+#   mutate(DBH = CircCorr/pi) %>% 
+#   collect()
+# load("./functional_save/env.Rdata")
+# Individuals <- left_join(traits, paracou) %>% 
+#   left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
+#   group_by(idTree,Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins, DBH, TWI, NCI) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
+#   ungroup() %>% 
+#   mutate(invSLA=1/SLA) %>% 
+#   mutate(invLA=1/LA)
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
-rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 ```
 
 # Introduction {-}
@@ -81,29 +82,37 @@ The aim of this document is to fit the biotic model with observed values of func
 
 ```{r mdata, fig.cap="prepared data"}
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+#traits <- c("invSLA")
 mdata <- lapply(traits, function(trait){
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
-  list(N = nrow(data_trait),
-       J = nrow(Competition),
-       C = length(unique(data_trait$Genus)),
-       S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait], center = F)),
-       individual = as.numeric(as.factor(Competition$idTree)),
-       DBHj = as.numeric(scale(Competition$DBHj, center = F)),
-       Deltaj = as.numeric(scale(Competition$dij, center = F)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       complex = as.numeric(as.factor(data_trait$Genus)),
-       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
+   Competition_trait <- Competition
+   Competition_trait$idTree <- match(Competition_trait$idTree, 
+data_trait$idTree)
+   Competition_trait <- filter(Competition_trait, !is.na(idTree))
+   list(N = nrow(data_trait),
+        J = nrow(Competition_trait),
+        C = length(unique(data_trait$Genus)),
+        S = length(unique(data_trait$Species)),
+        Trait = as.numeric(scale(data_trait[trait], center = F)),
+        individual = Competition_trait$idTree,
+        DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+        Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+        species = as.numeric(as.factor(data_trait$Species)),
+        complex = as.numeric(as.factor(data_trait$Genus)),
+        speciesincomplex = 
+unique(cbind(as.numeric(as.factor(data_trait$Species)), 
+as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), 
+as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
 names(mdata) <- traits
 lapply(as.list(traits), function(trait)
-  cbind(Model = trait, 
-        Trait = mdata[[trait]]$Trait, 
-        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = NCI, y = Trait, col = Genus)) +
-  geom_point() +
-  geom_smooth() +
-  facet_wrap(~ Model, scales = "free", nrow = 3)
+   cbind(Model = trait,
+         Trait = mdata[[trait]]$Trait,
+         Individuals[unlist(!is.na(Individuals[trait])),])) %>%
+   bind_rows() %>%
+   ggplot(aes(x = NCI, y = Trait, col = Genus)) +
+   geom_point() +
+   geom_smooth() +
+   facet_wrap(~ Model, scales = "free", nrow = 3)
 ```
 
 # Model without mixed effects
@@ -111,9 +120,9 @@ lapply(as.list(traits), function(trait)
 We explained leaf trait $Trait$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
 
 \begin{equation} 
-Trait_i \sim \mathcal{N}(\alpha + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
+$$Trait_i \sim \mathcal{N}(\alpha + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
 (\alpha, \beta_{comp}, \beta_{NCI}) \sim \mathcal{N}^{3}(0, + \infty) \\
-(\alpha_{NCI}, \sigma) \sim \Gamma(- \infty, - \infty) 
+(\alpha_{NCI}, \sigma) \sim \Gamma(- \infty, - \infty) $$
 (\#eq:Competition)
 \end{equation}
 
@@ -136,19 +145,29 @@ data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
   vector[N] Trait ; // Trait
-  vector[N] DBHj ; // DBH neighbor
+  vector[N] DBHj ; // DBH neighbor [J]???
   vector[N] Deltaj ; // Distance neighbor
   int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
 }
 parameters {
+  real alpha ;
+  real beta_comp ;
+  real<lower=0> alpha_NCI ;
+  real<lower=0> sigma ;
 }
+transformed parameters {
+  vector [N] NCI ;
+  for(j in 1:J)
+    NCI[individual[j]] = NCI[individual[j]] + DBH[j]^2*exp(-alpha_NCI*Deltaj[j]) ;
+  }
 model {
-  Trait ~ normal(, sigma) ; // Likelihood
+  Trait ~ normal(alpha + beta_comp*NCI, sigma) ; // Likelihood
 } 
-generated quantities {
-  vector[N] Traitpred ;
-  Traitpred =  ;
-}
+//generated quantities {
+//  vector[N] Traitpred ;
+//  Traitpred =  ;
+//} // empty line for C++
+
 ```
 
 
