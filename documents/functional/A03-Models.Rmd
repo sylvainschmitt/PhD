@@ -3,6 +3,11 @@ title: "A03 : Model"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt & Anne Baranger
 output:
+  bookdown::html_document2:
+    number_sections: yes
+    toc: true
+    toc_float: yes
+    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -10,11 +15,6 @@ output:
     number_sections: false
     toc: false
     keep_tex: true
-  bookdown::html_document2:
-    number_sections: yes
-    toc: true
-    toc_float: yes
-    theme: flatly
   bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
@@ -120,8 +120,8 @@ Individuals %>%
 We explained leaf trait $Trait$ according to ontogeny following a normal law with a Michaelis-Menten model form:
 
 \begin{equation} 
-Trait_i \sim \mathcal{N}(\cfrac{\alpha_{DBH} . DBH_i}{\beta_{DBH} + DBH_i},\sigma_{DBH}) \\
-(\alpha_{DBH},\beta_{DBH},\sigma_{DBH}) \sim \Gamma^{3}(- \infty, - \infty)
+Trait_i \sim \mathcal{N}(\cfrac{\alpha . DBH_i}{\beta_{DBH} + DBH_i},\sigma) \\
+(\alpha,\beta_{DBH},\sigma) \sim \Gamma^{3}(- \infty, - \infty)
 (\#eq:Ontogeny)
 \end{equation}
 
@@ -129,9 +129,9 @@ where:
 
 * $Trait_i$ is a functional trait of an individual i associated to a $DBH_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals, i.e. 838 in our dataset;
-* $\alpha_{DBH}$ represents the value of the saturation plateau, i.e. the highest trait value reached with higher development stage. Consequently, it must range in positive values;
+* $\alpha$ represents both the intercept and the value of the saturation plateau, i.e. the highest trait value reached with higher development stage. Consequently, it must range in positive values;
 * $\beta_{DBH}$ which is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
-* $\sigma_{DBH}$ is normal law standard error, and will, therefore, be chosen with positive values;
+* $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 * Gamma law were chosen as non informative flat prior on $\mathbb{R}^+$ for Michaelis-Menten models parameters and Normal law standard error.
 
 Random nested effect will be discussed in part [Full model].
@@ -166,9 +166,9 @@ Individuals %>%
 We explained leaf trait $Trait$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
 
 \begin{equation} 
-Trait_i \sim \mathcal{N}(\alpha_{comp} + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma_{comp}) \\
-(\alpha_{comp}, \beta_{comp}, \beta_{NCI}) \sim \mathcal{N}^{3}(0, + \infty) \\
-(\alpha_{NCI}, \sigma_{comp}) \sim \Gamma(- \infty, - \infty) 
+Trait_i \sim \mathcal{N}(\alpha + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
+(\alpha, \beta_{comp}, \beta_{NCI}) \sim \mathcal{N}^{3}(0, + \infty) \\
+(\alpha_{NCI}, \sigma) \sim \Gamma(- \infty, - \infty) 
 (\#eq:Competition)
 \end{equation}
 
@@ -180,8 +180,8 @@ where:
 * $\delta_{i,j}$ is the distance between the individual i and one of its neighbors j;
 * $\alpha_{NCI}$ represents the effect of neighbors distance to the individual, lower $\alpha_{NCI}$ enable to strengthen competition effects from trees farther to the individual $i$. $\alpha_{NCI}$ will be computed with positive values;
 * $\beta_{NCI}$ represents the idea that bigger neighbor will increase competition on the focal individual, thus $\beta_{NCI}$ was chosen equal to 2 to represent neighbor surface.
-* $\alpha_{comp}$ and $\beta_{comp}$ are linear model parameters and could range in positive or negative value. Normal flat laws were chosen as non informative flat priors on on $\mathbb{R}$;
-* $\sigma_{Comp}$ is normal law standard error, and will, therefore, be chosen with positive values;
+* $\alpha$ and $\beta_{comp}$ are linear model parameters and could range in positive or negative value. Normal flat laws were chosen as non informative flat priors on on $\mathbb{R}$;
+* $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
 Random nested effect will be discussed in part [Full model].
@@ -212,8 +212,8 @@ Individuals %>%
 We explained leaf trait $Trait$ according to abiotic environment following a normal law with a linear model form:
 
 \begin{equation} 
-Trait_i \sim \mathcal{N}(\alpha_{TWI} + \beta_{TWI}. TWI_i ,\sigma_{TWI})
-\\(\alpha_{TWI}, \sigma_{comp}) \sim \Gamma^{2}(- \infty, - \infty)
+Trait_i \sim \mathcal{N}(\alpha + \beta_{TWI}. TWI_i ,\sigma)
+\\(\alpha, \sigma) \sim \Gamma^{2}(- \infty, - \infty)
 \\(\beta_{TWI}) \sim \mathcal{N}(0, + \infty) 
 (\#eq:Competition)
 \end{equation}
@@ -222,8 +222,8 @@ where:
 
 * $Trait_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
 * $i \in [1,I]$ where I is the number of individuals;
-* $\alpha_{TWI}$ and $\beta_{TWI}$ are linear model parameters. $\alpha_{TWI}$ can range in positive or negative value, and as $\beta_{TWI}$ is the intercept and has to range in positive value as $TWI$. Normal flat law and gamma law were respectively chosen as non informative flat priors on $\mathbb{R}$ and $\mathbb{R}^+$;
-* $\sigma_{TWI}$ is normal law standard error, and will, be chosen with positive values. Therefore, a gamma law was chosen as non informative flat prior on $\mathbb{R}^+$.
+* $\alpha$ and $\beta_{TWI}$ are linear model parameters. $\alpha$ can range in positive or negative value, and as $\beta_{TWI}$ is the intercept and has to range in positive value as $TWI$. Normal flat law and gamma law were respectively chosen as non informative flat priors on $\mathbb{R}$ and $\mathbb{R}^+$;
+* $\sigma$ is normal law standard error, and will, be chosen with positive values. Therefore, a gamma law was chosen as non informative flat prior on $\mathbb{R}^+$.
 
 Random nested effect will be discussed in part [Full model].
 
@@ -235,31 +235,37 @@ We explored interactions by exploring previous scatter form for each descriptor 
 cowplot::plot_grid(
   Individuals %>% 
     filter(!(Genus=="Lecythis")) %>%
+    mutate_at(vars("DBH", "NCI", "TWI"), funs(./max(.))) %>% 
     dplyr::select(DBH, NCI, TWI, SpeciesLong, Genus, SLA) %>% 
     reshape2::melt(id.vars = c("SLA", "DBH", "SpeciesLong", "Genus")) %>%
     mutate(DBH = gtools::quantcut(DBH, 3)) %>% 
     ggplot(aes(value, SLA, col = SpeciesLong, group = Genus)) +
     geom_point() +
     geom_smooth() +
-    facet_grid(DBH ~ variable, scales = "free", labeller = "label_both"),
+    facet_grid(DBH ~ variable, scales = "free_x", labeller = "label_both") +
+    ylim(NA, 200),
   Individuals %>% 
     filter(!(Genus=="Lecythis")) %>%
+    mutate_at(vars("DBH", "NCI", "TWI"), funs(./max(.))) %>% 
     dplyr::select(DBH, NCI, TWI, SpeciesLong, Genus, SLA) %>% 
     reshape2::melt(id.vars = c("SLA", "NCI", "SpeciesLong", "Genus")) %>% 
     mutate(NCI = gtools::quantcut(NCI, 3)) %>% 
     ggplot(aes(value, SLA, col = SpeciesLong, group = Genus)) +
     geom_point() +
     geom_smooth() +
-    facet_grid(NCI ~ variable, scales = "free", labeller = "label_both"),
+    facet_grid(variable ~ NCI, scales = "free_x", labeller = "label_both") +
+    ylim(NA, 200),
   Individuals %>% 
     filter(!(Genus=="Lecythis")) %>%
+    mutate_at(vars("DBH", "NCI", "TWI"), funs(./max(.))) %>% 
     dplyr::select(DBH, NCI, TWI, SpeciesLong, Genus, SLA) %>% 
     reshape2::melt(id.vars = c("SLA", "TWI", "SpeciesLong", "Genus")) %>% 
     mutate(TWI = gtools::quantcut(TWI, 3)) %>%  
     ggplot(aes(value, SLA, col = SpeciesLong, group = Genus)) +
     geom_point() +
     geom_smooth() +
-    facet_grid(TWI ~ variable, scales = "free", labeller = "label_both"),
+    facet_grid(TWI ~ variable, scales = "free_x", labeller = "label_both") +
+    ylim(NA, 200),
   labels = c("DBH", "NCI", "TWI")) 
 ```
 
@@ -275,7 +281,7 @@ First model form to be investigated is a model where phenotype would be explaine
 Trait_i \sim \mathcal{N}(\alpha.\frac{DBH_i}{\beta_{DBH} + DBH_i} + \beta_{TWI}.TWI_i +  \beta_{comp}.\sum_{j=1}^{J} DBH_j^2 . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
 (\alpha, \beta_{DBH}, \alpha_{NCI}, \sigma) \sim \Gamma^{4}(- \infty, - \infty) \\
 (\beta_{TWI}, \beta_{comp}) \sim \mathcal{N}(0, + \infty)
-(\#eq:Aditional)
+(\#eq:Additive)
 \end{equation}
 
 where:
@@ -320,14 +326,11 @@ where:
 
 # Random nested effects
 
-In previous models, taxonomic levels were not integrated, but individuals displayed different trends depending on complex and species they belonged to. We chose to deal with taxonomic levels as random nested effects of three levels on all parameters from the mean of the full model (i.e. except $\sigma$): (i) variability of individuals between complexes ($C$ levels), (ii) variability of individuals within a complex and between species ($S_c$ level), and (iii) variability of individuals within a species ($I_{s}$ level). Consequently, the additional full model become:
+In previous models, taxonomic levels were not integrated, but individuals displayed different trends depending on complex and species they belonged to. We chose to deal with complex as fixed effect because they were represented only by two levels ($C=2$), and we will further look at complex differentiation by investigating overlap of parameters posteriors. In addition, species were integrated as random effect for all individuals. Consequently, the additive full model \@ref(eq:Additive) become:
 
 \begin{equation} 
-Trait_{c,s,i} \sim \mathcal{N}(\frac{{\alpha_{DBH}}_{c,s,i}.DBH_i}{{\beta_{DBH}}_{c,s,i} + DBH_i} + {\beta_{TWI}}_{c,s,i}.TWI_i + {\beta_{Comp}}_{c,s,i}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s,i}.\delta_{i,j}}, \sigma)    \\ 
-|~\forall \theta ~parameters \neq \sigma, \\
-\theta_{c,s,i} \sim \mathcal{N}(\theta{c,s}~,\sigma_{individual})   \\ 
-\theta_{c,s} \sim \mathcal{N}(\theta_s,\sigma_{species})    \\ 
-\theta_{c} \sim \mathcal{N}(\theta,\sigma_{complex}) \\
+Trait_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)    \\ 
+|~\forall \theta ~parameters \neq \sigma, \theta_{c,s} \sim \mathcal{N}(\theta_c,\sigma_{species})
 (\#eq:Randomeffect)
 \end{equation}
 
@@ -337,8 +340,6 @@ where:
 * $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
 * $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
 * $c \in [1,C]$ where $C$ is the number of complexes.
-
-> **Anyway, when analyzing parameters variance between taxonomic levels (complex, species and individuals) we have to think about the issue of uneven sampling ($C=2$ , $S=17$, $I=838$).**
 
 # Inference strategy
 
@@ -350,7 +351,7 @@ To help the model convergence following tricks might be used:
 
 * Scale and/or center descriptors ($DBH_i$, $TWI$, $DBH_j$, $\delta_{i,j}$) 
 * Check for parameters relation, especially suspected one between $\beta_{Comp}$ and  $\alpha_{NCI}$ (non identifiable when $\alpha_{NCI} \to \infty$), and decorrelate with intermediate parameter inference (e.g. $\beta_{Comp}'=f(\beta_{Comp}, \alpha_{NCI})$)
-* Use a transformed parameter $\beta_{DBH}' = e^{-\beta_{DBH}}$ for $\beta_{DBH}$ inference to help $\beta_{DBH}$ explore a null effect of ontogeny
+* Use a transformed parameter $\beta_{DBH}' = e^{-\beta_{DBH}}$ for $\beta_{DBH}$ inference to help $\beta_{DBH}$ explore a null effect of ontogeny (**and maybe use a similar for $\alpha_{NCI}$ that might be complicated to infer due to the strong exponential effect**)
 * __Hierarchical model sampling trick ?__
 
 ## Data - Traits
@@ -368,7 +369,7 @@ Inferred models and sub-models should follow the following order :
 
 1. Each sub-model (ontogeny, abiotic, biotic)
     1. Without taxonomic levels (each possible form)
-    1. With taxonomic levels (added one-by-one)
+    1. With taxonomic levels
 1. The full model
     1. Additive (total or one-by-one if bug)
     1. Hierarchical (total or one-by-one if bug)
@@ -376,78 +377,27 @@ Inferred models and sub-models should follow the following order :
 
 # Conclusion {-}
 
-In conclusion, we obtained the following full model to explain functional traits variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels ($C,S,I$ nested random effects):
+In conclusion, we obtained the following full model to explain functional traits variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels ($C, S$ mixed effects, respectivelly fixed and random):
 
 \begin{equation} 
-  T_{c,s,i} \sim \mathcal{N}(\frac{{\alpha_{DBH}}_{c,s,i}.DBH_i}{{\beta_{DBH}}_{c,s,i} + DBH_i} + {\beta_{TWI}}_{c,s,i}.TWI_i + {\beta_{Comp}}_{c,s,i}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s,i}.\delta_{i,j}}, \sigma)    \\
-  \begin{bmatrix}
-           {\alpha_{DBH}}_{c,s,i} \\
-           {\beta_{DBH}}_{c,s,i} \\
-           {\beta_{TWI}}_{c,s,i} \\
-           {\beta_{Comp}}_{c,s,i} \\
-           {\alpha_{NCI}}_{c,s,i}
-  \end{bmatrix} \sim \mathcal{N}^5(
-  \begin{bmatrix}
-           {\alpha_{DBH}}_{c,s} \\
-           {\beta_{DBH}}_{c,s} \\
-           {\beta_{TWI}}_{c,s} \\
-           {\beta_{Comp}}_{c,s} \\
-           {\alpha_{NCI}}_{c,s}
-  \end{bmatrix} ,
-  \begin{bmatrix}
-           {\sigma_{DBH}}_{individual} \\
-           {\sigma_{DBH2}}_{individual} \\
-           {\sigma_{TWI}}_{individual} \\
-           {\sigma_{Comp}}_{individual} \\
-           {\sigma_{NCI}}_{individual}
-  \end{bmatrix}) \\
+  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)    \\
+  \Theta_{c,s} \sim \mathcal{N}^5(\Theta_c,\sigma_{species}) ~|~ \Theta =
    \begin{bmatrix}
-           {\alpha_{DBH}}_{c,s} \\
-           {\beta_{DBH}}_{c,s} \\
-           {\beta_{TWI}}_{c,s} \\
-           {\beta_{Comp}}_{c,s} \\
-           {\alpha_{NCI}}_{c,s}
-  \end{bmatrix} \sim \mathcal{N}^5(
+           \alpha \\
+           \beta_{DBH} \\
+           \beta_{TWI} \\
+           \beta_{Comp} \\
+           \alpha_{NCI}
+  \end{bmatrix},~\sigma_{species}
   \begin{bmatrix}
-           {\alpha_{DBH}}_{c} \\
-           {\beta_{DBH}}_{c} \\
-           {\beta_{TWI}}_{c} \\
-           {\beta_{Comp}}_{c} \\
-           {\alpha_{NCI}}_{c}
-  \end{bmatrix} ,
-  \begin{bmatrix}
-           {\sigma_{DBH}}_{species} \\
-           {\sigma_{DBH2}}_{species} \\
-           {\sigma_{TWI}}_{species} \\
-           {\sigma_{Comp}}_{species} \\
-           {\sigma_{NCI}}_{species}
-  \end{bmatrix}) \\
-  \begin{bmatrix}
-           {\alpha_{DBH}}_c \\
-           {\beta_{DBH}}_c \\
-           {\beta_{TWI}}_c \\
-           {\beta_{Comp}}_c \\
-           {\alpha_{NCI}}_c
-  \end{bmatrix} \sim \mathcal{N}^5(
-  \begin{bmatrix}
-           {\alpha_{DBH}} \\
-           {\beta_{DBH}} \\
-           {\beta_{TWI}} \\
-           {\beta_{Comp}} \\
-           {\alpha_{NCI}}
-  \end{bmatrix} ,
-  \begin{bmatrix}
-           {\sigma_{DBH}}_{complex} \\
-           {\sigma_{DBH2}}_{complex} \\
-           {\sigma_{TWI}}_{complex} \\
-           {\sigma_{Comp}}_{complex} \\
-           {\sigma_{NCI}}_{complex}
-  \end{bmatrix}) \\
-  (\alpha_{DBH}, \beta_{DBH}, \alpha_{NCI}, \sigma) \sim \Gamma^{4}(- \infty, + \infty) \\
-  (\beta_{TWI}, \beta_{comp}) \sim \mathcal{N}^2(0, + \infty) \\
-  ({\sigma_{DBH}}_{individual}, {\sigma_{DBH2}}_{individual}, {\sigma_{TWI}}_{individual}, {\sigma_{Comp}}_{individual}, {\sigma_{NCI}}_{individual}) \sim \Gamma^{5}(- \infty, + \infty) \\
-  ({\sigma_{DBH}}_{species}, {\sigma_{DBH2}}_{species}, {\sigma_{TWI}}_{species}, {\sigma_{Comp}}_{species}, {\sigma_{NCI}}_{species}) \sim \Gamma^{5}(- \infty, + \infty) \\
-  ({\sigma_{DBH}}_{complex}, {\sigma_{DBH2}}_{complex}, {\sigma_{TWI}}_{complex}, {\sigma_{Comp}}_{complex}, {\sigma_{NCI}}_{complex}) \sim \Gamma^{5}(- \infty, + \infty)
+           \sigma_{Intercept} \\
+           \sigma_{DBH} \\
+           \sigma_{TWI} \\
+           \sigma_{Comp} \\
+           \sigma_{NCI}
+  \end{bmatrix}  \\
+  \Theta_c \sim \mathcal{N}^{5}(0, + \infty) \\
+  (\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)
 (\#eq:final)
 \end{equation}
 
@@ -462,8 +412,8 @@ In conclusion, we obtained the following full model to explain functional traits
 * $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
 * $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
 * $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
-* all $\sigma_{complex}$, $\sigma_{species}$ and $\sigma_{individual}$ represents parameters variance for each corresponding taxonomic level;
-* $\sigma$ is the normal law standard error, and will, be chosen with positive values;
-* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$ and all $\sigma$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{Comp}$.
+* all $\sigma_{species}$ represents parameters variance for species;
+* $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
+* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$  and $\sigma_{species}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all $\Theta_{c,s}$ and $\Theta_c$.
 
 # References {-}

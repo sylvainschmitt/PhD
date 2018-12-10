@@ -1,3 +1,7 @@
+# PhD 0.1.9078
+* Symphonia species fixed
+* A04 Abiotic & AO6 shape
+
 # PhD 0.1.9077
 * AO5 Ontogenic Model
 * A06 Biotic Model

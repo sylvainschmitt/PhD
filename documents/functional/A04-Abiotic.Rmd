@@ -1,0 +1,340 @@
+---
+title: "A04 : Abiotic Model (TWI)"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt & Anne Baranger
+output: 
+  bookdown::html_document2:
+    number_sections: yes
+    toc: true
+    toc_float: yes
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r data, eval=T}
+traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
+  mutate(Genus = "Symphonia") %>% 
+  rename(Species = Morphotype) %>% 
+  mutate(Species = ifelse(Species == "Indet.", 
+                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G", 
+                                     "sp.1" =  "S")], Species))
+traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) 
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(idTree %in% traits$idTree) %>%
+  filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+         Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
+         Genus == "Symphonia" & CensusYear == 2015) %>%
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+load("./functional_save/env.Rdata")
+Individuals <- left_join(traits, paracou) %>% 
+  left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
+  group_by(Plot, SubPlot, TreeFieldNum, Genus, Species,
+           SpeciesLong, Bark, Dawkins, DBH, TWI, Curvature) %>%
+  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+                    "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
+  ungroup()
+rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+```
+
+# Introduction {-}
+
+The aim of this document is to fit the abiotic model with observde values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the abiotic model with (1) and without mixed effects (2).
+
+```{r mdata, fig.cap="prepared data"}
+traits <- c("SLA", "LDMC", "LT", "LA", "CC")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
+  list(N = nrow(data_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait[trait], center = F)),
+       TWI = as.numeric(scale(data_trait$TWI, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+names(mdata) <- traits
+lapply(as.list(traits), function(trait)
+  cbind(Model = trait, 
+        Trait = mdata[[trait]]$Trait, 
+        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = TWI, y = Trait, col = Genus)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ Model, scales = "free", nrow = 3)
+```
+
+# Model without mixed effects
+
+We explained leaf trait $T$ according to abiotic environment following a normal law with a linear model form:
+
+\begin{equation} 
+Trait_i \sim \mathcal{N}(\alpha + \beta_{TWI}. TWI_i ,\sigma)
+\\(\alpha, \sigma) \sim \Gamma^{2}(- \infty, - \infty)
+\\(\beta_{TWI}) \sim \mathcal{N}(0, + \infty) 
+(\#eq:Competition)
+\end{equation}
+
+where:
+
+* $Trait_i$ is a functional trait of an individual i associated to a $TWI_i$ value ;
+* $i \in [1,I]$ where I is the number of individuals;
+* $\alpha$ and $\beta_{TWI}$ are linear model parameters. $\alpha$ can range in positive or negative value, and as $\beta_{TWI}$ is the intercept and has to range in positive value as $TWI$. Normal flat law and gamma law were respectively chosen as non informative flat priors on $\mathbb{R}$ and $\mathbb{R}^+$;
+* $\sigma$ is normal law standard error, and will, be chosen with positive values. Therefore, a gamma law was chosen as non informative flat prior on $\mathbb{R}^+$.
+
+
+## Code
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  vector[N] Trait ; // Trait
+  vector[N] TWI ; // Topographic Wetness Index
+}
+parameters {
+  real<lower=0> alpha ; // Intercept
+  real betaTWI ; // TWI slope
+  real<lower=0> sigma ; // Variance
+}
+model {
+  alpha ~ gamma(10^-2, 10^-2) ; // Priors
+  betaTWI ~ normal(0, 10^2) ;
+  sigma ~ gamma(10^-2, 10^-2);
+  Trait ~ normal(alpha + betaTWI*TWI, sigma) ; // Likelihood
+} 
+generated quantities {
+  vector[N] Traitpred ;
+  Traitpred = alpha + betaTWI*TWI ;
+}
+```
+
+
+## Summary
+
+```{r }
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/TWI.Rdata")
+load("./functional_save/TWI.Rdata")
+pars <- c("alpha","betaTWI","sigma")
+lapply(as.list(traits), function(trait)
+  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+   mutate(Trait = trait)) %>%
+  bind_rows() %>%
+  kable() %>%
+  kable_styling()
+```
+
+## Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+## Chains
+
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
+mcmc_trace(as.array(fits$LA), pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))
+```
+
+## Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+mcmc_pairs(as.array(fits$CC), pars = pars)
+```
+
+## Predictions
+
+```{r , fig.cap="Predictions."}
+lapply(as.list(traits), function(trait)
+  cbind(fit = trait, 
+        Y = mdata[[trait]]$Trait,
+        Individuals[unlist(!is.na(Individuals[trait])),],
+        Traitpred = apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, mean),
+        sigmaTWI = apply(as.matrix(fits[[trait]], pars = "sigma"), 2, mean),
+        mu5 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, quantile, probs = 0.05)),
+        mu95 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, quantile, probs = 0.95)),
+        sigmaTWI95 = unlist(apply(as.matrix(fits[[trait]], pars = "sigma"), 2, quantile, probs = 0.95))
+        )) %>% 
+  bind_rows() %>% 
+  mutate(Y5sigmafix = qnorm(0.05, mean = mu5, sd = sigmaTWI)) %>% 
+  mutate(Y95sigmafix = qnorm(0.95, mean = mu95, sd = sigmaTWI)) %>% 
+  mutate(Y5 = qnorm(0.05, mean = mu5, sd = sigmaTWI95)) %>% 
+  mutate(Y95 = qnorm(0.95, mean = mu95, sd = sigmaTWI95)) %>% 
+  ggplot(aes(x = TWI)) +
+  geom_point(aes(y = Y)) +
+  geom_line(aes(y = Traitpred)) +
+  geom_ribbon(aes(ymin = Y5, ymax = Y95, color = 'Ypred'), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Y5sigmafix, ymax = Y95sigmafix, color = 'Ysigmafix'), alpha = 0.2) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95, color = 'mu'), alpha = 0.2) +
+  facet_wrap(~ fit, scales = "free", nrow = 3)
+```
+
+## Diagnostic
+
+The model correclty converged with acceptable parameters correlation and correct predictions. *Bla, bla...*
+
+# Model with mixed effects
+
+We added a fixed complex effect and random species effect on parameters $alpha$ (intercept) and $\beta_TWI$ (TWI slope).
+
+## Code
+
+```{stan output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1> N ; // # obs
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
+  vector[N] Trait ; // Phenotype continuous descriptor
+  vector[N] TWI ; // Topographic Wetness Index
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector[S] alpha_s ; // Abiotic intercept for species
+  vector[C] alpha_c ; // Abiotic intercept for complexes
+  vector[S] betaTWI_s ; // Abiotic slope for species
+  vector[C] betaTWI_c ; // Abiotic slope for complexes
+  real<lower=0, upper=10> sigmaIntercept ; // Abiotic intercept variance for species
+  real<lower=0, upper=10> sigmaTWI ; // Abiotic slope variance for species
+  real<lower=0, upper=10> sigma ; // Abiotic variance
+}
+model {
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaTWI_s ~ normal(betaTWI_c[speciesincomplex], sigmaTWI) ;
+  Trait ~ normal(alpha_s[species] + betaTWI_s[species] .* TWI, sigma) ; // Likelihood
+}
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+}
+```
+
+## Summary
+
+```{r }
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/TWIRNE.Rdata")
+load("./functional_save/TWIRNE.Rdata")
+pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma" )
+lapply(as.list(traits), function(trait)
+  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+   mutate(Trait = trait)) %>%
+  bind_rows() %>%
+  kable() %>%
+  kable_styling()
+```
+
+## Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaTWI")),
+  labels = names(data), nrow = 2)
+```
+
+## Chains
+
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
+mcmc_trace(as.array(fits$SLA), regex_pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))
+```
+
+## Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+mcmc_pairs(as.array(fits$SLA), regex_pars = pars)
+```
+
+## Predictions
+
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(names(mdata)), function(type)
+  cbind(type = type, 
+        Y = mdata[[type]]$Trait,
+        TWI = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),"TWI"])),
+        Individuals[!is.na(unlist(Individuals[,type])),],
+        muEschweilera = apply(as.matrix(fits[[type]], 
+                                        pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",1]")), 
+                              2, mean),
+        muSymphonia = apply(as.matrix(fits[[type]], 
+                                      pars = paste0("Trait_pred[",
+                                                    1:mdata[[type]]$N,",2]")), 
+                            2, mean),
+        muEschweilera5 = apply(as.matrix(fits[[type]], 
+                                         pars = paste0("Trait_pred[",
+                                                       1:mdata[[type]]$N,",1]")), 
+                               2, quantile, probs = 0.05),
+        muSymphonia5 = apply(as.matrix(fits[[type]], 
+                                       pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",2]")), 
+                             2, quantile, probs = 0.05),
+        muEschweilera95 = apply(as.matrix(fits[[type]], 
+                                          pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",1]")), 
+                                2, quantile, probs = 0.95),
+        muSymphonia95 = apply(as.matrix(fits[[type]], 
+                                        pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",2]")), 
+                              2, quantile, probs = 0.95)
+  )) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = TWI)) +
+  geom_point(aes(y = Y, col = as.factor(Genus))) +
+  geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
+                  col = "Eschweilera"), alpha = 0.2) +
+  geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,
+                  col = "Symphonia"), alpha = 0.2) +
+  geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
+  geom_line(aes(y = muSymphonia, col = "Symphonia")) +
+  facet_wrap(~ type, scales = "free", nrow = 3)
+```
+
+## Diagnostic
+
+The model correclty converged with acceptable parameters correlation and correct predictions. *Bla, bla...*
+
+# Conclusion
+
+The abiotic model with mixed effects showed a significant increase of likelihood compared to the model without mixed effects for all traits besides an increase of parameters. We consequently selected the first for subsequent analysis. *Bla, bla...*
+
+# References
