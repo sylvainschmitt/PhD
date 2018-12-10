@@ -16,7 +16,7 @@ link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -62,14 +62,19 @@ Individuals <- left_join(traits, paracou) %>%
   ungroup()
 rm(traits, paracou, env)
 ```
-
-```{r DataForStan}
-traits <- c("SLA","LA","LDMC","CC","LT")
-data <- sapply(traits, function(trait)
-  list(N = nrow(Individuals[unlist(!is.na(Individuals[trait])),]),
-       Trait = unlist(Individuals[unlist(!is.na(Individuals[trait])),trait]),
-       TWI = Individuals[unlist(!is.na(Individuals[trait])),]$TWI), simplify = F)
-#str(data)
+```{r DataForStanRNE}
+traits <- c("SLA", "LDMC", "LT", "LA", "CC")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
+  list(N = nrow(data_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait[trait])),
+       TWI = as.numeric(scale(data_trait$TWI)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+names(mdata) <- traits
 ```
 
 # Model without random nested effect
@@ -141,6 +146,11 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   labels = names(data), nrow = 2)
 ```
 
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), pars = "betaTWI")),
+  labels = names(data), nrow = 2)
+```
 ## Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
@@ -183,26 +193,123 @@ lapply(as.list(traits), function(trait)
 
 # Model with random nested effect
 
-```{stan, output.var="Model",echo=T,eval=F}
+## Code
+```{stan output.var="Model"}
 data {
-  int<lower=1>  N; // Number of observations
-  vector[N] Trait; // Trait
-  vector[N] TWI; // Topographic wetness index
+  int<lower=1> N ; // # obs
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
+  vector[N] Trait ; // Phenotype continuous descriptor
+  vector[N] TWI ; // Topographic Wetness Index
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  real<lower=0> alphaTWI; // intercept
-  real betaTWI; // Trait parameter
-  real<lower=0> sigmaTWI; // variance
+  vector[S] alpha_s ; // Abiotic intercept for species
+  vector[C] alpha_c ; // Abiotic intercept for complexes
+  vector[S] betaTWI_s ; // Abiotic slope for species
+  vector[C] betaTWI_c ; // Abiotic slope for complexes
+  real<lower=0, upper=10> sigmaIntercept ; // Abiotic intercept variance for species
+  real<lower=0, upper=10> sigmaTWI ; // Abiotic slope variance for species
+  real<lower=0, upper=10> sigma ; // Abiotic variance
 }
 model {
-  alphaTWI ~ gamma(10^-2, 10^-2); // alpha prior
-  betaTWI ~ normal(0, 10^2); // beta prior
-  sigmaTWI ~ gamma(10^-2, 10^-2); // sigma prior
-  Trait ~ normal(alphaTWI + betaTWI*TWI, sigmaTWI); // Likelihood
-} 
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaTWI_s ~ normal(betaTWI_c[speciesincomplex], sigmaTWI) ;
+  Trait ~ normal(alpha_s[species] + betaTWI_s[species] .* TWI, sigma) ; // Likelihood
+}
 generated quantities {
-  vector[N] Traitpred ;
-  Traitpred = alphaTWI + betaTWI*TWI ;
-}// empty line at the end (C++)
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+}
+```
 
+## Summary
+
+```{r }
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/TWIRNE.Rdata")
+load("./functional_save/TWIRNE.Rdata")
+pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma" )
+lapply(as.list(traits), function(trait)
+  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+   mutate(Trait = trait)) %>%
+  bind_rows() %>%
+  kable() %>%
+  kable_styling()
+```
+
+## Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), pars = pars)),
+  labels = names(data), nrow = 2)
+```
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), pars = "betaTWI")),
+  labels = names(data), nrow = 2)
+```
+
+## Chains
+
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
+mcmc_trace(as.array(fit), pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))
+```
+
+## Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+mcmc_pairs(as.array(fits$CC), pars = pars)
+```
+
+#### Predictions
+
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(names(mdata)), function(type)
+  cbind(type = type, 
+        trait = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),type])),
+        TWI = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),"TWI"])),
+        Individuals[!is.na(unlist(Individuals[,type])),],
+        muEschweilera = apply(as.matrix(fits[[type]], 
+                                        pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",1]")), 
+                              2, mean),
+        muSymphonia = apply(as.matrix(fits[[type]], 
+                                      pars = paste0("Trait_pred[",
+                                                    1:mdata[[type]]$N,",2]")), 
+                            2, mean),
+        muEschweilera5 = apply(as.matrix(fits[[type]], 
+                                         pars = paste0("Trait_pred[",
+                                                       1:mdata[[type]]$N,",1]")), 
+                               2, quantile, probs = 0.05),
+        muSymphonia5 = apply(as.matrix(fits[[type]], 
+                                       pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",2]")), 
+                             2, quantile, probs = 0.05),
+        muEschweilera95 = apply(as.matrix(fits[[type]], 
+                                          pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",1]")), 
+                                2, quantile, probs = 0.95),
+        muSymphonia95 = apply(as.matrix(fits[[type]], 
+                                        pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",2]")), 
+                              2, quantile, probs = 0.95)
+  )) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = TWI)) +
+  geom_point(aes(y = trait, col = as.factor(Genus))) +
+  geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
+  geom_line(aes(y = muEschweilera, col = "Symphonia")) +
+  geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
+                  col = "Eschweilera"), alpha = 0.2) +
+    geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,
+                  col = "Symphonia"), alpha = 0.2) +
+  facet_wrap(~ type, scales = "free", nrow = 3)
 ```
