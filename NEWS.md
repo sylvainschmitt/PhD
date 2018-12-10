@@ -1,14 +1,21 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f39b8e8531e69a422cdd59da69c3a6c2642c03ac
 # PhD 0.1.9077
 * AO5 Ontogenic Model
 * A06 Biotic Model
 
 # PhD 0.1.9076
 * A04 AbioticModel without random nested effect
+<<<<<<< HEAD
 =======
 # PhD 0.1.9076
 * A01-PCA sharing
 >>>>>>> 5566472927db45a45959aa2d2eacbaaf76c649a4
+=======
+* A01-PCA sharing
+>>>>>>> f39b8e8531e69a422cdd59da69c3a6c2642c03ac
 
 # PhD 0.1.9075
 * A02 & A03 Models @annebaranger comments
