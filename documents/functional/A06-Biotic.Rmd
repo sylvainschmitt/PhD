@@ -82,13 +82,13 @@ load("./functional_save/CompetitionMatrix.Rdata")
 The aim of this document is to fit the biotic model with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the abiotic model with (1) and without mixed effects (2).
 
 ```{r mdata, fig.cap="prepared data"}
-traits <- c("invSLA")
 Individuals <- sample_n(Individuals, 100)
-
-# traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
+  dmax = 10
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
   Competition_trait <- Competition
+  Competition_trait <- filter(Competition_trait, dij < dmax)
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
   list(N = nrow(data_trait),
@@ -136,6 +136,27 @@ where:
 * $\alpha$ and $\beta_{comp}$ are linear model parameters and could range in positive or negative value. Normal flat laws were chosen as non informative flat priors on on $\mathbb{R}$;
 * $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
+
+$$e^{-alpha.\delta_{1\%}}=0.01 \iff \delta_{1\%} = -\frac{2.log(10)}{\alpha}$$
+
+```{r, eval=F, fig.height=12, fig.width=12}
+ggplot(data.frame(x = 0), aes(x)) +
+  stat_function(fun = function(x) -log(0.01)/x) +
+  xlim(0,1)
+data.frame(alpha = seq(0, 1, by = 0.1), 
+           `delta-1pct` = sapply(seq(0, 1, by = 0.1), function(x) -log(0.01)/x)) %>% 
+  kable(col.names = c("$\\alpha$", "\\delta_{1\\%}"))
+cowplot::plot_grid(plotlist = lapply(seq(0.1, 1, by = 0.1), function(alpha)
+  Competition %>% 
+    mutate(NCIj20 = DBHj^2*exp(-alpha*dij)) %>% 
+    mutate(NCIj10 = ifelse(dij < 10, NCIj20, 0)) %>% 
+    group_by(idTree) %>% 
+    summarise(NCI20 = sum(NCIj20), NCI10 = sum(NCIj10)) %>% 
+    ggplot(aes(NCI20, NCI10)) +
+    geom_point() +
+    geom_abline(slope = 1, intercept = 0)), labels = seq(0.1, 1, by = 0.1))
+```
+
 
 ## Code
 
@@ -263,7 +284,7 @@ parameters {
   vector[C] alpha_c ; // Intercept for complexes
   vector[S] betaComp_s ; // Biotic slope for species
   vector[C] betaComp_c ; // Biotic slope for complexes
-  real<lower=0, upper=1> alphaNCI ;
+  real<lower=0> alphaNCI ;
   real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
   real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
   real<lower=0> sigma ;
@@ -277,6 +298,8 @@ transformed parameters {
    NCI[individual[j]] += NCIj[j] ;
 }
 model {
+  alphaNCI ~ lognormal(0, 10) ;
+  sigmaComp ~ lognormal(0, 10) ;
   alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
   betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
   Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* NCI, sigma) ; // Likelihood
@@ -290,12 +313,12 @@ generated quantities {
 
 ## Summary
 
-> 100 observations ~100s !
+> 100 observations ~100s for 20 m against 100 observations ~22s for 10m !
 
 ```{r }
-# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-# names(fits) <- traits
-# save(fits, file = "./functional_save/NCIRNE.Rdata")
+fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+names(fits) <- traits
+save(fits, file = "./functional_save/NCIRNE.Rdata")
 load("./functional_save/NCIRNE.Rdata")
 pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
 lapply(as.list(traits), function(trait)
@@ -323,13 +346,13 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
 ## Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$invSLA), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$LDMC), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.", fig.height=12, fig.width=12}
 mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
@@ -375,8 +398,7 @@ lapply(as.list(names(mdata)), function(type)
                   col = "Symphonia"), alpha = 0.2) +
   geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
   geom_line(aes(y = muSymphonia, col = "Symphonia")) +
-  facet_wrap(~ type, scales = "free", nrow = 3) +
-  scale_x_log10()
+  facet_wrap(~ type, scales = "free", nrow = 3)
 ```
 
 ## Diagnostic

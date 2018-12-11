@@ -1,3 +1,6 @@
+# PhD 0.1.9080
+* Competition matriux with edge effects
+
 # PhD 0.1.9079
 * A06 Biotic model in stan
 
