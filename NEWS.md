@@ -1,3 +1,6 @@
+# PhD 0.1.9081
+* Biotic full sampling
+
 # PhD 0.1.9080
 * Competition matriux with edge effects
 

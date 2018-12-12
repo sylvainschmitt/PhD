@@ -23,7 +23,7 @@ link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()[ls() != "Model"]) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -33,7 +33,7 @@ theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
   cache = T, cache.lazy = F)
-options(mc.cores = parallel::detectCores())
+options(mc.cores = 2)
 rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
@@ -52,25 +52,16 @@ path <- "../../data/Paracou/"
 #   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
 #   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
 # traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
-#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species))
-# paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
-#   tbl("Paracou") %>%
-#   filter(idTree %in% traits$idTree) %>%
-#   filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
-#          Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
-#          Genus == "Symphonia" & CensusYear == 2015) %>%
-#   mutate(DBH = CircCorr/pi) %>%
-#   collect()
-# load("./functional_save/env.Rdata")
-# Individuals <- left_join(traits, paracou) %>%
-#   left_join(env, by = "idTree", suffix = c("", ".y")) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
 #   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
-#            SpeciesLong, Bark, Dawkins, DBH, TWI, NCI) %>%
+#            SpeciesLong, Bark, Dawkins) %>%
 #   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
 #                     "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
 #   ungroup() %>%
 #   mutate(invSLA=1/SLA) %>%
 #   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
 # rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
@@ -79,42 +70,7 @@ load("./functional_save/CompetitionMatrix.Rdata")
 
 # Introduction {-}
 
-The aim of this document is to fit the biotic model with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the abiotic model with (1) and without mixed effects (2).
-
-```{r mdata, fig.cap="prepared data"}
-Individuals <- sample_n(Individuals, 100)
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-mdata <- lapply(traits, function(trait){
-  dmax = 10
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
-  Competition_trait <- Competition
-  Competition_trait <- filter(Competition_trait, dij < dmax)
-  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
-  Competition_trait <- filter(Competition_trait, !is.na(idTree))
-  list(N = nrow(data_trait),
-       J = nrow(Competition_trait),
-       C = length(unique(data_trait$Genus)),
-       S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait], center = F)),
-       individual = Competition_trait$idTree,
-       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
-       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       complex = as.numeric(as.factor(data_trait$Genus)),
-       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
-names(mdata) <- traits
-lapply(as.list(traits), function(trait)
-  cbind(Model = trait, 
-        Trait = mdata[[trait]]$Trait, 
-        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = NCI, y = Trait, col = Genus)) +
-  geom_point() +
-  geom_smooth() +
-  facet_wrap(~ Model, scales = "free", nrow = 3)
-```
-
-# Model without mixed effects
+The aim of this document is to fit the biotic model (equation \@ref(eq:Competition)) with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit. We tested the abiotic model with mixed effects. We tested first 5 ways to deal with edge effects with a reduce dataset of 200 observations for $LA$ with neighbors until 20m (table \@ref(tab:EdgeEffecttable)). Finally, we built the full models for all traits and all observations for all neighbors in a radius of 20m with the method to deal with edge effect with the highest likelihood.
 
 We explained leaf trait $Trait$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
 
@@ -137,133 +93,23 @@ where:
 * $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
-$$e^{-alpha.\delta_{1\%}}=0.01 \iff \delta_{1\%} = -\frac{2.log(10)}{\alpha}$$
 
-```{r, eval=F, fig.height=12, fig.width=12}
-ggplot(data.frame(x = 0), aes(x)) +
-  stat_function(fun = function(x) -log(0.01)/x) +
-  xlim(0,1)
-data.frame(alpha = seq(0, 1, by = 0.1), 
-           `delta-1pct` = sapply(seq(0, 1, by = 0.1), function(x) -log(0.01)/x)) %>% 
-  kable(col.names = c("$\\alpha$", "\\delta_{1\\%}"))
-cowplot::plot_grid(plotlist = lapply(seq(0.1, 1, by = 0.1), function(alpha)
-  Competition %>% 
-    mutate(NCIj20 = DBHj^2*exp(-alpha*dij)) %>% 
-    mutate(NCIj10 = ifelse(dij < 10, NCIj20, 0)) %>% 
-    group_by(idTree) %>% 
-    summarise(NCI20 = sum(NCIj20), NCI10 = sum(NCIj10)) %>% 
-    ggplot(aes(NCI20, NCI10)) +
-    geom_point() +
-    geom_abline(slope = 1, intercept = 0)), labels = seq(0.1, 1, by = 0.1))
+```{r EdgeEffecttable}
+data.frame(Fit = 0:4,
+           Include = c("No", rep("Yes", 4)),
+           Correction = c("", rep("No", 2), rep("Yes", 2)),
+           Weighing = c("", "No", "Yes", "No", "Yes")) %>% 
+  kable(caption = "Edge effects test", 
+        col.names = c("Test", "Include edge effect", "Correct edge effect", 
+                      "Weight corresponding observations"))
 ```
 
 
-## Code
+# Edge effect test
 
-```{stan, output.var="Model", echo=T, eval=F}
-data {
-  int<lower=1>  N ; // # of observations
-  int<lower=1>  J ; // # of neighbors
-  vector[N] Trait ; // Trait
-  vector[J] DBHj ; // DBH neighbor
-  vector[J] Deltaj ; // Distance neighbor
-  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
-}
-parameters {
-  real<lower=0> alpha ;
-  real betaComp ;
-  real<lower=0, upper=1> alphaNCI ;
-  real<lower=0> sigma ;
-}
-transformed parameters {
-  vector[J] NCIj ;
-  vector[N] NCI ;
-  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
-  NCI = rep_vector(0.0, N) ;
-  for(j in 1:J)
-   NCI[individual[j]] += NCIj[j] ;
-}
-model {
-  Trait ~ normal(alpha + betaComp * NCI, sigma) ; // Likelihood
-}
-generated quantities {
-  vector[N] Traitpred ;
-  Traitpred = alpha + betaComp * NCI ;
-}
-```
+## Test 0
 
-## Summary
-
-> 100 observations ~100s !
-
-```{r }
-# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-# names(fits) <- traits
-# save(fits, file = "./functional_save/NCI.Rdata")
-load("./functional_save/NCI.Rdata")
-pars <- c("alpha", "betaComp", "alphaNCI", "sigma")
-lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
-   mutate(Trait = trait)) %>%
-  bind_rows() %>%
-  kable() %>%
-  kable_styling()
-```
-
-## Posteriors
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), pars = pars)),
-  labels = names(data), nrow = 2)
-```
-
-## Chains
-
-```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$invSLA), pars = c(pars, "lp__"),
-             facet_args = list(labeller = label_parsed))
-```
-
-## Pairs
-
-```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$invSLA), pars = pars)
-```
-
-## Predictions
-
-```{r , fig.cap="Predictions."}
-lapply(as.list(traits), function(trait)
-  cbind(fit = trait, 
-        Y = mdata[[trait]]$Trait,
-       Individuals[unlist(!is.na(Individuals[trait])),],
-       NCI = apply(as.matrix(fits[[trait]], pars = "NCI"), 2, mean),
-       Traitpred = apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, mean),
-       sigmaTWI = apply(as.matrix(fits[[trait]], pars = "sigma"), 2, mean),
-       mu5 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, 
-                          quantile, probs = 0.05)),
-       mu95 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, 
-                           quantile, probs = 0.95)),
-       sigmaTWI95 = unlist(apply(as.matrix(fits[[trait]], pars = "sigma"), 2, 
-                                 quantile, probs = 0.95))
-  )) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = NCI)) +
-  geom_point(aes(y = Y)) +
-  geom_line(aes(y = Traitpred)) +
-  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
-  facet_wrap(~ fit, scales = "free", nrow = 3)
-```
-
-## Diagnostic
-
-
-# Model with mixed effects
-
-*We added a fixed complex effect and random species effect on parameters...*
-
-## Code
+> Edge effect excluded from data
 
 ```{stan, output.var="Model", echo=T, eval=F}
 data {
@@ -298,8 +144,7 @@ transformed parameters {
    NCI[individual[j]] += NCIj[j] ;
 }
 model {
-  alphaNCI ~ lognormal(0, 10) ;
-  sigmaComp ~ lognormal(0, 10) ;
+  alphaNCI ~ lognormal(0, 1) ;
   alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
   betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
   Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* NCI, sigma) ; // Likelihood
@@ -311,22 +156,522 @@ generated quantities {
 }
 ```
 
-## Summary
+```{r }
+data_trait <- Individuals %>% 
+  filter(!is.na(invLA)) %>% 
+  left_join(select(Competition, idTree, EdgeEffect20)) %>% 
+  filter(EdgeEffect20 == 0) %>% 
+  sample_n(200)
+Competition_trait <- Competition
+Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+Competition_trait <- filter(Competition_trait, !is.na(idTree))
+mdata <- list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait$invLA, center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       weights = weights,
+       data = data_trait,
+       competition = Competition_trait)
+# fit <- sampling(Model, chains = 2, data = mdata)
+# save(fit, file = "./functional_save/NCItest0.Rdata")
+```
 
-> 100 observations ~100s for 20 m against 100 observations ~22s for 10m !
+## Test 1
+
+> Edge effect without weight nor correction
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # of species
+  int<lower=1> C ; // # of complexes
+  vector[N] Trait ; // Trait
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaComp_s ; // Biotic slope for species
+  vector[C] betaComp_c ; // Biotic slope for complexes
+  real<lower=0> alphaNCI ;
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigma ;
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+}
+model {
+  alphaNCI ~ lognormal(0, 1) ;
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* NCI, sigma) ; // Likelihood
+}
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * NCI ; // Predictions
+}
+```
 
 ```{r }
-fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-names(fits) <- traits
-save(fits, file = "./functional_save/NCIRNE.Rdata")
-load("./functional_save/NCIRNE.Rdata")
+data_trait <- Individuals %>% 
+  filter(!is.na(invLA)) %>% 
+  sample_n(200)
+Competition_trait <- Competition
+Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+Competition_trait <- filter(Competition_trait, !is.na(idTree))
+mdata <- list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait$invLA, center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       weights = weights,
+       data = data_trait,
+       competition = Competition_trait)
+# fit <- sampling(Model, chains = 2, data = mdata)
+# save(fit, file = "./functional_save/NCItest1.Rdata")
+```
+
+## Test 2
+
+> Edge effect with weighted observations
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # of species
+  int<lower=1> C ; // # of complexes
+  vector[N] Trait ; // Trait
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+  vector[N] weights ;
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaComp_s ; // Biotic slope for species
+  vector[C] betaComp_c ; // Biotic slope for complexes
+  real<lower=0> alphaNCI ;
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigma ;
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+}
+model {
+  alphaNCI ~ lognormal(0, 1) ;
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  for(n in 1:N)
+    target += weights[n] * normal_lpdf(Trait[n] | alpha_s[species] +  betaComp_s[species]*NCI[n], sigma) ; // Likelihood
+}
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * NCI ; // Predictions
+}
+```
+
+```{r }
+data_trait <- Individuals %>% 
+  filter(!is.na(invLA)) %>% 
+  sample_n(200)
+Competition_trait <- Competition
+Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+Competition_trait <- filter(Competition_trait, !is.na(idTree))
+data_trait <- data_trait %>% 
+  left_join(select(Competition, idTree, AreaOutside20) 
+            %>% unique())
+mdata <- list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait$invLA, center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       weights = 1-data_trait$AreaOutside20,
+       data = data_trait,
+       competition = Competition_trait)
+# fit <- sampling(Model, chains = 2, data = mdata)
+# save(fit, file = "./functional_save/NCItest2.Rdata")
+```
+
+## Test 3
+
+> Edge effect with corrected observations
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # of species
+  int<lower=1> C ; // # of complexes
+  vector[N] Trait ; // Trait
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+  vector[N] weights ;
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaComp_s ; // Biotic slope for species
+  vector[C] betaComp_c ; // Biotic slope for complexes
+  real<lower=0> alphaNCI ;
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigma ;
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+}
+model {
+  alphaNCI ~ lognormal(0, 1) ;
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
+}
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * (1 ./ weights) .* NCI ; // Predictions
+}
+```
+
+
+```{r }
+data_trait <- Individuals %>% 
+  filter(!is.na(invLA)) %>% 
+  sample_n(200)
+Competition_trait <- Competition
+Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+Competition_trait <- filter(Competition_trait, !is.na(idTree))
+data_trait <- data_trait %>% 
+  left_join(select(Competition, idTree, AreaOutside20) 
+            %>% unique())
+mdata <- list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait$invLA, center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       weights = 1-data_trait$AreaOutside20,
+       data = data_trait,
+       competition = Competition_trait)
+# fit <- sampling(Model, chains = 2, data = mdata)
+# save(fit, file = "./functional_save/NCItest3.Rdata")
+```
+
+## Test 4
+
+> Edge effect with weighted and corrected observations
+
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # of species
+  int<lower=1> C ; // # of complexes
+  vector[N] Trait ; // Trait
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+  vector[N] weights ;
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaComp_s ; // Biotic slope for species
+  vector[C] betaComp_c ; // Biotic slope for complexes
+  real<lower=0> alphaNCI ;
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigma ;
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+}
+model {
+  alphaNCI ~ lognormal(0, 1) ;
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  for(n in 1:N)
+    target += weights[n] * normal_lpdf(Trait[n] | alpha_s[species] +  betaComp_s[species]*NCI[n], sigma) ; // Likelihood
+}
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * (1 ./ weights) .* NCI ; // Predictions
+}
+```
+
+```{r }
+data_trait <- Individuals %>% 
+  filter(!is.na(invLA)) %>% 
+  sample_n(200)
+Competition_trait <- Competition
+Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+Competition_trait <- filter(Competition_trait, !is.na(idTree))
+data_trait <- data_trait %>% 
+  left_join(select(Competition, idTree, AreaOutside20) 
+            %>% unique())
+mdata <- list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait$invLA, center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       weights = 1-data_trait$AreaOutside20,
+       data = data_trait,
+       competition = Competition_trait)
+# fit <- sampling(Model, chains = 2, data = mdata)
+# save(fit, file = "./functional_save/NCItest4.Rdata")
+```
+
+## Summary
+
+```{r }
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+tests <- paste0("test", 0:4)
+fits <- lapply(tests, function(test){
+  # cat(test, "\n")
+  load(paste0("./functional_save/NCI", test, ".Rdata"))
+  return(fit)
+})
+names(fits) <- tests
 pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
-lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
-   mutate(Trait = trait)) %>%
-  bind_rows() %>%
+table <- lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T))
+table %>% 
+  bind_rows(.id = "Test") %>% 
+  reshape2::melt(id.vars = c("Test", "term")) %>% 
+  reshape2::dcast(term + variable ~ Test, value.var = "value") %>% 
   kable() %>%
-  kable_styling()
+  kable_styling() %>% 
+  collapse_rows(1)
+```
+
+```{r EdgeEffecttable2}
+data.frame(Fit = 0:4,
+           Include = c("No", rep("Yes", 4)),
+           Correction = c("", rep("No", 2), rep("Yes", 2)),
+           Weighing = c("", "No", "Yes", "No", "Yes")) %>% 
+  kable(caption = "Edge effects test", 
+        col.names = c("Test", "Include edge effect", "Correct edge effect", 
+                      "Weight corresponding observations"))
+```
+
+## Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(tests, function(test)
+  mcmc_intervals(as.array(fits[[test]]), regex_pars = pars)),
+  labels = tests, nrow = 2)
+```
+
+```{r , fig.cap="Model parameters posterior.", fig.width=12, fig.height=12}
+cowplot::plot_grid(plotlist = lapply(tests, function(test)
+  mcmc_intervals(as.array(fits[[test]]), regex_pars = c("Comp"))),
+  labels = tests, nrow = 2)
+```
+
+```{r , fig.cap="Model parameters posterior."}
+gdata <- lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit), regex_pars = c("lp__"))) %>% 
+  bind_rows(.id = "test") 
+ggplot(gdata, aes(x = test, xend = test, col = test, fill = test)) +
+  geom_point(aes(y = m), shape = 21, size = 10) +
+  geom_segment(aes_(y = ~ ll, yend = ~ hh), size = 1, show.legend = F) +
+  geom_segment(aes_(y = ~ l, yend = ~ h), size = 2) +
+  coord_flip() +
+  scale_y_sqrt() +
+  ggtitle("Log likelihood")
+```
+
+## Chains
+
+```{r , fig.cap="Model parameters posterior.", fig.width=12, fig.height=12}
+cowplot::plot_grid(plotlist = lapply(tests, function(test)
+  mcmc_trace(as.array(fits[[test]]), pars = c("alphaNCI"))),
+  labels = tests, nrow = 2)
+```
+
+## Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.", fig.height=12, fig.width=12}
+mcmc_pairs(as.array(fits$test2), regex_pars = pars)
+```
+
+## Conclusion
+
+We will use test 3, i.e. we will include individuals with edge effect with edge effet correction without weighing likelihood in the bayesian model.
+
+# Full model
+
+```{r mdata, fig.cap="prepared data"}
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    left_join(select(Competition, idTree, AreaOutside20) 
+              %>% unique())
+  Competition_trait <- Competition
+  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+  Competition_trait <- filter(Competition_trait, !is.na(idTree))
+  list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait[trait], center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       weights = 1-data_trait$AreaOutside20,
+       data = data_trait,
+       competition = Competition_trait)})
+names(mdata) <- traits
+```
+
+## Code
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # of species
+  int<lower=1> C ; // # of complexes
+  vector[N] Trait ; // Trait
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+  vector[N] weights ;
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaComp_s ; // Biotic slope for species
+  vector[C] betaComp_c ; // Biotic slope for complexes
+  real<lower=0> alphaNCI ;
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigma ;
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+}
+model {
+  alphaNCI ~ lognormal(0, 1) ;
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
+}
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * (1 ./ weights) .* NCI ; // Predictions
+}
+```
+
+## Summary
+
+```{r }
+for(trait in traits){
+  cat("### ", trait, " ### \n\n")
+  fit <- sampling(Model, chains = 2, data = mdata[[trait]])
+  save(fits, file = paste0("./functional_save/NCI_", trait, ".Rdata"))
+  rm(fit) ; gc()
+}
+```
+
+```{r }
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/NCI.Rdata")
+# load("./functional_save/NCI.Rdata")
+# pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
+# lapply(as.list(traits), function(trait)
+#   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+#    mutate(Trait = trait)) %>%
+#   bind_rows() %>%
+#   kable() %>%
+#   kable_styling()
 ```
 
 ## Posteriors
@@ -339,7 +684,7 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
 
 ```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaComp_c")),
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "Comp")),
   labels = names(data), nrow = 2)
 ```
 
@@ -358,7 +703,7 @@ mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 
 ## Predictions
 
-```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+```{r , ev, fig.cap="Predictions.", fig.width=12, fig.height=12}
 lapply(as.list(names(mdata)), function(type)
   cbind(type = type, 
         Y = mdata[[type]]$Trait,
@@ -400,8 +745,6 @@ lapply(as.list(names(mdata)), function(type)
   geom_line(aes(y = muSymphonia, col = "Symphonia")) +
   facet_wrap(~ type, scales = "free", nrow = 3)
 ```
-
-## Diagnostic
 
 # Conclusion
 
