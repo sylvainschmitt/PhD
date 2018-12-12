@@ -498,14 +498,18 @@ mdata <- list(N = nrow(data_trait),
 ## Summary
 
 ```{r }
-rm(list = ls()) ; invisible(gc()) ; set.seed(42)
-tests <- paste0("test", 0:4)
-fits <- lapply(tests, function(test){
-  # cat(test, "\n")
-  load(paste0("./functional_save/NCI", test, ".Rdata"))
-  return(fit)
-})
-names(fits) <- tests
+# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+# tests <- paste0("test", 0:4)
+# fits <- lapply(tests, function(test){
+#   load(paste0("./functional_save/NCI", test, ".Rdata"))
+#   return(fit)
+# })
+# names(fits) <- tests
+# save(fits, file = "./functional_save/NCItest.Rdata")
+# rm(fits)
+# lapply(tests, function(test)
+#   unlink(paste0("./functional_save/NCI", test, ".Rdata")))
+load("./functional_save/NCItest.Rdata")
 pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
 table <- lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T))
@@ -652,10 +656,11 @@ generated quantities {
 ## Summary
 
 ```{r }
+traits <- traits[!(traits %in% "invSLA")]
 for(trait in traits){
   cat("### ", trait, " ### \n\n")
   fit <- sampling(Model, chains = 2, data = mdata[[trait]])
-  save(fits, file = paste0("./functional_save/NCI_", trait, ".Rdata"))
+  save(fit, file = paste0("./functional_save/NCI_", trait, ".Rdata"))
   rm(fit) ; gc()
 }
 ```
@@ -665,13 +670,14 @@ for(trait in traits){
 # names(fits) <- traits
 # save(fits, file = "./functional_save/NCI.Rdata")
 # load("./functional_save/NCI.Rdata")
-# pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
+pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
 # lapply(as.list(traits), function(trait)
 #   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
 #    mutate(Trait = trait)) %>%
 #   bind_rows() %>%
 #   kable() %>%
 #   kable_styling()
+broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)
 ```
 
 ## Posteriors
@@ -680,30 +686,32 @@ for(trait in traits){
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
   labels = names(data), nrow = 2)
+mcmc_intervals(as.array(fit), regex_pars = pars)
 ```
 
 ```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = "Comp")),
   labels = names(data), nrow = 2)
+mcmc_intervals(as.array(fit), regex_pars = "Comp")
 ```
 
 ## Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$LDMC), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fit), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.", fig.height=12, fig.width=12}
-mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+mcmc_pairs(as.array(fit), regex_pars = pars)
 ```
 
 ## Predictions
 
-```{r , ev, fig.cap="Predictions.", fig.width=12, fig.height=12}
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
 lapply(as.list(names(mdata)), function(type)
   cbind(type = type, 
         Y = mdata[[type]]$Trait,
