@@ -1,5 +1,7 @@
 # PhD 0.1.9080
-* Competition matriux with edge effects
+* A04 Abiotic model & A05 Ontogenic Model 
+* A07 Additive model
+* Competition matrix with edge effects
 
 # PhD 0.1.9079
 * A06 Biotic model in stan
@@ -14,6 +16,8 @@
 
 # PhD 0.1.9076
 * A04 AbioticModel without random nested effect
+
+# PhD 0.1.9076
 * A01-PCA sharing
 
 # PhD 0.1.9075

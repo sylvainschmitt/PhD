@@ -7,13 +7,13 @@ output:
     number_sections: yes
     toc: true
     toc_float: yes
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -142,11 +142,11 @@ generated quantities {
 ```{r }
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- traits
-# save(fits, file = "./functional_save/TWI.Rdata")
-load("./functional_save/TWI.Rdata")
+# save(fits, file = "./functional_save/TWIM1.Rdata")
+load("./functional_save/TWIM1.Rdata")
 pars <- c("alpha","betaTWI","sigma")
 lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+  broom::tidyMCMC(fits[["invSLA"]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
   bind_rows() %>%
   kable() %>%
@@ -248,8 +248,8 @@ generated quantities {
 ```{r }
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- traits
-# save(fits, file = "./functional_save/TWIRNE.Rdata")
-load("./functional_save/TWIRNE.Rdata")
+# save(fits, file = "./functional_save/TWIM2.Rdata")
+load("./functional_save/TWIM2.Rdata")
 pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma" )
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
