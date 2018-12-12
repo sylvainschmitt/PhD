@@ -17,8 +17,8 @@ output:
     keep_tex: true
   bookdown::word_document2: default
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
@@ -38,7 +38,10 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-# Data
+# Introduction {-}
+
+The aim of this document is to fit the ontogenic model with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the ontogenic model without mixed effects (1), with random effects on species (2) and with mixed effects (3).
+
 ```{r data, eval=T}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
   googlesheets::gs_read("AllTraits") %>% 
@@ -86,39 +89,44 @@ mdata <- lapply(traits, function(trait){
        complex = as.numeric(as.factor(data_trait$Genus)),
        speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
 names(mdata) <- traits
-mdata1 <- lapply(traits, function(trait){
-  data_trait <- filter(Individuals[!is.na(unlist(Individuals[,trait])),],Genus=="Eschweilera")
-  list(N = nrow(data_trait),
-       C = length(unique(data_trait$Genus)),
-       S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait],center = F)),
-       DBH = as.numeric(scale(data_trait$DBH,center = F)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       complex = as.numeric(as.factor(data_trait$Genus)),
-       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
-names(mdata1) <- traits
-mdata2 <- lapply(traits, function(trait){
-  data_trait <- filter(Individuals[!is.na(unlist(Individuals[,trait])),],Genus=="Symphonia")
-  list(N = nrow(data_trait),
-       C = length(unique(data_trait$Genus)),
-       S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait],center = F)),
-       DBH = as.numeric(scale(data_trait$DBH,center = F)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       complex = as.numeric(as.factor(data_trait$Genus)),
-       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
-names(mdata2) <- traits
-rm(Individuals)
+# mdata1 <- lapply(traits, function(trait){
+#   data_trait <- filter(Individuals[!is.na(unlist(Individuals[,trait])),],Genus=="Eschweilera")
+#   list(N = nrow(data_trait),
+#        C = length(unique(data_trait$Genus)),
+#        S = length(unique(data_trait$Species)),
+#        Trait = as.numeric(scale(data_trait[trait],center = F)),
+#        DBH = as.numeric(scale(data_trait$DBH,center = F)),
+#        species = as.numeric(as.factor(data_trait$Species)),
+#        complex = as.numeric(as.factor(data_trait$Genus)),
+#        speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+# names(mdata1) <- traits
+# mdata2 <- lapply(traits, function(trait){
+#   data_trait <- filter(Individuals[!is.na(unlist(Individuals[,trait])),],Genus=="Symphonia")
+#   list(N = nrow(data_trait),
+#        C = length(unique(data_trait$Genus)),
+#        S = length(unique(data_trait$Species)),
+#        Trait = as.numeric(scale(data_trait[trait],center = F)),
+#        DBH = as.numeric(scale(data_trait$DBH,center = F)),
+#        species = as.numeric(as.factor(data_trait$Species)),
+#        complex = as.numeric(as.factor(data_trait$Genus)),
+#        speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+# names(mdata2) <- traits
+# rm(Individuals)
 ```
 
 
 # Simplest model
 
-##  Code M1
+\begin{equation} 
+Trait_i \sim \mathcal{N}(\cfrac{\alpha . DBH_i}{\beta + DBH_i},\sigma) 
+(\#eq:Ontogeny)
+\end{equation}
+
+##  Code
 
 ```{stan Model, output.var="Model", echo=T, eval=F}
 data {
-  int[lower=1] N ; //  obs
+  int<lower=1> N ; //  obs
   vector[N] Trait ; // Phenotype continuous descriptor
   vector[N] DBH ; // Diameter at breast height
 }
@@ -132,7 +140,7 @@ model {
 }
 generated quantities {
   vector[N] Trait_pred ;
-  Trait_pred = (alpha*DBH) / (beta+DBH) ; // Predictions
+  Trait_pred = (alpha*DBH) ./ (beta+DBH) ; // Predictions
 } // empty line at the end (C++)
 
 ```
@@ -171,8 +179,35 @@ mcmc_trace(as.array(fits$invSLA), pars = c(pars, "lp__"),
 ## Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$CC), pars = pars)
+mcmc_pairs(as.array(fits$invSLA), pars = pars)
 ```
+
+## Predictions
+```{r , fig.cap="Predictions.",eval=F}
+lapply(as.list(traits), function(trait)
+  cbind(fit = trait, 
+        Y = mdata[[trait]]$Trait,
+        Individuals[unlist(!is.na(Individuals[trait])),],
+        Traitpred = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, mean),
+        sigmaTWI = apply(as.matrix(fits[[trait]], pars = "sigma"), 2, mean),
+        mu5 = unlist(apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.05)),
+        mu95 = unlist(apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.95)),
+        sigmaTWI95 = unlist(apply(as.matrix(fits[[trait]], pars = "sigma"), 2, quantile, probs = 0.95))
+        )) %>% 
+  bind_rows() %>% 
+  mutate(Y5sigmafix = qnorm(0.05, mean = mu5, sd = sigmaTWI)) %>% 
+  mutate(Y95sigmafix = qnorm(0.95, mean = mu95, sd = sigmaTWI)) %>% 
+  mutate(Y5 = qnorm(0.05, mean = mu5, sd = sigmaTWI95)) %>% 
+  mutate(Y95 = qnorm(0.95, mean = mu95, sd = sigmaTWI95)) %>% 
+  ggplot(aes(x = TWI)) +
+  geom_point(aes(y = Y)) +
+  geom_line(aes(y = Traitpred)) +
+  geom_ribbon(aes(ymin = Y5, ymax = Y95, color = 'Ypred'), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Y5sigmafix, ymax = Y95sigmafix, color = 'Ysigmafix'), alpha = 0.2) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95, color = 'mu'), alpha = 0.2) +
+  facet_wrap(~ fit, scales = "free", nrow = 3)
+```
+
 **Alpha strongly linked to beta**
 
 
@@ -184,9 +219,9 @@ Converge with symphonia and Eschweleira Dataset, when variables are reduced but 
 # Model with random effect only on species
 
 \begin{equation} 
-$$Trait_i \sim \mathcal{N}(\cfrac{\alpha_{s} . DBH_i}{\beta_{s} + DBH_i},\sigma) 
+Trait_i \sim \mathcal{N}(\cfrac{\alpha_{s} . DBH_i}{\beta_{s} + DBH_i},\sigma) 
 \\ (\alpha_{s} \sim \mathcal{N}(\alpha, \sigma_{intercept})
-\\ (\beta{s} \sim \mathcal{N}(\beta_{DBH}, \sigma_{DBH})$$
+\\ (\beta{s} \sim \mathcal{N}(\beta_{DBH}, \sigma_{DBH})
 (\#eq:Ontogeny)
 \end{equation}
 
@@ -223,7 +258,7 @@ generated quantities {
 
 ## Summary
 
-```{r }
+```{r}
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- traits
 # save(fits, file = "./functional_save/OntoM2.Rdata")
@@ -242,21 +277,20 @@ lapply(as.list(traits), function(trait)
 
 ```{r , fig.cap="Model parameters posterior.", fig.width=12}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits), pars = pars)),
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
   labels = names(data), nrow = 2)
 ```
-
 ## Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data.", fig.width=12}
-mcmc_trace(as.array(fits$invSLA), pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$invSLA), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$invSLA), pars = pars)
+mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
 ## Obs
@@ -266,6 +300,7 @@ Do not converge because of sigma.
 # Model with random nested effect on species and complex
 
 ## Code
+
 ```{stan output.var="Model",echo=T, eval=F}
 data {
   int<lower=1> N ; // # obs
@@ -293,26 +328,27 @@ parameters {
 //  betaDBH_c = exp(-0.5*betaDBHP_c) ;
 //}
 model {
+  betaDBH_c ~ lognormal(0,1) ;
   alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
   betaDBH_s ~ normal(betaDBH_c[speciesincomplex], sigmaDBH) ;
   Trait ~ normal((alpha_s[species].*DBH) ./ (betaDBH_s[species]+DBH), sigma) ; // Likelihood
 }
 generated quantities {
-  matrix[N,C] Trait_pred ;
-  for(c in 1:C)
-    Trait_pred[,c] = alpha_c[c] + betaDBH_c[c] *DBH ; // Predictions
+   matrix[N,C] Trait_pred ;
+   for(c in 1:C)
+    Trait_pred[,c] = (alpha_c[c]*DBH) ./ (betaDBH_c[c]+DBH) ; // Predictions
 }
 ```
 
 ## Summary
 
 ```{r }
-# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-# names(fits) <- traits
+fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+names(fits) <- traits
 # save(fits, file = "./functional_save/OntoM3.Rdata")
-load("./functional_save/OntoM3.Rdata")
+# load("./functional_save/OntoM3.Rdata")
 
-
+pars <- c( "alpha_c", "betaDBH_c", "sigmaIntercept", "sigmaDBH", "sigma" )
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -325,7 +361,18 @@ lapply(as.list(traits), function(trait)
 ```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
-  labels = names(data), nrow = 2)
+  labels = traits, nrow = 2)
+```
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaDBH_c")),
+  labels = traits, nrow = 2)
+```
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(traits, function(trait)
+  mcmc_areas(as.array(fits[[trait]]), regex_pars = "betaDBH_c")),
+  labels = traits, nrow = 2)
 ```
 
 ## Chains
@@ -337,8 +384,8 @@ mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
 
 ## Pairs
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$CC), regex_pars = pars)
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.",fig.height=12}
+mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
 ## Predictions
@@ -378,7 +425,7 @@ lapply(as.list(names(mdata)), function(type)
   ggplot(aes(x = DBH)) +
   geom_point(aes(y = trait, col = as.factor(Genus))) +
   geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
-  geom_line(aes(y = muEschweilera, col = "Symphonia")) +
+  geom_line(aes(y = muSymphonia, col = "Symphonia")) +
   geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
                   col = "Eschweilera"), alpha = 0.2) +
     geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,

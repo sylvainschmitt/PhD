@@ -17,13 +17,13 @@ output:
     keep_tex: true
   bookdown::word_document2: default
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -39,48 +39,43 @@ path <- "../../data/Paracou/"
 ```
 
 ```{r data, eval=T}
-traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
-  mutate(Genus = "Symphonia") %>% 
-  rename(Species = Morphotype) %>% 
-  mutate(Species = ifelse(Species == "Indet.", 
-                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G", 
+traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+  googlesheets::gs_read("AllTraits") %>%
+  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+  mutate(Genus = "Symphonia") %>%
+  rename(Species = Morphotype) %>%
+  mutate(Species = ifelse(Species == "Indet.",
+                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
                                      "sp.1" =  "S")], Species))
-traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
+traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+  googlesheets::gs_read("AllTraits") %>%
   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) 
-paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(idTree %in% traits$idTree) %>%
-  filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
-         Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
-         Genus == "Symphonia" & CensusYear == 2015) %>%
-  mutate(DBH = CircCorr/pi) %>% 
-  collect()
-load("./functional_save/env.Rdata")
-Individuals <- left_join(traits, paracou) %>% 
-  left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
-  group_by(Plot, SubPlot, TreeFieldNum, Genus, Species,
-           SpeciesLong, Bark, Dawkins, DBH, TWI, NCI) %>%
+traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+  group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+           SpeciesLong, Bark, Dawkins) %>%
   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
-                    "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
-  ungroup() %>% 
-  mutate(invSLA=1/SLA) %>% 
+                    "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+  ungroup() %>%
+  mutate(invSLA=1/SLA) %>%
   mutate(invLA=1/LA)
-load("./functional_save/CompetitionMatrix.Rdata")
+load("./functional_save/env.Rdata")
+Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
 rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+# load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
 # Introduction {-}
 
 The aim of this document is to fit the full model with observed values of functional traits for our individuals. We prepared data excluding oultiers and reducing variance of all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the full model with additive (1) and hierarchical (2) forms.
 
-```{r mdata, fig.cap="prepared data"}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+```{r mdata, fig.cap="prepared data",fig.width=12}
+traits <- c("invLA")
+# Individuals <- sample_n(Individuals, 100)
+#traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
   list(N = nrow(data_trait),
@@ -97,17 +92,19 @@ mdata <- lapply(traits, function(trait){
        complex = as.numeric(as.factor(data_trait$Genus)),
        speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
 names(mdata) <- traits
+
 lapply(as.list(traits), function(trait)
   cbind(Model = trait, 
         Trait = mdata[[trait]]$Trait, 
         Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
   bind_rows() %>% 
-  select(Model, Trait, Genus, DBH, TWI, NCI) %>% 
+  select(Model, Trait, Genus, DBH, TWI) %>% 
   reshape2::melt(id.vars = c("Model", "Trait", "Genus")) %>% 
   ggplot(aes(x = value, y = Trait, col = Genus)) +
   geom_point() +
   geom_smooth() +
   facet_grid(Model ~ variable, scales = "free")
+rm(Individuals,Competition)
 ```
 
 # Additive model
@@ -115,7 +112,7 @@ lapply(as.list(traits), function(trait)
 We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels ($C, S$ mixed effects, respectivelly fixed and random):
 
 \begin{equation} 
-  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)    \\
+$$  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)    \\
   \Theta_{c,s} \sim \mathcal{N}^5(\Theta_c,\sigma_{species}) ~|~ \Theta =
    \begin{bmatrix}
            \alpha \\
@@ -132,7 +129,7 @@ We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environ
            \sigma_{NCI}
   \end{bmatrix}  \\
   \Theta_c \sim \mathcal{N}^{5}(0, + \infty) \\
-  (\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)
+  (\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)$$
 (\#eq:final)
 \end{equation}
 
@@ -151,33 +148,32 @@ We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environ
 * $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
 * therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$  and $\sigma_{species}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all $\Theta_{c,s}$ and $\Theta_c$.
 
-## Code
+## Code without biotic effect
 
 ```{stan, output.var="Model", echo=T, eval=F}
 data {
   int<lower=1>  N ; // # of observations
-  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
   vector[N] Trait ; // Trait
   vector[N] DBH ; // Diameter at Breast Height
   vector[N] TWI ; // Topographic Wetness Index
-  vector[N] DBHj ; // DBH neighbor
-  vector[N] Deltaj ; // Distance neighbor
-  int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
   int<lower=1, upper=S> species[N] ; // species index
   int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
   int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  vector[S] alpha_s ; // Intercept for species
-  vector[C] alpha_c ; // Intercept for complexes
-  vector[S] betaDBH_s ; // DBH half-load for species
-  vector[C] betaDBH_c ; // DBH half-load for complexes
+  vector<lower=0> [S] alpha_s ; // Intercept for species
+  vector<lower=0> [C] alpha_c ; // Intercept for complexes
+  vector<lower=0> [S] betaDBH_s ; // DBH half-load for species
+  vector<lower=0> [C]  betaDBH_c ; // DBH half-load for complexes
   vector[S] betaTWI_s ; // Abiotic slope for species
   vector[C] betaTWI_c ; // Abiotic slope for complexes
-  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
-  real<lower=0, upper=10> sigmaDBH ; // DBH half-load variance for species
-  real<lower=0, upper=10> sigmaTWI ; // Abiotic slope variance for species
-  real<lower=0, upper=10> sigma ; // Variance
+
+  real<lower=0> sigmaIntercept ; // Intercept variance for species
+  real<lower=0> sigmaDBH ; // DBH half-load variance for species
+  real<lower=0> sigmaTWI ; // Abiotic slope variance for species
+  real<lower=0> sigma ; // Variance
 }
 model {
   alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
@@ -188,19 +184,19 @@ model {
 generated quantities {
   matrix[N,C] Trait_pred ;
   for(c in 1:C)
-    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+    Trait_pred[,c] = alpha_c[c] * (DBH ./ (betaDBH_c[c] + DBH)) + betaTWI_c[c]*TWI ; // Predictions
 }
-```
 
+```
 
 ## Summary
 
 ```{r , eval=F}
-# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-# names(fits) <- traits
-# save(fits, file = "./functional_save/NCI.Rdata")
-load("./functional_save/NCI.Rdata")
-pars <- c()
+fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+names(fits) <- traits
+# save(fits, file = "./functional_save/AddOntoAbiot.Rdata")
+#load("./functional_save/NCI.Rdata")
+pars <- c("alpha_c", "betaDBH_c", "betaTWI_c", "sigmaIntercept", "sigmaDBH", "sigmaTWI", "sigma")
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -213,24 +209,67 @@ lapply(as.list(traits), function(trait)
 
 ```{r , eval=F, fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), pars = pars)),
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
   labels = names(data), nrow = 2)
 ```
 
 ## Chains
 
-```{r , eval=F, fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$LA), pars = c(pars, "lp__"),
+```{r , eval=F, fig.cap="Markov chains trace plot after warmup for intermediate data.",fig.height=12,fig.width=12}
+mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , eval=F, fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$CC), pars = pars)
+```{r , eval=F, fig.cap="Markov chains pairs plot after warmup  for intermediate data.",fig.height=20,fig.width=20}
+mcmc_pairs(as.array(fits$invLA), regex_pars = pars)
 ```
 
 ## Predictions
+
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(names(mdata)), function(type)
+  cbind(type = type, 
+        trait = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),type],center=F)),
+        DBH = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),"DBH"],center=F)),
+        Individuals[!is.na(unlist(Individuals[,type])),],
+        muEschweilera = apply(as.matrix(fits[[type]], 
+                                        pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",1]")), 
+                              2, mean),
+        muSymphonia = apply(as.matrix(fits[[type]], 
+                                      pars = paste0("Trait_pred[",
+                                                    1:mdata[[type]]$N,",2]")), 
+                            2, mean),
+        muEschweilera5 = apply(as.matrix(fits[[type]], 
+                                         pars = paste0("Trait_pred[",
+                                                       1:mdata[[type]]$N,",1]")), 
+                               2, quantile, probs = 0.05),
+        muSymphonia5 = apply(as.matrix(fits[[type]], 
+                                       pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",2]")), 
+                             2, quantile, probs = 0.05),
+        muEschweilera95 = apply(as.matrix(fits[[type]], 
+                                          pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",1]")), 
+                                2, quantile, probs = 0.95),
+        muSymphonia95 = apply(as.matrix(fits[[type]], 
+                                        pars = paste0("Trait_pred[",
+                                                      1:mdata[[type]]$N,",2]")), 
+                              2, quantile, probs = 0.95)
+  )) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = DBH)) +
+  geom_point(aes(y = trait, col = as.factor(Genus))) +
+  geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
+  geom_line(aes(y = muEschweilera, col = "Symphonia")) +
+  geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
+                  col = "Eschweilera"), alpha = 0.2) +
+    geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,
+                  col = "Symphonia"), alpha = 0.2) +
+  facet_wrap(~ type, scales = "free", nrow = 3)
+```
 
 ```{r , eval=F, fig.cap="Predictions."}
 lapply(as.list(traits), function(trait)
@@ -265,7 +304,7 @@ lapply(as.list(traits), function(trait)
 We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels ($C, S$ mixed effects, respectivelly fixed and random):
 
 \begin{equation} 
-  T_{c,s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i}, \sigma)    \\
+  $$T_{c,s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i}, \sigma)    \\
   \alpha_{env} \sim \mathcal{N}(\alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma_{env})    \\
   \Theta_{c,s} \sim \mathcal{N}^5(\Theta_c,\sigma_{species}) ~|~ \Theta =
    \begin{bmatrix}
@@ -283,7 +322,7 @@ We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environ
            \sigma_{NCI}
   \end{bmatrix}  \\
   \Theta_c \sim \mathcal{N}^{5}(0, + \infty) \\
-  (\sigma, \sigma_{env}, \sigma_{species}) \sim \Gamma^{7}(- \infty, + \infty)
+  (\sigma, \sigma_{env}, \sigma_{species}) \sim \Gamma^{7}(- \infty, + \infty)$$
 (\#eq:final)
 \end{equation}
 
@@ -307,40 +346,43 @@ We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environ
 ```{stan, output.var="Model", echo=T, eval=F}
 data {
   int<lower=1>  N ; // # of observations
-  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
   vector[N] Trait ; // Trait
   vector[N] DBH ; // Diameter at Breast Height
   vector[N] TWI ; // Topographic Wetness Index
-  vector[N] DBHj ; // DBH neighbor
-  vector[N] Deltaj ; // Distance neighbor
-  int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
   int<lower=1, upper=S> species[N] ; // species index
   int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
   int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  vector[S] alpha_s ; // Intercept for species
-  vector[C] alpha_c ; // Intercept for complexes
-  vector[S] betaDBH_s ; // DBH half-load for species
-  vector[C] betaDBH_c ; // DBH half-load for complexes
+  real alpha_env ; // Intercept
+  vector<lower=0> [S] alpha_s ; // Intercept for species
+  vector<lower=0> [C] alpha_c ; // Intercept for complexes
+  vector<lower=0> [S] betaDBH_s ; // DBH half-load for species
+  vector<lower=0> [C]  betaDBH_c ; // DBH half-load for complexes
   vector[S] betaTWI_s ; // Abiotic slope for species
   vector[C] betaTWI_c ; // Abiotic slope for complexes
-  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
-  real<lower=0, upper=10> sigmaDBH ; // DBH half-load variance for species
-  real<lower=0, upper=10> sigmaTWI ; // Abiotic slope variance for species
-  real<lower=0, upper=10> sigma ; // Variance
+
+  real<lower=0> sigmaIntercept ; // Intercept variance for species
+  real<lower=0> sigmaDBH ; // DBH half-load variance for species
+  real<lower=0> sigmaTWI ; // Abiotic slope variance for species
+  real<lower=0> sigmaEnv ;
+  real<lower=0> sigma ; // Variance
 }
 model {
   alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
   betaDBH_s ~ normal(betaDBH_c[speciesincomplex], sigmaDBH) ;
   betaTWI_s ~ normal(betaTWI_c[speciesincomplex], sigmaTWI) ;
-  Trait ~ normal(, sigma) ; // Likelihood
+  Trait ~ normal(alpha_env * (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
+  alpha_env ~ normal(alpha_s[species] + betaTWI_s[species] .* TWI, sigmaEnv) ;
 } 
 generated quantities {
   matrix[N,C] Trait_pred ;
   for(c in 1:C)
-    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+    Trait_pred[,c] = alpha_env * (DBH ./ (betaDBH_c[c] + DBH)) ; // Predictions
 }
+
 ```
 
 ## Summary
@@ -432,6 +474,90 @@ lapply(as.list(names(mdata)), function(type)
 ```
 
 ## Diagnostic
+
+# Additive with biotic effect 
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] DBHj ; // DBH neighbor
+  vector[N] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaDBH_s ; // DBH half-load for species
+  vector[C] betaDBH_c ; // DBH half-load for complexes
+  vector[S] betaTWI_s ; // Abiotic slope for species
+  vector[C] betaTWI_c ; // Abiotic slope for complexes
+  
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaDBH ; // DBH half-load variance for species
+  real<lower=0, upper=10> sigmaTWI ; // Abiotic slope variance for species
+  real<lower=0, upper=10> sigma ; // Variance
+}
+model {
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaDBH_s ~ normal(betaDBH_c[speciesincomplex], sigmaDBH) ;
+  betaTWI_s ~ normal(betaTWI_c[speciesincomplex], sigmaTWI) ;
+  Trait ~ normal(alpha_s[species] .* (DBH ./ (betaDBH_s[species] + DBH)) + betaTWI_s[species] .* TWI, sigma) ; // Likelihood
+} 
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+}
+```
+
+# Hierarchical with biotic effect
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] DBHj ; // DBH neighbor
+  vector[N] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaDBH_s ; // DBH half-load for species
+  vector[C] betaDBH_c ; // DBH half-load for complexes
+  vector[S] betaTWI_s ; // Abiotic slope for species
+  vector[C] betaTWI_c ; // Abiotic slope for complexes
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaDBH ; // DBH half-load variance for species
+  real<lower=0, upper=10> sigmaTWI ; // Abiotic slope variance for species
+  real<lower=0, upper=10> sigma ; // Variance
+}
+model {
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaDBH_s ~ normal(betaDBH_c[speciesincomplex], sigmaDBH) ;
+  betaTWI_s ~ normal(betaTWI_c[speciesincomplex], sigmaTWI) ;
+  Trait ~ normal(, sigma) ; // Likelihood
+} 
+generated quantities {
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+}
+```
+
 
 # Conclusion
 

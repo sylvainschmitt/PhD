@@ -1,3 +1,10 @@
+# PhD 0.1.9080
+* A04 Abiotic model & A05 Ontogenic Model 
+* A07 Additive model
+
+# PhD 0.1.9079
+* A06 Biotic model in stan
+
 # PhD 0.1.9078
 * A04 Abiotic & AO6 invSLA & invLA
 * A07 Full Model template

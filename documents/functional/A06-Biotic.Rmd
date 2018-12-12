@@ -23,7 +23,7 @@ link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -39,39 +39,40 @@ path <- "../../data/Paracou/"
 ```
 
 ```{r data, eval=T}
-# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
-#   googlesheets::gs_read("AllTraits") %>% 
-#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
-#   mutate(Genus = "Symphonia") %>% 
-#   rename(Species = Morphotype) %>% 
-#   mutate(Species = ifelse(Species == "Indet.", 
-#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G", 
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
 #                                      "sp.1" =  "S")], Species))
-# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-#   googlesheets::gs_read("AllTraits") %>% 
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
 #   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
 #   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
-#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) 
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species))
 # paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 #   tbl("Paracou") %>%
 #   filter(idTree %in% traits$idTree) %>%
 #   filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
 #          Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
 #          Genus == "Symphonia" & CensusYear == 2015) %>%
-#   mutate(DBH = CircCorr/pi) %>% 
+#   mutate(DBH = CircCorr/pi) %>%
 #   collect()
 # load("./functional_save/env.Rdata")
-# Individuals <- left_join(traits, paracou) %>% 
-#   left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
-#   group_by(idTree,Plot, SubPlot, TreeFieldNum, Genus, Species,
+# Individuals <- left_join(traits, paracou) %>%
+#   left_join(env, by = "idTree", suffix = c("", ".y")) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
 #            SpeciesLong, Bark, Dawkins, DBH, TWI, NCI) %>%
 #   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
 #                     "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
-#   ungroup() %>% 
-#   mutate(invSLA=1/SLA) %>% 
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
 #   mutate(invLA=1/LA)
 # rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
 ```
@@ -81,38 +82,35 @@ load("./functional_save/CompetitionMatrix.Rdata")
 The aim of this document is to fit the biotic model with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the abiotic model with (1) and without mixed effects (2).
 
 ```{r mdata, fig.cap="prepared data"}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-#traits <- c("invSLA")
+traits <- c("invSLA")
+Individuals <- sample_n(Individuals, 100)
+# traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
-   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
-   Competition_trait <- Competition
-   Competition_trait$idTree <- match(Competition_trait$idTree, 
-data_trait$idTree)
-   Competition_trait <- filter(Competition_trait, !is.na(idTree))
-   list(N = nrow(data_trait),
-        J = nrow(Competition_trait),
-        C = length(unique(data_trait$Genus)),
-        S = length(unique(data_trait$Species)),
-        Trait = as.numeric(scale(data_trait[trait], center = F)),
-        individual = Competition_trait$idTree,
-        DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
-        Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
-        species = as.numeric(as.factor(data_trait$Species)),
-        complex = as.numeric(as.factor(data_trait$Genus)),
-        speciesincomplex = 
-unique(cbind(as.numeric(as.factor(data_trait$Species)), 
-as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), 
-as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
+  Competition_trait <- Competition
+  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+  Competition_trait <- filter(Competition_trait, !is.na(idTree))
+  list(N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait[trait], center = F)),
+       individual = Competition_trait$idTree,
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
 names(mdata) <- traits
 lapply(as.list(traits), function(trait)
-   cbind(Model = trait,
-         Trait = mdata[[trait]]$Trait,
-         Individuals[unlist(!is.na(Individuals[trait])),])) %>%
-   bind_rows() %>%
-   ggplot(aes(x = NCI, y = Trait, col = Genus)) +
-   geom_point() +
-   geom_smooth() +
-   facet_wrap(~ Model, scales = "free", nrow = 3)
+  cbind(Model = trait, 
+        Trait = mdata[[trait]]$Trait, 
+        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = NCI, y = Trait, col = Genus)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ Model, scales = "free", nrow = 3)
 ```
 
 # Model without mixed effects
@@ -120,9 +118,9 @@ lapply(as.list(traits), function(trait)
 We explained leaf trait $Trait$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
 
 \begin{equation} 
-$$Trait_i \sim \mathcal{N}(\alpha + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
+Trait_i \sim \mathcal{N}(\alpha + \beta_{comp}. \sum_{j~|~\delta_{i,j}<\delta_{max}}^{J_i} DBH_j^{\beta_{NCI}}.e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma) \\
 (\alpha, \beta_{comp}, \beta_{NCI}) \sim \mathcal{N}^{3}(0, + \infty) \\
-(\alpha_{NCI}, \sigma) \sim \Gamma(- \infty, - \infty) $$
+(\alpha_{NCI}, \sigma) \sim \Gamma(- \infty, - \infty) 
 (\#eq:Competition)
 \end{equation}
 
@@ -145,40 +143,42 @@ data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
   vector[N] Trait ; // Trait
-  vector[N] DBHj ; // DBH neighbor [J]???
-  vector[N] Deltaj ; // Distance neighbor
-  int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
 }
 parameters {
-  real alpha ;
-  real beta_comp ;
-  real<lower=0> alpha_NCI ;
+  real<lower=0> alpha ;
+  real betaComp ;
+  real<lower=0, upper=1> alphaNCI ;
   real<lower=0> sigma ;
 }
 transformed parameters {
-  vector [N] NCI ;
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
-    NCI[individual[j]] = NCI[individual[j]] + DBH[j]^2*exp(-alpha_NCI*Deltaj[j]) ;
-  }
+   NCI[individual[j]] += NCIj[j] ;
+}
 model {
-  Trait ~ normal(alpha + beta_comp*NCI, sigma) ; // Likelihood
-} 
-//generated quantities {
-//  vector[N] Traitpred ;
-//  Traitpred =  ;
-//} // empty line for C++
-
+  Trait ~ normal(alpha + betaComp * NCI, sigma) ; // Likelihood
+}
+generated quantities {
+  vector[N] Traitpred ;
+  Traitpred = alpha + betaComp * NCI ;
+}
 ```
-
 
 ## Summary
 
-```{r , eval=F}
+> 100 observations ~100s !
+```{r }
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- traits
 # save(fits, file = "./functional_save/NCI.Rdata")
 load("./functional_save/NCI.Rdata")
-pars <- c()
+pars <- c("alpha", "betaComp", "alphaNCI", "sigma")
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -189,7 +189,7 @@ lapply(as.list(traits), function(trait)
 
 ## Posteriors
 
-```{r , eval=F, fig.cap="Model parameters posterior."}
+```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), pars = pars)),
   labels = names(data), nrow = 2)
@@ -197,41 +197,39 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
 
 ## Chains
 
-```{r , eval=F, fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$LA), pars = c(pars, "lp__"),
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
+mcmc_trace(as.array(fits$invSLA), pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , eval=F, fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$CC), pars = pars)
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+mcmc_pairs(as.array(fits$invSLA), pars = pars)
 ```
 
 ## Predictions
 
-```{r , eval=F, fig.cap="Predictions."}
+```{r , fig.cap="Predictions."}
 lapply(as.list(traits), function(trait)
   cbind(fit = trait, 
         Y = mdata[[trait]]$Trait,
-        Individuals[unlist(!is.na(Individuals[trait])),],
-        Traitpred = apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, mean),
-        sigmaTWI = apply(as.matrix(fits[[trait]], pars = "sigma"), 2, mean),
-        mu5 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, quantile, probs = 0.05)),
-        mu95 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, quantile, probs = 0.95)),
-        sigmaTWI95 = unlist(apply(as.matrix(fits[[trait]], pars = "sigma"), 2, quantile, probs = 0.95))
-        )) %>% 
+       Individuals[unlist(!is.na(Individuals[trait])),],
+       NCI = apply(as.matrix(fits[[trait]], pars = "NCI"), 2, mean),
+       Traitpred = apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, mean),
+       sigmaTWI = apply(as.matrix(fits[[trait]], pars = "sigma"), 2, mean),
+       mu5 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, 
+                          quantile, probs = 0.05)),
+       mu95 = unlist(apply(as.matrix(fits[[trait]], pars = "Traitpred"), 2, 
+                           quantile, probs = 0.95)),
+       sigmaTWI95 = unlist(apply(as.matrix(fits[[trait]], pars = "sigma"), 2, 
+                                 quantile, probs = 0.95))
+  )) %>% 
   bind_rows() %>% 
-  mutate(Y5sigmafix = qnorm(0.05, mean = mu5, sd = sigmaTWI)) %>% 
-  mutate(Y95sigmafix = qnorm(0.95, mean = mu95, sd = sigmaTWI)) %>% 
-  mutate(Y5 = qnorm(0.05, mean = mu5, sd = sigmaTWI95)) %>% 
-  mutate(Y95 = qnorm(0.95, mean = mu95, sd = sigmaTWI95)) %>% 
-  ggplot(aes(x = TWI)) +
+  ggplot(aes(x = NCI)) +
   geom_point(aes(y = Y)) +
   geom_line(aes(y = Traitpred)) +
-  geom_ribbon(aes(ymin = Y5, ymax = Y95, color = 'Ypred'), alpha = 0.2) +
-  geom_ribbon(aes(ymin = Y5sigmafix, ymax = Y95sigmafix, color = 'Ysigmafix'), alpha = 0.2) +
-  geom_ribbon(aes(ymin = mu5, ymax = mu95, color = 'mu'), alpha = 0.2) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
   facet_wrap(~ fit, scales = "free", nrow = 3)
 ```
 
@@ -248,33 +246,55 @@ lapply(as.list(traits), function(trait)
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # of species
+  int<lower=1> C ; // # of complexes
   vector[N] Trait ; // Trait
-  vector[N] DBHj ; // DBH neighbor
-  vector[N] Deltaj ; // Distance neighbor
-  int<lower=1, upper=N>  individual ; // individuals index in neighbor matrix
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
   int<lower=1, upper=S> species[N] ; // species index
   int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
   int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
+  vector[S] alpha_s ; // Intercept for species
+  vector[C] alpha_c ; // Intercept for complexes
+  vector[S] betaComp_s ; // Biotic slope for species
+  vector[C] betaComp_c ; // Biotic slope for complexes
+  real<lower=0, upper=1> alphaNCI ;
+  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
+  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigma ;
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
 }
 model {
-  Trait ~ normal(, sigma) ; // Likelihood
-} 
+  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
+  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* NCI, sigma) ; // Likelihood
+}
 generated quantities {
-  vector[N] Traitpred ;
-  Traitpred =  ;
+  matrix[N,C] Trait_pred ;
+  for(c in 1:C)
+    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * NCI ; // Predictions
 }
 ```
 
 ## Summary
 
-```{r , eval=F}
+> 100 observations ~100s !
+```{r }
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- traits
-# save(fits, file = "./functional_save/TWIRNE.Rdata")
-load("./functional_save/TWIRNE.Rdata")
-pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma" )
+# save(fits, file = "./functional_save/NCIRNE.Rdata")
+load("./functional_save/NCIRNE.Rdata")
+pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -285,38 +305,38 @@ lapply(as.list(traits), function(trait)
 
 ## Posteriors
 
-```{r , eval=F, fig.cap="Model parameters posterior."}
+```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
   labels = names(data), nrow = 2)
 ```
 
-```{r , eval=F, fig.cap="Model parameters posterior."}
+```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaTWI")),
+  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaComp_c")),
   labels = names(data), nrow = 2)
 ```
 
 ## Chains
 
-```{r , eval=F, fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$SLA), regex_pars = c(pars, "lp__"),
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
+mcmc_trace(as.array(fits$invSLA), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , eval=F, fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$SLA), regex_pars = pars)
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
+mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
 ## Predictions
 
-```{r , eval=F, fig.cap="Predictions.", fig.width=12, fig.height=12}
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
 lapply(as.list(names(mdata)), function(type)
   cbind(type = type, 
         Y = mdata[[type]]$Trait,
-        TWI = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),"TWI"])),
+        NCI = apply(as.matrix(fits[[type]], pars = "NCI"), 2, mean),
         Individuals[!is.na(unlist(Individuals[,type])),],
         muEschweilera = apply(as.matrix(fits[[type]], 
                                         pars = paste0("Trait_pred[",
@@ -344,7 +364,7 @@ lapply(as.list(names(mdata)), function(type)
                               2, quantile, probs = 0.95)
   )) %>% 
   bind_rows() %>% 
-  ggplot(aes(x = TWI)) +
+  ggplot(aes(x = NCI)) +
   geom_point(aes(y = Y, col = as.factor(Genus))) +
   geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
                   col = "Eschweilera"), alpha = 0.2) +
@@ -352,7 +372,8 @@ lapply(as.list(names(mdata)), function(type)
                   col = "Symphonia"), alpha = 0.2) +
   geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
   geom_line(aes(y = muSymphonia, col = "Symphonia")) +
-  facet_wrap(~ type, scales = "free", nrow = 3)
+  facet_wrap(~ type, scales = "free", nrow = 3) +
+  scale_x_log10()
 ```
 
 ## Diagnostic
