@@ -102,6 +102,49 @@ rm(traits, paracou)
 # load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
+```{r EdgeEffect}
+# load("./functional_save/CompetitionMatrix.Rdata")
+# trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+#   tbl("Paracou") %>% 
+#   filter(idTree %in% Competition$idTree) %>% 
+#   collect() %>% 
+#   mutate(DBH = CircCorr*pi) %>% 
+#   group_by(idTree) %>% 
+#   arrange(desc(CensusYear)) %>% 
+#   filter(CensusYear == first(CensusYear)) %>% 
+#   filter(CensusYear >= 2015) %>% 
+#   dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, 
+#          Xfield, Yfield, Xutm, Yutm, DBH, Family, Genus, Species)
+# limits <- shapefile(file.path(path, "limits", "Plots.shp"))
+# limits <- spTransform(limits, CRSobj = crs)
+# coordinates(trees) <- ~ Xutm + Yutm
+# proj4string(trees) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# trees <- spTransform(trees, CRSobj = crs)
+# b10 <- lapply(trees$idTree, function(id)
+#   buffer(subset(trees, idTree == id), 10) - limits)
+# b20 <- lapply(trees$idTree, function(id)
+#   buffer(subset(trees, idTree == id), 20) - limits)
+# EdgeEffects <- data.frame(idTree = trees$idTree,
+#            EdgeEffect10 = unlist(lapply(b10, length)),
+#            AreaOutside10 = unlist(lapply(b10, function(x){
+#              if(inherits(try(suppressWarnings(area(x))), "try-error"))
+#                0
+#              else
+#                suppressWarnings(try(area(x)))
+#            })) / (pi*10^2),
+#            EdgeEffect20 = unlist(lapply(b20, length)),
+#            AreaOutside20 = unlist(lapply(b20, function(x){
+#              if(inherits(try(suppressWarnings(area(x))), "try-error"))
+#                0
+#              else
+#                suppressWarnings(try(area(x)))
+#            })) / (pi*20^2))
+# Competition <- Competition %>% 
+#   left_join(EdgeEffects)
+# save(Competition, file = "./functional_save/CompetitionMatrix.Rdata")
+# load("./functional_save/CompetitionMatrix.Rdata")
+```
+
 ```{r env}
 # env <- data %>%
 #    dplyr::select(idTree, Xutm, Yutm, DBH, Dawkins) %>%

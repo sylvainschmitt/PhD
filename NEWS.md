@@ -1,6 +1,13 @@
+# PhD 0.1.9082
+* A04 Abiotic & A05 Ontogenic correction
+
+# PhD 0.1.9081
+* Biotic full sampling
+
 # PhD 0.1.9080
 * A04 Abiotic model & A05 Ontogenic Model 
 * A07 Additive model
+* Competition matrix with edge effects
 
 # PhD 0.1.9079
 * A06 Biotic model in stan
