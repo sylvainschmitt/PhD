@@ -25,8 +25,9 @@ load("./functional_save/CompetitionMatrix.Rdata")
 cat("#### Model Data ####\n\n")
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
-  left_join(select(Competition, idTree, AreaOutside20) 
-            %>% unique())
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    left_join(select(Competition, idTree, AreaOutside20) 
+              %>% unique())
   Competition_trait <- Competition
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
