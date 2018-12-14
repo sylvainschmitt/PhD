@@ -17,8 +17,10 @@ output:
     keep_tex: true
   bookdown::word_document2: default
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+csl: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/csl/mee.csl
+bibliography: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
@@ -111,7 +113,7 @@ data.frame(Fit = 0:4,
 
 > Edge effect excluded from data
 
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
@@ -187,7 +189,7 @@ mdata <- list(N = nrow(data_trait),
 
 > Edge effect without weight nor correction
 
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
@@ -261,7 +263,7 @@ mdata <- list(N = nrow(data_trait),
 
 > Edge effect with weighted observations
 
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
@@ -340,7 +342,7 @@ mdata <- list(N = nrow(data_trait),
 
 > Edge effect with corrected observations
 
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
@@ -420,7 +422,7 @@ mdata <- list(N = nrow(data_trait),
 > Edge effect with weighted and corrected observations
 
 
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
@@ -499,7 +501,7 @@ mdata <- list(N = nrow(data_trait),
 
 ```{r }
 # rm(list = ls()) ; invisible(gc()) ; set.seed(42)
-# tests <- paste0("test", 0:4)
+tests <- paste0("test", 0:4)
 # fits <- lapply(tests, function(test){
 #   load(paste0("./functional_save/NCI", test, ".Rdata"))
 #   return(fit)
@@ -509,7 +511,7 @@ mdata <- list(N = nrow(data_trait),
 # rm(fits)
 # lapply(tests, function(test)
 #   unlink(paste0("./functional_save/NCI", test, ".Rdata")))
-load("./functional_save/NCItest.Rdata")
+load("./functional_save/NCItest.Rdata") 
 pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
 table <- lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T))
@@ -607,7 +609,7 @@ names(mdata) <- traits
 
 ## Code
 
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
@@ -751,7 +753,8 @@ lapply(as.list(names(mdata)), function(type)
                   col = "Symphonia"), alpha = 0.2) +
   geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
   geom_line(aes(y = muSymphonia, col = "Symphonia")) +
-  facet_wrap(~ type, scales = "free", nrow = 3)
+  facet_wrap(~ type, scales = "free", nrow = 3) +
+  scale_x_log10()
 ```
 
 # Conclusion

@@ -50,7 +50,7 @@ names(mdata) <- traits
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-traits <- traits[!(traits %in% c("invSLA", "LDMC"))]
+traits <- traits[!(traits %in% c("invSLA", "LDMC", "LT"))]
 Model <- stan_model("./functional_cluster/NCI.stan")
 for(trait in traits){
   cat("### ", trait, " ### \n\n")
@@ -58,3 +58,13 @@ for(trait in traits){
   save(fit, file = paste0("./functional_save/NCI_", trait, ".Rdata"))
   rm(fit) ; gc()
 }
+
+#### Grouping ####
+
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+fits <- lapply(traits, function(trait){
+  load(paste0("./functional_save/NCI_", trait, ".Rdata"))
+  return(fit)
+})
+names(fits) <- traits
+save(fits, file = "./functional_save/NCI.Rdata")
