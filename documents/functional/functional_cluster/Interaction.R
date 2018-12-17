@@ -59,4 +59,4 @@ fits <- lapply(mdata, function(x) {
   sampling(Model, chains = 2, data = x,
            include = FALSE, pars = 'NCIj', save_warmup = FALSE)})
 names(fits) <- traits
-save(fits, file = "./functional_save/Interaction.stan")
+save(fits, file = "./functional_save/Interaction.Rdata")
