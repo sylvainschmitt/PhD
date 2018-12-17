@@ -186,12 +186,10 @@ generated quantities {
   matrix[N,C] Trait_pred ;
   matrix[N,C] Trait_predDBH ;
   matrix[N,C] Trait_predTWI ;
-  for(c in 1:C)
+  for(c in 1:C){
     Trait_pred[,c] = alpha_c[c] * (DBH ./ (betaDBH_c[c] + DBH)) + betaTWI_c[c]*TWI ; // Predictions
-  for(c in 1:C)
     Trait_predDBH[,c] = alpha_c[c] * (DBH ./ (betaDBH_c[c] + DBH)) + betaTWI_c[c]*mean(TWI) ;
-   for(c in 1:C)
-    Trait_predTWI[,c] = alpha_c[c] * (mean(DBH) ./ (betaDBH_c[c] + mean(DBH))) + betaTWI_c[c]*TWI ;
+    Trait_predTWI[,c] = alpha_c[c] * (mean(DBH) ./ (betaDBH_c[c] + mean(DBH))) + betaTWI_c[c]*TWI ;}
 }
 
 ```
@@ -219,6 +217,7 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = "alpha_c")),
   labels = traits, nrow = 2)
 ```
+
 ```{r , eval=F, fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = c("betaDBH_c","betaTWI_c"))),
@@ -382,7 +381,7 @@ generated quantities {
 ```{r , eval=F}
 fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 names(fits) <- traits
-save(fits, file = "./functional_save/HierOntaAbiot2.Rdata")
+# save(fits, file = "./functional_save/HierOntaAbiot2.Rdata")
 #load("./functional_save/HierOntaAbiot2.Rdata")
 pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma" )
 lapply(as.list(traits), function(trait)
