@@ -1,3 +1,7 @@
+# PhD 0.1.9087
+* A06, A07 & A08 new models with non-centered parameters
+
+
 # PhD 0.1.9086
 * A08 & A08 Outputs first sampling
 * A07 & A08 models cluster code

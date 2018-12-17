@@ -51,8 +51,9 @@ names(mdata) <- traits
 
 cat("#### Sampling ####\n\n")
 Model <- stan_model("./functional_cluster/NCI.stan")
-fits <- lapply(mdata, function(x) {
-  sampling(Model, chains = 2, data = x,
-           include = FALSE, pars = 'NCIj', save_warmup = FALSE)})
+fits <- lapply(mdata, function(x)
+  sampling(Model, data = x, chains = 2, save_warmup = F,
+           include = F, pars = c('NCIj', "alpha_s", "betaComp_s",
+                                 "alpha_s_tilde", "betaComp_s_tilde")))
 names(fits) <- traits
 save(fits, file = "./functional_save/NCI.Rdata")

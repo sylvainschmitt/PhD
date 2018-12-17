@@ -13,27 +13,36 @@ data {
   vector[N] weights ;
 }
 parameters {
-  vector[S] alpha_s ; // Intercept for species
   vector[C] alpha_c ; // Intercept for complexes
-  vector[S] betaComp_s ; // Biotic slope for species
   vector[C] betaComp_c ; // Biotic slope for complexes
   real<lower=0> alphaNCI ;
-  real<lower=0, upper=10> sigmaIntercept ; // Intercept variance for species
-  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  vector[S] alpha_s_tilde ; // Intercept for species
+  vector[S] betaComp_s_tilde ; // Biotic slope for species
+  real<lower=0> sigmaIntercept ; // Intercept variance for species
+  real<lower=0> sigmaComp ; // Biotic slope variance for species
   real<lower=0> sigma ;
 }
 transformed parameters {
+  vector[S] alpha_s ;
+  vector[S] betaComp_s ;
   vector[J] NCIj ;
   vector[N] NCI ;
+  alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;
+  betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
   NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
 }
 model {
+  alpha_c ~ normal(0, 10^6) ;
+  betaComp_c ~ normal(0, 10^6) ;
   alphaNCI ~ lognormal(0, 1) ;
-  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
-  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  alpha_s_tilde ~ normal(0, 1) ;
+  betaComp_s_tilde ~ normal(0, 1) ;
+  sigmaIntercept ~ cauchy(0, 1) ;
+  sigmaComp ~ cauchy(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
   Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
 }
 generated quantities {
