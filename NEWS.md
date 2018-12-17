@@ -1,3 +1,6 @@
+# PhD 0.1.9086
+* A07 & A08 models cluster code
+
 # PhD 0.1.9085
 * A08-interaction to be compiled on cluster
 

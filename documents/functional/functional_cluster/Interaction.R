@@ -56,6 +56,7 @@ names(mdata) <- traits
 cat("#### Sampling ####\n\n")
 Model <- stan_model("./functional_cluster/Interaction.stan")
 fits <- lapply(mdata, function(x) {
-  sampling(Model, chains = 2, data = x)})
+  sampling(Model, chains = 2, data = x,
+           include = FALSE, pars = 'NCIj', save_warmup = FALSE)})
 names(fits) <- traits
 save(fits, file = "./functional_save/Interaction.stan")
