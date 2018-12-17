@@ -1,3 +1,6 @@
+# PhD 0.1.9088
+* A04 & A05 updated (un-centered, R2 & new predict)
+
 # PhD 0.1.9087
 * A06, A07 & A08 new models with non-centered parameters
 

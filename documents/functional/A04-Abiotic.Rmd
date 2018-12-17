@@ -27,39 +27,33 @@ path <- "../../data/Paracou/"
 ```
 
 ```{r data, eval=T}
-traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
-  mutate(Genus = "Symphonia") %>% 
-  rename(Species = Morphotype) %>% 
-  mutate(Species = ifelse(Species == "Indet.", 
-                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G", 
-                                     "sp.1" =  "S")], Species))
-traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>% 
-  googlesheets::gs_read("AllTraits") %>% 
-  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
-  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>% 
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) 
-paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(idTree %in% traits$idTree) %>%
-  filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
-         Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
-         Genus == "Symphonia" & CensusYear == 2015) %>%
-  mutate(DBH = CircCorr/pi) %>% 
-  collect()
-load("./functional_save/env.Rdata")
-Individuals <- left_join(traits, paracou) %>% 
-  left_join(env, by = "idTree", suffix = c("", ".y")) %>% 
-  group_by(Plot, SubPlot, TreeFieldNum, Genus, Species,
-           SpeciesLong, Bark, Dawkins, DBH, TWI, Curvature) %>%
-  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
-                    "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
-  ungroup() %>% 
-  mutate(invSLA=1/SLA) %>% 
-  mutate(invLA=1/LA)
-rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T)  %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
 # Introduction {-}
@@ -149,25 +143,27 @@ model {
   Trait ~ normal(alpha_s[species] + betaTWI_s[species] .* TWI, sigma) ; // Likelihood
 }
 generated quantities {
-  matrix[N,C] Trait_pred ;
-  for(c in 1:C)
-    Trait_pred[,c] = alpha_c[c] + betaTWI_c[c] *TWI ; // Predictions
+  vector[N] Trait_pred ;
+  real Rsquared ;
+  Trait_pred = alpha_c[complex] + betaTWI_c[complex] .* TWI ; // Predictions
+  Rsquared = 1 - sum((Trait - Trait_pred) .* (Trait - Trait_pred))/sum((Trait - mean(Trait)) .* (Trait - mean(Trait))) ;
 }
 ```
 
 ## Summary
 
 ```{r }
-# fits <- lapply(mdata, function(x) 
+# fits <- lapply(mdata, function(x)
 #   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c("alpha_s", "betaTWI_s", 
+#            include = F, pars = c("alpha_s", "betaTWI_s",
 #                                  "alpha_s_tilde", "betaTWI_s_tilde")))
 # names(fits) <- traits
 # save(fits, file = "./functional_save/TWI.Rdata")
 load("./functional_save/TWI.Rdata")
-pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma" )
+pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept", "sigmaTWI", "sigma")
 lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+  broom::tidyMCMC(fits[[trait]], pars = c(pars, "Rsquared", "lp__"), 
+                  droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
   bind_rows() %>%
   kable() %>%
@@ -178,7 +174,7 @@ lapply(as.list(traits), function(trait)
 
 ```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$invSLA), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
@@ -205,44 +201,20 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
 ## Predictions
 
 ```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
-lapply(as.list(names(mdata)), function(type)
-  cbind(type = type, 
-        Y = mdata[[type]]$Trait,
-        TWI = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),"TWI"])),
-        Individuals[!is.na(unlist(Individuals[,type])),],
-        muEschweilera = apply(as.matrix(fits[[type]], 
-                                        pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",1]")), 
-                              2, mean),
-        muSymphonia = apply(as.matrix(fits[[type]], 
-                                      pars = paste0("Trait_pred[",
-                                                    1:mdata[[type]]$N,",2]")), 
-                            2, mean),
-        muEschweilera5 = apply(as.matrix(fits[[type]], 
-                                         pars = paste0("Trait_pred[",
-                                                       1:mdata[[type]]$N,",1]")), 
-                               2, quantile, probs = 0.05),
-        muSymphonia5 = apply(as.matrix(fits[[type]], 
-                                       pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",2]")), 
-                             2, quantile, probs = 0.05),
-        muEschweilera95 = apply(as.matrix(fits[[type]], 
-                                          pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",1]")), 
-                                2, quantile, probs = 0.95),
-        muSymphonia95 = apply(as.matrix(fits[[type]], 
-                                        pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",2]")), 
-                              2, quantile, probs = 0.95)
+lapply(as.list(traits), function(trait)
+  data.frame(trait = trait, 
+        Y = mdata[[trait]]$Trait,
+        TWI = mdata[[trait]]$TWI,
+        Genus = mdata[[trait]]$complex,
+        mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, mean),
+        mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.05),
+        mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.95)
   )) %>% 
   bind_rows() %>% 
-  ggplot(aes(x = TWI)) +
-  geom_point(aes(y = Y, col = as.factor(Genus))) +
-  geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
-                  col = "Eschweilera"), alpha = 0.2) +
-  geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,
-                  col = "Symphonia"), alpha = 0.2) +
-  geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
-  geom_line(aes(y = muSymphonia, col = "Symphonia")) +
-  facet_wrap(~ type, scales = "free", nrow = 3)
+  ggplot(aes(x = TWI, col = as.factor(Genus))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_wrap(~ trait, scales = "free", nrow = 3) +
+  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
 ```
