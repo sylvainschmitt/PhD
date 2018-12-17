@@ -1,3 +1,6 @@
+# PhD 0.1.9086
+* A08 & A08 Outputs first sampling
+
 # PhD 0.1.9085
 * A08-interaction to be compiled on cluster
 

@@ -17,10 +17,10 @@ output:
     keep_tex: true
   bookdown::word_document2: default
 linestretch: 1.5
-csl: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/csl/mee.csl
-bibliography: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/library.bib
-# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-# bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/library.bib
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
@@ -75,8 +75,7 @@ load("./functional_save/CompetitionMatrix.Rdata")
 The aim of this document is to fit the interaction full model with observed values of functional traits for our individuals. We prepared data excluding oultiers and reducing variance of all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the full model with additive (1) and hierarchical (2) forms.
 
 ```{r mdata, fig.cap="prepared data",fig.width=12}
-# traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-traits <- c("invLA")
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
@@ -226,12 +225,12 @@ generated quantities {
 ## Summary
 
 ```{r }
-fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-names(fits) <- traits
-save(fits, file = "./functional_save/Interaction.Rdata")
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/Interaction.Rdata")
 load("./functional_save/Interaction.Rdata")
-pars <- c( "alpha_c", "betaTWI_c", "sigmaIntercept",
-           "sigmaTWI", "sigma" )
+pars <- c("alpha_c", "betaDBH_c", "betaTWI_c", "betaComp_c", "alphaNCI",
+          "sigmaIntercept", "sigmaDBH", "sigmaTWI", "sigmaComp", "sigma")
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -240,75 +239,347 @@ lapply(as.list(traits), function(trait)
   kable_styling()
 ```
 
-## Posteriors
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
-  labels = traits, nrow = 2)
-```
+Leaf area $LA$ did not converged and will be fixed. In the meantime we show the posteriors of other models posteriors below.
 
 ## Chains
 
-```{r , fig.cap="Markov chains trace plot after warmup for intermediate data.", fig.height=12, fig.width=12}
-mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
-             facet_args = list(labeller = label_parsed))
+```{r , fig.cap="Markov chains trace plot after warmup for intermediate data.",fig.height=12,fig.width=12}
+mcmc_trace(as.array(fits$invSLA), regex_pars = c(pars, "lp__"),
+           facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.",fig.height=12,fig.width=12}
-mcmc_pairs(as.array(fits$invLA), regex_pars = pars)
+```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.",fig.height=20,fig.width=20}
+mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+## Posteriors
+
+```{r }
+traits <- c("invSLA", "LDMC", "LT", "CC") # invLA did not converged and should be corrected
+fits[["invLA"]] <- NULL
+```
+
+```{r posteriorsLp}
+gdata <- lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit),
+                      regex_pars = c("lp__"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(parameter = "logged-likelihood")
+ggplot(gdata, aes(x = trait, xend = trait)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F)
+```
+
+```{r Rsqaured}
+lapply(as.list(traits), function(trait) 
+  as.data.frame(fits[[trait]], pars = c("Trait_pred")) %>% 
+    reshape2::melt() %>% 
+    group_by(variable) %>% 
+    summarise(value = mean(value)) %>% 
+    ungroup() %>% 
+    mutate(variable = gsub("]", "", variable, fixed = T)) %>% 
+    separate(variable, c("variable", "index"), sep = "\\[") %>% 
+    separate(index, c("obs", "complex"), sep = ",", convert = T) %>% 
+    rename(Ypred = value) %>% 
+    select(-variable) %>% 
+    left_join(data.frame(obs = 1:mdata[[trait]]$N,
+                         Y = mdata[[trait]]$Trait,
+                         complex = mdata[[trait]]$complex),
+              by = c("obs", "complex")) %>% 
+    arrange(obs) %>% 
+    filter(!is.na(Y)) %>% 
+    mutate(trait = trait)) %>% 
+  bind_rows() %>% 
+  group_by(trait) %>% 
+  mutate(Ymean = mean(Y)) %>% 
+  mutate(SquaredResiduals = (Y - Ypred)^2) %>% 
+  mutate(SquaredTotals = (Y - Ymean)^2) %>% 
+  summarise(Rsquared = 1 - sum(SquaredResiduals)/sum(SquaredTotals)) %>% 
+  kable(caption = "Models Rsquared", col.names = c("Trait", "$R^2$"))
+```
+
+```{r posteriorsBeta, fig.width=12, fig.height=12}
+gdata <- lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit),
+                      regex_pars = c("alpha_c", "betaDBH_c",
+                                     "betaTWI_c", "betaComp_c"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == 2, "Symphonia", "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(parameter = as.factor(gsub("c", "", parameter))) %>% 
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
+                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
+  mutate(parameter = factor(parameter, levels = c("alpha", "beta[DBH]", 
+                                                  "beta[TWI]", "beta[Comp]")))
+student <- lapply(fits, function(fit) 
+  as.data.frame(fit, pars = c("alpha_c", "betaDBH_c",
+                                     "betaTWI_c", "betaComp_c"))) %>% 
+  bind_rows(.id = "trait") %>%
+  reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == 2, "Symphonia", "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(parameter = as.factor(gsub("c", "", parameter))) %>% 
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
+                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
+  group_by(trait, parameter) %>% 
+  do(student = t.test(value ~ complex, data = .)) %>% 
+  mutate(student = student$p.value) %>% 
+  mutate(student = ifelse(student < 0.001, "***",
+                          ifelse(student < 0.01, "**",
+                                 ifelse(student < 0.05, "*",
+                                        ifelse(student < 0.1, ".", 
+                                               "n.s."))))) %>% 
+  left_join(gdata %>% 
+              group_by(trait, parameter) %>% 
+              summarise(x = mean(m)))
+significance <- lapply(fits, function(fit) 
+  as.data.frame(fit, pars = c("alpha_c", "betaDBH_c",
+                                     "betaTWI_c", "betaComp_c"))) %>% 
+  bind_rows(.id = "trait") %>%
+  reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == 2, "Symphonia", "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(parameter = as.factor(gsub("c", "", parameter))) %>% 
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
+                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
+  group_by(trait, parameter, complex) %>% 
+  summarise(pvalue = rank(c(0,value))[1]/(length(value)+1)) %>% 
+  mutate(pvalue = ifelse(pvalue > 0.5, 1-pvalue, pvalue)) %>% 
+  mutate(pvalue = ifelse(pvalue < 0.001, "***",
+                          ifelse(pvalue < 0.01, "**",
+                                 ifelse(pvalue < 0.05, "*",
+                                        ifelse(pvalue < 0.1, ".", 
+                                               "n.s."))))) %>% 
+    left_join(gdata %>% 
+              group_by(trait, parameter, complex) %>% 
+              summarise(x = mean(m)))
+ggplot(gdata, aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  geom_text(aes(x = trait, y = x, label = student,
+                col = NA, fill = NA), position = position_nudge(x = 0.1),
+            data = student) +
+  geom_text(aes(x = trait, y = x, label = pvalue, fill = NA), 
+            position = position_nudge(x = -0.1),
+            data = significance) +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F)
+```
+
+```{r posteriorsAlpha}
+gdata <- lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit),
+                      regex_pars = c("alphaNCI"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(parameter = recode_factor(parameter, alphaNCI = "alpha[NCI]"))
+significance <- lapply(fits, function(fit) 
+  as.data.frame(fit, pars = c("alphaNCI"))) %>% 
+  bind_rows(.id = "trait") %>%
+  group_by(trait) %>% 
+  summarise(pvalue = rank(c(0,alphaNCI))[1]/(length(alphaNCI)+1)) %>% 
+  mutate(pvalue = ifelse(pvalue > 0.5, 1-pvalue, pvalue)) %>% 
+  mutate(pvalue = ifelse(pvalue < 0.001, "***",
+                          ifelse(pvalue < 0.01, "**",
+                                 ifelse(pvalue < 0.05, "*",
+                                        ifelse(pvalue < 0.1, ".", 
+                                               "n.s."))))) %>% 
+  left_join(gdata)
+ggplot(gdata, aes(x = trait, xend = trait)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  geom_text(aes(x = trait, y = m, label = pvalue), 
+            position = position_nudge(x = -0.1),
+            data = significance) +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  ylim(NA,1)
+```
+
+```{r posteriorsSigma2, fig.width=12, fig.height=12}
+gdata <- lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit),
+                      regex_pars = c("sigma"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(parameter = recode_factor(parameter, 
+                                   sigma = "sigma^2",
+                                   sigmaIntercept = "sigma[Intercept]^2",
+                                   sigmaDBH = "sigma[DBH]^2", 
+                                   sigmaTWI = "sigma[TWI]^2",
+                                   sigmaComp = "sigma[Comp]^2"))
+significance <- lapply(fits, function(fit) 
+  as.data.frame(fit, pars = c("sigma", "sigmaIntercept", 
+                              "sigmaDBH", "sigmaTWI", "sigmaComp"))) %>% 
+  bind_rows(.id = "trait") %>%
+  reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
+  group_by(trait, parameter) %>% 
+  summarise(pvalue = rank(c(0,value))[1]/(length(value)+1)) %>% 
+  mutate(pvalue = ifelse(pvalue > 0.5, 1-pvalue, pvalue)) %>% 
+  mutate(pvalue = ifelse(pvalue < 0.001, "***",
+                          ifelse(pvalue < 0.01, "**",
+                                 ifelse(pvalue < 0.05, "*",
+                                        ifelse(pvalue < 0.1, ".", 
+                                               "n.s."))))) %>% 
+  mutate(parameter = recode_factor(parameter, 
+                                   sigma = "sigma^2",
+                                   sigmaIntercept = "sigma[Intercept]^2",
+                                   sigmaDBH = "sigma[DBH]^2", 
+                                   sigmaTWI = "sigma[TWI]^2",
+                                   sigmaComp = "sigma[Comp]^2")) %>% 
+  left_join(gdata)
+ggplot(gdata, aes(x = trait, xend = trait)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  geom_text(aes(x = trait, y = m, label = pvalue),
+            position = position_nudge(x = 0.2),
+            data = significance) +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F)
 ```
 
 ## Predictions
 
-```{r , fig.cap="Predictions.", fig.width=14, fig.height=10}
-lapply(as.list(names(mdata)), function(type)
-  cbind(type = type, 
-        Y = mdata[[type]]$Trait,
-        TWI = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,type])),"TWI"])),
-        Individuals[!is.na(unlist(Individuals[,type])),],
-        muEschweilera = apply(as.matrix(fits[[type]], 
-                                        pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",1]")), 
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+list(
+  DBH = lapply(as.list(traits), function(trait)
+    cbind(trait = trait, 
+          variable = "DBH",
+          mu = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,trait])),trait],center=F)),
+          value = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,trait])),"DBH"],center=F)),
+          Individuals[!is.na(unlist(Individuals[,trait])),],
+          muEschweilera = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("Trait_predDBH[",
+                                                        1:mdata[[trait]]$N,",1]")), 
+                                2, mean),
+          muSymphonia = apply(as.matrix(fits[[trait]], 
+                                        pars = paste0("Trait_predDBH[",
+                                                      1:mdata[[trait]]$N,",2]")), 
                               2, mean),
-        muSymphonia = apply(as.matrix(fits[[type]], 
-                                      pars = paste0("Trait_pred[",
-                                                    1:mdata[[type]]$N,",2]")), 
-                            2, mean),
-        muEschweilera5 = apply(as.matrix(fits[[type]], 
-                                         pars = paste0("Trait_pred[",
-                                                       1:mdata[[type]]$N,",1]")), 
+          muEschweilera5 = apply(as.matrix(fits[[trait]], 
+                                           pars = paste0("Trait_predDBH[",
+                                                         1:mdata[[trait]]$N,",1]")), 
+                                 2, quantile, probs = 0.05),
+          muSymphonia5 = apply(as.matrix(fits[[trait]], 
+                                         pars = paste0("Trait_predDBH[",
+                                                       1:mdata[[trait]]$N,",2]")), 
                                2, quantile, probs = 0.05),
-        muSymphonia5 = apply(as.matrix(fits[[type]], 
-                                       pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",2]")), 
-                             2, quantile, probs = 0.05),
-        muEschweilera95 = apply(as.matrix(fits[[type]], 
-                                          pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",1]")), 
-                                2, quantile, probs = 0.95),
-        muSymphonia95 = apply(as.matrix(fits[[type]], 
-                                        pars = paste0("Trait_pred[",
-                                                      1:mdata[[type]]$N,",2]")), 
-                              2, quantile, probs = 0.95)
-  )) %>% 
+          muEschweilera95 = apply(as.matrix(fits[[trait]], 
+                                            pars = paste0("Trait_predDBH[",
+                                                          1:mdata[[trait]]$N,",1]")), 
+                                  2, quantile, probs = 0.95),
+          muSymphonia95 = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("Trait_predDBH[",
+                                                        1:mdata[[trait]]$N,",2]")), 
+                                2, quantile, probs = 0.95)
+    )) %>% 
+    bind_rows(),
+  TWI = lapply(as.list(traits), function(trait)
+    cbind(trait = trait, 
+          variable = "TWI",
+          mu = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,trait])),trait],center=F)),
+          value = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,trait])),"TWI"],center=F)),
+          Individuals[!is.na(unlist(Individuals[,trait])),],
+          muEschweilera = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("Trait_predTWI[",
+                                                        1:mdata[[trait]]$N,",1]")), 
+                                2, mean),
+          muSymphonia = apply(as.matrix(fits[[trait]], 
+                                        pars = paste0("Trait_predTWI[",
+                                                      1:mdata[[trait]]$N,",2]")), 
+                              2, mean),
+          muEschweilera5 = apply(as.matrix(fits[[trait]], 
+                                           pars = paste0("Trait_predTWI[",
+                                                         1:mdata[[trait]]$N,",1]")), 
+                                 2, quantile, probs = 0.05),
+          muSymphonia5 = apply(as.matrix(fits[[trait]], 
+                                         pars = paste0("Trait_predTWI[",
+                                                       1:mdata[[trait]]$N,",2]")), 
+                               2, quantile, probs = 0.05),
+          muEschweilera95 = apply(as.matrix(fits[[trait]], 
+                                            pars = paste0("Trait_predTWI[",
+                                                          1:mdata[[trait]]$N,",1]")), 
+                                  2, quantile, probs = 0.95),
+          muSymphonia95 = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("Trait_predTWI[",
+                                                        1:mdata[[trait]]$N,",2]")), 
+                                2, quantile, probs = 0.95)
+    )) %>% 
+    bind_rows(),
+  NCI = lapply(as.list(traits), function(trait)
+    cbind(trait = trait, 
+          variable = "NCI",
+          mu = as.numeric(scale(Individuals[!is.na(unlist(Individuals[,trait])),trait],center=F)),
+          value = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("NCI[", 1:mdata[[trait]]$N,"]")), 
+                                2, mean),
+          Individuals[!is.na(unlist(Individuals[,trait])),],
+          muEschweilera = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("Trait_predNCI[",
+                                                        1:mdata[[trait]]$N,",1]")), 
+                                2, mean),
+          muSymphonia = apply(as.matrix(fits[[trait]], 
+                                        pars = paste0("Trait_predNCI[",
+                                                      1:mdata[[trait]]$N,",2]")), 
+                              2, mean),
+          muEschweilera5 = apply(as.matrix(fits[[trait]], 
+                                           pars = paste0("Trait_predNCI[",
+                                                         1:mdata[[trait]]$N,",1]")), 
+                                 2, quantile, probs = 0.05),
+          muSymphonia5 = apply(as.matrix(fits[[trait]], 
+                                         pars = paste0("Trait_predNCI[",
+                                                       1:mdata[[trait]]$N,",2]")), 
+                               2, quantile, probs = 0.05),
+          muEschweilera95 = apply(as.matrix(fits[[trait]], 
+                                            pars = paste0("Trait_predNCI[",
+                                                          1:mdata[[trait]]$N,",1]")), 
+                                  2, quantile, probs = 0.95),
+          muSymphonia95 = apply(as.matrix(fits[[trait]], 
+                                          pars = paste0("Trait_predNCI[",
+                                                        1:mdata[[trait]]$N,",2]")), 
+                                2, quantile, probs = 0.95)
+    )) %>% 
+    bind_rows()) %>% 
   bind_rows() %>% 
-  select(Y, type, Genus, muEschweilera, muSymphonia, muEschweilera5, 
-         muEschweilera95, muSymphonia5, muSymphonia95, TWI, DBH) %>% 
-  reshape2::melt(id.vars = c("Y", "type", "Genus", "muEschweilera", "muSymphonia", 
-                             "muEschweilera5", "muEschweilera95", "muSymphonia5", 
-                             "muSymphonia95")) %>% 
   ggplot(aes(x = value)) +
-  geom_point(aes(y = Y, col = as.factor(Genus))) +
-  geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
-                  col = "Eschweilera"), alpha = 0.2) +
-  geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,
-                  col = "Symphonia"), alpha = 0.2) +
+  geom_point(aes(y = mu, col = as.factor(Genus))) +
   geom_line(aes(y = muEschweilera, col = "Eschweilera")) +
   geom_line(aes(y = muSymphonia, col = "Symphonia")) +
-  facet_grid(type ~ variable, scales = "free")
+  geom_ribbon(aes(ymin = muEschweilera5, ymax = muEschweilera95,
+                  col = "Eschweilera"), alpha = 0.2) +
+    geom_ribbon(aes(ymin = muSymphonia5, ymax = muSymphonia95,
+                  col = "Symphonia"), alpha = 0.2) +
+  facet_grid(trait ~ variable, scales = "free")
 ```
 
 ## Diagnostic
