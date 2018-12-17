@@ -1,6 +1,14 @@
-# PhD 0.1.9083
+# PhD 0.1.9086
 * Report Anne : results 
 
+# PhD 0.1.9085
+* A08-interaction to be compiled on cluster
+
+# PhD 0.1.9084
+* A06-Biotic to be compiled on cluster
+
+# PhD 0.1.9083
+* A06-Biotic & A07-FullModel Cluster files
 
 # PhD 0.1.9082
 * A04 Abiotic & A05 Ontogenic correction
