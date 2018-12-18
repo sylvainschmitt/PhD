@@ -137,8 +137,8 @@ model {
   betaTWI_c ~ normal(0, 10^6) ;
   alpha_s_tilde ~ normal(0, 1) ;
   betaTWI_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ cauchy(0,5) ;
-  sigmaTWI ~ cauchy(0,5) ;
+  sigmaIntercept ~ lognormal(0,1) ;
+  sigmaTWI ~ lognormal(0,1) ;
   sigma ~ cauchy(0,5) ;
   Trait ~ normal(alpha_s[species] + betaTWI_s[species] .* TWI, sigma) ; // Likelihood
 }
@@ -180,7 +180,7 @@ mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
 
 ## Pairs
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model."}
+```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model.", fig.height=12, fig.width=12}
 mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
