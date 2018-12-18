@@ -1,6 +1,6 @@
 ---
-title: Title
-author: "Anne Barranger & Sylvain Schmitts"
+title: Report Internship
+author: "Anne Baranger & Sylvain Schmitts"
 date: '`r Sys.Date()`'
 output:
   bookdown::html_document2:
@@ -16,8 +16,8 @@ output:
     toc: false
     keep_tex: true
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
@@ -29,6 +29,7 @@ if(knitr:::is_html_output()) options(knitr.table.format = "html")
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
 library(broom)
+library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set( echo = F, message = F, warning = F, 
                 fig.height = 8, fig.width = 12,
@@ -59,6 +60,192 @@ _We will develop a general form of model that will be able to best explain pheno
 
 # Material & Methods
 
+<!-- Dataset -->
+Dataset used to build general models gathered measures of 838 trees from Paracou field station. Sampling was made over  *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes and 5 functional leaf traits were calculated (Table \@ref(tab:Traits)). Each individual was sampled with five leaves, and functional traits were then averaged by individual for subsequent analysis.
+
+```{r Traits, fig.cap="Functional traits measured, with trait unit, and abbreviation."}
+data.frame(
+  Traits = c("Specific Leaf Area", "Leaf Dry Matter Content", "Leaf Thickness", "Leaf Area", 
+             "Chlorophyll Content", "Branch Bark Thickness" , "Branch Bark Density", 
+             "Branch Wood Density "),
+  Unit = c("$cm^2.g^{-1}$","$g·g^{-1}$","$\\mu m$","$cm^2$", "$g.cm^{-2}$","$mm$","$g.cm^{-3}$","$g.cm^{-3}$"),
+  Abbreviation = c("SLA", "LDMC","LT", "LA", "CC", "brBT", "brBD", "brWD")) %>% 
+  #Formula = c("Area/Dry Mass","Fresh Mass/Dry Mass", "None","None","None","jsp","jsp","jsp")) %>% 
+  kable(format = "pandoc", escape = F,
+        caption = "Functional traits measured, with trait unit, and abbreviation.") %>%
+  kableExtra::kable_styling("striped", full_width = T)
+```
+
+Descriptors used then were measured on the field (DBH) or derived from a 1-m resolution digital elevation model (DEM) built using LiDAR campaign done in 2015 (TWI).
+Environmental and ontogenetic descriptors were chosen according to a previous analysis (see A02-Environment). Diameter at breast height (DBH) was chosen to describe the ontogeny of individuals. A neighbor crowding index (NCI) was used as a descriptor of biotic environment effect, implying that herbivory and pathogens effects were not taken into account. Finally, topographic wetness index (TWI) was selected between various environmental descriptors available. TWI was the abiotic descriptor that brought the most relevant information on physical conditions, highlighting water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
+
+Plots of each traits according descriptors were analysed previously and enabled to induce a model shape for abiotic environment, biotic environment and ontogeny effect (Figure \@ref(fig:mdata)). They were gathered in the following additive model, assuming first that interactions between descriptors were negligible:
+
+<!-- Model -->
+Individuals displayed different trends depending on complex and species they belonged to. We chose to deal with complex as fixed effect because they were represented only by two levels ($C=2$), and we  looked at complex differentiation by investigating overlap of parameters posteriors. In addition, species were integrated as random effect for all individuals.
+
+\begin{equation} 
+$$  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma)    \\
+  \Theta_{c,s} \sim \mathcal{N}^4(\Theta_c,\sigma_{species}) ~|~ \Theta =
+   \begin{bmatrix}
+           \alpha \\
+           \beta_{DBH} \\
+           \beta_{TWI} \\
+           \beta_{Comp} \\
+  \end{bmatrix},~\sigma_{species}
+  \begin{bmatrix}
+           \sigma_{Intercept} \\
+           \sigma_{DBH} \\
+           \sigma_{TWI} \\
+           \sigma_{Comp} \\
+  \end{bmatrix}  \\
+  \Theta_c \sim \mathcal{N}^{4}(0, + \infty) \\
+  (\alpha_{NCI},\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)$$
+(\#eq:final)
+\end{equation}
+
+* $Trait_{c,s,i}$ is a foliar trait of an individual i, from the species s, and the complex c;
+* $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
+* $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
+* $c \in [1,C]$ where $C$ is the number of complexes.
+* $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
+* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic), i.e. the highest trait value reached with higher development stage;
+* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values. It represents the rate with which the trait evolve toward it's maximum value;
+* $\beta_{TWI}$ is linear abiotic model parameters, thus, the strength of the effect of TWI on the trait. $\beta_{TWI}$ can range in positive or negative value;
+* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual $i$. Lower $\alpha_{NCI}$ enable to strengthen competition effects from more distant trees.  With $\alpha_{NCI}$ set to 1, neighbors DBH have only an effect of 0.1% after 2.3 meters, what displayed therefore that it has to explore values close to zero, but positive;
+* all $\sigma_{species}$ represents parameters variance for species;
+* $\sigma$ is the residual standard error, and represents variability of traits that can't be explained by the effects computed in the model;
+* $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
+* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$, $\sigma_{species}$ and $\beta_{DBH}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all other $\Theta_{c,s}$ and $\Theta_c$. And $\alpha_{NCI}$ was chosen with a lognormal prior.
+
+
+<!-- Statistical method -->
+Traits and descriptors were all standardized (but not centered!) for the model building, in order to make it easier to compare strength of effects between traits and between effects. We then used a Bayesian approach to estimate parameters distribution of the model regarding each foliar traits, in order to then analize effects of abiotic environment, biotic environment and ontogeny on phenotype, and to quantify variability of traits caused by taxonomic levels.
+
+<!-- Data -->
+
+```{r data}
+traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+  googlesheets::gs_read("AllTraits") %>%
+  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+  mutate(Genus = "Symphonia") %>%
+  rename(Species = Morphotype) %>%
+  mutate(Species = ifelse(Species == "Indet.",
+                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+                                     "sp.1" =  "S")], Species))
+traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+  googlesheets::gs_read("AllTraits") %>%
+  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+  group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+           SpeciesLong, Bark, Dawkins) %>%
+  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+                    "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+  ungroup() %>%
+  mutate(invSLA=1/SLA) %>%
+  mutate(invLA=1/LA)
+load("./functional_save/env.Rdata")
+Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+# load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+```
+
+```{r mdata, fig.cap="Scatter plots of traits according to DBH (left) or TWI (right)",fig.width=12,fig.height=10}
+#traits <- c("LDMC")
+#Individuals <- sample_n(Individuals, 100)
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
+  list(N = nrow(data_trait),
+       J = nrow(Competition),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait[trait], center = F)),
+       DBH = as.numeric(scale(data_trait$DBH, center = F)),
+       TWI = as.numeric(scale(data_trait$TWI, center = F)),
+       individual = as.numeric(as.factor(Competition$idTree)),
+       DBHj = as.numeric(scale(Competition$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition$dij, center = F)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
+names(mdata) <- traits
+
+lapply(as.list(traits), function(trait)
+  cbind(Model = trait, 
+        Trait = mdata[[trait]]$Trait, 
+        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
+  bind_rows() %>% 
+  select(Model, Trait, Genus, DBH, TWI) %>% 
+  reshape2::melt(id.vars = c("Model", "Trait", "Genus")) %>% 
+  ggplot(aes(x = value, y = Trait, col = Genus)) +
+  geom_point() +
+  geom_smooth() +
+  facet_grid(Model ~ variable, scales = "free")
+#rm(Individuals,Competition)
+```
+
 # Results
 
+## Effects of abiotic environment, biotic environment and ontogeny on traits values
+<!-- analysis of parameters -->
+
+    <!-- analysis of alpha & beta -->
+The distribution $\alpha$, ${\beta_{DBH}}_{c}$, ${\beta_{TWI}}_{c}$ and ${\beta_{comp}}_{c}$ (Figure \@ref(fig:posteriorsbeta)) - the four parameters which balances the effects of environmental descriptors - for each traits displays that ${\beta_{TWI}}_{c}$ and ${\beta_{comp}}_{c}$ could be null whereas $\alpha$ and ${\beta_{DBH}}_{c}$ ranged in values strictly positive. T-test supported that ${\beta_{TWI}}_{c}$ and ${\beta_{comp}}_{c}$ were not significantly non-null, and thus, could not be interprated later on. Notice however, that ${\beta_{TWI}}_{c}$ for Eschweilera took, however, a non-zero value.
+
+$\alpha$ took values really close for each traits, ranging between 0.92 and 1.38. Thus, ontogeny had a positive effect on trait value, and influenced them with almost the same strength.
+${\beta_{DBH}}_{c}$ were really close to zero for CC and LDMC (${\beta_{DBH}}_{c} < 0.09$), but still significantly positive, i.e. they had a steep slope for trait evolution regarding DBH. ${\beta_{DBH}}_{c}$ ranged in values up to 2.98 for LDMC and CC implying a slower evolution of traits with DBH.
+
+All parameters that were significantly non-null also displayed significant differences between complexes.
+
+```{r posteriorsbeta, fig.cap="Posteriors of $\\alpha$, ${\\beta_{DBH}}_{c}$, ${\\beta_{TWI}}_{c}$ and ${\\beta_{comp}}_{c}$ for each traits. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Paramaters significativity has been investigated with t-test and is reported with orange and green `***`. The segregation of paramaters between complexes was also assessed with t-test and reported with grey `***`."}
+include_graphics("./functional_save/posteriorsBeta.png")
+```
+
+    <!-- analysis of alphaNCI -->
+As $\alpha_{NCI}$ was explored with a fixed effect, we analized it on a seperate graph (Figure \@ref(fig:posteriorNCI)). For each traits, values were significantly positive and ranged between 1.07 and 2.74. Notice all $\alpha_{NCI}$ were above the 1-threshold, with the highest value it took,  the 1% effect of neighbors is reached before 1 meter of distance.
+
+```{r posteriorNCI, fig.cap="Posteriors of $\\alpha_{NCI}$. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Paramaters significativity has been investigated with t-test and is reported with grey ***."}
+include_graphics("./functional_save/posteriorsAlphaNCI.png")
+```
+
+## Variability of traits among taxonomic levels
+<!-- analysis of sigma -->
+For every traits, $\sigma$ and $\sigma_{species}$ were all significantly positive. Order of magnitude in which they ranged were, however, really contrasted. $\sigma$ reached values of an order of $10^{-1}$, whereas $\sigma_{intercept}$, $\sigma_{DBH}$ and $\sigma_{TWI}$ ranged more in the order of $10^{-2}$, and $\sigma_{comp}$ $10^{-4}$. Two major trends could be highlighted. LDMC and CC had $\sigma$, $\sigma_{intercept}$, $\sigma_{DBH}$ and $\sigma_{comp}$ closer to zero then LT and invSLA. $\sigma_{TWI}$ ranged in values quite similar for all traits although LT and invSLA had values slightly lower.
+Notice also that for all $\sigma_{species}$, the confidence interval got larger with higher estimate values, yet $\sigma$ had values of the highest order of magnitude but had a narrow confidence interval.
+
+```{r posteriorsigma, fig.cap="Posteriors of $\\sigma_{species}$ and $\\sigma$. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Paramaters significativity has been investigated with t-test and is reported with grey ***."}
+include_graphics("./functional_save/posteriorsSigma.png")
+```
+
+## Quality of the general additive model
+<!-- analysis of likelihood and predictions -->
+The log likelihood was hardly interpretable (Figure \@ref(fig:loglikelihood) because traits did not have the same dataset for the model inferences, thus why log likelihood were meant to be intrinsically different. Yet, LDMC and CC which were the only ones to have the same dataset, revealed that the model fitted better LDMC than CC.
+
+Rsquared table was computed to compare all traits (Table \@ref), and highlighted that the additive model explained well LDMC variations, whereas invSLA and LT fitted four time less well, and CC had an even lower value of Rsquared.
+
+```{r loglikelihood, fig.cap="Predictions of traits according to each descriptors, the others being fixed to their mean value. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals."}
+include_graphics("./functional_save/posteriorsLp.png")
+```
+
+Rsquared
+CC	0.0618557
+invSLA	0.1773810
+LDMC	0.6418458
+LT	0.1664569
+
+```{r predictions, fig.cap="Predictions of traits according to each descriptors, the others being fixed to their mean value. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Paramaters significativity has been investigated with t-test and is reported with grey ***."}
+include_graphics("./functional_save/Predictions.png")
+```
+
+# Discussion
+
+## How traits vary with environmental and ontogenetic descripors
+
+## 
 # References

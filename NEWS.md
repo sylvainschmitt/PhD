@@ -1,4 +1,5 @@
 # PhD 0.1.9090
+* Report Anne : mat&met, results 
 * A06, A07 & A08 new models with lognormal posterior for sigmaBeta
 
 # PhD 0.1.9089
