@@ -178,15 +178,15 @@ data {
   int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  vector<lower=0> [S] alpha_s ; // Intercept for species
-  vector<lower=0> [C] alpha_c ; // Intercept for complexes
-  vector<lower=0> [S] betaDBH_s ; // DBH half-load for species
+  vector [C] alpha_c ; // Intercept for complexes
   vector<lower=0> [C]  betaDBH_c ; // DBH half-load for complexes
-  vector[S] betaTWI_s ; // Abiotic slope for species
   vector[C] betaTWI_c ; // Abiotic slope for complexes
-  vector[S] betaComp_s ; // Biotic slope for species
   vector[C] betaComp_c ; // Biotic slope for complexes
   real<lower=0> alphaNCI ;
+  vector<lower=0> [S] alpha_s_tilde ; // Intercept for species
+  vector<lower=0> [S] betaDBH_s_tilde ; // DBH half-load for species
+  vector[S] betaTWI_s_tilde ; // Abiotic slope for species
+  vector[S] betaComp_s_tilde ; // Biotic slope for species
   real<lower=0> sigmaIntercept ; // Intercept variance for species
   real<lower=0> sigmaDBH ; // DBH half-load variance for species
   real<lower=0> sigmaTWI ; // Abiotic slope variance for species
@@ -194,33 +194,49 @@ parameters {
   real<lower=0> sigma ; // Variance
 }
 transformed parameters {
+  vector[S] alpha_s ;
+  vector<lower=0> [S] betaDBH_s ;
+  vector[S] betaTWI_s ;
+  vector[S] betaComp_s ;
   vector[J] NCIj ;
   vector[N] NCI ;
+  alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;
+  betaDBH_s = betaDBH_c[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
+  betaTWI_s = betaTWI_c[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
+  betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
   NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
 }
 model {
+  alpha_c ~ normal(0, 10^6) ;
   betaDBH_c ~ lognormal(0,1) ;
+  betaTWI_c ~ normal(0, 10^6) ;
+  betaComp_c ~ normal(0, 10^6) ;
   alphaNCI ~ lognormal(0, 1) ;
-  alpha_s ~ normal(alpha_c[speciesincomplex], sigmaIntercept) ;
-  betaDBH_s ~ normal(betaDBH_c[speciesincomplex], sigmaDBH) ;
-  betaTWI_s ~ normal(betaTWI_c[speciesincomplex], sigmaTWI) ;
-  betaComp_s ~ normal(betaComp_c[speciesincomplex], sigmaComp) ;
+  alpha_s_tilde ~ normal(0, 1) ;
+  betaDBH_s_tilde ~ normal(0, 1) ;
+  betaTWI_s_tilde ~ normal(0, 1) ;
+  betaComp_s_tilde ~ normal(0, 1) ;
+  sigmaIntercept ~ cauchy(0, 1) ;
+  sigmaDBH ~ cauchy(0, 1) ;
+  sigmaTWI ~ cauchy(0, 1) ;
+  sigmaComp ~ cauchy(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
   Trait ~ normal(alpha_s[species] .* (DBH ./ (betaDBH_s[species] + DBH)) + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
-} 
+}
 generated quantities {
-  matrix[N,C] Trait_pred ;
-  matrix[N,C] Trait_predDBH ;
-  matrix[N,C] Trait_predTWI ;
-  matrix[N,C] Trait_predNCI ;
-  for(c in 1:C) {
-    Trait_pred[,c] = alpha_c[c] * (DBH ./ (betaDBH_c[c] + DBH)) + betaTWI_c[c]*TWI  + betaComp_c[c] * (1 ./ weights) .* NCI ;
-    Trait_predDBH[,c] = alpha_c[c] * (DBH ./ (betaDBH_c[c] + DBH)) + betaTWI_c[c]*mean(TWI)  + betaComp_c[c] * mean((1 ./ weights) .* NCI) ;
-    Trait_predTWI[,c] = alpha_c[c] * (mean(DBH) ./ (betaDBH_c[c] + mean(DBH))) + betaTWI_c[c]*TWI  + betaComp_c[c] * mean((1 ./ weights) .* NCI) ;
-    Trait_predNCI[,c] = alpha_c[c] * (mean(DBH) ./ (betaDBH_c[c] + mean(DBH))) + betaTWI_c[c]*mean(TWI)  + betaComp_c[c] * (1 ./ weights) .* NCI ;
-  }
+  vector[N] Trait_pred ;
+  real Rsquared ;
+  vector[N] Trait_predDBH ;
+  vector[N] Trait_predTWI ;
+  vector[N] Trait_predNCI ;
+  Trait_pred = alpha_c[complex] .* (DBH ./ (betaDBH_c[complex] + DBH)) + betaTWI_c[complex] .* TWI + betaComp_c[complex] .* (1 ./ weights) .* NCI ;
+  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
+  Trait_predDBH = alpha_c[complex] .* (DBH ./ (betaDBH_c[complex] + DBH)) + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] * mean((1 ./ weights) .* NCI) ;
+  Trait_predTWI = alpha_c[complex] .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) + betaTWI_c[complex] .* TWI + betaComp_c[complex] * mean((1 ./ weights) .* NCI) ;
+  Trait_predNCI = alpha_c[complex] .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] .* (1 ./ weights) .* NCI ;
 }
 ```
 
@@ -228,8 +244,9 @@ generated quantities {
 
 ```{r }
 # fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, include = F, save_warmup = F,
-#            pars = c("NCIj", "alpha_s", "betaDBH_s", "betaTWI_s")))
+#   sampling(Model, chains = 2, data = x, save_warmup = F,
+#            include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s", "betaComp_s",
+#                                  "alpha_s_tilde", "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
 # names(fits) <- traits
 # save(fits, file = "./functional_save/Additive.Rdata")
 load("./functional_save/Additive.Rdata")
@@ -246,15 +263,16 @@ Leaf area $LA$ did not converged and will be fixed. In the meantime we show the 
 
 ## Chains
 
-```{r , fig.cap="Markov chains trace plot after warmup for intermediate data.",fig.height=12,fig.width=12}
-# mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
-#            facet_args = list(labeller = label_parsed))
+```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data.",fig.height=20,fig.width=20}
-# mcmc_pairs(as.array(fits$invLA), regex_pars = pars)
+```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model."}
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
 ## Posteriors
@@ -279,34 +297,6 @@ ggplot(gdata, aes(x = trait, xend = trait)) +
   facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
   xaxis_title(F) +
   yaxis_title(F)
-```
-
-```{r Rsqaured}
-lapply(as.list(traits), function(trait) 
-  as.data.frame(fits[[trait]], pars = c("Trait_pred")) %>% 
-    reshape2::melt() %>% 
-    group_by(variable) %>% 
-    summarise(value = mean(value)) %>% 
-    ungroup() %>% 
-    mutate(variable = gsub("]", "", variable, fixed = T)) %>% 
-    separate(variable, c("variable", "index"), sep = "\\[") %>% 
-    separate(index, c("obs", "complex"), sep = ",", convert = T) %>% 
-    rename(Ypred = value) %>% 
-    select(-variable) %>% 
-    left_join(data.frame(obs = 1:mdata[[trait]]$N,
-                         Y = mdata[[trait]]$Trait,
-                         complex = mdata[[trait]]$complex),
-              by = c("obs", "complex")) %>% 
-    arrange(obs) %>% 
-    filter(!is.na(Y)) %>% 
-    mutate(trait = trait)) %>% 
-  bind_rows() %>% 
-  group_by(trait) %>% 
-  mutate(Ymean = mean(Y)) %>% 
-  mutate(SquaredResiduals = (Y - Ypred)^2) %>% 
-  mutate(SquaredTotals = (Y - Ymean)^2) %>% 
-  summarise(Rsquared = 1 - sum(SquaredResiduals)/sum(SquaredTotals)) %>% 
-  kable(caption = "Models Rsquared", col.names = c("Trait", "$R^2$"))
 ```
 
 ```{r posteriorsBeta, fig.width=12, fig.height=12}

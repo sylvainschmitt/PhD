@@ -149,8 +149,8 @@ model {
   betaDBH_c ~ lognormal(0,1) ;
   alpha_s_tilde ~ normal(0, 1) ;
   betaDBH_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ cauchy(0,5) ;
-  sigmaDBH ~ cauchy(0,5) ;
+  sigmaIntercept ~ lognormal(0,1) ;
+  sigmaDBH ~ lognormal(0,1) ;
   sigma ~ cauchy(0,5) ;
   Trait ~ normal((alpha_s[species].*DBH) ./ (betaDBH_s[species]+DBH), sigma) ; // Likelihood
 }

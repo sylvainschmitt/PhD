@@ -56,10 +56,10 @@ model {
   betaDBH_s_tilde ~ normal(0, 1) ;
   betaTWI_s_tilde ~ normal(0, 1) ;
   betaComp_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ cauchy(0, 1) ;
-  sigmaDBH ~ cauchy(0, 1) ;
-  sigmaTWI ~ cauchy(0, 1) ;
-  sigmaComp ~ cauchy(0, 1) ;
+  sigmaIntercept ~ lognormal(0, 1) ;
+  sigmaDBH ~ lognormal(0, 1) ;
+  sigmaTWI ~ lognormal(0, 1) ;
+  sigmaComp ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
   Trait ~ normal((alpha_s[species] + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
 } 
