@@ -55,8 +55,9 @@ names(mdata) <- traits
 
 cat("#### Sampling ####\n\n")
 Model <- stan_model("./functional_cluster/Additive.stan")
-fits <- lapply(mdata, function(x) {
-  cat("#### Sampling of ", x$trait, "####\n\n")
-  sampling(Model, chains = 2, data = x)})
+fits <- lapply(mdata, function(x)
+  sampling(Model, chains = 2, data = x, save_warmup = F,
+           include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s", "betaComp_s",
+                                 "alpha_s_tilde", "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
 names(fits) <- traits
 save(fits, file = "./functional_save/Additive.Rdata")

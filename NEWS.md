@@ -1,5 +1,19 @@
+# PhD 0.1.9090
+* Report Anne : mat&met, results 
+
+# PhD 0.1.9089
+* A06, A07 & A08 new models with pred and R2 to cluster
+
+# PhD 0.1.9088
+* A04 & A05 updated (un-centered, R2 & new predict)
+
+# PhD 0.1.9087
+* A06, A07 & A08 new models with non-centered parameters
+
+
 # PhD 0.1.9086
-* Report Anne : results 
+* A08 & A08 Outputs first sampling
+* A07 & A08 models cluster code
 
 # PhD 0.1.9085
 * A08-interaction to be compiled on cluster
