@@ -64,14 +64,14 @@ model {
   Trait ~ normal((alpha_s[species] + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
 } 
 generated quantities {
-  matrix[N,C] Trait_pred ;
-  matrix[N,C] Trait_predDBH ;
-  matrix[N,C] Trait_predTWI ;
-  matrix[N,C] Trait_predNCI ;
-  for(c in 1:C) {
-    Trait_pred[,c] = (alpha_c[c] + betaTWI_c[c]*TWI  + betaComp_c[c] * (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_c[c] + DBH)) ;
-    Trait_predDBH[,c] = (alpha_c[c] + betaTWI_c[c]*mean(TWI)  + betaComp_c[c] * mean((1 ./ weights) .* NCI)) * (DBH ./ (betaDBH_c[c] + DBH)) ;
-    Trait_predTWI[,c] = (alpha_c[c] + betaTWI_c[c]*TWI  + betaComp_c[c] * mean((1 ./ weights) .* NCI)) * (mean(DBH) ./ (betaDBH_c[c] + mean(DBH))) ;
-    Trait_predNCI[,c] = (alpha_c[c] + betaTWI_c[c]*mean(TWI)  + betaComp_c[c] * (1 ./ weights) .* NCI) * (mean(DBH) ./ (betaDBH_c[c] + mean(DBH))) ;
-  }
+  vector[N] Trait_pred ;
+  real Rsquared ;
+  vector[N] Trait_predDBH ;
+  vector[N] Trait_predTWI ;
+  vector[N] Trait_predNCI ;
+  Trait_pred = (alpha_c[complex] + betaTWI_c[complex] .* TWI + betaComp_c[complex] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_c[complex] + DBH));
+  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
+  Trait_predDBH = (alpha_c[complex] + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] * mean((1 ./ weights) .* NCI)) .* (DBH ./ (betaDBH_c[complex] + DBH)) ;
+  Trait_predTWI = (alpha_c[complex] + + betaTWI_c[complex] .* TWI + betaComp_c[complex] * mean((1 ./ weights) .* NCI)) .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) ;
+  Trait_predNCI = (alpha_c[complex] + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] .* (1 ./ weights) .* NCI) .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) ;
 }

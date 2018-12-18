@@ -1,3 +1,6 @@
+# PhD 0.1.9089
+* A06, A07 & A08 new models with pred and R2 to cluster
+
 # PhD 0.1.9088
 * A04 & A05 updated (un-centered, R2 & new predict)
 

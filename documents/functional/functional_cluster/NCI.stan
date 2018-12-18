@@ -46,7 +46,8 @@ model {
   Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
 }
 generated quantities {
-  matrix[N,C] Trait_pred ;
-  for(c in 1:C)
-    Trait_pred[,c] = alpha_c[c] + betaComp_c[c] * (1 ./ weights) .* NCI ; // Predictions
+  vector[N] Trait_pred ;
+  real Rsquared ;
+  Trait_pred = alpha_c[complex] + betaComp_c[complex] .* (1 ./ weights) .* NCI ; // Predictions
+  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
 }
