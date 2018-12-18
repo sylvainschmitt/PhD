@@ -91,9 +91,11 @@ where:
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
 ```{r mdata, fig.cap="prepared data"}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+traits <- c("invSLA", "LDCMC", "LT", "invLA", "CC")
+# traits <- c("invLA")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    # sample_n(50) %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
@@ -163,8 +165,8 @@ model {
   alphaNCI ~ lognormal(0, 1) ;
   alpha_s_tilde ~ normal(0, 1) ;
   betaComp_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ cauchy(0, 1) ;
-  sigmaComp ~ cauchy(0, 1) ;
+  sigmaIntercept ~ lognormal(0, 1) ;
+  sigmaComp ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
   Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
 }
@@ -186,7 +188,8 @@ generated quantities {
 # names(fits) <- traits
 # save(fits, file = "./functional_save/NCI.Rdata")
 load("./functional_save/NCI.Rdata")
-pars <- c("alpha_c", "betaComp_c", "alphaNCI", "sigma")
+pars <- c("alpha_c", "betaComp_c", "alphaNCI", 
+          "sigmaIntercept", "sigmaComp", "sigma")
 lapply(as.list(traits), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -199,14 +202,14 @@ lapply(as.list(traits), function(trait)
 
 ```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$LDMC), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
 ## Pairs
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model."}
-mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model.", fig.height=12, fig.width=12}
+mcmc_pairs(as.array(fits$invLA), regex_pars = pars)
 ```
 
 ## Posteriors
@@ -227,6 +230,7 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = "alphaNCI")),
   labels = traits, nrow = 2)
+```
 ```
 
 ## Predictions

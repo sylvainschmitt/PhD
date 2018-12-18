@@ -40,8 +40,8 @@ model {
   alphaNCI ~ lognormal(0, 1) ;
   alpha_s_tilde ~ normal(0, 1) ;
   betaComp_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ cauchy(0, 1) ;
-  sigmaComp ~ cauchy(0, 1) ;
+  sigmaIntercept ~ lognormal(0, 1) ;
+  sigmaComp ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
   Trait ~ normal(alpha_s[species] +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
 }
