@@ -45,6 +45,7 @@ transformed parameters {
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
+  NCI = NCI ./ sd(NCI) ;
 }
 model {
   alpha_c ~ normal(0, 10^6) ;

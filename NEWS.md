@@ -1,3 +1,6 @@
+# PhD 0.1.9093
+* functional cluster reduce NCI for std betaComp
+
 # PhD 0.1.9092
 * functional cluster alert
 
