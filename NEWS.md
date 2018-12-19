@@ -8,16 +8,8 @@
 * A06, A07 & A08 new models with NCIj formula fix @EvaPhilippe
 
 # PhD 0.1.9090
-<<<<<<< HEAD
-<<<<<<< HEAD
-* Report Anne : mat&met, results 
-=======
-* A06, A07 & A08 new models with lognormal posterior for sigmaBeta
->>>>>>> 8420b30ffd035d4c315364605ad66f3fb5a77c9b
-=======
 * Report Anne : mat&met, results 
 * A06, A07 & A08 new models with lognormal posterior for sigmaBeta
->>>>>>> 4912a5fd9103e5b8b865d67d293a239ef75471e2
 
 # PhD 0.1.9089
 * A06, A07 & A08 new models with pred and R2 to cluster
@@ -27,7 +19,6 @@
 
 # PhD 0.1.9087
 * A06, A07 & A08 new models with non-centered parameters
-
 
 # PhD 0.1.9086
 * A08 & A08 Outputs first sampling

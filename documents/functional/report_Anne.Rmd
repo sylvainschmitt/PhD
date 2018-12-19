@@ -1,11 +1,6 @@
 ---
-<<<<<<< HEAD
 title: Modelling intraspecific variability among two species complexes from French Guiana
 author: "Anne Baranger"
-=======
-title: Report Internship
-author: Anne Baranger & Sylvain Schmitts
->>>>>>> 4912a5fd9103e5b8b865d67d293a239ef75471e2
 date: '`r Sys.Date()`'
 output:
   bookdown::html_document2:
@@ -22,8 +17,8 @@ output:
     keep_tex: yes
   gdoc::gdoc: default
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 gdoc_id: 1hlO-Io60KYgrkhwyQVB5xmPtPZz5QrycGH32B-Gvf-o
 ---
@@ -35,6 +30,7 @@ library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
+library(dplyr)
 library(broom)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
@@ -43,157 +39,35 @@ opts_chunk$set( echo = F, message = F, warning = F,
                 cache = T, cache.lazy = F)
 ```
 
-# Introduction
-
-Objectives of the analysis:
-
-* explain variations in leaf traits of individuals from different species complexes according to 4 descriptors: (i) tree ontogeny, (ii) biotic interactions and (iii) abiotic environment, and (iv) phylogeny through taxonomic levels.
-* explore trades-off between traits among complexes
-
-# Material & Methods
-
-## Study site 
-
-The study was conducted in the nothernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041mm annual rainfall and a mean air temperature of 25.71°C. Old tropical forest with an exceptional richness (over 750 woody species) has developped among the succession of small hills of this area, rising to 10–40 m a.s.l.(_Gourlet-Fleury et al., 2004_). 
-
-The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
-
-
-## Individuals sampling
-
-Two sampling campaigns were led in 2017 and 2018 during dry season. Sampling was made over two species complexes: (i) *Symphonia globulifera* and (ii) *Eschweilera clade Parvifolia*. Respectively 2 and 14 species of each were selected, and sampled on several individuals, depending on their natural abondance within the site.
-*Symphonia globulifera* were collected over all plots of the station for abondance matters, whereas *Eschweilera clade Parvifolia* were sampled only non-disturbed plots. 838 trees were collected in total. 
-For each individual, 5 mature leaves in consistent light conditions were collected, and kept them in humidified ziplock with enriched CO2 air in dark until measurement within the next 24 hours (_N. Pérez-Harguindeguy et al, 2013_).
- 
- 
-## Trait measurements
-
-After sampling, trait measurements were led on fresh leaves: (i) leaf area, (ii) leaf thickness (3 repetitions), (iii) leaf fresh weight and (iv) SPAD (3 repetitions). Leaves were then dried during 48h at 85°C and dry weight was mesured.
-Based on these direct measures, 5 functional traits were computed (Table \@ref(tab:Traits)).
-Chlorophyll contents was assessed using both an allometric model calibrated specifically on *Symphonia globulifera* and a general allometruc model for neotropical trees for *Eschweilera clade Parvifolia* (Coste et al. 2010).
-Leaf traits were averaged by individual for subsequent analysis. Leaf Thickness, Leaf Area and Specific Leaf Area were not measured on all leaves sampled for technical concerns, dataset was consequently truncated for those traits.
-
-```{r Traits, fig.cap="Functional traits measured, with trait unit, and abbreviation."}
-data.frame(
-  Traits = c("Specific Leaf Area", "Leaf Dry Matter Content", "Leaf Thickness", "Leaf Area", 
-             "Chlorophyll Content"),
-  #"Branch Bark Thickness" , "Branch Bark Density", "Branch Wood Density "),
-  Unit = c("$cm^2.g^{-1}$","$g·g^{-1}$","$\\mu m$","$cm^2$", "$g.cm^{-2}$"),
-  #,"$mm$","$g.cm^{-3}$","$g.cm^{-3}$"),
-  Abbreviation = c("SLA", "LDMC","LT", "LA", "CC")) %>% 
-  #"brBT", "brBD", "brWD")) %>% 
-  #Formula = c("Area/Dry Mass","Fresh Mass/Dry Mass", "None","None","None","jsp","jsp","jsp")) %>% 
-  kable(format = "pandoc", escape = F,
-        caption = "Functional traits measured, with trait unit, and abbreviation.") %>%
-  kableExtra::kable_styling("striped", full_width = T)
-```
-<!-- Analyses -->
-<!-- Traits variation and covariation -->
-<!-- Model description -->
-
-
-## Environmental variables
- 
-Environmental and ontogenetic descriptors were chosen in order to minimize their covariations (Figure \@ref(fig:Descriptors), and see supplementary material A02-Environment).
-Descriptors used were measured on the field (DBH), derived from fied measures (NCI) or derived from a 1-m resolution digital elevation model (DEM) built using LiDAR campaign done in 2015 (TWI).
-Diameter at breast height (DBH) was chosen as an indirect proxy for both light access and ontogeny effect. 
-A neighbor crowding index (NCI; Uriarte et al. 2004) was used as a descriptor of biotic asymmetric competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not taken into account.The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
-
-$$NCI_i = \sum _{j~|~\delta_{i,j}<\delta_{max}} ^{J_i} DBHj^\beta e^{-\alpha*\delta_{i,j}} ~|~ \begin{bmatrix} \beta \\ \alpha \\ \delta_{max} \end{bmatrix} = \begin{bmatrix} 2 \\ 1 \\ 20 \end{bmatrix}$$
-
-with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance $\delta_{max}$. $\beta$ represents the power of neighbors $DBH$ effect, here set to 2 to consider neighbors surface. $\alpha$ represents the decrease of neighbors $DBH$ effect with distance, arbitrarily set to 1 here for exploration (note that $\alpha$ set to 0 represent local basal area). $\delta_{max}$ represents the neighboring radius considered for $NCI$, here set to 20 meters as often observed in literature.
-Finally, topographic wetness index (TWI) was selected between various abiotic descriptors available (supplementary material A02-Environment) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
-
-```{r Descriptors, fig.cap="Selected variables correlations.", fig.height=6,fig.width=6}
-include_graphics("./functional_save/Additive_Model_without_LA/Descriptors.png")
-```
-
-## Model
-Each traits according were plotted to selected descriptorsand enabled to assess a submodel shape for each abiotic environment, biotic environment and ontogeny effect (see Supplementary Material A03-Models). Submodels were compiled in the following additive model: 
-
-\begin{equation} 
-<<<<<<< HEAD
-$$ T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma)    \\
-=======
-T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma)    \\
->>>>>>> 4912a5fd9103e5b8b865d67d293a239ef75471e2
-  \Theta_{c,s} \sim \mathcal{N}^4(\Theta_c,\sigma_{species}) ~|~ \Theta =
-   \begin{bmatrix}
-           \alpha \\
-           \beta_{DBH} \\
-           \beta_{TWI} \\
-           \beta_{Comp} \\
-  \end{bmatrix},~\sigma_{species}
-  \begin{bmatrix}
-           \sigma_{Intercept} \\
-           \sigma_{DBH} \\
-           \sigma_{TWI} \\
-           \sigma_{Comp} \\
-  \end{bmatrix}  \\
-  \Theta_c \sim \mathcal{N}^{4}(0, + \infty) \\
-<<<<<<< HEAD
-  (\alpha_{NCI},\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)$$ 
-=======
-  (\alpha_{NCI},\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)
->>>>>>> 4912a5fd9103e5b8b865d67d293a239ef75471e2
-(\#eq:final)
-\end{equation}
-with $Trait_{c,s,i}$ being a foliar trait of an individual i, from the species s, and the complex c. $i$ ranges $[1,I_s]$ where $I_s$ is the number of individuals in species s; $s$ ranges in $[1,S_c]$ where $S_c$ is the number of species in complex c and $c$ in $[1,C]$ where $C$ is the number of complexes.
-
-### Ontogenic part
-
-The ontogenic effect on traits is represented by the term $\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i}$, where $DBH_i$ was the DBH of the individual $i$. $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value. With higher $\beta_{DBH}$, traits evolves slowlier towards its plateau, consequently, ontogeny affects more traits values. Thus, $\beta_{DBH}$ ranges in positive values. 
-
-### Abiotic part
-
-The effect of abiotic environment relies on the topographic wetness index and is represented isn the model by the following part: ${\beta_{TWI}}_{c,s}.TWI_i$. $TWI_i$ is the value of TWI for the individual $i$ and  ${\beta_{TWI}}_{c,s}$ is the slope of TWI effect. When taking positive values, water accumulation of the environment will tend to increase the value of the trait and inversely. 
-
-### Biotic part
-
-The effect of competition is assessed by NCI through the following part: ${\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}$ , with $j$ ranging in $[1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$. $\delta_{i,j}$ is the distance between the individual i and one of its neighbors j. $\alpha_{NCI}$ represents the effect of neighbors distance to the individual $i$. Lower $\alpha_{NCI}$ enable to strengthen competition effects from more distant trees.  With $\alpha_{NCI}$ set to 1, neighbors DBH have only an effect of 0.1% after 2.3 meters, what displayed therefore that it has to explore values close to zero, but positive. $\beta_{Comp}$ is the slope of competition effect. When taking negative values, competition will affect phenotype by reducing traits values. 
-
-### Additive model and mixed effects
-
-Assuming first that interactions between descriptors were negligible, each descriptors effects were summed in a general model. A parameter $alpha$ was added to represent the intercept of the model, i.e. when ontogeny, abiotic and biotic environment do not affect phenotype, traits values reach the $alpha$ value, the saturation plateau.
-
-Moreover, individuals displayed different trends depending on complex and species they belonged to. It was chosen to deal with complexes as fixed effect on parameters ($\alpha$, $\beta_{DBH}$, $\beta_{TWI}$ and $\beta_{Comp}$) because they were represented only by two levels ($C=2$), and we looked at complex differentiation by investigating overlap of parameters posteriors. In addition, species were integrated as random effect on parameters for all individuals. Therefore, $\sigma_{species}$ (i.e. $sigma_{Intercept}$, $\sigma_{DBH}$, $\sigma_{TWI}$ and $\sigma_{Comp}$) represents parameters variance for species random effect.
-Finally $\sigma$ was the residual standard error, and represented variability of traits that could not be explained by the model, namely the unexplained remaining part, the effect of variability among leaves sampled, measures errors and random stochastic factors. 
-
-
-## Statistical method 
-
-First, individual traits co-variation were investigated by principal component analysis (PCA) on each species complexes. 
-Then, traits, DBH and TWI were all standardized (but not centered!) for the model building, in order to make it easier to compare strength of effects between traits and between effects. A Bayesian approach (see supplementary material A07-Additive) was used to estimate parameters of the model regarding each foliar traits, in order to then analyze effects of abiotic and biotic environment, and ontogeny on phenotype, and to quantify variability of traits caused by taxonomic levels.
-
 <!-- Data -->
 
 ```{r data}
-traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
-  googlesheets::gs_read("AllTraits") %>%
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
-  mutate(Genus = "Symphonia") %>%
-  rename(Species = Morphotype) %>%
-  mutate(Species = ifelse(Species == "Indet.",
-                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
-                                     "sp.1" =  "S")], Species))
-traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
-  googlesheets::gs_read("AllTraits") %>%
-  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
-  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
-  group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
-           SpeciesLong, Bark, Dawkins) %>%
-  summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
-                    "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
-  ungroup() %>%
-  mutate(invSLA=1/SLA) %>%
-  mutate(invLA=1/LA)
-load("./functional_save/env.Rdata")
-Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
-rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
-# load("./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
@@ -232,40 +106,173 @@ names(mdata) <- traits
 #rm(Individuals,Competition)
 ```
 
+
+# Introduction
+
+Objectives of the analysis:
+
+* explain variations in leaf traits of individuals from different species complexes according to 4 descriptors: (i) tree ontogeny, (ii) biotic interactions and (iii) abiotic environment, and (iv) phylogeny through taxonomic levels.
+* explore trades-off between traits among complexes
+
+# Material & Methods
+
+## Study site 
+
+The study was conducted in the nothernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041mm annual rainfall and a mean air temperature of 25.71°C. Old tropical forest with an exceptional richness (over 750 woody species) has developped among the succession of small hills of this area, rising to 10–40 m a.s.l.(_Gourlet-Fleury et al., 2004_). 
+
+The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
+
+
+## Individuals sampling
+
+Two sampling campaigns were led in 2017 and 2018 during dry season. Sampling was made over two species complexes: (i) *Symphonia globulifera* and (ii) *Eschweilera clade Parvifolia*. Respectively 2 and 14 species of each were selected, and sampled on several individuals, depending on their natural abondance within the site.
+*Symphonia globulifera* were collected over all plots of the station for abondance matters, whereas *Eschweilera clade Parvifolia* were sampled only non-disturbed plots. 838 trees were collected in total (Table \@ref(tab:Ndata). 
+For each individual, 5 mature leaves in consistent light conditions were collected, and kept them in humidified ziplock with enriched CO2 air in dark until measurement within the next 24 hours (_N. Pérez-Harguindeguy et al, 2013_).
+ 
+```{r Ndata, fig.cap="Species headcount",fig.width=12}
+Individuals %>% 
+  group_by(Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  arrange(desc(Genus), desc(N)) %>% 
+  kable(caption = "Number of individuals per species and genus.", escape = F) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1)
+``` 
+
+## Trait measurements
+
+After sampling, trait measurements were led on fresh leaves: (i) leaf area, (ii) leaf thickness (3 repetitions), (iii) leaf fresh weight and (iv) SPAD (3 repetitions). Leaves were then dried during 48h at 85°C and dry weight was mesured.
+Based on these direct measures, 5 functional traits were computed (Table \@ref(tab:Traits)).
+Chlorophyll contents was assessed using both an allometric model calibrated specifically on *Symphonia globulifera* and a general allometruc model for neotropical trees for *Eschweilera clade Parvifolia* (Coste et al. 2010).
+Leaf traits were averaged by individual for subsequent analysis. Leaf Thickness, Leaf Area and Specific Leaf Area were not measured on all leaves sampled for technical concerns, dataset was consequently truncated for those traits.
+
+```{r Traits, fig.cap="Functional traits measured, with trait unit, and abbreviation."}
+data.frame(
+  Traits = c("Specific Leaf Area", "Leaf Dry Matter Content", "Leaf Thickness", "Leaf Area", 
+             "Chlorophyll Content"),
+  #"Branch Bark Thickness" , "Branch Bark Density", "Branch Wood Density "),
+  Unit = c("$cm^2.g^{-1}$","$g·g^{-1}$","$\\mu m$","$cm^2$", "$g.cm^{-2}$"),
+  #,"$mm$","$g.cm^{-3}$","$g.cm^{-3}$"),
+  Abbreviation = c("SLA", "LDMC","LT", "LA", "CC")) %>% 
+  #"brBT", "brBD", "brWD")) %>% 
+  #Formula = c("Area/Dry Mass","Fresh Mass/Dry Mass", "None","None","None","jsp","jsp","jsp")) %>% 
+  kable(format = "pandoc", escape = F,
+        caption = "Functional traits measured, with trait unit, and abbreviation.") %>%
+  kableExtra::kable_styling("striped", full_width = T)
+```
+
+## Environmental variables
+ 
+Environmental and ontogenetic descriptors were chosen in order to minimize their covariations (Figure \@ref(fig:Descriptors), and see supplementary material A02-Environment).
+Descriptors used were measured on the field (DBH), derived from fied measures (NCI) or derived from a 1-m resolution digital elevation model (DEM) built using LiDAR campaign done in 2015 (TWI).
+Diameter at breast height (DBH) was chosen as an indirect proxy for both light access and ontogeny effect. 
+A neighbor crowding index (NCI; Uriarte et al. 2004) was used as a descriptor of biotic asymmetric competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not taken into account.The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
+
+$$NCI_i = \sum _{j~|~\delta_{i,j}<\delta_{max}} ^{J_i} DBHj^\beta e^{-\alpha*\delta_{i,j}} ~|~ \begin{bmatrix} \beta \\ \alpha \\ \delta_{max} \end{bmatrix} = \begin{bmatrix} 2 \\ 1 \\ 20 \end{bmatrix}$$
+
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance $\delta_{max}$. $\beta$ represents the power of neighbors $DBH$ effect, here set to 2 to consider neighbors surface. $\alpha$ represents the decrease of neighbors $DBH$ effect with distance, arbitrarily set to 1 here for exploration (note that $\alpha$ set to 0 represent local basal area). $\delta_{max}$ represents the neighboring radius considered for $NCI$, here set to 20 meters as often observed in literature.
+Finally, topographic wetness index (TWI) was selected between various abiotic descriptors available (supplementary material A02-Environment) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
+
+```{r Descriptors, fig.cap="Selected variables correlations.", fig.height=6,fig.width=6}
+include_graphics("./functional_save/AdditiveModel/Descriptors.png")
+```
+
+## Model
+Each traits according were plotted to selected descriptorsand enabled to assess a submodel shape for each abiotic environment, biotic environment and ontogeny effect (see Supplementary Material A03-Models). Submodels were compiled in the following additive model: 
+
+\begin{equation} 
+T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma)    \\
+  \Theta_{c,s} \sim \mathcal{N}^4(\Theta_c,\sigma_{species}) ~|~ \Theta =
+   \begin{bmatrix}
+           \alpha \\
+           \beta_{DBH} \\
+           \beta_{TWI} \\
+           \beta_{Comp} \\
+  \end{bmatrix},~\sigma_{species}
+  \begin{bmatrix}
+           \sigma_{Intercept} \\
+           \sigma_{DBH} \\
+           \sigma_{TWI} \\
+           \sigma_{Comp} \\
+  \end{bmatrix}  \\
+  \Theta_c \sim \mathcal{N}^{4}(0, + \infty) \\
+  (\alpha_{NCI},\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)
+(\#eq:final)
+\end{equation}
+with $Trait_{c,s,i}$ being a foliar trait of an individual i, from the species s, and the complex c. $i$ ranges $[1,I_s]$ where $I_s$ is the number of individuals in species s; $s$ ranges in $[1,S_c]$ where $S_c$ is the number of species in complex c and $c$ in $[1,C]$ where $C$ is the number of complexes.
+
+### Ontogenic part
+
+The ontogenic effect on traits is represented by the term $\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i}$, where $DBH_i$ was the DBH of the individual $i$. $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value. With higher $\beta_{DBH}$, traits evolves slowlier towards its plateau, consequently, ontogeny affects more traits values. Thus, $\beta_{DBH}$ ranges in positive values. 
+
+### Abiotic part
+
+The effect of abiotic environment relies on the topographic wetness index and is represented isn the model by the following part: ${\beta_{TWI}}_{c,s}.TWI_i$. $TWI_i$ is the value of TWI for the individual $i$ and  ${\beta_{TWI}}_{c,s}$ is the slope of TWI effect. When taking positive values, water accumulation of the environment will tend to increase the value of the trait and inversely. 
+
+### Biotic part
+
+The effect of competition is assessed by NCI through the following part: ${\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}$ , with $j$ ranging in $[1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$. $\delta_{i,j}$ is the distance between the individual i and one of its neighbors j. $\alpha_{NCI}$ represents the effect of neighbors distance to the individual $i$. Lower $\alpha_{NCI}$ enable to strengthen competition effects from more distant trees.  With $\alpha_{NCI}$ set to 1, neighbors DBH have only an effect of 0.1% after 2.3 meters, what displayed therefore that it has to explore values close to zero, but positive. $\beta_{Comp}$ is the slope of competition effect. When taking negative values, competition will affect phenotype by reducing traits values. 
+
+### Additive model and mixed effects
+
+Assuming first that interactions between descriptors were negligible, each descriptors effects were summed in a general model. A parameter $alpha$ was added to represent the intercept of the model, i.e. when ontogeny, abiotic and biotic environment do not affect phenotype, traits values reach the $alpha$ value, the saturation plateau.
+
+Moreover, individuals displayed different trends depending on complex and species they belonged to. It was chosen to deal with complexes as fixed effect on parameters ($\alpha$, $\beta_{DBH}$, $\beta_{TWI}$ and $\beta_{Comp}$) because they were represented only by two levels ($C=2$), and we looked at complex differentiation by investigating overlap of parameters posteriors. In addition, species were integrated as random effect on parameters for all individuals. Therefore, $\sigma_{species}$ (i.e. $\sigma_{Intercept}$, $\sigma_{DBH}$, $\sigma_{TWI}$ and $\sigma_{Comp}$) represents parameters variance for species random effect.
+Finally $\sigma$ was the residual standard error, and represented variability of traits that could not be explained by the model, namely the unexplained remaining part, the effect of variability among leaves sampled, measures errors and random stochastic factors. 
+
+
+## Statistical method 
+
+First, individual traits co-variation were investigated by principal component analysis (PCA) on each species complexes. 
+Then, traits, DBH and TWI were all standardized (but not centered!) for the model building, in order to make it easier to compare strength of effects between traits and between effects. A Bayesian approach (see supplementary material A07-Additive) was used to estimate parameters of the model regarding each foliar traits, in order to then analyze effects of abiotic and biotic environment, and ontogeny on phenotype, and to quantify variability of traits caused by taxonomic levels.
+
+> **Because of Bayesian inferences matters, subsequent analysis will be constructed omitting competition effect**
+
 # Results
 
 ## Co-variations of traits among complexes
+
 Within *Symphonia globulifera* complex, 75.1% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAsympho)). The first axis mainly increased with SLA and decreased with LDMC and CC, i.e. while SLA increased, leaf dry matter and chlorophyll diminished. Nevertheless the weights of the two remaining variables (LA and LT) on this axis were also significant. The first axis highlighted a strong correlation between CC and LDMC, whereas SLA and LA were still decoupled. The second axis was more related with LT and LA. The two morphotypes (*S. sp1* and *S. globulifera*) were segregated along the second axis, with decreasing LT and LA from *S. globulifera* to *S. sp1*. Finally, with decreasing diameter, SLA and LA increased whereas dry matter, chlorophyll content and leaf thickness lessen.
 
 Within *Eschweilera clade Parvifolia* complex, 65.16% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAeschw)). The opposition of increasing SLA with low LT and LDMC mostly draw the first axis of PCA. The second axis was related to increasing CC and LA, which were well correlated. SLA and LA seem had a decoupled relations. In addition, the first axis significantly segregated *E sagotiana* from other species (supplementary material A01-PCA), mostly investing in a thick leaves with high dry matter content but with low SLA . Whereas the second axis significantly segregated two species pools, *E. decolorans*, *E. sagotiana* and *E. wachenheimii* from *E. coriacea* and *E. grandiflora from 2* with *E. pedicellate* being intermediate, the first group mostly investing in big leaves with high chlorophyll content.
 
-```{r PCAeschw, fig.cap="Principal Component Analysis (PCA) of leaf trait wihtin Eschweilera complex. Dot color indicates the species, whereas dot size indicates individual diameter at breast height. See table \\@ref(tab:Traits) for traits abbreviation.", fig.height=10,fig.width=10}
-include_graphics("./functional_save/Additive_Model_without_LA/PCA_eschweilera.png")
-```
-
 ```{r PCAsympho, fig.cap="Principal Component Analysis (PCA) of leaf trait wihtin Symphonia complex and species seggregation on the two first axis. Dot and box colors indicates the species, whereas dot size indicates individual diameter at breast height.", fig.height=10,fig.width=10}
-include_graphics("./functional_save/Additive_Model_without_LA/ACP_symphonia.png")
+include_graphics("./functional_save/AdditiveModel/PCA_symphonia.png")
 ```
-## Quality of the general additive model
-<!-- analysis of likelihood and predictions -->
-The log likelihood was hardly interpretable (Figure \@ref(fig:loglikelihood) because traits did not have the same dataset for the model inferences, thus why log likelihood were meant to be intrinsically different. Yet, LDMC and CC which were the only ones to have the same dataset, revealed that the model fitted better LDMC than CC.
 
-Rsquared table was computed to compare all traits (Table \@ref), and highlighted that the additive model explained well LDMC variations, whereas invSLA and LT fitted four time less well, and CC had an even lower value of Rsquared.
+```{r PCAeschw, fig.cap="Principal Component Analysis (PCA) of leaf trait wihtin Eschweilera complex. Dot color indicates the species, whereas dot size indicates individual diameter at breast height. See table \\@ref(tab:Traits) for traits abbreviation.", fig.height=10,fig.width=10}
+include_graphics("./functional_save/AdditiveModel/PCA_eschweilera.png")
+```
+
+## Predictions fitness of the general additive model
+<!-- analysis of likelihood and predictions -->
+The log likelihood was hardly interpretable (Figure \@ref(fig:loglikelihood) because all traits did not have the same dataset for the model inferences, thus, log likelihoods were computed with different numbers of terms and were intrinsically different. Yet, LDMC and CC which were the only ones to have the same dataset, revealed that the model fitted better LDMC than CC.
+
+Rsquared table was computed to compare all traits (Table \@ref(tab:Rsquared)), and highlighted that the additive model explained well LDMC variations, whereas invSLA and LT fitted four time less well, and CC had an even lower value of Rsquared.
 
 Predictions graphs (Figure \@ref(fig:loglikelihood)) depicted a general trend for traits of being constant with TWI or NCI, all others descriptors being fixed to their means. However, with TWI and NCI fixed, traits evolution displayed a Michaelis-Menten shape.
 
 ```{r loglikelihood, fig.cap="Posteriors of Log Likelihood. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals."}
-include_graphics("./functional_save/posteriorsLp.png")
+include_graphics("./functional_save/AdditiveModel/posteriorsLpSigma-1.png")
 ```
 
-Rsquared
-CC	0.0618557
-invSLA	0.1773810
-LDMC	0.6418458
-LT	0.1664569
+```{r Rsquared}
+load("./functional_save/AdditiveAnne.Rdata")
+pars <- c("alpha_c", "betaDBH_c", "betaTWI_c",
+          "sigmaIntercept", "sigmaDBH", "sigmaTWI", "sigma")
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = "Rsquared", droppars = NULL)) %>%
+  bind_rows(.id = "Trait") %>% 
+  select(Trait, estimate) %>% 
+  kable(caption = "Model $R^2$",
+        escape = F, col.names = c("Trait", "$R^2$")) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T)
+```
 
 ```{r predictions, fig.cap="Predictions of traits according to each descriptors, the others being fixed to their mean value."}
-include_graphics("./functional_save/Predictions.png")
+include_graphics("./functional_save/AdditiveModel/Predictions.png")
 ```
 
 ## Determinant of functional traits at the individual level
@@ -280,15 +287,9 @@ ${\beta_{DBH}}_{c}$ were really close to zero for CC and LDMC (${\beta_{DBH}}_{c
 All parameters that were significantly non-null also displayed significant differences between complexes.
 
 ```{r posteriorsbeta, fig.cap="Posteriors of $\\alpha$, ${\\beta_{DBH}}_{c}$, ${\\beta_{TWI}}_{c}$ and ${\\beta_{comp}}_{c}$ for each traits. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Parameters significativity has been investigated with t-test and is reported with grey stars."}
-include_graphics("./functional_save/Additive_Model_without_LA/posteriorsBeta-1.png")
+include_graphics("./functional_save/AdditiveModel/posteriorsBeta-1.png")
 ```
 
-  <!-- analysis of alphaNCI -->
- For each traits, $\alpha_{NCI}$ were significantly positive (Figure \@ref(fig:posteriorNCI)) and ranged between 1.07 and 2.74. All $\alpha_{NCI}$ were above the 1-threshold. For LT, whose $\alpha_{NCI}$  had the highest value,  the 1% effect of neighbors is reached before 1 meter of distance.
-
-```{r posteriorNCI, fig.cap="Posteriors of $\\alpha_{NCI}$. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Parameters significativity has been investigated with t-test and is reported with grey stars."}
-include_graphics("./functional_save/Additive_Model_without_LA/posteriorsAlpha-1.png")
-```
 
 ## Variability of traits among taxonomic levels
 <!-- analysis of sigma -->
@@ -296,7 +297,7 @@ For every traits, $\sigma$ and $\sigma_{species}$ were all significantly positiv
 Notice also that for all $\sigma_{species}$, the confidence interval got larger with higher estimate values, yet $\sigma$ had values of the highest order of magnitude but had a narrow confidence interval.
 
 ```{r posteriorsigma, fig.cap="Posteriors of $\\sigma_{species}$ and $\\sigma$. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Parameters significativity has been investigated with t-test and is reported with grey ***."}
-include_graphics("./functional_save/posteriorsSigma.png")
+include_graphics("./functional_save/AdditiveModel/posteriorsSigma2-1.png")
 ```
 
 
