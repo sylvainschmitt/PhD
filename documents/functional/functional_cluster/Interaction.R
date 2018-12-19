@@ -61,3 +61,9 @@ fits <- lapply(mdata, function(x)
                                  "alpha_s_tilde", "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
 names(fits) <- traits
 save(fits, file = "./functional_save/Interaction.Rdata")
+
+#### Alert ####
+
+cat("#### Alert ####\n\n")
+library(RPushbullet)
+pbPost("note", "Interaction", "sampling done")

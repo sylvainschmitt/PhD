@@ -62,3 +62,8 @@ fits <- lapply(mdata, function(x)
 names(fits) <- traits
 save(fits, file = "./functional_save/Additive.Rdata")
 
+#### Alert ####
+
+cat("#### Alert ####\n\n")
+library(RPushbullet)
+pbPost("note", "Additive", "sampling done")
