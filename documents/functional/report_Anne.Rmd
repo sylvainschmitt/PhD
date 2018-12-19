@@ -1,26 +1,28 @@
 ---
 title: Report Internship
-author: "Anne Baranger & Sylvain Schmitts"
+author: Anne Baranger & Sylvain Schmitts
 date: '`r Sys.Date()`'
 output:
   bookdown::html_document2:
-    number_sections: false
-    toc: true
+    number_sections: no
+    toc: yes
     toc_float: yes
   bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
+    number_sections: no
+    toc: no
+    keep_tex: yes
+  gdoc::gdoc: default
 linestretch: 1.5
-# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-# bibliography: /home/sylvain/Documents/Bibliography/library.bib
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
+gdoc_id: 1hlO-Io60KYgrkhwyQVB5xmPtPZz5QrycGH32B-Gvf-o
 ---
-
+ 
 ```{r config, message=FALSE, warning=FALSE, include=FALSE}
 rm(list = ls()); invisible(gc())
 library(knitr)
@@ -85,7 +87,7 @@ Plots of each traits according descriptors were analysed previously and enabled 
 Individuals displayed different trends depending on complex and species they belonged to. We chose to deal with complex as fixed effect because they were represented only by two levels ($C=2$), and we  looked at complex differentiation by investigating overlap of parameters posteriors. In addition, species were integrated as random effect for all individuals.
 
 \begin{equation} 
-$$  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma)    \\
+T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J_i} DBH_j^{2} . e^{-\alpha_{NCI}.\delta_{i,j}}, \sigma)    \\
   \Theta_{c,s} \sim \mathcal{N}^4(\Theta_c,\sigma_{species}) ~|~ \Theta =
    \begin{bmatrix}
            \alpha \\
@@ -100,7 +102,7 @@ $$  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + D
            \sigma_{Comp} \\
   \end{bmatrix}  \\
   \Theta_c \sim \mathcal{N}^{4}(0, + \infty) \\
-  (\alpha_{NCI},\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)$$
+  (\alpha_{NCI},\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)
 (\#eq:final)
 \end{equation}
 

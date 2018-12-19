@@ -91,7 +91,7 @@ where:
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
 ```{r mdata, fig.cap="prepared data"}
-traits <- c("invSLA", "LDCMC", "LT", "invLA", "CC")
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 # traits <- c("invLA")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
@@ -191,7 +191,8 @@ load("./functional_save/NCI.Rdata")
 pars <- c("alpha_c", "betaComp_c", "alphaNCI", 
           "sigmaIntercept", "sigmaComp", "sigma")
 lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+  broom::tidyMCMC(fits[[trait]], pars = c(pars, "Rsquared", "lp__"), 
+                  droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
   bind_rows() %>%
   kable() %>%
@@ -230,7 +231,6 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   mcmc_intervals(as.array(fits[[trait]]), regex_pars = "alphaNCI")),
   labels = traits, nrow = 2)
-```
 ```
 
 ## Predictions

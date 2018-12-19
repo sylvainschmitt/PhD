@@ -41,7 +41,7 @@ transformed parameters {
   betaDBH_s = betaDBH_c[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
   betaTWI_s = betaTWI_c[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
   betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
-  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;

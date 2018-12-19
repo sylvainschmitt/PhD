@@ -29,7 +29,7 @@ transformed parameters {
   vector[N] NCI ;
   alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;
   betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
-  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
