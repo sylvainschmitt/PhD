@@ -91,11 +91,11 @@ where:
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
 ```{r mdata, fig.cap="prepared data"}
-# traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-traits <- c("invLA")
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+# traits <- c("invLA")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    sample_n(50) %>%
+    # sample_n(50) %>%
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
@@ -182,12 +182,12 @@ generated quantities {
 ## Summary
 
 ```{r }
-fits <- lapply(mdata, function(x)
-  sampling(Model, data = x, chains = 2, save_warmup = F,
-           include = F, pars = c('NCIj', "alpha_s", "betaComp_s",
-                                 "alpha_s_tilde", "betaComp_s_tilde")))
-names(fits) <- traits
-save(fits, file = "./functional_save/NCI.Rdata")
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, data = x, chains = 2, save_warmup = F,
+#            include = F, pars = c('NCIj', "alpha_s", "betaComp_s",
+#                                  "alpha_s_tilde", "betaComp_s_tilde")))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/NCI.Rdata")
 load("./functional_save/NCI.Rdata")
 pars <- c("alpha_c", "betaComp_c", "alphaNCI", 
           "sigmaIntercept", "sigmaComp", "sigma")
@@ -204,7 +204,7 @@ lapply(as.list(traits), function(trait)
 
 ```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$LT), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 

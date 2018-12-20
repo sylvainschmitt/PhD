@@ -1,3 +1,6 @@
+# PhD 0.1.9094
+* full models comparison and sensitivity start
+
 # PhD 0.1.9093
 * functional cluster reduce NCI for std betaComp
 

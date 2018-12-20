@@ -1,0 +1,105 @@
+---
+title: "A09 : Sensitivity Analysis"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt & Anne Baranger
+output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+  bookdown::word_document2: default
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r data, eval=T}
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+```
+
+# Introduction
+
+> To test the effect of one parameter on the model we will set all others parameters and their associated descriptors to the mean. Thus, the model will be sensitive to the parameter if the $\hat Y$ does not change and on the contrary unsensitive to the parameter if their is a strong change of $\hat Y$.
+
+Practically, working with the following model:
+
+$$T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)$$
+We will test ${\beta_{TWI}}_{c,s}$ effect sampling this model :
+
+$$T_{c,s,i} \sim \mathcal{N}(\overline{\alpha_{c}}.\frac{\overline{DBH}}{\overline{{\beta_{DBH}}_{c}} + \overline{DBH}} + {\beta_{TWI}}_{c,s}.TWI_i + \overline{{\beta_{Comp}}_{c}}.\overline{NCI}, \sigma)$$
+and looking at :
+
+$$\Delta \hat T = \sqrt{(\hat T_{full} - \hat T_{\beta_{TWI}})^2}$$
+In conclusion we will test following models for the different effects :
+
+```{r}
+data.frame(
+  Parameter = c("$\\alpha$", "$\\beta_{DBH}$", "$\\beta_{TWI}$", 
+                "$\\beta_{Comp}$", "$\\alpha_{NCI}$"),
+  Test = c(
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\alpha_{c,s}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}, \\sigma)$",
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{DBH_i}{{\\beta_{DBH}}_{c,s} + DBH_i} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}, \\sigma)$",
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + {\\beta_{TWI}}_{c,s}.TWI_i + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}, \\sigma)$",
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + {\\beta_{Comp}}_{c,s}.\\sum_{j=1}^{J} DBH_j^{2} . e^{-\\overline{{\\alpha_{NCI}}_{c}}.\\delta_{i,j}}, \\sigma)$",
+        "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\sum_{j=1}^{J} DBH_j^{2} . e^{-{\\alpha_{NCI}}_{c,s}.\\delta_{i,j}}, \\sigma)$"
+  )
+) %>% 
+  kable()
+```
+
+Similarly, we can test species random effect and complex random effect by removing the effect on each parameter. Thus, a strong change of $\hat Y$ will this time underline an important effect of the factor :
+
+
+
+# References

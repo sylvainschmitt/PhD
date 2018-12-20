@@ -76,8 +76,10 @@ The aim of this document is to fit the interaction full model with observed valu
 
 ```{r mdata, fig.cap="prepared data",fig.width=12}
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+# traits <- c("LDMC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    # sample_n(50) %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
@@ -85,16 +87,16 @@ mdata <- lapply(traits, function(trait){
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
   list(trait = trait,
        N = nrow(data_trait),
-       J = nrow(Competition),
+       J = nrow(Competition_trait),
        C = length(unique(data_trait$Genus)),
        S = length(unique(data_trait$Species)),
        Trait = as.numeric(scale(data_trait[trait], center = F)),
        DBH = as.numeric(scale(data_trait$DBH, center = F)),
        TWI = as.numeric(scale(data_trait$TWI, center = F)),
-       DBHj = as.numeric(scale(Competition$DBHj, center = F)),
-       Deltaj = as.numeric(scale(Competition$dij, center = F)),
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
        weights = 1-data_trait$AreaOutside20,
-       individual = as.numeric(as.factor(Competition$idTree)),
+       individual = as.numeric(as.factor(Competition_trait$idTree)),
        species = as.numeric(as.factor(data_trait$Species)),
        complex = as.numeric(as.factor(data_trait$Genus)),
        speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
@@ -103,17 +105,17 @@ mdata <- lapply(traits, function(trait){
 })
 names(mdata) <- traits
 
-lapply(as.list(traits), function(trait)
-  cbind(Model = trait, 
-        Trait = mdata[[trait]]$Trait, 
-        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
-  bind_rows() %>% 
-  select(Model, Trait, Genus, DBH, TWI) %>% 
-  reshape2::melt(id.vars = c("Model", "Trait", "Genus")) %>% 
-  ggplot(aes(x = value, y = Trait, col = Genus)) +
-  geom_point() +
-  geom_smooth() +
-  facet_grid(Model ~ variable, scales = "free")
+# lapply(as.list(traits), function(trait)
+#   cbind(Model = trait, 
+#         Trait = mdata[[trait]]$Trait, 
+#         Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
+#   bind_rows() %>% 
+#   select(Model, Trait, Genus, DBH, TWI) %>% 
+#   reshape2::melt(id.vars = c("Model", "Trait", "Genus")) %>% 
+#   ggplot(aes(x = value, y = Trait, col = Genus)) +
+#   geom_point() +
+#   geom_smooth() +
+#   facet_grid(Model ~ variable, scales = "free")
 ```
 
 # Model
@@ -204,10 +206,11 @@ transformed parameters {
   betaDBH_s = betaDBH_c[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
   betaTWI_s = betaTWI_c[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
   betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
-  NCIj = (DBHj .* DBHj + exp(-alphaNCI * Deltaj)) ;
+  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
+  NCI = NCI ./ sd(NCI) ;
 }
 model {
   alpha_c ~ normal(0, 10^6) ;
@@ -245,8 +248,8 @@ generated quantities {
 ```{r }
 # fits <- lapply(mdata, function(x)
 #   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s", 
-#                                  "betaComp_s", "alpha_s_tilde", 
+#            include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s",
+#                                  "betaComp_s", "alpha_s_tilde",
 #                                  "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
 # names(fits) <- traits
 # save(fits, file = "./functional_save/Interaction.Rdata")
@@ -347,30 +350,6 @@ student <- lapply(fits, function(fit)
   left_join(gdata %>% 
               group_by(trait, parameter) %>% 
               summarise(x = mean(m)))
-# significance <- lapply(fits, function(fit) 
-#   as.data.frame(fit, pars = c("alpha_c", "betaDBH_c",
-#                                      "betaTWI_c", "betaComp_c"))) %>% 
-#   bind_rows(.id = "trait") %>%
-#   reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
-#   mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
-#   mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
-#   mutate(complex = ifelse(complex == 2, "Symphonia", "Eschweilera")) %>% 
-#   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-#   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-#   mutate(parameter = as.factor(gsub("c", "", parameter))) %>% 
-#   mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
-#                                    betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
-#   group_by(trait, parameter, complex) %>% 
-#   summarise(pvalue = rank(c(0,value))[1]/(length(value)+1)) %>% 
-#   mutate(pvalue = ifelse(pvalue > 0.5, 1-pvalue, pvalue)) %>% 
-#   mutate(pvalue = ifelse(pvalue < 0.001, "***",
-#                           ifelse(pvalue < 0.01, "**",
-#                                  ifelse(pvalue < 0.05, "*",
-#                                         ifelse(pvalue < 0.1, ".", 
-#                                                "n.s."))))) %>% 
-#     left_join(gdata %>% 
-#               group_by(trait, parameter, complex) %>% 
-#               summarise(x = mean(m)))
 ggplot(gdata, aes(x = trait, xend = trait, col = complex, fill = complex)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
@@ -381,9 +360,6 @@ ggplot(gdata, aes(x = trait, xend = trait, col = complex, fill = complex)) +
   geom_text(aes(x = trait, y = x, label = student,
                 col = NA, fill = NA), position = position_nudge(x = 0.1),
             data = student) +
-  # geom_text(aes(x = trait, y = x, label = pvalue, fill = NA), 
-  #           position = position_nudge(x = -0.1),
-  #           data = significance) +
   facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
   xaxis_title(F) +
   yaxis_title(F)
@@ -400,18 +376,6 @@ gdata <- lapply(as.list(traits), function(trait) {
 }) %>% 
   bind_rows() %>% 
   mutate(parameter = recode_factor(parameter, alphaNCI = "alpha[NCI]"))
-# significance <- lapply(fits, function(fit) 
-#   as.data.frame(fit, pars = c("alphaNCI"))) %>% 
-#   bind_rows(.id = "trait") %>%
-#   group_by(trait) %>% 
-#   summarise(pvalue = rank(c(0,alphaNCI))[1]/(length(alphaNCI)+1)) %>% 
-#   mutate(pvalue = ifelse(pvalue > 0.5, 1-pvalue, pvalue)) %>% 
-#   mutate(pvalue = ifelse(pvalue < 0.001, "***",
-#                           ifelse(pvalue < 0.01, "**",
-#                                  ifelse(pvalue < 0.05, "*",
-#                                         ifelse(pvalue < 0.1, ".", 
-#                                                "n.s."))))) %>% 
-#   left_join(gdata)
 ggplot(gdata, aes(x = trait, xend = trait)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
@@ -419,9 +383,6 @@ ggplot(gdata, aes(x = trait, xend = trait)) +
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  # geom_text(aes(x = trait, y = m, label = pvalue), 
-  #           position = position_nudge(x = -0.1),
-  #           data = significance) +
   facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
   xaxis_title(F) +
   yaxis_title(F)
@@ -443,26 +404,6 @@ gdata <- lapply(as.list(traits), function(trait) {
                                    sigmaDBH = "sigma[DBH]^2", 
                                    sigmaTWI = "sigma[TWI]^2",
                                    sigmaComp = "sigma[Comp]^2"))
-# significance <- lapply(fits, function(fit) 
-#   as.data.frame(fit, pars = c("sigma", "sigmaIntercept", 
-#                               "sigmaDBH", "sigmaTWI", "sigmaComp"))) %>% 
-#   bind_rows(.id = "trait") %>%
-#   reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
-#   group_by(trait, parameter) %>% 
-#   summarise(pvalue = rank(c(0,value))[1]/(length(value)+1)) %>% 
-#   mutate(pvalue = ifelse(pvalue > 0.5, 1-pvalue, pvalue)) %>% 
-#   mutate(pvalue = ifelse(pvalue < 0.001, "***",
-#                           ifelse(pvalue < 0.01, "**",
-#                                  ifelse(pvalue < 0.05, "*",
-#                                         ifelse(pvalue < 0.1, ".", 
-#                                                "n.s."))))) %>% 
-#   mutate(parameter = recode_factor(parameter, 
-#                                    sigma = "sigma^2",
-#                                    sigmaIntercept = "sigma[Intercept]^2",
-#                                    sigmaDBH = "sigma[DBH]^2", 
-#                                    sigmaTWI = "sigma[TWI]^2",
-#                                    sigmaComp = "sigma[Comp]^2")) %>% 
-#   left_join(gdata)
 ggplot(gdata, aes(x = trait, xend = trait)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
@@ -470,9 +411,6 @@ ggplot(gdata, aes(x = trait, xend = trait)) +
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  # geom_text(aes(x = trait, y = m, label = pvalue),
-  #           position = position_nudge(x = 0.2),
-  #           data = significance) +
   facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
   xaxis_title(F) +
   yaxis_title(F)
