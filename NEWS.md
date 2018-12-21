@@ -1,3 +1,12 @@
+# PhD 0.1.9096
+* Parrallel std interaction model for cluster
+
+# PhD 0.1.9095
+* Wood traits
+
+# PhD 0.1.9094
+* full models comparison and sensitivity start
+
 # PhD 0.1.9093
 * functional cluster reduce NCI for std betaComp
 
