@@ -318,7 +318,8 @@ On the other hand, $\alpha$ and ${\beta_{DBH}}_{c}$ ranged in strictly positive 
 for each traits, except for $\alpha_{Eschweilera}$ of invLA which was not significant. The intercept took values in a very narrow interval, from 0.74 up to 1.09.
 
 ${\beta_{DBH}}_{c}$ took values in $[0,0.25]$, but more contrasted relatively to the interval width. For instance, ${\beta_{DBH}}_{Eschweilera}$ for LDMC was ten time lower than ${\beta_{DBH}}_{Symphonia}$ for LT. Consequently, ontogeny affected the increasment of traits with a different strength, making traits evolve ten time slowlier with ontogeny, when comparing extrema of ${\beta_{DBH}}_{c}$. 
-$\{beta_{DBH}}_{90}$ was computed as the value of DBH - when DBH not reduced nor centered - for which the trait account for 90% of its maximum value, as far as ${\beta_{DBH}}_{c}$ ranged in values Result are presented in table x.
+$\{beta_{DBH}}_{90}$ was computed as the value of DBH - when DBH not reduced nor centered - for which the trait account for 90% of its maximum value (Table \@ref(tab:beta90)). $\{beta_{DBH}}_{90}$ enabled to assess until which DBH the trait was still affected by ontogenic stage. $\{beta_{DBH}}_{90}$ taking values lower than 10cm, as *Eschweilera clade parvifolia* for LDMC and for CC, can be considered non significant because measures only concerned trees of diameters above 10cm. 
+
 All parameters that were significant also displayed significant differences between complexes.
 
 ```{r beta90}
@@ -326,24 +327,19 @@ lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "Trait") %>% 
   mutate(complex = gsub("([[:alpha:]])", "", term)) %>% 
-  dplyr::select(Trait, term, complex, estimate, std.error, rhat) %>% 
+  dplyr::select(Trait, term, complex, estimate, std.error) %>% 
   mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
   mutate(complex = recode_factor(complex, `2` = "Symphonia", 
                                  `1` = "Eschweilera")) %>% 
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = as.factor(gsub("c", "", term))) %>% 
-  mutate(term = recode_factor(term, 
-                              alpha = "$\\alpha$",
-                              betaDBH = "$\\beta_{DBH}$", 
-                              betaTWI = "$\\beta_{TWI}$", 
-                              sigmaInterept = "$\\sigma^2_{Intercept}$",
-                              sigmaDBH = "$\\sigma^2_{DBH}$", 
-                              sigmaTWI = "$\\sigma^2_{TWI}$",
-                              sigma = "$\\sigma^2$")) %>% 
-  kable(caption = "Model parameters posterior.",
-        escape = F, col.names = c("Trait", "Parameter", "Complex",
-                                  "Estimate", "Standard Error", "$\\hat R$")) %>% 
+  filter(term=="betaDBH") %>% 
+  mutate(betaDBH90 = estimate*30.7*9) %>% 
+  dplyr::select(Trait,complex,betaDBH90) %>% 
+  kable(caption = "$\\{beta_{DBH}}_90 estimations",
+        escape = F, col.names = c("Trait", "Complex",
+                                  "{beta_{DBH}}_90")) %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
