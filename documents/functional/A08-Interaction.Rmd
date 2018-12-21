@@ -105,6 +105,12 @@ mdata <- lapply(traits, function(trait){
 })
 names(mdata) <- traits
 
+lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    left_join(select(Competition, idTree, AreaOutside20) 
+              %>% unique())
+       attr(scale(data_trait$DBH, center = F), "scaled:scale")
+})
 # lapply(as.list(traits), function(trait)
 #   cbind(Model = trait, 
 #         Trait = mdata[[trait]]$Trait, 
@@ -449,6 +455,36 @@ lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
   scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
 ```
 
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+g <- lapply(as.list(c("DBH")), function(variable)
+  lapply(as.list("LDMC"), function(trait) {
+    if(variable == "NCI") {
+      value <- apply(as.matrix(fits[[trait]], pars = "NCI"), 2, mean)
+    } else {
+      value <- mdata[[trait]][[variable]]
+    }
+    data.frame(
+      trait = trait, 
+      variable = variable,
+      Y = mdata[[trait]]$Trait,
+      value = value,
+      Genus = mdata[[trait]]$complex,
+      mu = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
+                 2, mean),
+      mu5 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
+                  2, quantile, probs = 0.05),
+      mu95 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
+                   2, quantile, probs = 0.95)
+    )
+  }) %>% bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = value, col = as.factor(Genus))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_grid(trait ~ variable, scales = "free") +
+  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```
 ## Diagnostic
 
 # Conclusion

@@ -1,0 +1,347 @@
+---
+title: "A08 : Interaction Model"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt & Anne Baranger
+output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+  bookdown::word_document2: default
+linestretch: 1.5
+# csl: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/ECOFOG/sylvain.schmitt/Documents/Bibliography/library.bib
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r data, eval=T}
+# traits <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.", "sp.1", Species)) %>% 
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   filter(!is.nan(brWD))
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traits, env)
+# save(Individuals, file = "./functional_save/IndividualsWood.Rdata")
+load("./functional_save/IndividualsWood.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+```
+
+# Introduction {-}
+
+The aim of this document is to fit the interaction full model with observed values of wood functional traits for our individuals. We prepared data excluding oultiers and reducing variance of all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the full model with the interaction form.
+
+```{r mdata}
+traits <- c("brBT", "brBD", "brWD")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    left_join(select(Competition, idTree, AreaOutside20) 
+              %>% unique())
+  Competition_trait <- Competition
+  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+  Competition_trait <- filter(Competition_trait, !is.na(idTree))
+  list(trait = trait,
+       N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       S = length(unique(data_trait$Species)),
+       Trait = as.numeric(scale(data_trait[trait], center = F)),
+       DBH = as.numeric(scale(data_trait$DBH, center = F)),
+       TWI = as.numeric(scale(data_trait$TWI, center = F)),
+       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
+       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       weights = 1-data_trait$AreaOutside20,
+       individual = as.numeric(as.factor(Competition_trait$idTree)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       data = data_trait,
+       competition = Competition_trait)
+})
+names(mdata) <- traits
+```
+
+# Model
+
+We explained wood trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and species random effect ($S$):
+
+\begin{equation} 
+T_{c,s,i} \sim \mathcal{N}((\alpha_s + {\beta_{TWI}}_s.TWI_i + {\beta_{Comp}}_s.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}).\frac{DBH_i}{{\beta_{DBH}}_s + DBH_i}, \sigma)    \\
+(\#eq:final)
+\end{equation}
+
+* $Trait_{s,i}$ is a trait of an individual i, from the species s;
+* $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
+* $s \in [1,S]$ where $S$ is the number of species;
+* $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
+* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
+* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
+* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
+* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
+* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
+* all $\sigma_{species}$ represents parameters variance for species;
+* $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
+* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$  and $\sigma_{species}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all $\Theta_{c,s}$ and $\Theta_c$.
+
+## Code
+
+```{stan, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  vector[N] weights ;
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+}
+parameters {
+  vector [S] alpha_s ; // Intercept for complexes
+  vector<lower=0> [S]  betaDBH_s ; // DBH half-load for complexes
+  vector[S] betaTWI_s ; // Abiotic slope for complexes
+  vector[S] betaComp_s ; // Biotic slope for complexes
+  real<lower=0> alphaNCI ;
+  real<lower=0> sigma ; // Variance
+}
+transformed parameters {
+  vector[J] NCIj ;
+  vector[N] NCI ;
+  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+  NCI = NCI ./ sd(NCI) ;
+}
+model {
+  alpha_s ~ normal(0, 10^6) ;
+  betaDBH_s ~ lognormal(0,1) ;
+  betaTWI_s ~ normal(0, 10^6) ;
+  betaComp_s ~ normal(0, 10^6) ;
+  alphaNCI ~ lognormal(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha_s[species] + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
+} 
+generated quantities {
+  vector[N] Trait_pred ;
+  real Rsquared ;
+  vector[N] Trait_predDBH ;
+  vector[N] Trait_predTWI ;
+  vector[N] Trait_predNCI ;
+  Trait_pred = (alpha_s[species] + betaTWI_s[species] .* TWI + betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH));
+  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
+  Trait_predDBH = (alpha_s[species] + betaTWI_s[species] * mean(TWI) + betaComp_s[species] * mean((1 ./ weights) .* NCI)) .* (DBH ./ (betaDBH_s[species] + DBH)) ;
+  Trait_predTWI = (alpha_s[species] + + betaTWI_s[species] .* TWI + betaComp_s[species] * mean((1 ./ weights) .* NCI)) .* (mean(DBH) ./ (betaDBH_s[species] + mean(DBH))) ;
+  Trait_predNCI = (alpha_s[species] + betaTWI_s[species] * mean(TWI) + betaComp_s[species] .* (1 ./ weights) .* NCI) .* (mean(DBH) ./ (betaDBH_s[species] + mean(DBH))) ;
+}
+```
+
+## Summary
+
+```{r }
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F, include = F, pars = c('NCIj')))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/InteractionWood.Rdata")
+load("./functional_save/InteractionWood.Rdata")
+pars <- c("alpha_s", "betaDBH_s", "betaTWI_s", "betaComp_s", "alphaNCI", "sigma")
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "Trait") %>%
+  kable() %>%
+  kable_styling()
+```
+
+## Chains
+
+```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$brWD), regex_pars = c(pars, "lp__"),
+             facet_args = list(labeller = label_parsed))
+```
+
+## Pairs
+
+```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model."}
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+## Posteriors
+
+```{r posteriorsLp}
+lapply(fits, function(fit)
+  mcmc_intervals_data(as.array(fit), regex_pars = c("lp__"))) %>% 
+  bind_rows(.id = "Trait") %>% 
+  mutate(parameter = "logged-likelihood") %>% 
+  ggplot(aes(x = Trait, xend = Trait)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F)
+```
+
+```{r posteriorsBeta, fig.width=12, fig.height=12}
+S_sqrt <- function(x){sign(x)*sqrt(abs(x))}
+IS_sqrt <- function(x){x^2*sign(x)}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",S_sqrt,IS_sqrt)
+gdata <- lapply(fits, function(fit)
+  mcmc_intervals_data(as.array(fit), regex_pars = c("alpha_s", "betaDBH_s",
+                                                    "betaTWI_s", "betaComp_s"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(Species = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(Species = gsub("([[:punct:]])", "", Species)) %>% 
+  mutate(Species = ifelse(Species == 1, "S. globulifera", "S. sp1")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(parameter = as.factor(gsub("s", "", parameter))) %>% 
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
+                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
+  mutate(parameter = factor(parameter, levels = c("alpha", "beta[DBH]", 
+                                                  "beta[TWI]", "beta[Comp]")))
+student <- lapply(fits, function(fit) 
+  as.data.frame(fit, pars = c("alpha_s", "betaDBH_s",
+                              "betaTWI_s", "betaComp_s"))) %>% 
+  bind_rows(.id = "trait") %>%
+  reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
+  mutate(Species = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(Species = gsub("([[:punct:]])", "", Species)) %>% 
+  mutate(Species = ifelse(Species == 1, "S. globulifera", "S. sp1")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(parameter = as.factor(gsub("s", "", parameter))) %>% 
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
+                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
+  group_by(trait, parameter) %>% 
+  do(student = t.test(value ~ Species, data = .)) %>% 
+  mutate(student = student$p.value) %>% 
+  mutate(student = ifelse(student < 0.001, "***",
+                          ifelse(student < 0.01, "**",
+                                 ifelse(student < 0.05, "*",
+                                        ifelse(student < 0.1, ".", 
+                                               "n.s."))))) %>% 
+  left_join(gdata %>% 
+              group_by(trait, parameter) %>% 
+              summarise(x = mean(m)))
+ggplot(gdata, aes(x = trait, xend = trait, col = Species, fill = Species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  geom_text(aes(x = trait, y = x, label = student,
+                col = NA, fill = NA), position = position_nudge(x = 0.1),
+            data = student) +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  scale_y_continuous(trans="S_sqrt")
+```
+
+```{r posteriorsAlpha}
+lapply(fits, function(fit)
+  mcmc_intervals_data(as.array(fit), regex_pars = c("alphaNCI"))) %>% 
+  bind_rows(.id = "Trait") %>% 
+  mutate(parameter = "alpha[NCI]") %>% 
+  ggplot(aes(x = Trait, xend = Trait)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F)
+```
+
+```{r posteriorsSigma}
+lapply(fits, function(fit)
+  mcmc_intervals_data(as.array(fit), regex_pars = c("sigma"))) %>% 
+  bind_rows(.id = "Trait") %>% 
+  mutate(parameter = "sigma^2") %>% 
+  ggplot(aes(x = Trait, xend = Trait)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F)
+```
+
+## Predictions
+
+```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
+  lapply(as.list(traits), function(trait) {
+    if(variable == "NCI") {
+      value <- apply(as.matrix(fits[[trait]], pars = "NCI"), 2, mean)
+    } else {
+      value <- mdata[[trait]][[variable]]
+    }
+    data.frame(
+      trait = trait, 
+      variable = variable,
+      Y = mdata[[trait]]$Trait,
+      value = value,
+      Species = mdata[[trait]]$species,
+      mu = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
+                 2, mean),
+      mu5 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
+                  2, quantile, probs = 0.05),
+      mu95 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
+                   2, quantile, probs = 0.95)
+    )
+  }) %>% bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = value, col = as.factor(Species))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_grid(trait ~ variable, scales = "free") +
+  scale_color_discrete("Species", labels = c("S. globulifera", "S. sp1"))
+```
+
+## Diagnostic
+
+# Conclusion
+
+# References
