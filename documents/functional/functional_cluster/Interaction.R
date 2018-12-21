@@ -1,8 +1,8 @@
 #### Setup ####
 
-con <- file("./functional_cluster/Interaction.log")
-sink(con, append=T)
-sink(con, append=T, type="message")
+# con <- file("./functional_cluster/Interaction.log")
+# sink(con, append=T)
+# sink(con, append=T, type="message")
 
 cat("#### Setup ####\n\n")
 rm(list = ls())

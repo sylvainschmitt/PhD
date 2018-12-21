@@ -19,9 +19,9 @@ transformed data {
   vector[N] TWI_sd ;
   vector[J] DBHj_sd ;
   vector[J] Deltaj_sd ;
-  DBH_sd = DBH ./ sd(Trait) ;
-  TWI_sd = TWI ./ sd(Trait) ;
-  DBHj_sd = DBHj ./ sd(Trait) ;
+  DBH_sd = DBH ./ sd(DBH) ;
+  TWI_sd = TWI ./ sd(TWI) ;
+  DBHj_sd = DBHj ./ sd(DBHj) ;
   Deltaj_sd = Deltaj ./ sd(Deltaj) ;
 }
 parameters {
@@ -47,7 +47,6 @@ transformed parameters {
   vector[S] betaComp_s ;
   vector[J] NCIj ; // Competition Index
   vector[N] NCI ;
-  vector[N] NCI_sd ;
   vector<lower=0> [C]  betaDBH_c ; // True values of parameters
   vector[C] betaTWI_c ;
   real<lower=0> alphaNCI ;
@@ -68,7 +67,7 @@ transformed parameters {
   betaTWI_c = sd(TWI) * betaTWI_sd_c ;
   alphaNCI = sd(Deltaj_sd) * alphaNCI_sd ;
   sigmaDBH = sd(DBH) * sigmaDBH_sd ;
-  sigmaTWI = sd(TWI) * sigmaTWI ;
+  sigmaTWI = sd(TWI) * sigmaTWI_sd ;
 }
 model {
   alpha_c ~ normal(0, 10^6) ;
@@ -85,7 +84,7 @@ model {
   sigmaTWI_sd ~ lognormal(0, 1) ;
   sigmaComp ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
-  Trait ~ normal((alpha_s[species] + betaTWI_sd_s[species] .* TWI_sd +  betaComp_s[species] .* (1 ./ weights) .* NCI_sd) .* (DBH_sd ./ (betaDBH_sd_s[species] + DBH_sd)), sigma) ; // Likelihood
+  Trait ~ normal((alpha_s[species] + betaTWI_sd_s[species] .* TWI_sd +  betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH_sd ./ (betaDBH_sd_s[species] + DBH_sd)), sigma) ; // Likelihood
 } 
 generated quantities {
   vector[N] Trait_pred ;
