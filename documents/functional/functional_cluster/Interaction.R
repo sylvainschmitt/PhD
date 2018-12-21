@@ -36,7 +36,7 @@ mdata <- lapply(traits, function(trait){
        J = nrow(Competition_trait),
        C = length(unique(data_trait$Genus)),
        S = length(unique(data_trait$Species)),
-       Trait = data_trait[trait],
+       Trait = unlist(data_trait[trait]),
        DBH = data_trait$DBH,
        TWI = data_trait$TWI,
        DBHj = Competition_trait$DBHj,
@@ -55,10 +55,15 @@ names(mdata) <- traits
 
 cat("#### Sampling ####\n\n")
 Model <- stan_model("./functional_cluster/Interaction.stan")
-fits <- lapply(mdata, function(x)
+library(parallel)
+cl <- makeCluster(3)
+clusterExport(cl, list("mdata", "sampling", "Model"))
+fits <- parLapply(cl, mdata, function(x)
   sampling(Model, chains = 2, data = x, save_warmup = F,
            include = F, pars = c('NCIj', "alpha_s", "betaDBH_sd_s", "betaTWI_sd_s", "betaComp_s",
                                  "alpha_s_tilde", "betaDBH_sd_s_tilde", "betaTWI_sd_s_tilde", "betaComp_s_tilde")))
+stopCluster(cl)
+rm(cl)
 names(fits) <- traits
 save(fits, file = "./functional_save/Interaction.Rdata")
 
