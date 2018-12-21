@@ -305,10 +305,11 @@ Predictions graphs (Figure \@ref(fig:predictions)) depicted a general trend of t
 include_graphics("./functional_save/AdditiveModel/posteriorsLpSigma-1.png")
 ```
 
-
 ```{r predictions, fig.cap="Predictions of traits according to each descriptors, the others being fixed to their mean value."}
 include_graphics("./functional_save/AdditiveModel/Predictions.png")
 ```
+
+
 ## Quantification of environmental and ontogenical effect on functional traits at the individual level
 <!-- analysis of parameters -->
 
@@ -321,6 +322,11 @@ ${\beta_{DBH}}_{c}$ took values in $[0,0.25]$, but more contrasted relatively to
 $\{beta_{DBH}}_{90}$ was computed as the value of DBH - when DBH not reduced nor centered - for which the trait account for 90% of its maximum value (Table \@ref(tab:beta90)). $\{beta_{DBH}}_{90}$ enabled to assess until which DBH the trait was still affected by ontogenic stage. $\{beta_{DBH}}_{90}$ taking values lower than 10cm, as *Eschweilera clade parvifolia* for LDMC and for CC, can be considered non significant because measures only concerned trees of diameters above 10cm. 
 $\{{beta_{DBH}}_{90}}_{Symphonia}$ for invSLA, LT and invLA, and $\{{beta_{DBH}}_{90}}_{Eschveilera}$ for invaLA were particularly high, respectively 52.2,60.8, 43.3 and 137.4 showing thaht traits reached their maximum trait values with late ontogenic stage.
 All parameters that were significant also displayed significant differences between complexes.
+
+
+```{r posteriorsbeta, fig.cap="Posteriors of $\\alpha$, ${\\beta_{DBH}}_{c}$, ${\\beta_{TWI}}_{c}$ and ${\\beta_{comp}}_{c}$ for each traits. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Parameters significativity has been investigated with t-test and is reported with grey stars."}
+include_graphics("./functional_save/AdditiveModel/posteriorsBeta-1.png")
+```
 
 ```{r beta90}
 lapply(fits, function(fit)
@@ -345,17 +351,17 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:2)
 ```
 
-```{r posteriorsbeta, fig.cap="Posteriors of $\\alpha$, ${\\beta_{DBH}}_{c}$, ${\\beta_{TWI}}_{c}$ and ${\\beta_{comp}}_{c}$ for each traits. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Parameters significativity has been investigated with t-test and is reported with grey stars."}
-include_graphics("./functional_save/AdditiveModel/posteriorsBeta-1.png")
-```
-
 
 ## Quantification of intraspecific variability of traits
 <!-- analysis of sigma -->
 For every traits, $\sigma^2_{species}$ were all significantly positive. Order of magnitude in which they ranged were, however, really contrasted. 
-$\sigma^2_{TWI}$ took values between 0.05 and 0.1, which represented for significant $\beta_{TWI}$ always more than 100% of their value.
-$\sigma^2_{intercept}$, $\sigma^2_{DBH}$ and $\sigma^2_{TWI}$ ranged in the order of $10^{-2}$. Two major trends could be highlighted. LDMC and CC had $\sigma^2$, $\sigma^2_{intercept}$, $\sigma^2_{DBH}$ and $\sigma^2_{comp}$ closer to zero than LT and invSLA. $\sigma^2_{TWI}$ ranged in values quite similar for all traits although LT and invSLA had values slightly lower.
-Notice also that for all $\sigma^2_{species}$, the confidence interval got larger with higher estimate values, yet $\sigma^2$ had values of the highest order of magnitude but had a narrow confidence interval.
+
+$\sigma^2_{intercept}$ ranged in $[0,0.4]$ which never accounted for more than 50% of their $\alpha_{intercept}$ values, showing that species trait did not have radically different trends that offset each other around their complex means. Conversely, $\sigma^2_{intercept}$ of invLA was 0.81 which accounted for more than 70% of complexes parameters (0.29 and 1.09 for Eschweilera and Symphonia $\alpha_{intercept}$ respectively), highlighting how species had a great variability regarding mean trend of complexes.
+
+$\sigma^2_{DBH}$ behaved in a different way as it took values that ranges in the same order of magnitude of linked $\{beta_{DBH}}_c$. $\sigma^2_{DBH}$ represented often more than 50% of $\{beta_{DBH}}_c$, e.g. for LT, $\sigma^2_{DBH}=0.08$ when $\{beta_{DBH}}_{Eschweilera}=0.06$ and $\{beta_{DBH}}_{Symphonia}=0.22$, thus, species could vary from about 36% to 133% around complex mean.
+
+Similarly, $\sigma^2_{TWI}$ took values between 0.05 and 0.1, which represented for significant $\beta_{TWI}$ always more than 60% of their value. Traits for which $\beta_{TWI}$ (i.e. invSLA , LDMC and LT) did not have significant values had $\sigma^2_{TWI}$ of about 0.07, i.e. of the same order of magnitude of significant $\beta_{TWI}$. Therefore, traits for which $\beta_{TWI}$ were not significant could have been caracterize by species that reacted to TWI, but in antagonistic ways.
+
 
 ```{r posteriorsigma, fig.cap="Posteriors of $\\sigma^2_{species}$ and $\\sigma^2$. Bold lines represent 50% confidence intervals, normal lines 95% confidence intervals. Parameters significativity has been investigated with t-test and is reported with grey ***."}
 include_graphics("./functional_save/AdditiveModel/posteriorsSigma2-1.png")
