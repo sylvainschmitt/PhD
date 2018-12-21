@@ -55,15 +55,10 @@ names(mdata) <- traits
 
 cat("#### Sampling ####\n\n")
 Model <- stan_model("./functional_cluster/Interaction.stan")
-library(parallel)
-cl <- makeCluster(3)
-clusterExport(cl, list("mdata", "sampling", "Model"))
-fits <- parLapply(cl, mdata, function(x)
+fits <- lapply(mdata, function(x)
   sampling(Model, chains = 2, data = x, save_warmup = F,
-           include = F, pars = c('NCIj', "alpha_s", "betaDBH_sd_s", "betaTWI_sd_s", "betaComp_s",
-                                 "alpha_s_tilde", "betaDBH_sd_s_tilde", "betaTWI_sd_s_tilde", "betaComp_s_tilde")))
-stopCluster(cl)
-rm(cl)
+           include = F, pars = c('NCIj', "alpha_s_tilde", "betaDBH_sd_s_tilde", 
+                                 "betaTWI_sd_s_tilde", "betaComp_s_tilde")))
 names(fits) <- traits
 save(fits, file = "./functional_save/Interaction.Rdata")
 

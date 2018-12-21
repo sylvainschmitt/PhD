@@ -25,7 +25,7 @@ transformed data {
   Deltaj_sd = Deltaj ./ sd(Deltaj) ;
 }
 parameters {
-  vector [C] alpha_c ; // Intercept for complexes
+  vector<lower=0> [C] alpha_c ; // Intercept for complexes
   vector<lower=0> [C]  betaDBH_sd_c ; // DBH half-load for complexes
   vector[C] betaTWI_sd_c ; // Abiotic slope for complexes
   vector[C] betaComp_c ; // Biotic slope for complexes
@@ -41,7 +41,7 @@ parameters {
   real<lower=0> sigma ; // Variance
 }
 transformed parameters {
-  vector[S] alpha_s ; // Non centered random effect
+  vector<lower=0>[S] alpha_s ; // Non centered random effect
   vector<lower=0> [S] betaDBH_sd_s ;
   vector[S] betaTWI_sd_s ;
   vector[S] betaComp_s ;
@@ -70,7 +70,7 @@ transformed parameters {
   sigmaTWI = sd(TWI) * sigmaTWI_sd ;
 }
 model {
-  alpha_c ~ normal(0, 10^6) ;
+  alpha_c ~ lognormal(0,1) ;
   betaDBH_sd_c ~ lognormal(0,1) ;
   betaTWI_sd_c ~ normal(0, 10^6) ;
   betaComp_c ~ normal(0, 10^6) ;
