@@ -76,10 +76,8 @@ The aim of this document is to fit the interaction full model with observed valu
 
 ```{r mdata, fig.cap="prepared data",fig.width=12}
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-# traits <- c("LDMC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    # sample_n(50) %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
@@ -90,11 +88,11 @@ mdata <- lapply(traits, function(trait){
        J = nrow(Competition_trait),
        C = length(unique(data_trait$Genus)),
        S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait], center = F)),
-       DBH = as.numeric(scale(data_trait$DBH, center = F)),
-       TWI = as.numeric(scale(data_trait$TWI, center = F)),
-       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
-       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
+       Trait = data_trait[trait],
+       DBH = data_trait$DBH,
+       TWI = data_trait$TWI,
+       DBHj = Competition_trait$DBHj,
+       Deltaj = Competition_trait$dij,
        weights = 1-data_trait$AreaOutside20,
        individual = as.numeric(as.factor(Competition_trait$idTree)),
        species = as.numeric(as.factor(data_trait$Species)),
@@ -104,24 +102,6 @@ mdata <- lapply(traits, function(trait){
        competition = Competition_trait)
 })
 names(mdata) <- traits
-
-lapply(traits, function(trait){
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    left_join(select(Competition, idTree, AreaOutside20) 
-              %>% unique())
-       attr(scale(data_trait$DBH, center = F), "scaled:scale")
-})
-# lapply(as.list(traits), function(trait)
-#   cbind(Model = trait, 
-#         Trait = mdata[[trait]]$Trait, 
-#         Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
-#   bind_rows() %>% 
-#   select(Model, Trait, Genus, DBH, TWI) %>% 
-#   reshape2::melt(id.vars = c("Model", "Trait", "Genus")) %>% 
-#   ggplot(aes(x = value, y = Trait, col = Genus)) +
-#   geom_point() +
-#   geom_smooth() +
-#   facet_grid(Model ~ variable, scales = "free")
 ```
 
 # Model
@@ -185,64 +165,83 @@ data {
   int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
   int<lower=1, upper=C> complex[N] ; // species index
 }
+transformed data {
+  vector[N] DBH_sd ; // Reducing continuous descriptors
+  vector[N] TWI_sd ;
+  vector[J] DBHj_sd ;
+  vector[J] Deltaj_sd ;
+  DBH_sd = DBH ./ sd(Trait) ;
+  TWI_sd = TWI ./ sd(Trait) ;
+  DBHj_sd = DBHj ./ sd(Trait) ;
+  Deltaj_sd = Deltaj ./ sd(Deltaj) ;
+}
 parameters {
   vector [C] alpha_c ; // Intercept for complexes
-  vector<lower=0> [C]  betaDBH_c ; // DBH half-load for complexes
-  vector[C] betaTWI_c ; // Abiotic slope for complexes
+  vector<lower=0> [C]  betaDBH_sd_c ; // DBH half-load for complexes
+  vector[C] betaTWI_sd_c ; // Abiotic slope for complexes
   vector[C] betaComp_c ; // Biotic slope for complexes
-  real<lower=0> alphaNCI ;
+  real<lower=0> alphaNCI_sd ;
   vector<lower=0> [S] alpha_s_tilde ; // Intercept for species
-  vector<lower=0> [S] betaDBH_s_tilde ; // DBH half-load for species
-  vector[S] betaTWI_s_tilde ; // Abiotic slope for species
+  vector<lower=0> [S] betaDBH_sd_s_tilde ; // DBH half-load for species
+  vector[S] betaTWI_sd_s_tilde ; // Abiotic slope for species
   vector[S] betaComp_s_tilde ; // Biotic slope for species
   real<lower=0> sigmaIntercept ; // Intercept variance for species
-  real<lower=0> sigmaDBH ; // DBH half-load variance for species
-  real<lower=0> sigmaTWI ; // Abiotic slope variance for species
-  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  real<lower=0> sigmaDBH_sd ; // DBH half-load variance for species
+  real<lower=0> sigmaTWI_sd ; // Abiotic slope variance for species
+  real<lower=0> sigmaComp ; // Biotic slope variance for species
   real<lower=0> sigma ; // Variance
 }
 transformed parameters {
-  vector[S] alpha_s ;
-  vector<lower=0> [S] betaDBH_s ;
-  vector[S] betaTWI_s ;
+  vector[S] alpha_s ; // Non centered random effect
+  vector<lower=0> [S] betaDBH_sd_s ;
+  vector[S] betaTWI_sd_s ;
   vector[S] betaComp_s ;
-  vector[J] NCIj ;
+  vector[J] NCIj ; // Competition Index
   vector[N] NCI ;
-  alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;
-  betaDBH_s = betaDBH_c[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
-  betaTWI_s = betaTWI_c[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
+  vector[N] NCI_sd ;
+  vector<lower=0> [C]  betaDBH_c ; // True values of parameters
+  vector[C] betaTWI_c ;
+  real<lower=0> alphaNCI ;
+  real<lower=0> sigmaDBH ;
+  real<lower=0> sigmaTWI ;
+  alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ; // Non centered random effect
+  betaDBH_sd_s = betaDBH_sd_c[speciesincomplex] + sigmaDBH_sd*betaDBH_sd_s_tilde ;
+  betaTWI_sd_s = betaTWI_sd_c[speciesincomplex] + sigmaTWI_sd*betaTWI_sd_s_tilde ;
   betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
-  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
+  NCIj = DBHj_sd .* DBHj_sd .* exp(-alphaNCI_sd * Deltaj_sd) ; // Competition Index
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
   NCI = NCI ./ sd(NCI) ;
+  betaDBH_c = sd(DBH) * betaDBH_sd_c ; // True values of parameters
+  betaTWI_c = sd(TWI) * betaTWI_sd_c ;
+  alphaNCI = sd(Deltaj_sd) * alphaNCI_sd ;
+  sigmaDBH = sd(DBH) * sigmaDBH_sd ;
+  sigmaTWI = sd(TWI) * sigmaTWI ;
 }
 model {
   alpha_c ~ normal(0, 10^6) ;
-  betaDBH_c ~ lognormal(0,1) ;
-  betaTWI_c ~ normal(0, 10^6) ;
+  betaDBH_sd_c ~ lognormal(0,1) ;
+  betaTWI_sd_c ~ normal(0, 10^6) ;
   betaComp_c ~ normal(0, 10^6) ;
-  alphaNCI ~ lognormal(0, 1) ;
+  alphaNCI_sd ~ lognormal(0, 1) ;
   alpha_s_tilde ~ normal(0, 1) ;
-  betaDBH_s_tilde ~ normal(0, 1) ;
-  betaTWI_s_tilde ~ normal(0, 1) ;
+  betaDBH_sd_s_tilde ~ normal(0, 1) ;
+  betaTWI_sd_s_tilde ~ normal(0, 1) ;
   betaComp_s_tilde ~ normal(0, 1) ;
   sigmaIntercept ~ lognormal(0, 1) ;
-  sigmaDBH ~ lognormal(0, 1) ;
-  sigmaTWI ~ lognormal(0, 1) ;
+  sigmaDBH_sd ~ lognormal(0, 1) ;
+  sigmaTWI_sd ~ lognormal(0, 1) ;
   sigmaComp ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
-  Trait ~ normal((alpha_s[species] + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
+  Trait ~ normal((alpha_s[species] + betaTWI_sd_s[species] .* TWI_sd +  betaComp_s[species] .* (1 ./ weights) .* NCI_sd) .* (DBH_sd ./ (betaDBH_sd_s[species] + DBH_sd)), sigma) ; // Likelihood
 } 
 generated quantities {
   vector[N] Trait_pred ;
-  real Rsquared ;
   vector[N] Trait_predDBH ;
   vector[N] Trait_predTWI ;
   vector[N] Trait_predNCI ;
   Trait_pred = (alpha_c[complex] + betaTWI_c[complex] .* TWI + betaComp_c[complex] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_c[complex] + DBH));
-  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
   Trait_predDBH = (alpha_c[complex] + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] * mean((1 ./ weights) .* NCI)) .* (DBH ./ (betaDBH_c[complex] + DBH)) ;
   Trait_predTWI = (alpha_c[complex] + + betaTWI_c[complex] .* TWI + betaComp_c[complex] * mean((1 ./ weights) .* NCI)) .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) ;
   Trait_predNCI = (alpha_c[complex] + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] .* (1 ./ weights) .* NCI) .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) ;

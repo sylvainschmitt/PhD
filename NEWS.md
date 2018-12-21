@@ -1,3 +1,6 @@
+# PhD 0.1.9096
+* Parrallel std interaction model for cluster
+
 # PhD 0.1.9095
 * Wood traits
 
