@@ -75,9 +75,11 @@ load("./functional_save/CompetitionMatrix.Rdata")
 The aim of this document is to fit the interaction full model with observed values of functional traits for our individuals. We prepared data excluding oultiers and reducing variance of all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the full model with additive (1) and hierarchical (2) forms.
 
 ```{r mdata, fig.cap="prepared data",fig.width=12}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+# traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+traits <- c("CC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    sample_n(20) %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
@@ -88,7 +90,7 @@ mdata <- lapply(traits, function(trait){
        J = nrow(Competition_trait),
        C = length(unique(data_trait$Genus)),
        S = length(unique(data_trait$Species)),
-       Trait = data_trait[trait],
+       Trait = unlist(data_trait[trait]),
        DBH = data_trait$DBH,
        TWI = data_trait$TWI,
        DBHj = Competition_trait$DBHj,
@@ -204,6 +206,7 @@ transformed parameters {
   real<lower=0> alphaNCI ;
   real<lower=0> sigmaDBH ;
   real<lower=0> sigmaTWI ;
+  vector<lower=0> [C]  DBH90 ;
   alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ; // Non centered random effect
   betaDBH_sd_s = betaDBH_sd_c[speciesincomplex] + sigmaDBH_sd*betaDBH_sd_s_tilde ;
   betaTWI_sd_s = betaTWI_sd_c[speciesincomplex] + sigmaTWI_sd*betaTWI_sd_s_tilde ;
@@ -214,6 +217,7 @@ transformed parameters {
    NCI[individual[j]] += NCIj[j] ;
   NCI = NCI ./ sd(NCI) ;
   betaDBH_c = sd(DBH) * betaDBH_sd_c ; // True values of parameters
+  DBH90 = 9 * betaDBH_c ;
   betaTWI_c = sd(TWI) * betaTWI_sd_c ;
   alphaNCI = sd(Deltaj_sd) * alphaNCI_sd ;
   sigmaDBH = sd(DBH) * sigmaDBH_sd ;
@@ -251,12 +255,12 @@ generated quantities {
 ## Summary
 
 ```{r }
-# fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s",
-#                                  "betaComp_s", "alpha_s_tilde",
-#                                  "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
-# names(fits) <- traits
+fits <- lapply(mdata, function(x)
+  sampling(Model, chains = 2, data = x, save_warmup = F,
+           include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s",
+                                 "betaComp_s", "alpha_s_tilde",
+                                 "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
+names(fits) <- traits
 # save(fits, file = "./functional_save/Interaction.Rdata")
 load("./functional_save/Interaction.Rdata")
 pars <- c("alpha_c", "betaDBH_c", "betaTWI_c", "betaComp_c", "alphaNCI",
