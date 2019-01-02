@@ -97,7 +97,7 @@ model {
   sigmaTWI_sd ~ lognormal(0, 1) ;
   sigmaComp_sd ~ lognormal(0, 1) ;
   sigma_sd ~ cauchy(0, 5) ;
-  Trait_sd ~ normal((alpha_sd_s[species] + betaTWI_sd_s[species] .* TWI_sd +  betaComp_sd_s[species] .* (1 ./ weights) .* NCI_sd) .* (DBH_sd ./ (betaDBH_sd_s[species] + DBH_sd)), sigma_sd) ; // Likelihood
+  Trait_sd ~ lognormal((alpha_sd_s[species] + betaTWI_sd_s[species] .* TWI_sd +  betaComp_sd_s[species] .* (1 ./ weights) .* NCI_sd) .* (DBH_sd ./ (betaDBH_sd_s[species] + DBH_sd)), sigma_sd) ; // Likelihood
 } 
 generated quantities {
   vector[N] Trait_pred ;

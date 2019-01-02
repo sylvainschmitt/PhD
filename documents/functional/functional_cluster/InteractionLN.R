@@ -54,16 +54,16 @@ names(mdata) <- traits
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("./functional_cluster/Interaction.stan")
+Model <- stan_model("./functional_cluster/InteractionLN.stan")
 fits <- lapply(mdata, function(x)
   sampling(Model, chains = 2, data = x, save_warmup = F,
            include = F, pars = c('NCIj', "alpha_sd_s_tilde", "betaDBH_sd_s_tilde", 
                                  "betaTWI_sd_s_tilde", "betaComp_sd_s_tilde")))
 names(fits) <- traits
-save(fits, file = "./functional_save/Interaction.Rdata")
+save(fits, file = "./functional_save/InteractionLN.Rdata")
 
 #### Alert ####
 
 cat("#### Alert ####\n\n")
 library(RPushbullet)
-pbPost("note", "Interaction", "sampling done")
+pbPost("note", "InteractionLN", "sampling done")
