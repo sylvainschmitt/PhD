@@ -1,3 +1,6 @@
+# PhD 0.1.9097
+* Std from stan to R
+
 # PhD 0.1.9096
 * Parrallel std interaction model for cluster
 

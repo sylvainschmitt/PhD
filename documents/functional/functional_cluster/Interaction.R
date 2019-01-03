@@ -1,9 +1,5 @@
 #### Setup ####
 
-# con <- file("./functional_cluster/Interaction.log")
-# sink(con, append=T)
-# sink(con, append=T, type="message")
-
 cat("#### Setup ####\n\n")
 rm(list = ls())
 invisible(gc())
@@ -31,23 +27,28 @@ mdata <- lapply(traits, function(trait){
   Competition_trait <- Competition
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
-  list(trait = trait,
+  list(Model = trait,
        N = nrow(data_trait),
        J = nrow(Competition_trait),
        C = length(unique(data_trait$Genus)),
        S = length(unique(data_trait$Species)),
-       Trait = unlist(data_trait[trait]),
-       DBH = data_trait$DBH,
-       TWI = data_trait$TWI,
-       DBHj = Competition_trait$DBHj,
-       Deltaj = Competition_trait$dij,
+       Trait = unlist(data_trait[trait])/sd(unlist(data_trait[trait])),
+       DBH = data_trait$DBH/sd(data_trait$DBH),
+       TWI = data_trait$TWI/sd(data_trait$TWI),
+       DBHj = Competition_trait$DBHj/sd(Competition_trait$DBHj),
+       Deltaj = Competition_trait$dij/sd(Competition_trait$dij),
        weights = 1-data_trait$AreaOutside20,
        individual = as.numeric(as.factor(Competition_trait$idTree)),
        species = as.numeric(as.factor(data_trait$Species)),
        complex = as.numeric(as.factor(data_trait$Genus)),
        speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
        data = data_trait,
-       competition = Competition_trait)
+       competition = Competition_trait,
+       sd = c(Trait = sd(unlist(data_trait[trait])), 
+              DBH = sd(data_trait$DBH), 
+              TWI = sd(data_trait$TWI), 
+              DBHj = sd(Competition_trait$DBHj), 
+              Deltaj = sd(Competition_trait$dij)))
 })
 names(mdata) <- traits
 
