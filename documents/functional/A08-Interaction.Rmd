@@ -281,7 +281,7 @@ generated quantities {
 # names(fits) <- traits
 # save(fits, file = "./functional_save/Interaction.Rdata")
 load("./functional_save/Interaction.Rdata")
-pars <- c("alpha_c", "betaDBH_c", "betaTWI_c", "betaComp_c", "alphaNCI",
+pars <- c("alpha", "betaDBH", "betaTWI", "betaComp", "alphaNCI",
           "sigmaIntercept", "sigmaDBH", "sigmaTWI", "sigmaComp", "sigma")
 ```
 
@@ -364,15 +364,15 @@ lapply(fits, function(fit)
 
 ```{r diagnostic, fig.cap="Markov chains trace plot after warmup for SLA model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$LT), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$LT, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
 ```{r lp, fig.cap="Model likelihood."}
 lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      pars = c("lp__"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                      pars = c("lp__")))) %>% 
   bind_rows(.id = "trait") %>% 
   mutate(parameter = recode_factor(parameter, lp__ = "log-likelihood")) %>% 
   ggplot(aes(x = trait, xend = trait)) +
@@ -390,8 +390,8 @@ lapply(fits, function(fit)
 
 ```{r posteriorsSigma, fig.cap="Model variance (for standardized traits)."}
 lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      pars = c("sigma_sd"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                      pars = c("sigma")))) %>% 
   bind_rows(.id = "trait") %>% 
   mutate(parameter = recode_factor(parameter, sigma_sd = "sigma^2")) %>% 
   ggplot(aes(x = trait, xend = trait)) +
@@ -407,9 +407,9 @@ lapply(fits, function(fit)
 
 ```{r posteriorIntercept, fig.cap="Model intercept (for standardized traits)."}
 lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("alpha_sd_c",
-                                     "sigmaIntercept_sd"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("alpha",
+                                        "sigmaIntercept")))) %>% 
   bind_rows(.id = "trait") %>% 
   mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
@@ -419,7 +419,7 @@ lapply(fits, function(fit)
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
   mutate(parameter = recode_factor(parameter, alphasdc = "alpha",
-                                   sigmaInterceptsd = "sigma[Intercept]^2")) %>%
+                                   sigmaIntercept = "sigma[Intercept]^2")) %>%
   ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
@@ -437,9 +437,9 @@ lapply(fits, function(fit)
 
 ```{r posteriorDBH, fig.cap="Model DBH effect."}
 lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("DBH90",
-                                     "sigmaDBH_sd"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaDBH",
+                                        "sigmaDBH")))) %>% 
   bind_rows(.id = "trait") %>% 
   mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
@@ -448,9 +448,9 @@ lapply(fits, function(fit)
                                  `1` = "Eschweilera")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
-  mutate(parameter = recode_factor(parameter, DBH = "DBH[90]",
-                                   sigmaDBHsd = "sigma[DBH]^2")) %>%
-  mutate(parameter = factor(parameter, levels = c("DBH[90]", "sigma[DBH]^2"))) %>%
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]",
+                                   sigmaDBH = "sigma[DBH]^2")) %>%
+  mutate(parameter = factor(parameter, levels = c("beta[DBH]", "sigma[DBH]^2"))) %>%
   ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
@@ -472,9 +472,9 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
 lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("betaTWI_sd_c",
-                                     "sigmaTWI_sd"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaTWI",
+                                        "sigmaTWI")))) %>% 
   bind_rows(.id = "trait") %>% 
   mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
@@ -483,8 +483,8 @@ lapply(fits, function(fit)
                                  `1` = "Eschweilera")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
-  mutate(parameter = recode_factor(parameter, betaTWIsdc = "beta[TWI]",
-                                   sigmaTWIsd = "sigma[TWI]^2")) %>%
+  mutate(parameter = recode_factor(parameter, betaTWI = "beta[TWI]",
+                                   sigmaTWI = "sigma[TWI]^2")) %>%
   mutate(parameter = factor(parameter, levels = c("beta[TWI]", "sigma[TWI]^2"))) %>%
   ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
@@ -508,9 +508,9 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
 lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("betaTWI_sd_c",
-                                     "betaTWI_sd_s"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaTWI",
+                                        "betaTWI_s")))) %>% 
   bind_rows(.id = "trait") %>% 
   separate(parameter, c("parameter", "sd", "taxonomy"), sep = "_") %>% 
   select(-sd) %>% 

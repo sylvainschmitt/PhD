@@ -67,7 +67,6 @@ model {
 } 
 generated quantities {
   vector[N] Trait_pred ; // Predictions
-  real Rsquared ;
   vector[N] Trait_predDBH ;
   vector[N] Trait_predTWI ;
   vector[N] Trait_predNCI ;

@@ -58,8 +58,8 @@ cat("#### Sampling ####\n\n")
 Model <- stan_model("./functional_cluster/Interaction.stan")
 fits <- lapply(mdata, function(x)
   sampling(Model, chains = 2, data = x, save_warmup = F,
-           include = F, pars = c('NCIj', "alpha_sd_s_tilde", "betaDBH_sd_s_tilde", 
-                                 "betaTWI_sd_s_tilde", "betaComp_sd_s_tilde")))
+           include = F, pars = c('NCIj', "alpha_s_tilde", "betaDBH_s_tilde", 
+                                 "betaTWI_s_tilde", "betaComp_s_tilde")))
 names(fits) <- traits
 save(fits, file = "./functional_save/Interaction.Rdata")
 
