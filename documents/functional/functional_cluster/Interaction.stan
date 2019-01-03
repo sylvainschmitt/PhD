@@ -71,8 +71,8 @@ generated quantities {
   vector[N] Trait_predDBH ;
   vector[N] Trait_predTWI ;
   vector[N] Trait_predNCI ;
-  Trait_pred = (alpha_c[complex] + betaTWI_c[complex] .* TWI + betaComp_c[complex] .* NCI) .* (DBH ./ (betaDBH_c[complex] + DBH));
-  Trait_predDBH = (alpha_c[complex] + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] * mean(NCI)) .* (DBH ./ (betaDBH_c[complex] + DBH)) ;
-  Trait_predTWI = (alpha_c[complex] + + betaTWI_c[complex] .* TWI + betaComp_c[complex] * mean(NCI)) .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) ;
-  Trait_predNCI = (alpha_c[complex] + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] .* NCI) .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) ;
+  Trait_pred = (alpha[complex] + betaTWI[complex] .* TWI + betaComp[complex] .* NCI) .* (DBH ./ (betaDBH[complex] + DBH));
+  Trait_predDBH = (alpha[complex] + betaTWI[complex] * mean(TWI) + betaComp[complex] * mean(NCI)) .* (DBH ./ (betaDBH[complex] + DBH)) ;
+  Trait_predTWI = (alpha[complex] + + betaTWI[complex] .* TWI + betaComp[complex] * mean(NCI)) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))) ;
+  Trait_predNCI = (alpha[complex] + betaTWI[complex] * mean(TWI) + betaComp[complex] .* NCI) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))) ;
 }
