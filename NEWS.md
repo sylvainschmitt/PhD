@@ -1,3 +1,6 @@
+# PhD 0.1.9098
+* functional: sensitivity analysis
+
 # PhD 0.1.9097
 * Std from stan to R
 

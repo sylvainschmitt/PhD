@@ -66,6 +66,7 @@ path <- "../../data/Paracou/"
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
+load("./functional_save/Interaction.Rdata")
 ```
 
 # Introduction
@@ -74,10 +75,10 @@ load("./functional_save/CompetitionMatrix.Rdata")
 
 Practically, working with the following model:
 
-$$T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)$$
+$$T_{c,s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} \times (\alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}), \sigma)$$
 We will test ${\beta_{TWI}}_{c,s}$ effect sampling this model :
 
-$$T_{c,s,i} \sim \mathcal{N}(\overline{\alpha_{c}}.\frac{\overline{DBH}}{\overline{{\beta_{DBH}}_{c}} + \overline{DBH}} + {\beta_{TWI}}_{c,s}.TWI_i + \overline{{\beta_{Comp}}_{c}}.\overline{NCI}, \sigma)$$
+$$T_{c,s,i} \sim \mathcal{N}(\frac{\overline{DBH}}{\overline{{\beta_{DBH}}_{c}} + \overline{DBH}} \times (\overline{\alpha_{c}} + {\beta_{TWI}}_{c,s}.TWI_i + \overline{{\beta_{Comp}}_{c}}.\overline{NCI}), \sigma)$$
 and looking at :
 
 $$\Delta \hat T = \sqrt{(\hat T_{full} - \hat T_{\beta_{TWI}})^2}$$
@@ -85,21 +86,704 @@ In conclusion we will test following models for the different effects :
 
 ```{r}
 data.frame(
+  Variable = c("Intercept", "DBH", "TWI", "Competition", "Neighboor Distance"),
   Parameter = c("$\\alpha$", "$\\beta_{DBH}$", "$\\beta_{TWI}$", 
                 "$\\beta_{Comp}$", "$\\alpha_{NCI}$"),
   Test = c(
-    "$T_{c,s,i} \\sim \\mathcal{N}(\\alpha_{c,s}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}, \\sigma)$",
-    "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{DBH_i}{{\\beta_{DBH}}_{c,s} + DBH_i} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}, \\sigma)$",
-    "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + {\\beta_{TWI}}_{c,s}.TWI_i + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}, \\sigma)$",
-    "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + {\\beta_{Comp}}_{c,s}.\\sum_{j=1}^{J} DBH_j^{2} . e^{-\\overline{{\\alpha_{NCI}}_{c}}.\\delta_{i,j}}, \\sigma)$",
-        "$T_{c,s,i} \\sim \\mathcal{N}(\\overline{\\alpha_{c}}.\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\sum_{j=1}^{J} DBH_j^{2} . e^{-{\\alpha_{NCI}}_{c,s}.\\delta_{i,j}}, \\sigma)$"
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} \\times (\\alpha_{c,s} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}), \\sigma)$",
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\frac{DBH_i}{{\\beta_{DBH}}_{c,s} + DBH_i} \\times (\\overline{\\alpha_{c}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}), \\sigma)$",
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} \\times (\\overline{\\alpha_{c}} + {\\beta_{TWI}}_{c,s}.TWI_i + \\overline{{\\beta_{Comp}}_{c}}.\\overline{NCI}), \\sigma)$",
+    "$T_{c,s,i} \\sim \\mathcal{N}(\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} \\times  (\\overline{\\alpha_{c}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + {\\beta_{Comp}}_{c,s}.NCI), \\sigma)$",
+        "$T_{c,s,i}) \\sim \\mathcal{N}(\\overline{\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} \\times (\\alpha_{c}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\sum_{j=1}^{J} DBH_j^{2} . e^{-{\\alpha_{NCI}}_{c,s}.\\delta_{i,j}}), \\sigma)$"
   )
 ) %>% 
   kable()
 ```
 
-Similarly, we can test species random effect and complex random effect by removing the effect on each parameter. Thus, a strong change of $\hat Y$ will this time underline an important effect of the factor :
+```{r mdata}
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    left_join(select(Competition, idTree, AreaOutside20) 
+              %>% unique())
+  Competition_trait <- Competition
+  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+  Competition_trait <- filter(Competition_trait, !is.na(idTree))
+  list(Model = trait,
+       N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       C = length(unique(data_trait$Genus)),
+       S = length(unique(data_trait$Species)),
+       Trait = unlist(data_trait[trait])/sd(unlist(data_trait[trait])),
+       DBH = data_trait$DBH/sd(data_trait$DBH),
+       TWI = data_trait$TWI/sd(data_trait$TWI),
+       NCI = apply(as.matrix(fits[[trait]], pars = "NCI"), 2, mean),
+       alpha = apply(as.matrix(fits[[trait]], pars = "alpha"), 2, mean),
+       betaDBH = apply(as.matrix(fits[[trait]], pars = "betaDBH"), 2, mean),
+       betaTWI = apply(as.matrix(fits[[trait]], pars = "betaTWI"), 2, mean),
+       betaComp = apply(as.matrix(fits[[trait]], pars = "betaComp"), 2, mean),
+       individual = as.numeric(as.factor(Competition_trait$idTree)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       complex = as.numeric(as.factor(data_trait$Genus)),
+       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
+       data = data_trait,
+       competition = Competition_trait,
+       sd = c(Trait = sd(unlist(data_trait[trait])), 
+              DBH = sd(data_trait$DBH), 
+              TWI = sd(data_trait$TWI), 
+              DBHj = sd(Competition_trait$DBHj), 
+              Deltaj = sd(Competition_trait$dij)))
+})
+names(mdata) <- traits
+```
+
+<!-- s*Similarly, we can test species random effect and complex random effect by removing the effect on each parameter. Thus, a strong change of $\hat Y$ will this time underline an important effect of the factor :* -->
+
+# Intercept $\alpha$ sensitivity
+
+```{stan ModelIntercept, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] NCI ; // Neighboor Competition Index
+  vector<lower=0> [C]  betaDBH ; // DBH half-load for complexes
+  vector[C] betaTWI ; // TWI slope for complexes
+  vector[C] betaComp ; // Competition slope for complexes 
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector [C] alpha ; // Intercept for complexes
+  vector<lower=0> [S] alpha_s_tilde ; // Intercept for species
+  real<lower=0> sigmaIntercept ; // Intercept variance for species
+  real<lower=0> sigma ; // Variance
+}
+transformed parameters {
+  vector[S] alpha_s ; // Species uncentered effects
+  alpha_s = alpha[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;  // Species uncentered effects
+}
+model {
+  alpha ~ normal(0, 10^6) ; // Priors
+  alpha_s_tilde ~ normal(0, 1) ;
+  sigmaIntercept ~ lognormal(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha_s[species] + betaTWI[complex]*mean(TWI) + betaComp[complex]*mean(NCI)) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))), sigma) ; // Likelihood
+} 
+generated quantities {
+  vector[N] Trait_pred ; // Predictions
+  Trait_pred = (alpha[complex] + betaTWI[complex]*mean(TWI) + betaComp[complex]*mean(NCI)) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH)));
+}
+
+```
+
+```{r fitsIntercept}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F,
+#            include = F, pars = c("alpha_s_tilde")))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/SensitivityIntercept.Rdata")
+load("./functional_save/SensitivityIntercept.Rdata")
+pars <- c("alpha", "sigmaIntercept", "sigma")
+```
+
+```{r summaryIntercept}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", term)) %>% 
+  select(trait, term, complex, estimate, std.error, rhat) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia", 
+                                 `1` = "Eschweilera")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = as.factor(gsub("c", "", term))) %>% 
+  mutate(term = recode_factor(term, 
+                              alpha = "$\\alpha$",
+                              sigmaInterept = "$\\sigma^2_{Intercept}$",
+                              sigma = "$\\sigma^2$")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              invSLA = "$\\frac{1}{SLA}$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Complex = complex) %>% 
+  kable(caption = "Model parameters posterior.",
+        escape = F) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r posteriorIntercept, fig.cap="Model intercept (for standardized traits)."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("alpha",
+                                        "sigmaIntercept")))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == "", NA, complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia",
+                                 `1` = "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  mutate(parameter = recode_factor(parameter, alphasdc = "alpha",
+                                   sigmaIntercept = "sigma[Intercept]^2")) %>%
+  ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  scale_color_discrete("Species complex", 
+                       labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_fill_discrete("Species complex",
+                      labels = c("Symphonia", "Eschweilera", "Both"))
+```
+
+```{r predictionIntercept, fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
+lapply(as.list(traits), function(trait)
+  data.frame(
+    trait = trait,
+    variable = variable,
+    Y = mdata[[trait]]$Trait,
+    value = mdata[[trait]][[variable]],
+    Genus = mdata[[trait]]$complex,
+    mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+               2, mean),
+    mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                2, quantile, probs = 0.05),
+    mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                 2, quantile, probs = 0.95)
+  )
+) %>% bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = value, col = as.factor(Genus))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_grid(trait ~ variable, scales = "free") +
+  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```
+
+# DBH $\beta_{DBH}$ sensitivity
+
+```{stan ModelDBH, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] NCI ; // Neighboor Competition Index
+  vector [C] alpha ; // Intercept for complexes
+  vector[C] betaTWI ; // TWI slope for complexes
+  vector[C] betaComp ; // Competition slope for complexes 
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector<lower=0> [C]  betaDBH ; // DBH half-load for complexes
+  vector<lower=0> [S] betaDBH_s_tilde ; // DBH half-load for species
+  real<lower=0> sigmaDBH ; // DBH half-load variance for species
+  real<lower=0> sigma ; // Variance
+}
+transformed parameters {
+  vector<lower=0> [S] betaDBH_s ;
+  betaDBH_s = betaDBH[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
+}
+model {
+  betaDBH ~ lognormal(0,1) ;
+  betaDBH_s_tilde ~ normal(0, 1) ;
+  sigmaDBH ~ lognormal(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha[complex] + betaTWI[complex]*mean(TWI) + betaComp[complex]*mean(NCI)) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
+} 
+generated quantities {
+  vector[N] Trait_pred ; // Predictions
+  Trait_pred = (alpha[complex] + betaTWI[complex]*mean(TWI) + betaComp[complex]*mean(NCI)) .* (DBH ./ (betaDBH[complex] + DBH));
+}
+
+```
+
+```{r fitsDBH}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F,
+#            include = F, pars = c("alpha_s_tilde")))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/SensitivityDBH.Rdata")
+load("./functional_save/SensitivityDBH.Rdata")
+pars <- c("betaDBH", "sigmaDBH", "sigma")
+```
+
+```{r summaryDBH}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", term)) %>% 
+  select(trait, term, complex, estimate, std.error, rhat) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia", 
+                                 `1` = "Eschweilera")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = as.factor(gsub("c", "", term))) %>% 
+  mutate(term = recode_factor(term, 
+                              betaDBH = "$\\beta_{DBH}$",
+                              sigmaDBH = "$\\sigma^2_{DBH}$",
+                              sigma = "$\\sigma^2$")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              invSLA = "$\\frac{1}{SLA}$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Complex = complex) %>% 
+  kable(caption = "Model parameters posterior.",
+        escape = F) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r posteriorDBH, fig.cap="Model DBH effect."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaDBH",
+                                        "sigmaDBH")))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == "", NA, complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia",
+                                 `1` = "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]",
+                                   sigmaDBH = "sigma[DBH]^2")) %>%
+  mutate(parameter = factor(parameter, levels = c("beta[DBH]", "sigma[DBH]^2"))) %>%
+  ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  scale_color_discrete("Species complex",
+                       labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_fill_discrete("Species complex",
+                      labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_y_log10()
+```
+
+```{r predictionDBH, fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
+lapply(as.list(traits), function(trait)
+  data.frame(
+    trait = trait,
+    variable = variable,
+    Y = mdata[[trait]]$Trait,
+    value = mdata[[trait]][[variable]],
+    Genus = mdata[[trait]]$complex,
+    mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+               2, mean),
+    mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                2, quantile, probs = 0.05),
+    mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                 2, quantile, probs = 0.95)
+  )
+) %>% bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = value, col = as.factor(Genus))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_grid(trait ~ variable, scales = "free") +
+  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```
+
+# TWI $\beta_{TWI}$ sensitivity
+
+```{stan ModelTWI, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] NCI ; // Neighboor Competition Index
+  vector [C] alpha ; // Intercept for complexes
+  vector<lower=0> [C]  betaDBH ; // DBH half-load for complexes
+  vector[C] betaComp ; // Competition slope for complexes 
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector[C] betaTWI ; // TWI slope for complexes
+  vector<lower=0> [S] betaTWI_s_tilde ; // TWI slope for species
+  real<lower=0> sigmaTWI ; // TWI slope variance for species
+  real<lower=0> sigma ; // Variance
+}
+transformed parameters {
+  vector<lower=0> [S] betaTWI_s ;
+  betaTWI_s = betaTWI[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
+}
+model {
+  betaTWI ~ normal(0, 10^6) ;
+  betaTWI_s_tilde ~ normal(0, 1) ;
+  sigmaTWI ~ lognormal(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha[complex] + betaTWI_s[species] .* TWI + betaComp[complex]*mean(NCI)) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))), sigma) ; // Likelihood
+} 
+generated quantities {
+  vector[N] Trait_pred ; // Predictions
+  Trait_pred = (alpha[complex] + betaTWI[complex] .* TWI + betaComp[complex]*mean(NCI)) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH)));
+}
+
+```
+
+```{r fitsTWI}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F,
+#            include = F, pars = c("alpha_s_tilde")))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/SensitivityTWI.Rdata")
+load("./functional_save/SensitivityTWI.Rdata")
+pars <- c("betaTWI", "sigmaTWI", "sigma")
+```
+
+```{r summaryTWI}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", term)) %>% 
+  select(trait, term, complex, estimate, std.error, rhat) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia", 
+                                 `1` = "Eschweilera")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = as.factor(gsub("c", "", term))) %>% 
+  mutate(term = recode_factor(term, 
+                              betaTWI = "$\\beta_{TWI}$",
+                              sigmaTWI = "$\\sigma^2_{TWI}$",
+                              sigma = "$\\sigma^2$")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              invSLA = "$\\frac{1}{SLA}$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Complex = complex) %>% 
+  kable(caption = "Model parameters posterior.",
+        escape = F) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r posteriorTWI, fig.cap="Model TWI effect (for standardized TWI)."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaTWI",
+                                        "sigmaTWI")))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == "", NA, complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia",
+                                 `1` = "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  mutate(parameter = recode_factor(parameter, betaTWI = "beta[TWI]",
+                                   sigmaTWI = "sigma[TWI]^2")) %>%
+  mutate(parameter = factor(parameter, levels = c("beta[TWI]", "sigma[TWI]^2"))) %>%
+  ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  scale_color_discrete("Species complex",
+                       labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_fill_discrete("Species complex",
+                      labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_y_continuous(trans="S_sqrt")
+```
+
+```{r predictionTWI, fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
+lapply(as.list(traits), function(trait)
+  data.frame(
+    trait = trait,
+    variable = variable,
+    Y = mdata[[trait]]$Trait,
+    value = mdata[[trait]][[variable]],
+    Genus = mdata[[trait]]$complex,
+    mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+               2, mean),
+    mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                2, quantile, probs = 0.05),
+    mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                 2, quantile, probs = 0.95)
+  )
+) %>% bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = value, col = as.factor(Genus))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_grid(trait ~ variable, scales = "free") +
+  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```
+
+# Competition $\beta_{Comp}$ sensitivity
+
+```{stan ModelComp, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] NCI ; // Neighboor Competition Index
+  vector [C] alpha ; // Intercept for complexes
+  vector<lower=0> [C]  betaDBH ; // DBH half-load for complexes
+  vector[C] betaTWI ; // TWI slope for complexes
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
+}
+parameters {
+  vector[C] betaComp ; // Competition slope for complexes 
+  vector[S] betaComp_s_tilde ; // Competition slope for species
+  real<lower=0> sigmaComp ; // Competition slope variance for species
+  real<lower=0> sigma ; // Variance
+}
+transformed parameters {
+  vector[S] betaComp_s ;
+  betaComp_s = betaComp[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
+}
+model {
+  betaComp ~ normal(0, 10^6) ;
+  betaComp_s_tilde ~ normal(0, 1) ;
+  sigmaComp ~ lognormal(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha[complex] +betaTWI[complex]*mean(TWI) + betaComp_s[species] .* NCI) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))), sigma) ; // Likelihood
+} 
+generated quantities {
+  vector[N] Trait_pred ; // Predictions
+  Trait_pred = (alpha[complex] + betaTWI[complex] .* TWI + betaComp[complex] .* NCI) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH)));
+}
+
+```
+
+```{r fitsComp}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F,
+#            include = F, pars = c("betaComp_s_tilde")))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/SensitivityComp.Rdata")
+load("./functional_save/SensitivityComp.Rdata")
+pars <- c("betaComp", "sigmaComp", "sigma")
+```
+
+```{r summaryComp}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", term)) %>% 
+  select(trait, term, complex, estimate, std.error, rhat) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia", 
+                                 `1` = "Eschweilera")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = as.factor(gsub("c", "", term))) %>% 
+  mutate(term = recode_factor(term, 
+                              betaComp = "$\\beta_{Comp}$",
+                              sigmaComp = "$\\sigma^2_{Comp}$",
+                              sigma = "$\\sigma^2$")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              invSLA = "$\\frac{1}{SLA}$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Complex = complex) %>% 
+  kable(caption = "Model parameters posterior.",
+        escape = F) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r posteriorComp, fig.cap="Model Comp effect (for standardized NCI)."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaComp",
+                                        "sigmaComp")))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
+  mutate(complex = ifelse(complex == "", NA, complex)) %>% 
+  mutate(complex = recode_factor(complex, `2` = "Symphonia",
+                                 `1` = "Eschweilera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  mutate(parameter = recode_factor(parameter, betaComp = "beta[Comp]",
+                                   sigmaComp = "sigma[Comp]^2")) %>%
+  mutate(parameter = factor(parameter, levels = c("beta[Comp]", "sigma[Comp]^2"))) %>%
+  ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  scale_color_discrete("Species complex",
+                       labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_fill_discrete("Species complex",
+                      labels = c("Symphonia", "Eschweilera", "Both")) +
+  scale_y_continuous(trans="S_sqrt")
+```
+
+```{r predictionComp, fig.cap="Predictions.", fig.width=12, fig.height=12}
+lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
+lapply(as.list(traits), function(trait)
+  data.frame(
+    trait = trait,
+    variable = variable,
+    Y = mdata[[trait]]$Trait,
+    value = mdata[[trait]][[variable]],
+    Genus = mdata[[trait]]$complex,
+    mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+               2, mean),
+    mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                2, quantile, probs = 0.05),
+    mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                 2, quantile, probs = 0.95)
+  )
+) %>% bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = value, col = as.factor(Genus))) +
+  geom_point(aes(y = Y)) +
+  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
+  geom_line(aes(y = mu)) +
+  facet_grid(trait ~ variable, scales = "free") +
+  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```
+
+# Comparison
+
+```{r comparisonData}
+models <- c(full = "Interaction.Rdata",
+            Intercept = "SensitivityIntercept.Rdata",
+            DBH = "SensitivityDBH.Rdata",
+            TWI = "SensitivityTWI.Rdata",
+            Competition = "SensitivityComp.Rdata")
+Ypreds <- lapply(models, function(model){
+  load(file.path("./functional_save", model))
+  lapply(as.list(traits), function(trait)
+    data.frame(
+      trait = trait,
+      individual = mdata[[trait]]$data$idTree,
+      Genus = mdata[[trait]]$data$Genus,
+      mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 
+                 2, mean)
+    )
+  ) %>% 
+    bind_rows()
+}) %>% 
+  bind_cols() %>% 
+  select(trait, individual, Genus, mu, mu1, mu2, mu3, mu4) %>% 
+  rename(full = mu, Intercept = mu1, DBH = mu2, 
+         TWI = mu3, Competition = mu4)
+```
 
 
+```{r scatters, fig.cap="Model comparison between the full model prediction and sensitivity analysis."}
+Ypreds %>% 
+  reshape2::melt(id.vars = c("trait", "individual", "Genus", "full"), 
+                 variable.name = "sensitivity", value.name = "Ypred") %>% 
+  ggplot(aes(full, Ypred)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, col = "red") +
+  facet_grid(sensitivity ~ trait, scales = "free")
+```
+
+```{r Deltapred, fig.cap="$\\Delta \\hat T = \\sqrt{(\\hat T_{full} - \\hat T_{parameter})^2}$ distribution by trait with Tuley Honest Significant Difference groups in letters."}
+tHSD <- Ypreds %>% 
+  reshape2::melt(id.vars = c("trait", "individual", "Genus", "full"), 
+                 variable.name = "sensitivity", value.name = "Ypred") %>% 
+  mutate(DeltaPred = sqrt((full - Ypred)^2)) %>% 
+  group_by(trait) %>% 
+  do(anova = aov(DeltaPred ~ sensitivity, data = .)) %>% 
+  mutate(tHSD = TukeyHSD(anova, ordered = F, conf.level = 0.95)) %$%
+  lapply(tHSD, function(x) multcompView::multcompLetters(x[,4])) %>% 
+  lapply(function(x) data.frame(sensitivity = names(x$Letters), group = x$Letters)) %>% 
+  bind_rows() %>% 
+  mutate(trait = rep(sort(traits), each = 4))
+Ypreds %>% 
+  reshape2::melt(id.vars = c("trait", "individual", "Genus", "full"), 
+                 variable.name = "sensitivity", value.name = "Ypred") %>% 
+  mutate(DeltaPred = sqrt((full - Ypred)^2)) %>% 
+  left_join(tHSD, by = c("trait", "sensitivity")) %>% 
+  ggplot(aes(sensitivity, DeltaPred, fill = sensitivity, label = group)) +
+  geom_boxplot() +
+  facet_grid(trait ~ ., scales = "free") +
+  coord_flip() +
+  scale_y_sqrt() +
+  scale_fill_discrete(guide = "none") +
+  geom_text(aes(y = max(DeltaPred)*0.8)) +
+  xlab("") + ylab(expression(Delta(Prediction)))
+```
+
+```{r DeltapredGroups}
+
+```
 
 # References
