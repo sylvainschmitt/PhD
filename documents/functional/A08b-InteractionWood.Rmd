@@ -60,10 +60,6 @@ load("./functional_save/IndividualsWood.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
-# Introduction {-}
-
-The aim of this document is to fit the interaction full model with observed values of wood functional traits for our individuals. We prepared data excluding oultiers and reducing variance of all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the full model with the interaction form.
-
 ```{r mdata}
 traits <- c("brBT", "brBD", "brWD")
 mdata <- lapply(traits, function(trait){
@@ -91,35 +87,236 @@ mdata <- lapply(traits, function(trait){
 names(mdata) <- traits
 ```
 
-# Model
+```{r fits}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F, include = F, pars = c('NCIj')))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/InteractionWood.Rdata")
+load("./functional_save/InteractionWood.Rdata")
+pars <- c("alpha_s", "betaDBH_s", "betaTWI_s", "betaComp_s", "alphaNCI", "sigma")
+```
 
-We explained wood trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and species random effect ($S$):
+# Introduction {-}
 
-\begin{equation} 
-T_{c,s,i} \sim \mathcal{N}((\alpha_s + {\beta_{TWI}}_s.TWI_i + {\beta_{Comp}}_s.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}).\frac{DBH_i}{{\beta_{DBH}}_s + DBH_i}, \sigma)    \\
-(\#eq:final)
-\end{equation}
+Subsequent analysis aimed to explore determinant of individual wood functional traits from Symphonia globulifera. More especially, we investigated how individual ontogeny, abiotic environment, and biotic interactions shaped its wood phenotype at several taxonomic scale, from individual to species. Determinant of the functional traits have been studied with the interaction model developed in document [A03-Models](A03-Models.html) and are further detailed.
 
-* $Trait_{s,i}$ is a trait of an individual i, from the species s;
-* $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
-* $s \in [1,S]$ where $S$ is the number of species;
-* $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
-* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
-* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
-* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
-* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
-* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
-* all $\sigma_{species}$ represents parameters variance for species;
-* $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
-* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$  and $\sigma_{species}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all $\Theta_{c,s}$ and $\Theta_c$.
+**Real introduction to be developped (maybe only in the first draft and not directly in this analysis).**
 
-## Code
+# Material and Methods
 
-```{stan, output.var="Model", echo=T, eval=F}
+## Study site
+
+The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
+
+The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
+
+## Individuals sampling
+
+**To be adjusted.**
+
+```{r headcount}
+Individuals %>% 
+  group_by(Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  arrange(desc(N)) %>% 
+  kable(caption = "Number of individuals sampled per genus and species.",
+        escape = F) %>% 
+  kable_styling(full_width = F)
+```
+
+## Trait measurements
+
+**To be adjusted**
+
+```{r Trait}
+Individuals %>% 
+  select(brBT, brBD, brWD) %>% 
+  reshape2::melt(variable.name = "trait") %>% 
+  filter(!is.na(value)) %>% 
+  group_by(trait) %>% 
+  summarise(N = n(),
+            Value = paste0("$",round(mean(value), 2), "\\pm", 
+                           round(sd(value), 2), "$")) %>% 
+  mutate(Trait = c("branch Bark Thickness", "branch Bark Density",
+                    "branch Wood Density")) %>% 
+  mutate(Unit = c("$\\mu m$", "$g.cm^{-3}$", "$g.cm^{-3}$")) %>%
+  select(Trait, Unit, trait, N, Value) %>% 
+  kable(col.names = c("Trait", "Unit", "Abbreviation", "N", "Mean (sd)"),
+    caption = "Functional traits measured, with trait unit, abbreviation, headcount, mean and standard error.", escape = F) %>% 
+  kable_styling(full_width = F)
+```
+
+## Environmental variables
+
+Three little correlated (Pearson's r < 0.14, see analysis [A02-Environment](A02-Environment.html)) ontogenetic and environmental descriptors were chosen to depict individual leaf traits. Diameter at breast height ($DBH$, $cm$) was chosen as an indirect proxy for ontogeny effect [but see @roggy_links_2005] but was shown to be confounded with light access through Dawkins index (see analysis [A02-Environment](A02-Environment.html)).
+
+A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic asymmetric competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
+$$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{−\alpha.\delta_{i,j}}$$
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature [ref]. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance (note that  set to 0 represent local basal area). 
+
+Finally, topographic wetness index ($TWI$) was selected between various abiotic descriptors available (see analysis [A02-Environment](A02-Environment.html)) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher]. Descriptors used were derived from field censuses ($DBH$ and $NCI$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
+
+
+## Analysis
+
+We explained wood trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels (species complex $C$ and species $S$) with a linear mixed model including interaction between ontogeny and environment (more likely than an additive form without interactions, see analysis [A07-Additive](A07-Additive.html)).
+
+Individual wood trait $Trait_{c,s,i}$ for species complex $c \in [1;C]$ and species $s \in [1;S_c]$ is first explained by its ontogeny confounded with light though individual DBH $DBH_i$ with a Michaelis Menten form (more likely than a linear form, see analysis [A05-Ontogeny](A05-Ontogeny.html)):
+$$T_{c,s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i}, \sigma)$$
+Because of the Michaelis Menten form $\beta_{DBH}$ is the value of DBH for which the trait account for half of its mature value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolves slower towards its plateau, consequently, ontogeny affects more traits values. We will further use $DBH_{90}$ equal to $9.\beta_{DBH}$ being the DBH value for which the trait account for 90% of its maximum value that we can assume as the DBH of trait maturity.
+
+Finally $\alpha_{env}$ is the trait maximum value in the Michaelis Menten and will be represented by an additive linear form of environmental effects represented by $TWI$ for abiotic environment and by $NCI$ for biotic interactions:
+$$alpha_{env} = \alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.NCI_i$$
+where $\alpha_{c,s}$ is the intercept, $\beta_{TWI}$ is the slope of TWI effect, e.g. positive $\beta_{TWI}$ represents an increase of the trait value with water accumulation; whereas $\beta_{Comp}$ is the slope of competition effect, e.g. negative $\beta_{Comp}$ highlight a decrease of trait value with competition.
+
+Species complex effect was integrated as a fixed effect on each parameter of the model and was later tested by Student T test between the two complex values for each parameter, a non significative value indicating no differentiation of the complex for the tested effect. Species effect was integrated as a nested random effect within each parameter and evaluated through species variance for each parameter ($\sigma_{Intercept}$, $\sigma_{DBH}$, $\sigma_{TWI}$, $\sigma_{Comp}$), a high variance indicating a strong diversity of species answers within complex for the tested effect.
+
+Traits, DBH and TWI were all reduced for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
+
+# Results
+
+**To be written**
+
+```{r summary}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:alpha:]])", "", term)) %>% 
+  select(trait, term, species, estimate, std.error, rhat) %>% 
+  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
+  mutate(species = recode_factor(species, `2` = "S. sp1", 
+                                 `1` = "S. globulifera")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = as.factor(gsub("c", "", term))) %>% 
+  mutate(term = recode_factor(term, 
+                              alphas = "$\\alpha$",
+                              betaDBHs = "$\\beta_{DBH}$", 
+                              betaTWIs = "$\\beta_{TWI}$", 
+                              betaComps = "$\\beta_{Comp}$", 
+                              alphaNCI = "$\\alpha_{NCI}$",
+                              sigma = "$\\sigma^2$",
+                              lp = "log-likelihood")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              invSLA = "$\\frac{1}{SLA}$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(term + species ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Complex = species) %>% 
+  kable(caption = "Model parameters for each species with reduced traits and descriptors.",
+        escape = F, digits = 3) %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r ontogeny, fig.cap="Ontogeny effect represented by the $DBH_{90}$ and associated species variance. Grey vertical line indicates the census recruitment DBH (10 cm), whereas red and blue vertical lines indicate maximum sampled diameter for respectively Symhponia and Eschweilera."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaDBH_s")))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
+  mutate(species = recode_factor(species, `2` = "S. sp1", 
+                                 `1` = "S. globulifera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  select(-outer_width, -inner_width, -point_est) %>% 
+  select(trait, parameter, species, ll, l, m, h, hh) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*32.58441)) %>%
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(ifelse(parameter == "betaDBH",
+                                                         .*9, .))) %>%
+  mutate(parameter = recode_factor(parameter, betaDBHs = "DBH[90]")) %>%
+  ggplot(aes(x = trait, xend = trait, col = species, fill = species)) +
+  geom_hline(yintercept = 10, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ parameter, labeller = label_parsed, scales = "free",
+             nrow = 2) +
+  xaxis_title(F) + ylab("Diameter at Breast Hieght (DBH, cm)") +
+  scale_y_sqrt(breaks = scales::pretty_breaks(10)) +
+  theme(legend.position="bottom") +
+  ylim(NA, 200)
+```
+
+```{r environment, fig.cap="Environment effects represented by TWI and NCI (for reduced variables and traits)."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = c("betaTWI_s",
+                                        "betaComp_s")))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
+  mutate(species = ifelse(species == "", NA, species)) %>% 
+  mutate(species = recode_factor(species, `2` = "S. sp1", 
+                                 `1` = "S. globulifera")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(variable = ifelse(grepl("TWI", parameter), "TWI", "NCI")) %>% 
+  mutate(parameter = ifelse(grepl("beta", parameter), "beta", "sigma^2")) %>% 
+  mutate(parameter = factor(parameter, levels = c("beta", "sigma^2"))) %>%
+  mutate(variable = factor(variable, levels = c("TWI", "NCI"))) %>%
+  ggplot(aes(x = trait, xend = trait, col = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(variable ~ parameter, labeller = label_parsed, scales = "free") +
+  xaxis_title(F) +
+  yaxis_title(F) +
+  scale_y_continuous(trans="S_sqrt") +
+  theme(legend.position="bottom")
+```
+
+# Discussion
+
+**To be written**
+
+## Conclusion
+
+*Take home messages…*
+
+-
+
+# Supplementary materials
+
+## S1: Model
+
+We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels (species complex $C$ and species $S$) with a linear mixed model including interaction between ontogeny and environment (more likely than an additive form without interactions, see analysis [A07-Additive](A07-Additive.html)). We obtained the following model (see [Material and Methods] for more detail on the model form):
+
+$$T_{c,s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} \times (\alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}), \sigma)    \\
+  \Theta_{c,s} \sim \mathcal{N}^5(\Theta_c,\sigma_{species}) ~|~ \Theta =
+   \begin{bmatrix}
+           \alpha \\
+           \beta_{DBH} \\
+           \beta_{TWI} \\
+           \beta_{Comp}
+  \end{bmatrix},~\sigma_{species}
+  \begin{bmatrix}
+           \sigma_{Intercept} \\
+           \sigma_{DBH} \\
+           \sigma_{TWI} \\
+           \sigma_{Comp}
+  \end{bmatrix}$$
+
+Resulting in the following `stan` code with selected priors:
+
+```{stan stanModel, output.var="Model", echo=T, eval=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1>  J ; // # of neighbors
   int<lower=1> S ; // # species
+  int<lower=1> C ; // # complex
   vector[N] Trait ; // Trait
   vector[N] DBH ; // Diameter at Breast Height
   vector[N] TWI ; // Topographic Wetness Index
@@ -128,188 +325,95 @@ data {
   vector[N] weights ;
   int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
   int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
+  int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  vector [S] alpha_s ; // Intercept for complexes
-  vector<lower=0> [S]  betaDBH_s ; // DBH half-load for complexes
-  vector[S] betaTWI_s ; // Abiotic slope for complexes
-  vector[S] betaComp_s ; // Biotic slope for complexes
+  vector [C] alpha ; // Intercept for complexes
+  vector<lower=0> [C]  betaDBH ; // DBH half-load for complexes
+  vector[C] betaTWI ; // TWI slope for complexes
+  vector[C] betaComp ; // Competition slope for complexes
   real<lower=0> alphaNCI ;
+  vector<lower=0> [S] alpha_s_tilde ; // Intercept for species
+  vector<lower=0> [S] betaDBH_s_tilde ; // DBH half-load for species
+  vector[S] betaTWI_s_tilde ; // TWI slope for species
+  vector[S] betaComp_s_tilde ; // Competition slope for species
+  real<lower=0> sigmaIntercept ; // Intercept variance for species
+  real<lower=0> sigmaDBH ; // DBH half-load variance for species
+  real<lower=0> sigmaTWI ; // TWI slope variance for species
+  real<lower=0> sigmaComp ; // Competition slope variance for species
   real<lower=0> sigma ; // Variance
 }
 transformed parameters {
-  vector[J] NCIj ;
+  vector[S] alpha_s ; // Species uncentered effects
+  vector<lower=0> [S] betaDBH_s ;
+  vector[S] betaTWI_s ;
+  vector[S] betaComp_s ;
+  vector[J] NCIj ; // Crowding index
   vector[N] NCI ;
-  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
+  alpha_s = alpha[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;  // Species uncentered effects
+  betaDBH_s = betaDBH[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
+  betaTWI_s = betaTWI[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
+  betaComp_s = betaComp[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
+  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;  // Crowding index
   NCI = rep_vector(0.0, N) ;
   for(j in 1:J)
    NCI[individual[j]] += NCIj[j] ;
+  NCI = (1 ./ weights) .* NCI ;
   NCI = NCI ./ sd(NCI) ;
 }
 model {
-  alpha_s ~ normal(0, 10^6) ;
-  betaDBH_s ~ lognormal(0,1) ;
-  betaTWI_s ~ normal(0, 10^6) ;
-  betaComp_s ~ normal(0, 10^6) ;
+  alpha ~ normal(0, 10^6) ; // Priors
+  betaDBH ~ lognormal(0,1) ;
+  betaTWI ~ normal(0, 10^6) ;
+  betaComp ~ normal(0, 10^6) ;
   alphaNCI ~ lognormal(0, 1) ;
+  alpha_s_tilde ~ normal(0, 1) ;
+  betaDBH_s_tilde ~ normal(0, 1) ;
+  betaTWI_s_tilde ~ normal(0, 1) ;
+  betaComp_s_tilde ~ normal(0, 1) ;
+  sigmaIntercept ~ lognormal(0, 1) ;
+  sigmaDBH ~ lognormal(0, 1) ;
+  sigmaTWI ~ lognormal(0, 1) ;
+  sigmaComp ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
-  Trait ~ normal((alpha_s[species] + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
+  Trait ~ normal((alpha_s[species] + betaTWI_s[species] .* TWI +  betaComp_s[species] .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH)), sigma) ; // Likelihood
 } 
 generated quantities {
-  vector[N] Trait_pred ;
-  real Rsquared ;
+  vector[N] Trait_pred ; // Predictions
   vector[N] Trait_predDBH ;
   vector[N] Trait_predTWI ;
   vector[N] Trait_predNCI ;
-  Trait_pred = (alpha_s[species] + betaTWI_s[species] .* TWI + betaComp_s[species] .* (1 ./ weights) .* NCI) .* (DBH ./ (betaDBH_s[species] + DBH));
-  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
-  Trait_predDBH = (alpha_s[species] + betaTWI_s[species] * mean(TWI) + betaComp_s[species] * mean((1 ./ weights) .* NCI)) .* (DBH ./ (betaDBH_s[species] + DBH)) ;
-  Trait_predTWI = (alpha_s[species] + + betaTWI_s[species] .* TWI + betaComp_s[species] * mean((1 ./ weights) .* NCI)) .* (mean(DBH) ./ (betaDBH_s[species] + mean(DBH))) ;
-  Trait_predNCI = (alpha_s[species] + betaTWI_s[species] * mean(TWI) + betaComp_s[species] .* (1 ./ weights) .* NCI) .* (mean(DBH) ./ (betaDBH_s[species] + mean(DBH))) ;
+  Trait_pred = (alpha[complex] + betaTWI[complex] .* TWI + betaComp[complex] .* NCI) .* (DBH ./ (betaDBH[complex] + DBH));
+  Trait_predDBH = (alpha[complex] + betaTWI[complex] * mean(TWI) + betaComp[complex] * mean(NCI)) .* (DBH ./ (betaDBH[complex] + DBH)) ;
+  Trait_predTWI = (alpha[complex] + + betaTWI[complex] .* TWI + betaComp[complex] * mean(NCI)) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))) ;
+  Trait_predNCI = (alpha[complex] + betaTWI[complex] * mean(TWI) + betaComp[complex] .* NCI) .* (mean(DBH) ./ (betaDBH[complex] + mean(DBH))) ;
 }
 ```
 
-## Summary
+## S2: Diagnostic
 
-```{r }
-# fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, save_warmup = F, include = F, pars = c('NCIj')))
-# names(fits) <- traits
-# save(fits, file = "./functional_save/InteractionWood.Rdata")
-load("./functional_save/InteractionWood.Rdata")
-pars <- c("alpha_s", "betaDBH_s", "betaTWI_s", "betaComp_s", "alphaNCI", "sigma")
-lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
-  bind_rows(.id = "Trait") %>%
-  kable() %>%
-  kable_styling()
-```
+Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every traits with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters. Post predictive check (PPC) with density overlay of observed trait values against predicted trait values showed relatively similar distribution taking into account that the model form was generic for every traits (figure \@ref(fig:ppc)). We can note that the model reproduced well multimodality for LDMC and invLA but had difficulty to represent high trait values for invSLA, LT and CC.
 
-## Chains
-
-```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
+```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$brWD), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$brWD, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
-```
-
-## Pairs
-
-```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model."}
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
-## Posteriors
-
-```{r posteriorsLp}
-lapply(fits, function(fit)
-  mcmc_intervals_data(as.array(fit), regex_pars = c("lp__"))) %>% 
-  bind_rows(.id = "Trait") %>% 
-  mutate(parameter = "logged-likelihood") %>% 
-  ggplot(aes(x = Trait, xend = Trait)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
+```{r ppc, fig.cap="Post predictive check (PPC) with density overlay of observed trait values against predicted trait."}
+cowplot::plot_grid(plotlist = mapply(function(fit, data) {
+  yrep <- as.matrix(fit, pars = "Trait_pred")
+  ppc_dens_overlay(data$Trait, yrep[sample(nrow(yrep), 25), ])
+}, fit = fits, data = mdata, SIMPLIFY = F), labels = names(fits), nrow = 3)
 ```
 
-```{r posteriorsBeta, fig.width=12, fig.height=12}
-S_sqrt <- function(x){sign(x)*sqrt(abs(x))}
-IS_sqrt <- function(x){x^2*sign(x)}
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",S_sqrt,IS_sqrt)
-gdata <- lapply(fits, function(fit)
-  mcmc_intervals_data(as.array(fit), regex_pars = c("alpha_s", "betaDBH_s",
-                                                    "betaTWI_s", "betaComp_s"))) %>% 
-  bind_rows(.id = "trait") %>% 
-  mutate(Species = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(Species = gsub("([[:punct:]])", "", Species)) %>% 
-  mutate(Species = ifelse(Species == 1, "S. globulifera", "S. sp1")) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(parameter = as.factor(gsub("s", "", parameter))) %>% 
-  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
-                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
-  mutate(parameter = factor(parameter, levels = c("alpha", "beta[DBH]", 
-                                                  "beta[TWI]", "beta[Comp]")))
-student <- lapply(fits, function(fit) 
-  as.data.frame(fit, pars = c("alpha_s", "betaDBH_s",
-                              "betaTWI_s", "betaComp_s"))) %>% 
-  bind_rows(.id = "trait") %>%
-  reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
-  mutate(Species = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(Species = gsub("([[:punct:]])", "", Species)) %>% 
-  mutate(Species = ifelse(Species == 1, "S. globulifera", "S. sp1")) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(parameter = as.factor(gsub("s", "", parameter))) %>% 
-  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
-                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
-  group_by(trait, parameter) %>% 
-  do(student = t.test(value ~ Species, data = .)) %>% 
-  mutate(student = student$p.value) %>% 
-  mutate(student = ifelse(student < 0.001, "***",
-                          ifelse(student < 0.01, "**",
-                                 ifelse(student < 0.05, "*",
-                                        ifelse(student < 0.1, ".", 
-                                               "n.s."))))) %>% 
-  left_join(gdata %>% 
-              group_by(trait, parameter) %>% 
-              summarise(x = mean(m)))
-ggplot(gdata, aes(x = trait, xend = trait, col = Species, fill = Species)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  geom_text(aes(x = trait, y = x, label = student,
-                col = NA, fill = NA), position = position_nudge(x = 0.1),
-            data = student) +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F) +
-  scale_y_continuous(trans="S_sqrt")
-```
+## S4: Predictions
 
-```{r posteriorsAlpha}
-lapply(fits, function(fit)
-  mcmc_intervals_data(as.array(fit), regex_pars = c("alphaNCI"))) %>% 
-  bind_rows(.id = "Trait") %>% 
-  mutate(parameter = "alpha[NCI]") %>% 
-  ggplot(aes(x = Trait, xend = Trait)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
-```
+Supplementary material S4 includes model predictions for every traits and descriptor (each descriptor is showed with other predictors set to their mean), and highlights the difference of goodness of fit among leaf functional traits.
 
-```{r posteriorsSigma}
-lapply(fits, function(fit)
-  mcmc_intervals_data(as.array(fit), regex_pars = c("sigma"))) %>% 
-  bind_rows(.id = "Trait") %>% 
-  mutate(parameter = "sigma^2") %>% 
-  ggplot(aes(x = Trait, xend = Trait)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
-```
-
-## Predictions
-
-```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
+```{r prediction, fig.cap="Predictions for every traits and descriptors (each dewscriptor is showed with other predictors set to their mean).", fig.width=12, fig.height=12}
 lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
   lapply(as.list(traits), function(trait) {
     if(variable == "NCI") {
@@ -322,7 +426,7 @@ lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
       variable = variable,
       Y = mdata[[trait]]$Trait,
       value = value,
-      Species = mdata[[trait]]$species,
+      Species = mdata[[trait]]$data$SpeciesLong,
       mu = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
                  2, mean),
       mu5 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
@@ -332,16 +436,12 @@ lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
     )
   }) %>% bind_rows()) %>% 
   bind_rows() %>% 
-  ggplot(aes(x = value, col = as.factor(Species))) +
+  ggplot(aes(x = value, col = Species)) +
   geom_point(aes(y = Y)) +
   geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
   geom_line(aes(y = mu)) +
-  facet_grid(trait ~ variable, scales = "free") +
-  scale_color_discrete("Species", labels = c("S. globulifera", "S. sp1"))
+  facet_grid(trait ~ variable, scales = "free")
 ```
 
-## Diagnostic
-
-# Conclusion
-
 # References
+

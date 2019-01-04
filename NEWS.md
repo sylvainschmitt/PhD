@@ -1,3 +1,7 @@
+# PhD 0.1.9099
+* functional: interaction results
+* distribution: categorical_logit
+
 # PhD 0.1.9098
 * functional: sensitivity analysis
 

@@ -127,74 +127,76 @@ $$Presence \sim \mathcal{Dirichlet~Process}(\alpha,\mathcal{N}(\mu_0,\sum0))$$
 
 #### Code
 
+<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
+<!-- // from https://ecosang.github.io/blog/study/dirichlet-process-with-stan/ -->
+<!-- data{ -->
+<!--   int<lower=0> S ; // # Species -->
+<!--   int<lower=0> N ; // # Observations -->
+<!--   real Environment[N] ; -->
+<!-- } -->
+<!-- parameters { -->
+<!--   real mu[S] ; //species mean -->
+<!--   real <lower=0,upper=1> v[S] ; -->
+<!--   real<lower=0> sigma[S] ; // species variance -->
+<!--   //real<lower=0> alpha ; // hyper prior DP(alpha,base) -->
+<!-- } -->
+<!-- transformed parameters{ -->
+<!--   simplex [S] pi ; -->
+<!--   pi[1] = v[1] ; -->
+<!--   // stick-break process based on The BUGS book Chapter 11 (p.294) -->
+<!--   for(s in 2:(S-1)) -->
+<!--       pi[s]= v[s]*(1-v[s-1])*pi[s-1]/v[s-1] ;  -->
+<!--   pi[S]=1-sum(pi[1:(S-1)]) ; // to make a simplex. -->
+<!-- } -->
+<!-- model { -->
+<!--   real alpha = 1 ; -->
+<!--   real a=0.001 ; -->
+<!--   real b=0.001 ; -->
+<!--   real ps[S] ; -->
+<!--   sigma ~ inv_gamma(a,b) ; -->
+<!--   mu ~ normal(0,5) ; -->
+<!--   //alpha~gamma(6,1) ; -->
+<!--   v ~ beta(1,alpha) ; -->
+<!--   for(n in 1:N){ -->
+<!--     for(s in 1:S){ -->
+<!--       ps[s]=log(pi[s])+normal_lpdf(Environment[n] | mu[s], sigma[s]) ; -->
+<!--     } -->
+<!--     target += log_sum_exp(ps) ; -->
+<!--   } -->
+<!-- } -->
+<!-- generated quantities { -->
+<!--   // pred -->
+<!-- } -->
+<!-- ``` -->
+
 ```{stan , output.var="Model", echo=T, eval=F}
-// from https://ecosang.github.io/blog/study/dirichlet-process-with-stan/
-data{
-  int<lower=0> S ; // # Species
-  int<lower=0> N ; // # Observations
+data {
+  int<lower=0> N ;
+  int<lower=2> S ;
+  int<lower=1,upper=S> Species[N];
   real Environment[N] ;
 }
 parameters {
-  real mu[S] ; //species mean
-  real <lower=0,upper=1> v[S] ;
-  real<lower=0> sigma[S] ; // species variance
-  //real<lower=0> alpha ; // hyper prior DP(alpha,base)
-}
-transformed parameters{
-  simplex [S] pi ;
-  pi[1] = v[1] ;
-  // stick-break process based on The BUGS book Chapter 11 (p.294)
-  for(s in 2:(S-1))
-      pi[s]= v[s]*(1-v[s-1])*pi[s-1]/v[s-1] ; 
-  pi[S]=1-sum(pi[1:(S-1)]) ; // to make a simplex.
+  vector[S] alpha ;
+  vector[S] beta ;
+  vector[S] gamma ;
 }
 model {
-  real alpha = 1 ;
-  real a=0.001 ;
-  real b=0.001 ;
-  real ps[S] ;
-  sigma ~ inv_gamma(a,b) ;
-  mu ~ normal(0,5) ;
-  //alpha~gamma(6,1) ;
-  v ~ beta(1,alpha) ;
-  for(n in 1:N){
-    for(s in 1:S){
-      ps[s]=log(pi[s])+normal_lpdf(Environment[n] | mu[s], sigma[s]) ;
-    }
-    target += log_sum_exp(ps) ;
-  }
-}
-generated quantities {
-  // pred
+  beta ~ normal(0, 5)  ;
+  for(n in 1:N)
+    Species[n] ~ categorical_logit(alpha + beta*Environment[n] + gamma*Environment[n]*Environment[n]) ;
 }
 ```
 
-```{stan , output.var="Model", echo=T, eval=F}
-// from https://ecosang.github.io/blog/study/dirichlet-process-with-stan/
-data{
-  int<lower=0> S ; // # Species
-  int<lower=0> N ; // # Observations
-  vector<lower=0>[N] Species ;
-}
-parameters {
-  vector<lower=0>[S] alpha ;
-}
-model {
-  target += dirichlet_lpdf(Species | alpha) ;
-}
-generated quantities {
-  // pred
-}
-```
 
 #### Summary
 
 ```{r }
-# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-# names(fits) <- names(mdata)
-# save(fits, file = "./distribution_save/D0.Rdata")
+fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+names(fits) <- names(mdata)
+save(fits, file = "./distribution_save/D0.Rdata")
 load("./distribution_save/D0.Rdata")
-pars <- c("alpha")
+pars <- c("alpha", "beta", "gamma")
 lapply(as.list(names(mdata)), function(type)
   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
     mutate(Type = type)) %>%
