@@ -3,11 +3,6 @@ title: "A09 : Sensitivity Analysis"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -15,6 +10,11 @@ output:
     number_sections: false
     toc: false
     keep_tex: true
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
   bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
@@ -97,7 +97,7 @@ data.frame(
         "$T_{c,s,i}) \\sim \\mathcal{N}(\\overline{\\frac{\\overline{DBH}}{\\overline{{\\beta_{DBH}}_{c}} + \\overline{DBH}} \\times (\\alpha_{c}} + \\overline{{\\beta_{TWI}}_{c}}.\\overline{TWI} + \\overline{{\\beta_{Comp}}_{c}}.\\sum_{j=1}^{J} DBH_j^{2} . e^{-{\\alpha_{NCI}}_{c,s}.\\delta_{i,j}}), \\sigma)$"
   )
 ) %>% 
-  kable()
+  kable(format = "pandoc")
 ```
 
 ```{r mdata}
@@ -218,7 +218,7 @@ lapply(fits, function(fit)
   reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Complex = complex) %>% 
   kable(caption = "Model parameters posterior.",
-        escape = F) %>% 
+        escape = F, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
@@ -359,7 +359,7 @@ lapply(fits, function(fit)
   reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Complex = complex) %>% 
   kable(caption = "Model parameters posterior.",
-        escape = F) %>% 
+        escape = F, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
@@ -502,7 +502,7 @@ lapply(fits, function(fit)
   reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Complex = complex) %>% 
   kable(caption = "Model parameters posterior.",
-        escape = F) %>% 
+        escape = F, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
@@ -649,7 +649,7 @@ lapply(fits, function(fit)
   reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Complex = complex) %>% 
   kable(caption = "Model parameters posterior.",
-        escape = F) %>% 
+        escape = F, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
@@ -780,10 +780,6 @@ Ypreds %>%
   scale_fill_discrete(guide = "none") +
   geom_text(aes(y = max(DeltaPred)*0.8)) +
   xlab("") + ylab(expression(Delta(Prediction)))
-```
-
-```{r DeltapredGroups}
-
 ```
 
 # References

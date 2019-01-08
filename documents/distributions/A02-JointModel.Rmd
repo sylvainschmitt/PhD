@@ -40,27 +40,6 @@ The aim of this document is to find the best general form of model to fit a join
 
 For this we will build three fake data sets distributed along our environmental variable as follow :
 
-#### Models summary
-
-```{r ModelsTable, render="pandoc"}
-data.frame(
-  Type = c("Dirichlet"),
-  Name = c("$D_0$", "$D_{\\alpha}$", "$D_{\\alpha, \\alpha_2}$", "$D_{\\alpha, \\beta}$",
-           "$D_{\\alpha, \\beta}2$", "$D_{\\alpha, \\beta}3$"),
-  Formula = c("$Presence \\sim \\mathcal{Dirichlet}(logit^{-1}(\\alpha_0))$",
-              "$Presence \\sim \\mathcal{Dirichlet}(logit^{-1}(\\alpha_0+\\alpha*Environment))$",
-              "$Presence \\sim \\mathcal{Dirichlet}(logit^{-1}(\\alpha_0+\\alpha*Environment+\\alpha_2*Environment^2))$",
-              "$Presence \\sim \\mathcal{Dirichlet}(logit^{-1}(\\alpha_0+\\alpha*Environment+Environment^{\\beta}))$",
-              "$Presence \\sim \\mathcal{Dirichlet}(logit^{-1}(\\alpha_0+\\alpha*(Environment+Environment^{\\beta})))$",
-              "$Presence \\sim \\mathcal{Dirichlet}(logit^{-1}(\\alpha_0+Environment^{\\alpha}+Environment^{\\beta}))$")  
-) %>% 
-  kable(caption = "Models summary.",
-        format = "html", escape = F) %>% 
-  kable_styling("striped", full_width = F) %>% 
-  collapse_rows(1)
-```
-
-
 Data {data-width=200}
 -------------------------------------
 
@@ -103,17 +82,19 @@ data <- lapply(data, function(x) x %>%
                         variable.name = "Species", value.name = "Presence") %>% 
          filter(Presence != 0) %>% 
          select(-Presence))
-mdata <- lapply(data, function(x) list(N = nrow(x),
-                                       S = length(unique(x$Species)),
-                                       Species = as.numeric(x$Species),
-                                       Environment = x$Environment))
+mdata <- lapply(data, function(x) 
+  list(S = length(unique(x$Species)),
+       N = nrow(x),
+       Environment = x$Environment,
+       y = sapply(levels(as.factor(x$Species)), 
+                  function(sp) as.numeric(x$Species == sp))))
 bind_rows(data, .id = "id") %>% 
   ggplot(aes(Environment, fill = Species, col = Species)) + 
   geom_density(alpha = 0.3) +  
   facet_wrap(~id, nrow = 3)
 ```
 
-$D_0$
+$Dirichlet~Multinomial$
 ==================
 
 Column 1
@@ -121,59 +102,26 @@ Column 1
 
 #### Model
 
-...
 
-$$Presence \sim \mathcal{Dirichlet~Process}(\alpha,\mathcal{N}(\mu_0,\sum0))$$
+$$
+Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*Environment + \gamma*Environment^2)) \\
+{Log~Probability~Mass~Function}_{Dirichlet~Multinomial}(y|\alpha) = \Gamma(\sum \alpha)  + \sum(\Gamma(\alpha + y)) - \Gamma(\sum \alpha+\sum y) - \sum\Gamma(\alpha)
+$$
 
 #### Code
 
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!-- // from https://ecosang.github.io/blog/study/dirichlet-process-with-stan/ -->
-<!-- data{ -->
-<!--   int<lower=0> S ; // # Species -->
-<!--   int<lower=0> N ; // # Observations -->
-<!--   real Environment[N] ; -->
-<!-- } -->
-<!-- parameters { -->
-<!--   real mu[S] ; //species mean -->
-<!--   real <lower=0,upper=1> v[S] ; -->
-<!--   real<lower=0> sigma[S] ; // species variance -->
-<!--   //real<lower=0> alpha ; // hyper prior DP(alpha,base) -->
-<!-- } -->
-<!-- transformed parameters{ -->
-<!--   simplex [S] pi ; -->
-<!--   pi[1] = v[1] ; -->
-<!--   // stick-break process based on The BUGS book Chapter 11 (p.294) -->
-<!--   for(s in 2:(S-1)) -->
-<!--       pi[s]= v[s]*(1-v[s-1])*pi[s-1]/v[s-1] ;  -->
-<!--   pi[S]=1-sum(pi[1:(S-1)]) ; // to make a simplex. -->
-<!-- } -->
-<!-- model { -->
-<!--   real alpha = 1 ; -->
-<!--   real a=0.001 ; -->
-<!--   real b=0.001 ; -->
-<!--   real ps[S] ; -->
-<!--   sigma ~ inv_gamma(a,b) ; -->
-<!--   mu ~ normal(0,5) ; -->
-<!--   //alpha~gamma(6,1) ; -->
-<!--   v ~ beta(1,alpha) ; -->
-<!--   for(n in 1:N){ -->
-<!--     for(s in 1:S){ -->
-<!--       ps[s]=log(pi[s])+normal_lpdf(Environment[n] | mu[s], sigma[s]) ; -->
-<!--     } -->
-<!--     target += log_sum_exp(ps) ; -->
-<!--   } -->
-<!-- } -->
-<!-- generated quantities { -->
-<!--   // pred -->
-<!-- } -->
-<!-- ``` -->
-
 ```{stan , output.var="Model", echo=T, eval=F}
+functions {
+  real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
+    real alpha_plus = sum(alpha);
+    return lgamma(alpha_plus) + sum(lgamma(alpha + to_vector(y)))
+                - lgamma(alpha_plus+sum(y)) - sum(lgamma(alpha));
+  }
+}
 data {
-  int<lower=0> N ;
-  int<lower=2> S ;
-  int<lower=1,upper=S> Species[N];
+  int<lower = 1> S  ;
+  int<lower = 1> N  ;
+  int<lower = 0> y[N, S]  ;
   real Environment[N] ;
 }
 parameters {
@@ -181,533 +129,83 @@ parameters {
   vector[S] beta ;
   vector[S] gamma ;
 }
+transformed parameters {
+  simplex[S] theta[N] ; 
+  for (n in 1:N)
+      theta[n] = softmax(alpha + beta*Environment[n] + gamma*Environment[n]*Environment[n]) ;
+}
 model {
-  beta ~ normal(0, 5)  ;
-  for(n in 1:N)
-    Species[n] ~ categorical_logit(alpha + beta*Environment[n] + gamma*Environment[n]*Environment[n]) ;
+  alpha ~ normal(0,1) ;  
+  beta ~ normal(0,1) ;  
+  gamma ~ normal(0,1) ;  
+  for (n in 1:N)
+    y[n] ~ dirichlet_multinomial(theta[n])  ;
 }
 ```
 
-
-#### Summary
-
-```{r }
-fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
-names(fits) <- names(mdata)
-save(fits, file = "./distribution_save/D0.Rdata")
-load("./distribution_save/D0.Rdata")
+```{r}
+# fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
+# names(fits) <- names(mdata)
+# save(fits, file = "./distribution_save/Dirichlet.Rdata")
+load("./distribution_save/Dirichlet.Rdata")
 pars <- c("alpha", "beta", "gamma")
-lapply(as.list(names(mdata)), function(type)
-  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
-    mutate(Type = type)) %>%
-  bind_rows() %>%
-  kable()
 ```
-
-#### Posteriors
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(names(data), function(type)
-  mcmc_intervals(as.array(fits[[type]]), regex_pars = pars)),
-  labels = names(data), nrow = 2)
-```
-
-Column 2
--------------------------------------
 
 #### Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$intermediate), regex_pars = c(pars, "lp__"),
+mcmc_trace(as.array(fits$limit, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 ```
 
 #### Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$intermediate), regex_pars = c(pars, "lp__"))
+mcmc_pairs(as.array(fits$limit, pars = pars))
 ```
+
+Column 2
+-------------------------------------
 
 #### Predictions
 
 ```{r , fig.cap="Predictions."}
-lapply(as.list(names(data)), function(type)
-  cbind(type = type, data[[type]],
-        mu = apply(as.matrix(fits[[type]], pars = "mu_species"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95))))) %>%
-  bind_rows() %>%
-  ggplot(aes(x = Environment)) +
-  geom_point(aes(y = Presence, col = as.factor(Presence))) +
-  geom_point(aes(y = mu)) +
-  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
-  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
-  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
-  facet_wrap(~ type, scales = "free", nrow = 3)
-
-cbind(type = type, data[[type]],
-        mu = apply(as.matrix(fits[[type]], pars = "mu_species"), 2, mean),
-        t(apply(as.matrix(fits[[type]], pars = "mu_species"), 2, quantile, probs = c(0.05, 0.95))))
+lapply(names(mdata), function(type)
+  lapply(1:3, function(sp)
+    cbind(type = type, data[[type]],
+          species = LETTERS[sp],
+          Environment = data[[type]]$Environment,
+          theta = apply(as.matrix(fits[[type]], 
+                                  pars = paste0("theta[", 1:mdata[[type]]$N, ",", sp, "]")), 
+                        2, mean),
+          theta5 = apply(as.matrix(fits[[type]], 
+                                   pars = paste0("theta[", 1:mdata[[type]]$N, ",", sp, "]")), 
+                         2, quantile, probs = 0.05),
+          theta95 = apply(as.matrix(fits[[type]],
+                                    pars = paste0("theta[", 1:mdata[[type]]$N, ",", sp, "]")), 
+                          2, quantile, probs = 0.95))) %>% 
+  bind_rows()) %>%
+  bind_rows() %>% 
+  ggplot(aes(x = Environment, col = species)) + 
+  geom_ribbon(aes(ymin = theta5, ymax = theta95), alpha = 0.2) +
+  geom_line(aes(y = theta)) +
+  facet_wrap(~ type, nrow = 3)
 ```
 
-<!-- $B_{\alpha}$ -->
-<!-- ================== -->
-
-<!-- Column 1 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Model -->
-
-<!-- $B_{\alpha}$ is a Bernoulli logistic regression estimating a sigmoidal incresing or decreasing $\alpha$ along the whole environmental gradient in addition to the intercept $\alpha_0$. $B_{\alpha}$ is responding well to the optimum in the limit of the environmental range and to no effect from the environmental variable. But $B_{\alpha}$ can't detect ecological optimum in the middle of the ecological range besides it's the most commonly used model ! -->
-
-<!-- $$Presence \sim \mathcal{Bernoulli}(logit(\alpha_0+\alpha*Environment))$$ -->
-
-<!-- #### Code -->
-
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!--   data { -->
-<!--     int<lower=1> N ; // # obs -->
-<!--     int<lower=0, upper=1> Presence[N] ; -->
-<!--     vector[N] Environment ; -->
-<!--     vector<lower=0, upper=1>[N] weights ; -->
-<!--   } -->
-<!--   parameters { -->
-<!--     real alpha_0 ; // Intercept -->
-<!--     real alpha ; // sigmoidal slope -->
-<!--   } -->
-<!--   model { -->
-<!--     target += weights*bernoulli_logit_lpmf(Presence | alpha_0 + alpha*Environment) ; -->
-<!--   } -->
-<!--   generated quantities { -->
-<!--     vector<lower=0, upper=1>[N] mu ; -->
-<!--     mu = inv_logit(alpha_0 + alpha*Environment) ; -->
-<!--   } -->
-<!-- ``` -->
-
-<!-- #### Summary -->
-
-<!-- ```{r } -->
-<!-- # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x)) -->
-<!-- # names(fits) <- names(mdata) -->
-<!-- # save(fits, file = "./distribution_save/Balpha.Rdata") -->
-<!-- load("./distribution_save/Balpha.Rdata") -->
-<!-- pars <- c("alpha_0", "alpha") -->
-<!-- lapply(as.list(names(mdata)), function(type) -->
-<!--   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% -->
-<!--     mutate(Type = type)) %>% -->
-<!--   bind_rows() %>% -->
-<!--   kable() -->
-<!-- ``` -->
-
-<!-- #### Posteriors -->
-
-<!-- ```{r , fig.cap="Model parameters posterior."} -->
-<!-- cowplot::plot_grid(plotlist = lapply(names(data), function(type) -->
-<!--   mcmc_intervals(as.array(fits[[type]]), pars = pars)), -->
-<!--   labels = names(data), nrow = 2) -->
-<!-- ``` -->
-
-<!-- Column 2 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Chains -->
-
-<!-- ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."} -->
-<!-- mcmc_trace(as.array(fits$limit), pars = c(pars, "lp__"), -->
-<!--              facet_args = list(labeller = label_parsed)) -->
-<!-- ``` -->
-
-<!-- #### Pairs -->
-
-<!-- ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."} -->
-<!-- mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__")) -->
-<!-- ``` -->
-
-<!-- #### Predictions -->
-
-<!-- ```{r , fig.cap="Predictions."} -->
-<!-- lapply(as.list(names(data)), function(type) -->
-<!--   cbind(type = type, data[[type]], -->
-<!--         mu = apply(as.matrix(fits[[type]], pars = "mu"), 2, mean), -->
-<!--         t(apply(as.matrix(fits[[type]], pars = "mu"), 2, quantile, probs = c(0.05, 0.95))))) %>%  -->
-<!--   bind_rows() %>%  -->
-<!--   ggplot(aes(x = Environment)) + -->
-<!--   geom_point(aes(y = Presence, col = as.factor(Presence))) + -->
-<!--   geom_point(aes(y = mu)) + -->
-<!--   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) + -->
-<!--   geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   facet_wrap(~ type, scales = "free", nrow = 3) -->
-<!-- ``` -->
-
-<!-- $B_{\alpha, \alpha_2}$ -->
-<!-- ================== -->
-
-<!-- Column 1 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Model -->
-
-<!-- $B_{\alpha, \alpha_2}$ is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter. $B_{\alpha, \alpha_2}$ is giving the expected result in every case. -->
-
-<!-- $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*Environment+\alpha_2*Environment^2))$$ -->
-
-<!-- #### Code -->
-
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!--   data { -->
-<!--     int<lower=1> N ; // # obs -->
-<!--     int<lower=0, upper=1> Presence[N] ; -->
-<!--     vector[N] Environment ; -->
-<!--     vector<lower=0, upper=1>[N] weights ; -->
-<!--   } -->
-<!--   parameters { -->
-<!--     real alpha_0 ; // intercept -->
-<!--     real alpha ; // sigmoidal slope -->
-<!--     real alpha_2 ; // quadratic form -->
-<!--   } -->
-<!--   model { -->
-<!--     target += weights*bernoulli_logit_lpmf(Presence | alpha_0 + alpha*Environment + alpha_2 * Environment .* Environment) ; -->
-<!--   } -->
-<!--   generated quantities { -->
-<!--     vector<lower=0, upper=1>[N] theta ; -->
-<!--     theta = inv_logit(alpha_0 + alpha * Environment  + alpha_2 * Environment .* Environment) ; -->
-<!--   } -->
-<!-- ``` -->
-
-<!-- #### Summary -->
-
-<!-- ```{r } -->
-<!-- # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x)) -->
-<!-- # names(fits) <- names(mdata) -->
-<!-- # save(fits, file = "./distribution_save/Balpha2.Rdata") -->
-<!-- load("./distribution_save/Balpha2.Rdata") -->
-<!-- pars <- c("alpha_0", "alpha", "alpha_2") -->
-<!-- lapply(as.list(names(mdata)), function(type) -->
-<!--   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% -->
-<!--     mutate(Type = type)) %>% -->
-<!--   bind_rows() %>% -->
-<!--   kable() -->
-<!-- ``` -->
-
-<!-- #### Posteriors -->
-
-<!-- ```{r , fig.cap="Model parameters posterior."} -->
-<!-- cowplot::plot_grid(plotlist = lapply(names(data), function(type) -->
-<!--   mcmc_intervals(as.array(fits[[type]]), pars = pars)), -->
-<!--   labels = names(data), nrow = 2) -->
-<!-- ``` -->
-
-<!-- Column 2 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Chains -->
-
-<!-- ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."} -->
-<!-- mcmc_trace(as.array(fits$intermediate), pars = c(pars, "lp__"), -->
-<!--              facet_args = list(labeller = label_parsed)) -->
-<!-- ``` -->
-
-<!-- #### Pairs -->
-
-<!-- ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."} -->
-<!-- mcmc_pairs(as.array(fits$intermediate), pars = c(pars, "lp__")) -->
-<!-- ``` -->
-
-<!-- #### Predictions -->
-
-<!-- ```{r , fig.cap="Predictions."} -->
-<!-- lapply(as.list(names(data)), function(type) -->
-<!--   cbind(type = type, data[[type]], -->
-<!--         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean), -->
-<!--         t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% -->
-<!--   bind_rows() %>% -->
-<!--   ggplot(aes(x = Environment)) + -->
-<!--   geom_point(aes(y = Presence, col = as.factor(Presence))) + -->
-<!--   geom_point(aes(y = mu)) + -->
-<!--   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) + -->
-<!--   geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   facet_wrap(~ type, scales = "free", nrow = 3) -->
-<!-- ``` -->
-
-<!-- $B_{\alpha, \beta}$ -->
-<!-- ================== -->
-
-<!-- Column 1 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Model -->
-
-<!-- $B_{\alpha, \beta}$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}$ is not dealing well with the intermediate niche optimum case. -->
-
-<!-- $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*Environment+Environment^{\beta}))$$ -->
-
-<!-- #### Code -->
-
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!--   data { -->
-<!--     int<lower=1> N ; // # obs -->
-<!--     int<lower=0, upper=1> Presence[N] ; -->
-<!--     vector[N] Environment ; -->
-<!--     vector<lower=0, upper=1>[N] weights ; -->
-<!--   } -->
-<!--   parameters { -->
-<!--     real alpha_0 ; // Intercept -->
-<!--     real alpha ; // sigmoidal slope -->
-<!--     real<lower=0, upper=4> beta ; // power form -->
-<!--   } -->
-<!--   model { -->
-<!--     for(n in 1:N) -->
-<!--       target += weights*bernoulli_logit_lpmf(Presence[n] | alpha_0 + alpha*Environment[n] + pow(Environment[n], beta)) ; -->
-<!--   } -->
-<!--   generated quantities { -->
-<!--     vector<lower=0, upper=1>[N] theta ; -->
-<!--     for(n in 1:N) -->
-<!--       theta[n] = inv_logit(alpha_0 + alpha * Environment[n]  + pow(Environment[n], beta)) ; -->
-<!--   } -->
-<!-- ``` -->
-
-<!-- #### Summary -->
-
-<!-- ```{r } -->
-<!-- # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x)) -->
-<!-- # names(fits) <- names(mdata) -->
-<!-- # save(fits, file = "./distribution_save/Bbeta.Rdata") -->
-<!-- load("./distribution_save/Bbeta.Rdata") -->
-<!-- pars <- c("alpha_0", "alpha", "beta") -->
-<!-- lapply(as.list(names(mdata)), function(type) -->
-<!--   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% -->
-<!--     mutate(Type = type)) %>% -->
-<!--   bind_rows() %>% -->
-<!--   kable() -->
-<!-- ``` -->
-
-<!-- #### Posteriors -->
-
-<!-- ```{r , fig.cap="Model parameters posterior."} -->
-<!-- cowplot::plot_grid(plotlist = lapply(names(data), function(type) -->
-<!--   mcmc_intervals(as.array(fits[[type]]), pars = pars)), -->
-<!--   labels = names(data), nrow = 2) -->
-<!-- ``` -->
-
-<!-- Column 2 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Chains -->
-
-<!-- ```{r , fig.cap="Markov chains trace plot after warmup for limit data."} -->
-<!-- mcmc_trace(as.array(fits$limit), pars = c(pars, "lp__"), -->
-<!--              facet_args = list(labeller = label_parsed)) -->
-<!-- ``` -->
-
-<!-- #### Pairs -->
-
-<!-- ```{r , fig.cap="Markov chains pairs plot after warmup  for limit data."} -->
-<!-- mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__")) -->
-<!-- ``` -->
-
-<!-- #### Predictions -->
-
-<!-- ```{r , fig.cap="Predictions."} -->
-<!-- lapply(as.list(names(data)), function(type) -->
-<!--   cbind(type = type, data[[type]], -->
-<!--         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean), -->
-<!--         t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% -->
-<!--   bind_rows() %>% -->
-<!--   ggplot(aes(x = Environment)) + -->
-<!--   geom_point(aes(y = Presence, col = as.factor(Presence))) + -->
-<!--   geom_point(aes(y = mu)) + -->
-<!--   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) + -->
-<!--   geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   facet_wrap(~ type, scales = "free", nrow = 3) -->
-<!-- ``` -->
-
-<!-- $B_{\alpha, \beta}2$ -->
-<!-- ================== -->
-
-<!-- Column 1 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Model -->
-
-<!-- $B_{\alpha, \beta}2$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}2$ is not dealing well with the intermediate niche optimum case. -->
-
-<!-- $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0 + \alpha*(Environment+Environment^{\beta})))$$ -->
-
-<!-- #### Code -->
-
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!--   data { -->
-<!--     int<lower=1> N ; // # obs -->
-<!--     int<lower=0, upper=1> Presence[N] ; -->
-<!--     vector[N] Environment ; -->
-<!--     vector<lower=0, upper=1>[N] weights ; -->
-<!--   } -->
-<!--   parameters { -->
-<!--     real alpha_0 ; // intercept -->
-<!--     real alpha ; // sigmoidal slope -->
-<!--     real<lower=0, upper=4> beta ; // power form -->
-<!--   } -->
-<!--   model { -->
-<!--     for(n in 1:N) -->
-<!--       target += weights*bernoulli_logit_lpmf(Presence[n] | alpha_0 + alpha*(Environment[n] + pow(Environment[n], beta))) ; -->
-<!--   } -->
-<!--   generated quantities { -->
-<!--     vector<lower=0, upper=1>[N] theta ; -->
-<!--     for(n in 1:N) -->
-<!--       theta[n] = inv_logit(alpha_0 + alpha*(Environment[n]  + pow(Environment[n], beta))) ; -->
-<!--   } -->
-<!-- ``` -->
-
-<!-- #### Summary -->
-
-<!-- ```{r } -->
-<!-- # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x)) -->
-<!-- # names(fits) <- names(mdata) -->
-<!-- # save(fits, file = "./distribution_save/Bbeta2.Rdata") -->
-<!-- load("./distribution_save/Bbeta2.Rdata") -->
-<!-- pars <- c("alpha_0", "alpha", "beta") -->
-<!-- lapply(as.list(names(mdata)), function(type) -->
-<!--   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% -->
-<!--     mutate(Type = type)) %>% -->
-<!--   bind_rows() %>% -->
-<!--   kable() -->
-<!-- ``` -->
-
-<!-- #### Posteriors -->
-
-<!-- ```{r , fig.cap="Model parameters posterior."} -->
-<!-- cowplot::plot_grid(plotlist = lapply(names(data), function(type) -->
-<!--   mcmc_intervals(as.array(fits[[type]]), pars = pars)), -->
-<!--   labels = names(data), nrow = 2) -->
-<!-- ``` -->
-
-<!-- Column 2 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Chains -->
-
-<!-- ```{r , fig.cap="Markov chains trace plot after warmup for limit data."} -->
-<!-- mcmc_trace(as.array(fits$limit), pars = c(pars, "lp__"), -->
-<!--              facet_args = list(labeller = label_parsed)) -->
-<!-- ``` -->
-
-<!-- #### Pairs -->
-
-<!-- ```{r , fig.cap="Markov chains pairs plot after warmup  for limit data."} -->
-<!-- mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__")) -->
-<!-- ``` -->
-
-<!-- #### Predictions -->
-
-<!-- ```{r , fig.cap="Predictions."} -->
-<!-- lapply(as.list(names(data)), function(type) -->
-<!--   cbind(type = type, data[[type]], -->
-<!--         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean), -->
-<!--         t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% -->
-<!--   bind_rows() %>% -->
-<!--   ggplot(aes(x = Environment)) + -->
-<!--   geom_point(aes(y = Presence, col = as.factor(Presence))) + -->
-<!--   geom_point(aes(y = mu)) + -->
-<!--   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) + -->
-<!--   geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   facet_wrap(~ type, scales = "free", nrow = 3) -->
-<!-- ``` -->
-
-<!-- $B_{\alpha, \beta}3$ -->
-<!-- ================== -->
-
-<!-- Column 1 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Model -->
-
-<!-- $B_{\alpha, \beta}3$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.$B_{\alpha, \beta}3$ is not dealing well with the intermediate niche optimum case. -->
-
-<!-- $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0+Environment^{\alpha}+Environment^{\beta})))~|~\alpha<\beta$$ -->
-
-<!-- #### Code -->
-
-<!-- ```{stan , output.var="Model", echo=T, eval=F} -->
-<!--   data { -->
-<!--     int<lower=1> N ; // # obs -->
-<!--     int<lower=0, upper=1> Presence[N] ; -->
-<!--     vector[N] Environment ; -->
-<!--     vector<lower=0, upper=1>[N] weights ; -->
-<!--   } -->
-<!--   parameters { -->
-<!--     real alpha_0 ; // intercept -->
-<!--     real<lower=0, upper=4> beta ; // second power form -->
-<!--     real<lower=0, upper=beta> alpha ; // first power form -->
-<!--   } -->
-<!--   model { -->
-<!--     for(n in 1:N) -->
-<!--       target += weights*bernoulli_logit_lpmf(Presence[n] | alpha_0 + pow(Environment[n], alpha) + pow(Environment[n], beta)) ; -->
-<!--   } -->
-<!--   generated quantities { -->
-<!--     vector<lower=0, upper=1>[N] theta ; -->
-<!--     for(n in 1:N) -->
-<!--       theta[n] = inv_logit(alpha_0 + pow(Environment[n], alpha) + pow(Environment[n], beta)) ; -->
-<!--   } -->
-<!-- ``` -->
-
-<!-- #### Summary -->
-
-<!-- ```{r } -->
-<!-- # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x)) -->
-<!-- # names(fits) <- names(mdata) -->
-<!-- # save(fits, file = "./distribution_save/Bbeta3.Rdata") -->
-<!-- load("./distribution_save/Bbeta3.Rdata") -->
-<!-- pars <- c("alpha_0", "alpha", "beta") -->
-<!-- lapply(as.list(names(mdata)), function(type) -->
-<!--   broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>% -->
-<!--     mutate(Type = type)) %>% -->
-<!--   bind_rows() %>% -->
-<!--   kable() -->
-<!-- ``` -->
-
-<!-- #### Posteriors -->
-
-<!-- ```{r , fig.cap="Model parameters posterior."} -->
-<!-- cowplot::plot_grid(plotlist = lapply(names(data), function(type) -->
-<!--   mcmc_intervals(as.array(fits[[type]]), pars = pars)), -->
-<!--   labels = names(data), nrow = 2) -->
-<!-- ``` -->
-
-<!-- Column 2 -->
-<!-- ------------------------------------- -->
-
-<!-- #### Chains -->
-
-<!-- ```{r , fig.cap="Markov chains trace plot after warmup for limit data."} -->
-<!-- mcmc_trace(as.array(fits$limit), pars = c(pars, "lp__"), -->
-<!--              facet_args = list(labeller = label_parsed)) -->
-<!-- ``` -->
-
-<!-- #### Pairs -->
-
-<!-- ```{r , fig.cap="Markov chains pairs plot after warmup  for limit data."} -->
-<!-- mcmc_pairs(as.array(fits$limit), pars = c(pars, "lp__")) -->
-<!-- ``` -->
-
-<!-- #### Predictions -->
-
-<!-- ```{r , fig.cap="Predictions."} -->
-<!-- lapply(as.list(names(data)), function(type) -->
-<!--   cbind(type = type, data[[type]], -->
-<!--         mu = apply(as.matrix(fits[[type]], pars = "theta"), 2, mean), -->
-<!--         t(apply(as.matrix(fits[[type]], pars = "theta"), 2, quantile, probs = c(0.05, 0.95))))) %>% -->
-<!--   bind_rows() %>% -->
-<!--   ggplot(aes(x = Environment)) + -->
-<!--   geom_point(aes(y = Presence, col = as.factor(Presence))) + -->
-<!--   geom_point(aes(y = mu)) + -->
-<!--   geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) + -->
-<!--   geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") + -->
-<!--   facet_wrap(~ type, scales = "free", nrow = 3) -->
-<!-- ``` -->
-
-# Discussion
-
+#### Posteriors
+
+```{r , fig.cap="Model parameters posterior."}
+cowplot::plot_grid(plotlist = lapply(names(data), function(type)
+  mcmc_intervals(as.array(fits[[type]], pars = pars))),
+  labels = names(data), nrow = 2)
+```
+
+#### Summary
+
+```{r }
+lapply(as.list(names(mdata)), function(type)
+  broom::tidyMCMC(fits[[type]], pars = c(pars, "lp__"), droppars = NULL, rhat = T) %>%
+    mutate(Type = type)) %>%
+  bind_rows() %>%
+  kable()
+```

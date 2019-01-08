@@ -3,11 +3,6 @@ title: "A08 : Interaction Model"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt & Anne Baranger
 output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -16,6 +11,11 @@ output:
     toc: false
     keep_tex: true
   bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -144,11 +144,12 @@ Between 232 and 1 individual have been sampled per species, depending on their n
 
 ```{r headcount}
 Individuals %>% 
+  mutate(Species = gsub("_", " ", Species)) %>% 
   group_by(Genus, Species) %>% 
   summarise(N = n()) %>% 
   arrange(desc(N)) %>% 
   kable(caption = "Number of individuals sampled per genus and species.",
-        escape = F) %>% 
+        escape = F, format = "pandoc") %>% 
   kable_styling(full_width = F)
 ```
 
@@ -169,7 +170,7 @@ Individuals %>%
                     "leaf Thickness", "Leaf Area", "Chlorophyll Content")) %>% 
   mutate(Unit = c("$cm^2.g^{-1}$", "$g.g^{-1}$", "$\\mu m$", "$cm^2$", "$g.cm^{-2}$")) %>%
   select(Trait, Unit, trait, N, Value) %>% 
-  kable(col.names = c("Trait", "Unit", "Abbreviation", "N", "Mean (sd)"),
+  kable(col.names = c("Trait", "Unit", "Abbreviation", "N", "Mean (sd)"), format = "pandoc",
     caption = "Functional traits measured, with trait unit, abbreviation, headcount, mean and standard error.", escape = F) %>% 
   kable_styling(full_width = F)
 ```
@@ -179,7 +180,7 @@ Individuals %>%
 Three little correlated (Pearson's r < 0.14, see analysis [A02-Environment](A02-Environment.html)) ontogenetic and environmental descriptors were chosen to depict individual leaf traits. Diameter at breast height ($DBH$, $cm$) was chosen as an indirect proxy for ontogeny effect [but see @roggy_links_2005] but was shown to be confounded with light access through Dawkins index (see analysis [A02-Environment](A02-Environment.html)).
 
 A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic asymmetric competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
-$$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{−\alpha.\delta_{i,j}}$$
+$$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\alpha.\delta_{i,j}}$$
 with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature [ref]. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance (note that  set to 0 represent local basal area). 
 
 Finally, topographic wetness index ($TWI$) was selected between various abiotic descriptors available (see analysis [A02-Environment](A02-Environment.html)) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher]. Descriptors used were derived from field censuses ($DBH$ and $NCI$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
@@ -244,7 +245,7 @@ lapply(fits, function(fit)
   reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Complex = complex) %>% 
   kable(caption = "Model parameters for each complex with reduced traits and descriptors.",
-        escape = F, digits = 3) %>% 
+        escape = F, digits = 3, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
@@ -359,7 +360,9 @@ lapply(fits, function(fit)
 
 We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels (species complex $C$ and species $S$) with a linear mixed model including interaction between ontogeny and environment (more likely than an additive form without interactions, see analysis [A07-Additive](A07-Additive.html)). We obtained the following model (see [Material and Methods] for more detail on the model form):
 
-$$T_{c,s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} \times (\alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}), \sigma)    \\
+\begin{equation} 
+\begin{split}
+  T_{c,s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} \times (\alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}), \sigma)    \\
   \Theta_{c,s} \sim \mathcal{N}^5(\Theta_c,\sigma_{species}) ~|~ \Theta =
    \begin{bmatrix}
            \alpha \\
@@ -372,7 +375,9 @@ $$T_{c,s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} \times (\
            \sigma_{DBH} \\
            \sigma_{TWI} \\
            \sigma_{Comp}
-  \end{bmatrix}$$
+  \end{bmatrix}
+\end{split}
+\end{equation} 
 
 Resulting in the following `stan` code with selected priors:
 

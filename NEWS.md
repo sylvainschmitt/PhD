@@ -1,3 +1,6 @@
+# PhD 0.1.9100
+* distribution: JointModel Dirichlet_Multinomial
+
 # PhD 0.1.9099
 * functional: interaction results
 * distribution: categorical_logit
