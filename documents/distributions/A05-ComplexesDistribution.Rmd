@@ -1,0 +1,331 @@
+---
+title: "A05: Complexes distributions"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
+  github_document: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(raster)
+library(leaflet)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+```{r trees}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+```
+
+```{r env}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./distribution_save/env.Rdata")
+load("./distribution_save/env.Rdata")
+```
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
+                         "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1"))
+)
+```
+
+```{r data}
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(complexes) %>% 
+  filter(!is.na(Plot)) %>% 
+  mutate(Complex = ifelse(is.na(Complex), "no", Complex))
+```
+
+
+```{r dataReduction}
+# data <- filter(data, Plot == 16) # for tests
+# data <- filter(data, Genus == "Symphonia")
+```
+
+```{r mdata}
+complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
+mdata <- data %>% 
+  filter(Plot == 1) %>% 
+  filter(SubPlot == 1)
+mdata <- lapply(complexes, function(complex)
+  list(N = nrow(mdata),
+       K = 3,
+       Y = as.numeric(mdata$Complex == complex),
+       X = dplyr::select(mdata, DEM, TWI, Slope) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix(),
+       w = ifelse(mdata$Complex == complex,
+                  1/(2*sum(mdata$Complex == complex)),
+                  1/(2*sum(mdata$Complex != complex)))))
+names(mdata) <- complexes
+```
+
+```{r fit}
+# fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
+# names(fits) <- complexes
+# save(fits, file = "./distribution_save/Complex.Rdata")
+load("./distribution_save/Complex.Rdata")
+pars <- c("alpha", "beta", "gamma")
+```
+
+# Introduction
+
+The aim of this document is to study the distribution at micro-environmental scale with biotic and abiotic environment of whole species complexes in Paracou (not species within complexes).
+
+# Material and Methods
+
+## Study site
+
+Paracou
+
+## Individuals
+
+Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes.html), in the meantime we focused on the two PhD models, i.e. *Symphonia globulifera*  and *Eschweilera Parvifolia clade*. *Symphonia globulifera* includes two morphotypes, *S. globulifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species.
+
+For test purposes, we only used trees censused in 2015 in the plot 1 and subplot 1. But later we will include more plots and subplots, and maybe more census years. Treee of all species present within this data set are further used (not only *Symphonia* and *Eschweilera*).
+
+## Environmental variables
+
+To be defined in document [A03-Descriptors](A03-Descriptors.html), for the moment we used only abiotic descriptors represented by elevation (DEM), wetness index (TWI) and slope (Slope) (but we built a generic form of model that can adapt to change in the descriptor set).
+
+## Analysis
+
+We analysed species complex distribution by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Because there will be more pseudo-absence than presence, they will be weighted with equal weighting for presences and absences.
+
+Species complex distribution has been investigating through logistic regression following a Bernoulli distribution (model with the best likelihood and results see document [A01-SingleModel](A01-SingleModel.html)):
+
+$$Presence \sim \mathcal{Bernoulli}[logit^-1(\alpha + \beta*X+\gamma*X^2)]$$
+with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the intercept, $\beta$ a vector of size $K$ representing the slope and $\gamma$ a vector of size $K$ representing the quadratic form.
+
+Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
+
+# Results
+
+The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
+
+Table \@ref(tab:summary) and figures \@ref(fig:posterior), \@ref(fig:prediction), \@ref(fig:niche), and \@ref(fig:niche2) will not be commented yet as they represent preliminary results. Still, we can note that globally species complexes have a low habitat suitability in the whole environmental space, i.e. they do not show a peculiar niche in Paracou and on the contrary seemed distributed everywhere.
+
+```{r summary}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(complex, term, descriptor, estimate) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `2` = "DEM", 
+                                 `1` = "TWI", `3` = "Slope")) %>% 
+  mutate(term = recode_factor(term, alpha = "$\\alpha$", 
+                              beta = "$\\beta$", 
+                              gamma = "$\\gamma$",
+                              lp = "log likelihood")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  reshape2::dcast(term + descriptor ~ complex, value.var = "estimate") %>% 
+  kable(caption = "Model parameters for each complex with scaled descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1)
+```
+
+```{r posterior, fig.cap="Model parameters posterior."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `2` = "DEM", 
+                                 `1` = "TWI", `3` = "Slope")) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  dplyr::select(-outer_width, -inner_width, -point_est) %>% 
+  dplyr::select(complex, parameter, descriptor, ll, l, m, h, hh) %>% 
+  ggplot(aes(x = parameter, xend = parameter, col = descriptor, fill = descriptor)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ complex, scales = "free", nrow = 2) +
+  xlab("") +
+  scale_y_continuous(trans="S_sqrt")
+```
+
+```{r prediction, fig.cap="Predictions."}
+lapply(fits, function(fit)
+  cbind(dplyr::select(filter(data, Plot ==1, SubPlot == 1), DEM, TWI, Slope),
+        theta = apply(as.matrix(fit, pars = "theta"), 2, mean),
+        theta5 = apply(as.matrix(fit, pars = "theta"), 2, quantile, probs = 0.05),
+        theta95 = apply(as.matrix(fit, pars = "theta"), 2, quantile, probs = 0.95))) %>% 
+  bind_rows(.id = "complex") %>% 
+  reshape2::melt(id.vars = c("complex", "theta", "theta5", "theta95")) %>% 
+  ggplot(aes(x = value)) + 
+  geom_ribbon(aes(ymin = theta5, ymax = theta95), alpha = 0.2) +
+  geom_line(aes(y = theta)) +
+  facet_grid(complex ~ variable, scales = "free") +
+  ylab("Habitat suitability")
+```
+
+```{r niche, fig.cap="Niche (HabitatSuitability)."}
+lapply(complexes, function(complex)
+  cbind(filter(data, Plot ==1, SubPlot == 1),
+        complex = complex,
+        Presence = as.numeric(filter(data, Plot ==1, SubPlot == 1)$Complex == complex),
+        theta = apply(as.matrix(fits[[complex]], pars = "theta"), 2, mean))) %>%
+  bind_rows() %>% 
+  dplyr::select(complex, DBH, theta, TWI, DEM, Slope) %>% 
+  reshape2::melt(id.vars = c("complex", "DBH", "theta", "TWI")) %>% 
+  ggplot(aes(TWI, value, col = theta, size = DBH)) +
+  geom_point() +
+  facet_grid(variable ~ complex, scales = "free") +
+  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
+                        high = scales::muted("red"), midpoint = 0.5)
+```
+
+```{r niche2, fig.cap="Niche (HabitatSuitability)."}
+lapply(fits, function(fit){
+  pars_val <- apply(as.matrix(fit, pars = c("alpha", "beta[1]", "beta[2]", "beta[3]",
+                                            "gamma[1]", "gamma[2]", "gamma[3]")), 2, mean)
+  n <- 100
+  HS <- matrix(nrow = n, ncol = n)
+  DEM <- seq(-1, 1, length.out = n)
+  TWI <- seq(-1, 1, length.out = n)
+  for(i in 1:n)
+    for(j in 1:n)
+      HS[i, j] <- psych::logistic(pars_val["alpha"] + 
+                                    pars_val["beta[1]"]*DEM[i] +
+                                    pars_val["gamma[1]"]*DEM[i]^2 +
+                                    pars_val["beta[2]"]*TWI[j] +
+                                    pars_val["gamma[2]"]*TWI[j]^2 +
+                                    pars_val["beta[3]"]*0.5 +
+                                    pars_val["gamma[3]"]*0.5^2)
+  reshape2::melt(HS, value.name = "HS") %>% 
+    mutate(Var1 = DEM[Var1],
+           Var2 = TWI[Var2]) %>%
+    rename(DEM = Var1, TWI = Var2)
+}) %>% 
+  bind_rows(.id = "complex") %>% 
+  ggplot(aes(x = DEM, y = TWI, z = HS, fill = HS)) +
+  geom_raster() +
+  scale_fill_distiller("Habitat\nsuitability (%)", palette = "Spectral") +
+  facet_wrap(~ complex) +
+  coord_fixed() + 
+  theme(legend.position="bottom")
+```
+
+# Discussion
+
+# Supplementray materials
+
+## S1: Model
+
+```{stan Model, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1> N ;                // # of individuals
+  int<lower=1> K ;                // # of environmental descriptors
+  int<lower=0, upper=1> Y[N] ;    // individuals presence or absence (0-1) 
+  matrix[N,K] X ;                 // environmental descriptors
+  vector<lower=0, upper=1>[N] w ; // weights for pseudo-absence to be equal to presence
+}
+parameters {
+  real alpha ;       // intercept
+  vector[K] beta ;   // sigmoidal slope
+  vector[K] gamma ;  // quadratic form
+}
+transformed parameters {
+  vector<lower=0, upper=1>[N] theta ; // habitat suitability
+  theta = inv_logit(alpha + X * beta + X .* X * gamma) ;
+}
+model {
+  alpha ~ normal(0, 10^6) ; // priors
+  beta ~ normal(0, 10^6) ;
+  gamma ~ normal(0, 10^6) ;
+  target += w*bernoulli_lpmf(Y | theta) ; // likelihood
+}
+generated quantities {
+  int<lower=0, upper=1> Yp[N] ; // predictions
+  for(n in 1:N)
+    Yp[n] = bernoulli_rng(theta[n]) ;
+}
+```
+
+## S2: Diagnostic
+
+Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters. Post predictive check (PPC) with density overlay of observed presence values against predicted presence values showed closed distribution (figure \@ref(fig:ppc)). 
+
+```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
+             facet_args = list(labeller = label_parsed))
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+
+```{r ppc, fig.cap="Post predictive check (PPC) with density overlay of observed trait values against predicted trait."}
+cowplot::plot_grid(plotlist = mapply(function(fit, data) {
+  yrep <- as.matrix(fit, pars = "Yp")
+  ppc_dens_overlay(data$Y, yrep[sample(nrow(yrep), 100), ])
+}, fit = fits, data = mdata, SIMPLIFY = F), labels = names(fits))
+```
+
+# References

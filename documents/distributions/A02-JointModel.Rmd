@@ -81,12 +81,13 @@ data <- lapply(data, function(x) x %>%
          reshape2::melt(id.vars = "Environment", 
                         variable.name = "Species", value.name = "Presence") %>% 
          filter(Presence != 0) %>% 
-         select(-Presence))
+         dplyr::select(-Presence))
 mdata <- lapply(data, function(x) 
-  list(S = length(unique(x$Species)),
-       N = nrow(x),
-       Environment = x$Environment,
-       y = sapply(levels(as.factor(x$Species)), 
+  list(N = nrow(x),
+       S = length(unique(x$Species)),
+       K = 1,
+       X = matrix(x$Environment),
+       Y = sapply(levels(as.factor(x$Species)), 
                   function(sp) as.numeric(x$Species == sp))))
 bind_rows(data, .id = "id") %>% 
   ggplot(aes(Environment, fill = Species, col = Species)) + 
@@ -102,6 +103,7 @@ Column 1
 
 #### Model
 
+The model used follow a Multinomial and Dirichlet conjugated distributions with a quadratic formed generalized through the softmax function. Each observation is defined by a simplex of size number of species $S$ coded in 0 for all species absent and 1 for species present. Consequently, $S$ values of $\alpha$, $\beta$ and $\gamma$ are inferred to compute the niche of each species along the environmental variable relativelly to other species distributions (sum being equal to 1).
 
 $$
 Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*Environment + \gamma*Environment^2)) \\
@@ -119,27 +121,30 @@ functions {
   }
 }
 data {
-  int<lower = 1> S  ;
-  int<lower = 1> N  ;
-  int<lower = 0> y[N, S]  ;
-  real Environment[N] ;
+  int<lower = 1> N  ;       // # of individuals
+  int<lower = 1> S  ;       // # of species
+  int<lower = 1> K  ;       // # of environmental descriptors
+  int<lower = 0, upper=1> Y[N, S]  ; // individuals presence or absence for each species
+  matrix[N,K] X ;           // environmental descriptors
 }
 parameters {
-  vector[S] alpha ;
-  vector[S] beta ;
-  vector[S] gamma ;
+  vector[S] alpha ; // intercept
+  matrix[S,K] beta ; // sigmoidal slope
+  matrix[S,K] gamma ; // quadratic form
 }
 transformed parameters {
-  simplex[S] theta[N] ; 
+  simplex[S] theta[N] ; // habitat suitability 
   for (n in 1:N)
-      theta[n] = softmax(alpha + beta*Environment[n] + gamma*Environment[n]*Environment[n]) ;
+      theta[n] = softmax(alpha + beta*to_vector(X[n,]) + gamma*to_vector(X[n,] .* X[n,])) ;
 }
 model {
   alpha ~ normal(0,1) ;  
-  beta ~ normal(0,1) ;  
-  gamma ~ normal(0,1) ;  
+  for(k in 1:K){
+    beta[,k] ~ normal(0,1) ;
+    gamma[,k] ~ normal(0,1) ;
+  }
   for (n in 1:N)
-    y[n] ~ dirichlet_multinomial(theta[n])  ;
+    Y[n] ~ dirichlet_multinomial(theta[n])  ; // likelihood
 }
 ```
 
@@ -154,14 +159,14 @@ pars <- c("alpha", "beta", "gamma")
 #### Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for intermediate data."}
-mcmc_trace(as.array(fits$limit, pars = c(pars, "lp__")),
+mcmc_trace(as.array(fits$intermediate, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 ```
 
 #### Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for intermediate data."}
-mcmc_pairs(as.array(fits$limit, pars = pars))
+mcmc_pairs(as.array(fits$intermediate, pars = pars))
 ```
 
 Column 2
@@ -195,9 +200,9 @@ lapply(names(mdata), function(type)
 #### Posteriors
 
 ```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(names(data), function(type)
-  mcmc_intervals(as.array(fits[[type]], pars = pars))),
-  labels = names(data), nrow = 2)
+cowplot::plot_grid(plotlist = lapply(fits, function(fit)
+  mcmc_intervals(as.array(fit, pars = pars))),
+  labels = names(fits), nrow = 2)
 ```
 
 #### Summary

@@ -1,0 +1,444 @@
+---
+title: "A06: Species distributions"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
+  github_document: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(raster)
+library(leaflet)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+```{r trees}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+```
+
+```{r env}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./distribution_save/env.Rdata")
+load("./distribution_save/env.Rdata")
+```
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
+                         "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1"))
+)
+```
+
+```{r data}
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(complexes) %>% 
+  filter(!is.na(Plot))
+```
+
+```{r mdata}
+complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
+mdata <- list(data %>% 
+                filter(Complex == "Symphonia") %>% 
+                filter(Plot == 16),
+              data %>% 
+                filter(Complex == "Eschweilera clade Parvifolia") %>% 
+                filter(Plot == 1))
+mdata <- lapply(mdata, function(data)
+  list(N = nrow(data),
+       S = length(unique(data$Species)),
+       K = 3,
+       Y = sapply(levels(as.factor(data$Species)),
+                  function(sp) as.numeric(data$Species == sp)),
+       X = dplyr::select(data, DEM, TWI, Slope) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix()))
+names(mdata) <- complexes
+```
+
+```{r fit}
+# fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
+# names(fits) <- complexes
+# save(fits, file = "./distribution_save/Species.Rdata")
+load("./distribution_save/Species.Rdata")
+pars <- c("alpha", "beta", "gamma")
+```
+
+# Introduction
+
+The aim of this document is to study the distribution at micro-environmental scale with biotic and abiotic environment of species within species complexes in Paracou (not the whole species complex).
+
+# Material and Methods
+
+## Study site
+
+Paracou
+
+## Individuals
+
+Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes.html), in the meantime we focused on the two PhD models, i.e. *Symphonia globulifera*  and *Eschweilera Parvifolia clade*. *Symphonia globulifera* includes two morphotypes, *S. globulifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species.
+
+For test purposes, we only used individual trees belonging to the species complex censused in 2015 in the plot 16 for *Symphonia* and in the plot 1 and subplot 1 for *Eschweilera*. But later we will include more plots and subplots, and maybe more census years.
+
+## Environmental variables
+
+To be defined in document [A03-Descriptors](A03-Descriptors.html), for the moment we used only abiotic descriptors represented by elevation (DEM), wetness index (TWI) and slope (Slope) (but we built a generic form of model that can adapt to change in the descriptor set).
+
+## Analysis
+
+We analysed species distribution within species complex by comparing to which species belonged occurrences of the species complex. Species distribution within species complex has been investigating through softmax regression following a conjugated Dirchlet and Multinomial distribution (see document [A02-JointModel](A01-JointModel.html)):
+
+$$Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*X + \gamma*X^2)) \\
+{Log~Probability~Mass~Function}_{Dirichlet~Multinomial}(y|\alpha) = \Gamma(\sum \alpha)  + \sum(\Gamma(\alpha + y)) - \Gamma(\sum \alpha+\sum y) - \sum\Gamma(\alpha)$$
+with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the intercept, $\beta$ a vector of size $K$ representing the slope and $\gamma$ a vector of size $K$ representing the quadratic form.
+
+Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
+
+<!-- ### Overlap test -->
+
+<!-- `dismo::nicheOverlap`  functions as other compute niche overlap from distribution projected on rasters which miss the overlap computation of the theoritical niche in the full environmental space tested. We will build an overlap index as the intersection of habitat suitability distribution (product of distribution functions) divided by the total sum of habitat suitability distribution (sum of distribution functions) : -->
+
+<!-- $$I_{overlap} = \frac{\cap niche}{\sum niche} = \frac{\prod_sdistribution_s}{\sum_sdistribution_s} =  \frac{\prod_s f_s(DEM, TWI, Slope)}{\sum_s f_s(DEM, TWI, Slope)}$$ -->
+
+# Results
+
+The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
+
+Table \@ref(tab:summary) and figures \@ref(fig:posterior), \@ref(fig:prediction), \@ref(fig:niche), and \@ref(fig:niche2) will not be commented yet as they represent preliminary results. Still, we can note that we have contrasted patterns between species. Whereas *S. sp1* and *S. globulifera* have totally opposed niche defined by DEM and TWI; *Eschweilera* complex is more contrasted with *E. coriacea* present almost everywhere without niche preference when *E. sagotiana* and *E. pedicellata* have distinct niche preferences.
+
+```{r summary}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c(pars), droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "complex") %>% 
+  mutate(index = gsub("([[:alpha:]])", "", term)) %>% 
+  mutate(index = gsub("([[:punct:]])", "", index)) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(species = substr(index, 1, 1)) %>% 
+  mutate(descriptor = substr(index, 2, 2)) %>% 
+  dplyr::select(complex, term, species, descriptor, estimate) %>% 
+  mutate(descriptor = recode_factor(descriptor, `2` = "DEM", 
+                                    `1` = "TWI", `3` = "Slope")) %>% 
+  mutate(term = recode_factor(term, alpha = "$\\alpha$", 
+                              beta = "$\\beta$", 
+                              gamma = "$\\gamma$")) %>% 
+  mutate(species = as.numeric(species)) %>% 
+  mutate(species = ifelse(complex == "Symphonia",
+                          levels(as.factor(filter(data, 
+                                                  Complex == "Symphonia", 
+                                                  Plot == 16)$Species))[species],
+                          levels(as.factor(filter(data, 
+                                                  Complex == "Eschweilera clade Parvifolia",
+                                                  Plot == 1)$Species))[species])) %>% 
+  mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
+  reshape2::dcast(term + descriptor ~ species, value.var = "estimate") %>% 
+  kable(caption = "Model parameters for each complex with scaled descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:3)
+```
+
+```{r posterior, fig.cap="Model parameters posterior."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = substr(descriptor, 1, 1)) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `2` = "DEM", 
+                                    `1` = "TWI", `3` = "Slope")) %>% 
+  mutate(species = as.numeric(species)) %>% 
+  mutate(species = ifelse(complex == "Symphonia",
+                          levels(as.factor(filter(data, 
+                                                  Complex == "Symphonia", 
+                                                  Plot == 16)$Species))[species],
+                          levels(as.factor(filter(data, 
+                                                  Complex == "Eschweilera clade Parvifolia",
+                                                  Plot == 1)$Species))[species])) %>% 
+  mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
+  dplyr::select(complex, parameter, descriptor, species, ll, l, m, h, hh) %>% 
+  filter(parameter != "alpha") %>% 
+  ggplot(aes(x = species, xend = species, col = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r prediction, fig.cap="Predictions."}
+mdata <- list(data %>% 
+                filter(Complex == "Symphonia") %>% 
+                filter(Plot == 16),
+              data %>% 
+                filter(Complex == "Eschweilera clade Parvifolia") %>% 
+                filter(Plot == 1))
+names(mdata) <- complexes
+lapply(complexes, function(complex)
+  lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
+    cbind(dplyr::select(mdata[[complex]], DEM, TWI, Slope),
+          complex = complex,
+          species = unique(mdata[[complex]]$Species)[sp],
+          theta = apply(as.matrix(fits[[complex]], 
+                                  pars = paste0("theta[", 1:nrow(mdata[[complex]]), 
+                                                ",", sp, "]")), 
+                        2, mean),
+          theta5 = apply(as.matrix(fits[[complex]], 
+                                   pars = paste0("theta[", 1:nrow(mdata[[complex]]),
+                                                 ",", sp, "]")), 
+                         2, quantile, probs = 0.05),
+          theta95 = apply(as.matrix(fits[[complex]],
+                                    pars = paste0("theta[", 1:nrow(mdata[[complex]]), 
+                                                  ",", sp, "]")), 
+                          2, quantile, probs = 0.95))) %>% 
+    bind_rows()) %>% 
+  bind_rows() %>% 
+  mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
+  reshape2::melt(id.vars = c("complex", "species", "theta", "theta5", "theta95")) %>% 
+  ggplot(aes(x = value)) + 
+  geom_ribbon(aes(ymin = theta5, ymax = theta95), alpha = 0.2) +
+  geom_line(aes(y = theta)) +
+  facet_grid(species ~ variable, scales = "free") +
+  ylab("Habitat suitability")
+```
+
+```{r niche, fig.cap="Niche (HabitatSuitability)."}
+lapply(complexes, function(complex)
+  lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
+    cbind(mdata[[complex]],
+          complex = complex,
+          species = unique(mdata[[complex]]$Species)[sp],
+          theta = apply(as.matrix(fits[[complex]], 
+                                  pars = paste0("theta[", 1:nrow(mdata[[complex]]), 
+                                                ",", sp, "]")), 
+                        2, mean))) %>% 
+    bind_rows()) %>% 
+  bind_rows() %>% 
+  filter(species == Species) %>% 
+  mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
+  dplyr::select(Species, DBH, theta, TWI, DEM, Slope) %>% 
+  reshape2::melt(id.vars = c("Species", "DBH", "theta", "TWI")) %>% 
+  ggplot(aes(TWI, value, col = theta, size = DBH)) +
+  geom_point() +
+  facet_grid(variable~Species, scales = "free") +
+  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
+                        high = scales::muted("red"), midpoint = 0.3) +
+  theme(legend.position="bottom")
+```
+
+```{r niche2, fig.cap="Niche (HabitatSuitability)."}
+lapply(complexes, function(complex)
+  lapply(1:length(unique(mdata[[complex]]$Species)), function(sp){
+    pars_val <- apply(as.matrix(fits[[complex]], 
+                                pars = c(paste0("alpha[", sp, "]"), 
+                                         paste0("beta[", sp, ",1]"), 
+                                         paste0("beta[", sp, ",2]"), 
+                                         paste0("beta[", sp, ",3]"),
+                                         paste0("gamma[", sp, ",1]"), 
+                                         paste0("gamma[", sp, ",2]"), 
+                                         paste0("gamma[", sp, ",3]"))), 
+                      2, mean)
+    n <- 100
+    HS <- matrix(nrow = n, ncol = n)
+    DEM <- seq(-2, 2, length.out = n)
+    TWI <- seq(-2, 2, length.out = n)
+    for(i in 1:n)
+      for(j in 1:n)
+        HS[i, j] <- psych::logistic(pars_val[paste0("alpha[", sp, "]")] + 
+                                      pars_val[paste0("beta[", sp, ",1]")]*DEM[i] +
+                                      pars_val[paste0("gamma[", sp, ",1]")]*DEM[i]^2 +
+                                      pars_val[paste0("beta[", sp, ",2]")]*TWI[j] +
+                                      pars_val[paste0("gamma[", sp, ",2]")]*TWI[j]^2 +
+                                      pars_val[paste0("beta[", sp, ",3]")]*0.5 +
+                                      pars_val[paste0("gamma[", sp, ",3]")]*0.5^2)
+    reshape2::melt(HS, value.name = "HS") %>% 
+         mutate(Var1 = DEM[Var1],
+           Var2 = TWI[Var2]) %>%
+      rename(DEM = Var1, TWI = Var2) %>% 
+      mutate(species = unique(mdata[[complex]]$Species)[sp])
+  }) %>% 
+    bind_rows()) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = DEM, y = TWI, z = HS, fill = HS)) +
+  geom_raster() +
+  scale_fill_distiller("Habitat\nsuitability (%)", palette = "Spectral") +
+  facet_wrap(~ species) +
+  coord_fixed() +
+  theme(legend.position="bottom")
+```
+
+```{r overlap, eval=F}
+lapply(1:length(unique(mdata$Species)), function(sp)
+  cbind(species = unique(mdata$Species)[sp],
+        mdata,
+        Presence = as.numeric(mdata$Species == unique(mdata$Species)[sp]),
+        theta = apply(as.matrix(fit, 
+                                pars = paste0("theta[", 1:nrow(mdata), ",", sp, "]")), 
+                      2, mean))) %>% 
+  bind_rows() %>% 
+  dplyr::select(idTree, species, theta) %>% 
+  group_by(idTree) %>% 
+  summarise(product = prod(theta), sum = sum(theta)) %>% 
+  mutate(overlap = product/sum) %>% 
+  ungroup() %>% 
+  summarise(overlap = mean(overlap)) %>% 
+  mutate(overlap = overlap*length(unique(mdata$Species)))
+```
+
+# Discussion
+
+# Supplementray materials
+
+## S1: Model
+
+```{stan Model, output.var="Model", echo=T, eval=F}
+functions {
+  real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
+    real alpha_plus = sum(alpha);
+    return lgamma(alpha_plus) + sum(lgamma(alpha + to_vector(y)))
+                - lgamma(alpha_plus+sum(y)) - sum(lgamma(alpha));
+  }
+}
+data {
+  int<lower = 1> N  ;       // # of individuals
+  int<lower = 1> S  ;       // # of species
+  int<lower = 1> K  ;       // # of environmental descriptors
+  int<lower = 0, upper=1> Y[N, S]  ; // individuals presence or absence for each species
+  matrix[N,K] X ;           // environmental descriptors
+}
+parameters {
+  vector[S] alpha ; // intercept
+  matrix[S,K] beta ; // sigmoidal slope
+  matrix[S,K] gamma ; // quadratic form
+}
+transformed parameters {
+  simplex[S] theta[N] ; // habitat suitability 
+  for (n in 1:N)
+      theta[n] = softmax(alpha + beta*to_vector(X[n,]) + gamma*to_vector(X[n,] .* X[n,])) ;
+}
+model {
+  alpha ~ normal(0,1) ;  
+  for(k in 1:K){
+    beta[,k] ~ normal(0,1) ;
+    gamma[,k] ~ normal(0,1) ;
+  }
+  for (n in 1:N)
+    Y[n] ~ dirichlet_multinomial(theta[n])  ; // likelihood
+}
+```
+
+
+## S2: Diagnostic
+
+Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters.
+
+```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
+             facet_args = list(labeller = label_parsed))
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+
+```{r ppc, fig.cap="Post predictive check (PPC) with density overlay of observed trait values against predicted trait.", eval=F}
+cowplot::plot_grid(plotlist = mapply(function(fit, data) {
+  yrep <- as.matrix(fit, pars = "Yp")
+  ppc_dens_overlay(data$Y, yrep[sample(nrow(yrep), 100), ])
+}, fit = fits, data = mdata, SIMPLIFY = F), labels = names(fits))
+```
+
+## SX: Projections
+
+```{r projection, fig.cap="Symphonia globulifera morphotype globulifera distribution in the Plot 16.", eval=F}
+limits <- subset(shapefile(file.path(path, "limits", "OverallPlots.shp")))
+# env <- stack(raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#              raster(file.path(path, "topography", "TWI_1m.tif")),
+#              raster(file.path(path, "topography", "slope_1m.tif")))
+# env <- crop(env, limits)
+# names(env) <- c("DEM", "TWI", "Slope")
+# pars_val <- apply(as.matrix(fits$globulifera, pars = c("alpha_0", "alpha_DEM", "alpha_DEM2", "alpha_TWI",
+#                                            "alpha_TWI2", "alpha_Slope", "alpha_Slope2")), 2, mean)
+# projection <- calc(env, function(x){psych::logistic(sum(pars_val["alpha_0"],
+#                                           pars_val["alpha_DEM"]*x[1], pars_val["alpha_DEM2"]*x[1]*x[1],
+#                                           pars_val["alpha_TWI"]*x[2], pars_val["alpha_TWI2"]*x[2]*x[2],
+#                                           pars_val["alpha_Slope"]*x[3], pars_val["alpha_Slope2"]*x[3]*x[3]))})
+# save(projection, file = "./distribution_save/SymphoProj.Rdata")
+load("./distribution_save/SymphoProj.Rdata")
+projection_df <- as(aggregate(projection, 4), "SpatialPixelsDataFrame")
+projection_df <- as.data.frame(projection_df)
+colnames(projection_df) <- c("HS", "x", "y")
+ggplot() +  
+  geom_tile(data=projection_df, aes(x=x, y=y, fill=(1-HS)*100)) +
+  geom_polygon(data = fortify(limits),
+                 aes(long, lat, group=group),
+                 colour = "black", lwd = 1.1, alpha = 0) +
+  coord_equal() +
+  cowplot::theme_map() +
+  scale_fill_distiller("S. globulifera\nHabitat\nsuitability (%)", palette = "Spectral")
+```
+
+# References

@@ -1,0 +1,144 @@
+---
+title: "A02: Environment & Ontogeny"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt & Anne Baranger
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(raster)
+library(leaflet)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+```{r trees}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr*pi) %>% 
+  collect()
+```
+
+```{r env}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./distribution_save/env.Rdata")
+load("./distribution_save/env.Rdata")
+```
+
+```{r data}
+data <- trees %>% 
+  left_join(env)
+```
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "Aspidosperma", Genus = "Aspidosperma",
+             Species = c("carapanauba", "shultesii", "excelsum", "oblongum", 
+                         "desmanthum", "album", "spruceanum", "sandwithianum", "helstonei", "sp.1CAY-ATDN")),
+  data.frame(Complex = "Dyospiros", Genus = "Dyospiros",
+             Species = c("capreifolia", "carbonaria", "martinii", "guianensis", "vestitia")),
+  data.frame(Complex = "Eschweilera clade Chartacea",
+             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis", "Lecythis"),
+             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea", "zabucajo")),
+  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
+                         "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Lecythis", Genus = "Lecythis",
+             Species = c("idatimon", "persistens", "persistenssubspaurantiaca", "corrugata")),
+  data.frame(Complex = "Couratari", Genus = "Couratari",
+             Species = c("calcynia", "oblongifolia", "guianensis")),
+  data.frame(Complex = "Pourouma", Genus = "Pourouma",
+             Species = c("guianensis", "saülensis", "sp.2CAY-ATDN", "minor", "melionii", "bicolor",
+                         "villosa", "sp.5CAY-ATDN")),
+  data.frame(Complex = "Cecropia", Genus = c("Pourouma", "Cecropia", "Cecropia"),
+             Species = c("mollis", "obtusa", "sciadophylla")),
+  data.frame(Complex = "Licania1", Genus = "Licania",
+             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
+                         "alba", "majuscula")),
+  data.frame(Complex = "Licania2", Genus = "Licania",
+             Species = c("octandra", "sprucei", "bicornis", "minutiflora")),
+  data.frame(Complex = "Couepia", Genus = c(rep("Couepia", 7), rep("Licania", 2)),
+             Species = c("obovata", "abrantha", "magnolifolia", "joaquinea", "caryophilloides",
+                         "guianensis", "bracteosa", "heteromorpha", "latistipula")),
+    data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1"))
+)
+complexes <- complexes %>% 
+  filter(Complex %in% c("Symphonia", "Eschweilera clade Parvifolia"))
+data <- left_join(complexes, data) %>% 
+  filter(!is.na(Plot))
+```
+
+# Introduction
+
+The aim of this document is to study the distribution at micro-environmental scale with abiotic environment of two species complexes : *Symphonia globulifera* morphotypes and *Eschweilera Parvifolia clade* species. *Symphonia globulifera* includes two morphotypes, *S. globulifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species. We wish to use a bayseian approach including both biotic and abiotic environment and maybe the ontogoeny through diameter at breast hieght (DBH).
+
+One of the first thing aiming this study as such fine micro-scale started from @Allie2015 figure (see figure \@ref(fig:Allie)). Effectivelly for the two species complexes studied she has shown a differentation of habitat (between *S. globulifera* and *S. sp1* and between, *E. coriacea* and *E. sagotiana*). But the ecological niche defined only included the centroid of the niche and we were wondering about the real niche taking into account intraspecific variability of habitat between sistser species within species complexes.
+
+```{r Allie, fig.cap = "Environmental variables selected in @Allie2015 including intraspecific variability."}
+data %>% 
+  ggplot(aes(RelativeElevation, Slope, 
+             col = Species, size = DBH)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(~ Complex, nrow = 2)
+```
+
+```{r Allie2, fig.cap = "Environmental variables selected in @Allie2015 including intraspecific variability."}
+data %>% 
+  filter(Species %in% c("coriacea", "sagotiana",
+                        "globulifera", "sp.1")) %>%
+  ggplot(aes(TWI, Slope, 
+             col = Species, size = DBH)) +
+  geom_point(alpha = 0.2) +
+  facet_wrap(Complex ~ Species, nrow = 2)
+```
+
+# References
