@@ -1,0 +1,164 @@
+---
+title: "A02: Niche descriptors"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(raster)
+library(leaflet)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+```{r trees}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Plot == 1, SubPlot == 1) %>% # for test purposes
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+```
+
+```{r abiotic}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# topo <- stack(
+#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
+#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
+#   raster(file.path(path, "topography", "slope_1m.tif")),
+#   raster(file.path(path, "topography", "curvature_1m.tif")),
+#   raster(file.path(path, "topography", "TRI_1m.tif")),
+#   raster(file.path(path, "topography", "TWI_1m.tif"))
+# )
+# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature", "TRI", "TWI")
+# topo <- projectRaster(topo, crs = crs)
+# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
+# rm(topo)
+# save(env, file = "./distribution_save/env.Rdata")
+# load("./distribution_save/env.Rdata")
+```
+
+```{r biotic}
+# treesXY <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(treesXY) <- ~Xutm + Yutm
+# proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# treesXY <- spTransform(treesXY, CRSobj = crs)
+# MNC <- raster(file.path(path, "topography", "MNC_ParacouAvril2009_1m.tif"))
+# names(MNC) <- c("MNC")
+# crs(MNC) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# MNC <- projectRaster(MNC, crs = crs)
+# env$MNC <- raster::extract(MNC, treesXY)
+# rm(treesXY, MNC)
+# save(env, file = "./distribution_save/env.Rdata")
+load("./distribution_save/env.Rdata")
+```
+
+```{r Competition}
+# cl <- makeCluster(4)
+# clusterExport(cl, list("data", "path"))
+# Competition <- clusterMap(cl,
+#   function(id, plot, census, x, y, genus){
+#   library(dplyr)
+#   src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>%
+#     tbl("Paracou") %>%
+#     filter(CensusYear == census) %>%
+#     filter(Plot == plot) %>%
+#     filter(idTree != id) %>%
+#     mutate(DBH = CircCorr/pi) %>%
+#     filter(DBH >= 10) %>% # != INRA plots
+#     mutate(dij = sqrt((x - Xutm)^2+(y - Yutm)^2)) %>%
+#     filter(dij < 10) %>%
+#     summarise(BA = sum(0.25*pi*DBH^2),
+#               BAgenus =  sum(0.25*pi*DBH^2*as.numeric(Genus == genus))) %>%
+#     mutate(idTree = id) %>%
+#     dplyr::select(idTree, BA, BAgenus) %>%
+#     collect()},
+#   id = trees$idTree,
+#   plot = trees$Plot,
+#   x = trees$Xutm,
+#   y = trees$Yutm,
+#   census = trees$CensusYear,
+#   genus = trees$Genus,
+#   SIMPLIFY = F)
+# stopCluster(cl)
+# rm(cl)
+# Competition <- bind_rows(Competition)
+# save(Competition, file = "./distribution_save/CompetitionP1C1.Rdata")
+load("./distribution_save/CompetitionP1C1.Rdata")
+```
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
+                         "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1"))
+)
+```
+
+```{r data}
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(complexes) %>% 
+  filter(!is.na(Plot))
+```
+
+# Introduction
+
+Subsequent analysis aimed to select descriptors of species complex distribution.
+
+Species distribution, and therefore species complex distribution, will be shaped both by abiotic environment and biotic interactions. We will not explore tree interactions with their environment trough herbivory and pathogens, besides their huge impact on tree life history [but see @VanderPutten2001].
+
+We selected functional traits descriptors by studying descriptors co-variation and keeping only little correlated variables with the best ecological meaning to represent abiotic environment and biotic interactions.
+
+# Material & Methods
+
+# Results
+
+## Biotic interactions
+
+## Abiotic environment
+
+# Conclusion
+
+# References

@@ -168,8 +168,8 @@ lapply(fits, function(fit)
   mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
   dplyr::select(complex, term, descriptor, estimate) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `2` = "DEM", 
-                                 `1` = "TWI", `3` = "Slope")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "DEM", 
+                                 `2` = "TWI", `3` = "Slope")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$",
@@ -193,8 +193,8 @@ lapply(fits, function(fit)
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `2` = "DEM", 
-                                 `1` = "TWI", `3` = "Slope")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "DEM", 
+                                 `2` = "TWI", `3` = "Slope")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
   dplyr::select(-outer_width, -inner_width, -point_est) %>% 
