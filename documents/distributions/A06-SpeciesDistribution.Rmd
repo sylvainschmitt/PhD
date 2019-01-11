@@ -75,6 +75,40 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 ```
 
+```{r Competition}
+# cl <- makeCluster(4)
+# clusterExport(cl, list("data", "path"))
+# Competition <- clusterMap(cl,
+#   function(id, plot, census, x, y, genus){
+#   library(dplyr)
+#   src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>%
+#     tbl("Paracou") %>%
+#     filter(CensusYear == census) %>%
+#     filter(Plot == plot) %>%
+#     filter(idTree != id) %>%
+#     mutate(DBH = CircCorr/pi) %>%
+#     filter(DBH >= 10) %>% # != INRA plots
+#     mutate(dij = sqrt((x - Xutm)^2+(y - Yutm)^2)) %>%
+#     filter(dij < 10) %>%
+#     summarise(BA = sum(0.25*pi*DBH^2),
+#               BAgenus =  sum(0.25*pi*DBH^2*as.numeric(Genus == genus))) %>%
+#     mutate(idTree = id) %>%
+#     dplyr::select(idTree, BA, BAgenus) %>%
+#     collect()},
+#   id = trees$idTree,
+#   plot = trees$Plot,
+#   x = trees$Xutm,
+#   y = trees$Yutm,
+#   census = trees$CensusYear,
+#   genus = trees$Genus,
+#   SIMPLIFY = F)
+# stopCluster(cl)
+# rm(cl)
+# Competition <- bind_rows(Competition)
+# save(Competition, file = "./distribution_save/CompetitionP1C1.Rdata")
+load("./distribution_save/Competition.Rdata")
+```
+
 ```{r complexes}
 complexes <- bind_rows(
   data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
@@ -89,6 +123,7 @@ complexes <- bind_rows(
 data <- trees %>% 
   left_join(env) %>% 
   left_join(complexes) %>% 
+  left_join(Competition) %>% 
   filter(!is.na(Plot))
 ```
 
@@ -103,10 +138,10 @@ mdata <- list(data %>%
 mdata <- lapply(mdata, function(data)
   list(N = nrow(data),
        S = length(unique(data$Species)),
-       K = 3,
+       K = 5,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, DEM, TWI, Slope) %>%
+       X = dplyr::select(data, DEM, TWI, Slope, BA, BAgenus) %>%
          mutate_all(funs(scale)) %>%
          as.matrix()))
 names(mdata) <- complexes
@@ -174,7 +209,8 @@ lapply(fits, function(fit)
   mutate(descriptor = substr(index, 2, 2)) %>% 
   dplyr::select(complex, term, species, descriptor, estimate) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "DEM", 
-                                    `2` = "TWI", `3` = "Slope")) %>% 
+                                    `2` = "TWI", `3` = "Slope",
+                                    `4` = "BA", `5` = "BAgenus")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$")) %>% 
@@ -206,7 +242,8 @@ lapply(fits, function(fit)
   mutate(species = substr(descriptor, 1, 1)) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "DEM", 
-                                    `2` = "TWI", `3` = "Slope")) %>% 
+                                    `2` = "TWI", `3` = "Slope",
+                                    `4` = "BA", `5` = "BAgenus")) %>% 
   mutate(species = as.numeric(species)) %>% 
   mutate(species = ifelse(complex == "Symphonia",
                           levels(as.factor(filter(data, 
@@ -241,7 +278,7 @@ mdata <- list(data %>%
 names(mdata) <- complexes
 lapply(complexes, function(complex)
   lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
-    cbind(dplyr::select(mdata[[complex]], DEM, TWI, Slope),
+    cbind(dplyr::select(mdata[[complex]], DEM, TWI, Slope, BA, BAgenus),
           complex = complex,
           species = levels(as.factor(mdata[[complex]]$Species))[sp],
           theta = apply(as.matrix(fits[[complex]], 
@@ -281,8 +318,8 @@ lapply(complexes, function(complex)
   bind_rows() %>% 
   filter(species == Species) %>% 
   mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
-  dplyr::select(Species, DBH, theta, TWI, DEM, Slope) %>% 
-  reshape2::melt(id.vars = c("Species", "DBH", "theta", "TWI")) %>% 
+  dplyr::select(Species, DBH, theta, TWI, DEM, Slope, BA, BAgenus) %>% 
+  reshape2::melt(id.vars = c("Species", "DBH", "theta", "TWI", "BA")) %>% 
   ggplot(aes(TWI, value, col = theta, size = DBH)) +
   geom_point() +
   facet_grid(variable~Species, scales = "free") +

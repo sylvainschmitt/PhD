@@ -32,6 +32,7 @@ library(raster)
 library(leaflet)
 library(rstan)
 library(bayesplot)
+library(factoextra)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
@@ -123,7 +124,7 @@ load("./distribution_save/env.Rdata")
 # rm(cl)
 # Competition <- bind_rows(Competition)
 # save(Competition, file = "./distribution_save/CompetitionP1C1.Rdata")
-load("./distribution_save/CompetitionP1C1.Rdata")
+load("./distribution_save/Competition.Rdata")
 ```
 
 ```{r complexes}
@@ -140,6 +141,7 @@ complexes <- bind_rows(
 data <- trees %>% 
   left_join(env) %>% 
   left_join(complexes) %>% 
+  left_join(Competition) %>% 
   filter(!is.na(Plot))
 ```
 
@@ -155,9 +157,45 @@ We selected functional traits descriptors by studying descriptors co-variation a
 
 # Results
 
+```{r correlations}
+data %>% 
+  dplyr::select(DBH, 
+                DEM, RelativeElevation, Slope, Curvature, TRI, TWI,
+                MNC, BA, BAgenus) %>% 
+  na.omit() %>% 
+  cor(.) %>% 
+  corrplot::corrplot.mixed()
+```
+
+```{r pca12}
+fviz_pca_var(princomp(~ DBH + DEM + RelativeElevation +
+                        Slope + Curvature + TRI + TWI +
+                        MNC + BA + BAgenus, data, cor = T),
+             axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```
+
+```{r pca13}
+fviz_pca_var(princomp(~ DBH + DEM + RelativeElevation +
+                        Slope + Curvature + TRI + TWI +
+                        MNC + BA + BAgenus, data, cor = T),
+             axes = c(1, 3), geom = c("arrow", "text"), col.var = "contrib")
+```
+
 ## Biotic interactions
 
+
+```{r pcaBiotic}
+fviz_pca_var(princomp(~ MNC + BA + BAgenus, data, cor = T),
+             axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```
+
 ## Abiotic environment
+
+```{r pcaAbiotic}
+fviz_pca_var(princomp(~ DEM + RelativeElevation +
+                        Slope + Curvature + TRI + TWI, data, cor = T),
+             axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```
 
 # Conclusion
 
