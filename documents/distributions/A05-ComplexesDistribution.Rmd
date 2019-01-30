@@ -16,9 +16,6 @@ output:
     toc: false
     keep_tex: true
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -269,7 +266,7 @@ lapply(fits, function(fit)
 lapply(complexes, function(complex)
   cbind(data,
         complex = complex,
-        Presence = as.numeric(filter(data, Plot ==1, SubPlot == 1)$Complex == complex),
+        Presence = as.numeric(data$Complex == complex),
         theta = apply(as.matrix(fits[[complex]], pars = "theta"), 2, mean))) %>%
   bind_rows() %>% 
   dplyr::select(complex, DBH, theta, TWI, BA, BAgenus, BAspecies) %>% 
@@ -287,7 +284,7 @@ lapply(complexes, function(complex)
 
 ## S1: Model
 
-```{stan Model, output.var="Model", echo=T, eval=F}
+```{stan Model, output.var="Model", echo=T, eval=F, cache = F}
 data {
   int<lower=1> N ;                // # of individuals
   int<lower=1> K ;                // # of environmental descriptors
