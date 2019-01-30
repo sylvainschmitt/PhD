@@ -74,6 +74,41 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 ```
 
+
+```{r Competition}
+# cl <- makeCluster(4)
+# clusterExport(cl, list("data", "path"))
+# Competition <- clusterMap(cl,
+#   function(id, plot, census, x, y, genus){
+#   library(dplyr)
+#   src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>%
+#     tbl("Paracou") %>%
+#     filter(CensusYear == census) %>%
+#     filter(Plot == plot) %>%
+#     filter(idTree != id) %>%
+#     mutate(DBH = CircCorr/pi) %>%
+#     filter(DBH >= 10) %>% # != INRA plots
+#     mutate(dij = sqrt((x - Xutm)^2+(y - Yutm)^2)) %>%
+#     filter(dij < 10) %>%
+#     summarise(BA = sum(0.25*pi*DBH^2),
+#               BAgenus =  sum(0.25*pi*DBH^2*as.numeric(Genus == genus))) %>%
+#     mutate(idTree = id) %>%
+#     dplyr::select(idTree, BA, BAgenus) %>%
+#     collect()},
+#   id = trees$idTree,
+#   plot = trees$Plot,
+#   x = trees$Xutm,
+#   y = trees$Yutm,
+#   census = trees$CensusYear,
+#   genus = trees$Genus,
+#   SIMPLIFY = F)
+# stopCluster(cl)
+# rm(cl)
+# Competition <- bind_rows(Competition)
+# save(Competition, file = "./distribution_save/Competition.Rdata")
+load("./distribution_save/Competition.Rdata")
+```
+
 ```{r complexes}
 complexes <- bind_rows(
   data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
@@ -88,39 +123,33 @@ complexes <- bind_rows(
 data <- trees %>% 
   left_join(env) %>% 
   left_join(complexes) %>% 
-  filter(!is.na(Plot)) %>% 
-  mutate(Complex = ifelse(is.na(Complex), "no", Complex))
-```
-
-
-```{r dataReduction}
-# data <- filter(data, Plot == 16) # for tests
-# data <- filter(data, Genus == "Symphonia")
+  left_join(Competition) %>% 
+  filter(!is.na(Plot))
 ```
 
 ```{r mdata}
 complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
-mdata <- data %>% 
-  filter(Plot == 1) %>% 
-  filter(SubPlot == 1)
+data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex)
-  list(N = nrow(mdata),
-       K = 3,
-       Y = as.numeric(mdata$Complex == complex),
-       X = dplyr::select(mdata, DEM, TWI, Slope) %>%
+  list(N = nrow(data),
+       K = 4,
+       Y = as.numeric(data$Complex == complex),
+       X = dplyr::select(data, 
+                         TWI, 
+                         BA, BAgenus, BAspecies) %>%
          mutate_all(funs(scale)) %>%
          as.matrix(),
-       w = ifelse(mdata$Complex == complex,
-                  1/(2*sum(mdata$Complex == complex)),
-                  1/(2*sum(mdata$Complex != complex)))))
+       w = ifelse(data$Complex == complex,
+                  1/(2*sum(data$Complex == complex)),
+                  1/(2*sum(data$Complex != complex)))))
 names(mdata) <- complexes
 ```
 
 ```{r fit}
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/Complex.Rdata")
-load("./distribution_save/Complex.Rdata")
+# save(fits, file = "./distribution_save/ComplexesAll.Rdata")
+load("./distribution_save/ComplexesAll.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
@@ -142,7 +171,12 @@ For test purposes, we only used trees censused in 2015 in the plot 1 and subplot
 
 ## Environmental variables
 
-To be defined in document [A03-Descriptors](A03-Descriptors.html), for the moment we used only abiotic descriptors represented by elevation (DEM), wetness index (TWI) and slope (Slope) (but we built a generic form of model that can adapt to change in the descriptor set).
+To be defined in document [A03-Descriptors](A03-Descriptors.html),
+
+* TWI
+* BA
+* BAgenus
+* BAspecies
 
 ## Analysis
 
@@ -168,14 +202,15 @@ lapply(fits, function(fit)
   mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
   dplyr::select(complex, term, descriptor, estimate) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "DEM", 
-                                 `2` = "TWI", `3` = "Slope")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "BA", `3` = "BAgenus",
+                                    `4` = "BAspecies")) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$",
                               lp = "log likelihood")) %>% 
-  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
-  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   reshape2::dcast(term + descriptor ~ complex, value.var = "estimate") %>% 
   kable(caption = "Model parameters for each complex with scaled descriptors.",
         escape = F, digits = 3, format = "pandoc") %>% 
@@ -193,27 +228,31 @@ lapply(fits, function(fit)
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "DEM", 
-                                 `2` = "TWI", `3` = "Slope")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "BA", `3` = "BAgenus",
+                                    `4` = "BAspecies")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  filter(parameter != "alpha") %>% 
   dplyr::select(-outer_width, -inner_width, -point_est) %>% 
   dplyr::select(complex, parameter, descriptor, ll, l, m, h, hh) %>% 
-  ggplot(aes(x = parameter, xend = parameter, col = descriptor, fill = descriptor)) +
+  ggplot(aes(x = complex, xend = complex, col = descriptor, fill = descriptor)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_wrap(~ complex, scales = "free", nrow = 2) +
-  xlab("") +
+  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none") +
   scale_y_continuous(trans="S_sqrt")
 ```
 
 ```{r prediction, fig.cap="Predictions."}
 lapply(fits, function(fit)
-  cbind(dplyr::select(filter(data, Plot ==1, SubPlot == 1), DEM, TWI, Slope),
+  cbind(dplyr::select(data, TWI, BA, BAgenus, BAspecies),
         theta = apply(as.matrix(fit, pars = "theta"), 2, mean),
         theta5 = apply(as.matrix(fit, pars = "theta"), 2, quantile, probs = 0.05),
         theta95 = apply(as.matrix(fit, pars = "theta"), 2, quantile, probs = 0.95))) %>% 
@@ -228,49 +267,18 @@ lapply(fits, function(fit)
 
 ```{r niche, fig.cap="Niche (HabitatSuitability)."}
 lapply(complexes, function(complex)
-  cbind(filter(data, Plot ==1, SubPlot == 1),
+  cbind(data,
         complex = complex,
         Presence = as.numeric(filter(data, Plot ==1, SubPlot == 1)$Complex == complex),
         theta = apply(as.matrix(fits[[complex]], pars = "theta"), 2, mean))) %>%
   bind_rows() %>% 
-  dplyr::select(complex, DBH, theta, TWI, DEM, Slope) %>% 
+  dplyr::select(complex, DBH, theta, TWI, BA, BAgenus, BAspecies) %>% 
   reshape2::melt(id.vars = c("complex", "DBH", "theta", "TWI")) %>% 
   ggplot(aes(TWI, value, col = theta, size = DBH)) +
   geom_point() +
   facet_grid(variable ~ complex, scales = "free") +
   scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
                         high = scales::muted("red"), midpoint = 0.5)
-```
-
-```{r niche2, fig.cap="Niche (HabitatSuitability)."}
-lapply(fits, function(fit){
-  pars_val <- apply(as.matrix(fit, pars = c("alpha", "beta[1]", "beta[2]", "beta[3]",
-                                            "gamma[1]", "gamma[2]", "gamma[3]")), 2, mean)
-  n <- 100
-  HS <- matrix(nrow = n, ncol = n)
-  DEM <- seq(-1, 1, length.out = n)
-  TWI <- seq(-1, 1, length.out = n)
-  for(i in 1:n)
-    for(j in 1:n)
-      HS[i, j] <- psych::logistic(pars_val["alpha"] + 
-                                    pars_val["beta[1]"]*DEM[i] +
-                                    pars_val["gamma[1]"]*DEM[i]^2 +
-                                    pars_val["beta[2]"]*TWI[j] +
-                                    pars_val["gamma[2]"]*TWI[j]^2 +
-                                    pars_val["beta[3]"]*0.5 +
-                                    pars_val["gamma[3]"]*0.5^2)
-  reshape2::melt(HS, value.name = "HS") %>% 
-    mutate(Var1 = DEM[Var1],
-           Var2 = TWI[Var2]) %>%
-    rename(DEM = Var1, TWI = Var2)
-}) %>% 
-  bind_rows(.id = "complex") %>% 
-  ggplot(aes(x = DEM, y = TWI, z = HS, fill = HS)) +
-  geom_raster() +
-  scale_fill_distiller("Habitat\nsuitability (%)", palette = "Spectral") +
-  facet_wrap(~ complex) +
-  coord_fixed() + 
-  theme(legend.position="bottom")
 ```
 
 # Discussion

@@ -1,5 +1,5 @@
 ---
-title: "A06: Species distributions"
+title: "A06: Species distributions with DBH"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
@@ -35,7 +35,7 @@ library(rstan)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
-  echo = F, message = F, warning = F, fig.height = 10, fig.width = 10,
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
@@ -130,15 +130,18 @@ data <- trees %>%
 ```{r mdata}
 complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
 mdata <- lapply(complexes, function(complex) {
-  data<- filter(data, Complex == complex)
+  data <- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
-       K = 4,
+       K = 8,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, 
-                         TWI,
+       X = dplyr::select(data,
+                         DBH, TWI,
                          BA, BAgenus, BAspecies) %>%
+         mutate(DBHTWI = DBH*TWI, DBHBA = DBH*BA, 
+                DBHBAgens = DBH*BAgenus, DBHBAspecies = DBH*BAspecies) %>%
+         dplyr::select(-DBH) %>% 
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
@@ -148,8 +151,8 @@ names(mdata) <- complexes
 ```{r fit}
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/SpeciesAll.Rdata")
-load("./distribution_save/SpeciesAll.Rdata")
+# save(fits, file = "./distribution_save/SpeciesReduced.Rdata")
+load("./distribution_save/SpeciesReduced.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
@@ -167,6 +170,8 @@ Paracou
 
 Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes.html), in the meantime we focused on the two PhD models, i.e. *Symphonia globulifera*  and *Eschweilera Parvifolia clade*. *Symphonia globulifera* includes two morphotypes, *S. globulifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species.
 
+For test purposes, we only used individual trees belonging to the species complex censused in 2015 in the plot 16 for *Symphonia* and in the plot 1 and subplot 1 for *Eschweilera*. But later we will include more plots and subplots, and maybe more census years.
+
 ## Environmental variables
 
 To be defined in document [A03-Descriptors](A03-Descriptors.html),
@@ -175,6 +180,10 @@ To be defined in document [A03-Descriptors](A03-Descriptors.html),
 * BA
 * BAgenus
 * BAspecies
+* DBHBA
+* DBHTWI
+* DBHBAgenus
+* DBHBAspecies
 
 ## Analysis
 
@@ -211,7 +220,10 @@ lapply(fits, function(fit)
   dplyr::select(complex, term, species, descriptor, estimate) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
                                     `2` = "BA", `3` = "BAgenus",
-                                    `4` = "BAspecies")) %>% 
+                                    `4` = "BAspecies",
+                                    `5` = "DBHTWI", 
+                                    `6` = "DBHBA", `7` = "DBHBAgenus",
+                                    `8` = "DBHBAspecies")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$")) %>% 
@@ -241,9 +253,47 @@ lapply(fits, function(fit)
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = substr(descriptor, 1, 1)) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  filter(descriptor %in% 1:4) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
                                     `2` = "BA", `3` = "BAgenus",
                                     `4` = "BAspecies")) %>% 
+  mutate(species = as.numeric(species)) %>% 
+  mutate(species = ifelse(complex == "Symphonia",
+                          levels(as.factor(filter(data, 
+                                                  Complex == "Symphonia")$Species))[species],
+                          levels(as.factor(filter(data, 
+                                                  Complex == "Eschweilera clade Parvifolia"
+                          )$Species))[species])) %>% 
+  mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
+  dplyr::select(complex, parameter, descriptor, species, ll, l, m, h, hh) %>% 
+  filter(parameter != "alpha") %>% 
+  ggplot(aes(x = species, xend = species, col = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r posteriorDBH, fig.cap="Model parameters posterior."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = substr(descriptor, 1, 1)) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  filter(descriptor %in% 5:8) %>% 
+  mutate(descriptor = recode_factor(descriptor, `5` = "DBHTWI", 
+                                    `6` = "DBHBA", `7` = "DBHBAgenus",
+                                    `8` = "DBHBAspecies")) %>% 
   mutate(species = as.numeric(species)) %>% 
   mutate(species = ifelse(complex == "Symphonia",
                           levels(as.factor(filter(data, 
@@ -301,6 +351,44 @@ lapply(complexes, function(complex)
   ylab("Habitat suitability")
 ```
 
+```{r predictionDBH, fig.cap="Predictions."}
+mdata <- list(data %>% 
+                filter(Complex == "Symphonia") %>% 
+                mutate(DBHTWI = DBH*TWI, DBHBA = DBH*BA, 
+                DBHBAgenus = DBH*BAgenus, DBHBAspecies = DBH*BAspecies),
+              data %>% 
+                filter(Complex == "Eschweilera clade Parvifolia") %>% 
+                mutate(DBHTWI = DBH*TWI, DBHBA = DBH*BA, 
+                DBHBAgenus = DBH*BAgenus, DBHBAspecies = DBH*BAspecies))
+names(mdata) <- complexes
+lapply(complexes, function(complex)
+  lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
+    cbind(dplyr::select(mdata[[complex]], DBHTWI, DBHBA, DBHBAgenus, DBHBAspecies),
+          complex = complex,
+          species = levels(as.factor(mdata[[complex]]$Species))[sp],
+          theta = apply(as.matrix(fits[[complex]], 
+                                  pars = paste0("theta[", 1:nrow(mdata[[complex]]), 
+                                                ",", sp, "]")), 
+                        2, mean),
+          theta5 = apply(as.matrix(fits[[complex]], 
+                                   pars = paste0("theta[", 1:nrow(mdata[[complex]]),
+                                                 ",", sp, "]")), 
+                         2, quantile, probs = 0.05),
+          theta95 = apply(as.matrix(fits[[complex]],
+                                    pars = paste0("theta[", 1:nrow(mdata[[complex]]), 
+                                                  ",", sp, "]")), 
+                          2, quantile, probs = 0.95))) %>% 
+    bind_rows()) %>% 
+  bind_rows() %>% 
+  mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
+  reshape2::melt(id.vars = c("complex", "species", "theta", "theta5", "theta95")) %>% 
+  ggplot(aes(x = value)) + 
+  geom_ribbon(aes(ymin = theta5, ymax = theta95), alpha = 0.2) +
+  geom_line(aes(y = theta)) +
+  facet_grid(species ~ variable, scales = "free") +
+  ylab("Habitat suitability")
+```
+
 ```{r niche, fig.cap="Niche (HabitatSuitability)."}
 lapply(complexes, function(complex)
   lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
@@ -318,6 +406,30 @@ lapply(complexes, function(complex)
   dplyr::select(Species, DBH, theta, TWI, BA, BAgenus, BAspecies) %>% 
   reshape2::melt(id.vars = c("Species", "DBH", "theta", "TWI")) %>% 
   ggplot(aes(TWI, value, col = theta, size = DBH)) +
+  geom_point() +
+  facet_grid(variable~Species, scales = "free") +
+  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
+                        high = scales::muted("red"), midpoint = 1/7) +
+  theme(legend.position="bottom")
+```
+
+```{r nicheDBH, fig.cap="Niche (HabitatSuitability)."}
+lapply(complexes, function(complex)
+  lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
+    cbind(mdata[[complex]],
+          complex = complex,
+          species = levels(as.factor(mdata[[complex]]$Species))[sp],
+          theta = apply(as.matrix(fits[[complex]], 
+                                  pars = paste0("theta[", 1:nrow(mdata[[complex]]), 
+                                                ",", sp, "]")), 
+                        2, mean))) %>% 
+    bind_rows()) %>% 
+  bind_rows() %>% 
+  filter(species == Species) %>% 
+  mutate(Species = paste0(substr(complex, 1, 1), ". ", Species)) %>% 
+  dplyr::select(Species, DBH, theta, DBHTWI, DBHBA, DBHBAgenus, DBHBAspecies) %>% 
+  reshape2::melt(id.vars = c("Species", "DBH", "theta", "DBHTWI")) %>% 
+  ggplot(aes(DBHTWI, value, col = theta, size = DBH)) +
   geom_point() +
   facet_grid(variable~Species, scales = "free") +
   scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
