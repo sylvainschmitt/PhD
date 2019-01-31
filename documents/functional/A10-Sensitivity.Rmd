@@ -782,4 +782,18 @@ Ypreds %>%
   xlab("") + ylab(expression(Delta(Prediction)))
 ```
 
+```{r Deltapred2, fig.cap="$\\Delta \\hat T = \\sqrt{(\\hat T_{full} - \\hat T_{parameter})^2}$ distribution by trait."}
+Ypreds %>% 
+  reshape2::melt(id.vars = c("trait", "individual", "Genus", "full"), 
+                 variable.name = "sensitivity", value.name = "Ypred") %>% 
+  mutate(DeltaPred = sqrt((full - Ypred)^2)) %>% 
+  ggplot(aes(sensitivity, DeltaPred, fill = sensitivity)) +
+  geom_boxplot() +
+  facet_grid(trait ~ Genus, scales = "free") +
+  coord_flip() +
+  scale_y_sqrt() +
+  scale_fill_discrete(guide = "none") +
+  xlab("") + ylab(expression(Delta(Prediction)))
+```
+
 # References

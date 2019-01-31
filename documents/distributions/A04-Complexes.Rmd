@@ -1,13 +1,10 @@
 ---
-title: "A04: Complexes definition & distribution"
+title: "A04: Complexes definition"
 date: '`r Sys.Date()`'
 output:
   bookdown::html_document2:
     number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
+  bookdown::word_document2: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -24,6 +21,9 @@ link-citations: yes
 ```{r setup, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(parallel)
 library(tidyverse)
 library(ggfortify)
@@ -33,161 +33,58 @@ library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
-  cache = T, cache.lazy = F)
+  cache = F, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
+Species complex were defined based on evidence for low phylogenetic resolution or plastid DNA sharing in the clade [@baraloto_using_2012-1; @Gonzalez2009]: *Eschweilera* (Lecythidaceae); *Licania* (Chrysobalanaceae); *Iryanthera* (Myristicaceae); *Symphonia* (Clusiaceae); *Talisia* (Sapindaceae). We will further keep species with more than 10 individuals. We thus obtained 6 species complexes (Table \@ref(tab:summary)) including 2 to 5 species.
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "E. Chartacea",
+             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
+             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
+                         "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
+                         "alba", "majuscula")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1"))
+)
+```
+
 ```{r trees}
-trees <- src_sqlite(file.path(path, "trees/Paracou.sqlite")) %>% 
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
   filter(Species != "Indet.") %>% 
-  collect() %>% 
-  mutate(DBH = CircCorr*pi)
-```
-
-```{r env}
-# env <- trees %>%
-#   dplyr::select(idTree, Xutm, Yutm) %>%
-#   unique()
-# coordinates(env) <- ~Xutm + Yutm
-# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
-# env <- spTransform(env, CRSobj = crs)
-# topo <- stack(
-#   raster(file.path(path, "topography", "DEM_1m_2015.tif")),
-#   raster(file.path(path, "topography", "RelativeElevation_1m.tif")),
-#   raster(file.path(path, "topography", "slope_1m.tif")),
-#   raster(file.path(path, "topography", "curvature_1m.tif")),
-#   raster(file.path(path, "topography", "TRI_1m.tif")),
-#   raster(file.path(path, "topography", "TWI_1m.tif"))
-# )
-# names(topo) <- c("DEM", "RelativeElevation", "Slope", "Curvature", "TRI", "TWI")
-# topo <- projectRaster(topo, crs = crs)
-# env <- data.frame(cbind(env@data, raster::extract(topo, env)))
-# rm(topo)
-# save(env, file = "./distribution_save/env.Rdata")
-load("./distribution_save/env.Rdata")
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
 ```
 
 ```{r data}
 data <- trees %>% 
-  left_join(env)
+  left_join(complexes, by = c("Genus", "Species")) %>% 
+  filter(!is.na(Complex))
 ```
 
-# Introduction
-
-The aim of this document is (i) to define first species complexes that will be studied and (ii) to study if we have simlar patterns of distribution at micro-environmental scale of for the tropical tree species complexes defined (figure \@ref(fig:phylotree) and table \@ref(tab:complexes)).
-
-> Quelques commentaires sur les complexes choisis et leur composition:
-- Chartacea: Lecythis zabucajo n'appartient pas au clade Chartacea. Par contre, il y a du Lecythis chartacea à Paracou, cela rentre dans le clade. (L. holcogyne aussi, mais il y a moins de 10 ind)
-- Pourouma: ce n'est pas sûr que c'est un bon complexe, car P. villosa semble plus apparenté à Cecropia obtusa qu'aux autres Pourouma (phylogénie de Baraloto et al. JEco, 2012, 
-https://besjournals.onlinelibrary.wiley.com/action/downloadSupplement?doi=10.1111%2Fj.1365-2745.2012.01966.x&file=JEC_1966_sm_AppendixS1-S3.pdf).
-
->Il faudrait donc approfondir au niveau de la phylogénie.
-
->Concernant la liste des complexes d'espèces, on avait regardé cela il y a un moment avec Niklas, dans le cadre d'une proposition de projet ANR. Un petit extrait de la méthodo:
-Methodology  Candidate tropical tree clades are identified based on 1) displaying habitat overdispersion and harbouring at least two abundant species (> 1 ind./ha) with alternative habitat preference and enhanced performance in the preferred habitat in Paracou1, 2) evidence for low phylogenetic resolution or plastid DNA sharing in the clade20,26,28: Chrysophyllum, Pouteria, Micropholis (Sapotaceae); Eschweilera (Lecythidaceae); Licania (Chrysobalanaceae); Iryanthera (Myristicaceae); Symphonia (Clusiaceae); Talisia (Sapindaceae).
-
-> Donc, sur base de ces critères la liste des complexes candidats pourrait s'allonger un peu, même si dans ton cas, Sylvain, il ne faut pas choisir des complexes a priori surdispsersés. 
-
-# Previously
-
-```{r phylotree, fig.cap="Phylogenic tree of Paracou species with putative species complexes highlighted by Niklas."}
-include_graphics("./data/phylo_circulaire.png")
+```{r summary}
+data %>% 
+  group_by(Complex, Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  arrange(Complex, desc(N)) %>% 
+  mutate(N = cell_spec(N, bold = ifelse(N > 10, T, F))) %>% 
+  kable(caption = "Identified complexes.", format = "pandoc") %>% 
+  kable_styling(full_width = F)
 ```
-
-```{r complexes}
-complexes <- bind_rows(
-  data.frame(Complex = "Aspidosperma", Genus = "Aspidosperma",
-             Species = c("carapanauba", "shultesii", "excelsum", "oblongum", 
-                         "desmanthum", "album", "spruceanum", "sandwithianum", "helstonei", "sp.1CAY-ATDN")),
-  data.frame(Complex = "Dyospiros", Genus = "Dyospiros",
-             Species = c("capreifolia", "carbonaria", "martinii", "guianensis", "vestitia")),
-  data.frame(Complex = "Chartacea",
-             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis", "Lecythis"),
-             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea", "zabucajo")),
-  data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
-             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
-                         "micrantha", "grandiflora", "chartaceifolia")),
-  data.frame(Complex = "Lecythis", Genus = "Lecythis",
-             Species = c("idatimon", "persistens", "persistenssubspaurantiaca", "corrugata")),
-  data.frame(Complex = "Couratari", Genus = "Couratari",
-             Species = c("calcynia", "oblongifolia", "guianensis")),
-  data.frame(Complex = "Pourouma", Genus = "Pourouma",
-             Species = c("guianensis", "saülensis", "sp.2CAY-ATDN", "minor", "melionii", "bicolor",
-                         "villosa", "sp.5CAY-ATDN")),
-  data.frame(Complex = "Cecropia", Genus = c("Pourouma", "Cecropia", "Cecropia"),
-             Species = c("mollis", "obtusa", "sciadophylla")),
-  data.frame(Complex = "Licania1", Genus = "Licania",
-             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
-                         "alba", "majuscula")),
-  data.frame(Complex = "Licania2", Genus = "Licania",
-             Species = c("octandra", "sprucei", "bicornis", "minutiflora")),
-  data.frame(Complex = "Couepia", Genus = c(rep("Couepia", 7), rep("Licania", 2)),
-             Species = c("obovata", "abrantha", "magnolifolia", "joaquinea", "caryophilloides",
-                         "guianensis", "bracteosa", "heteromorpha", "latistipula")),
-    data.frame(Complex = "Symphonia", Genus = "Symphonia",
-             Species = c("globulifera", "sp.1"))
-)
-complexes %>% 
-  group_by(Complex) %>% 
-  summarise(Species = n()) %>% 
-  kable(caption = "Complexes identified by Niklas.")
-```
-
-```{r dataComplexes}
-data <- complexes %>% 
-  left_join(data) %>% 
-  filter(!is.na(Forest)) %>% 
-  group_by(Species) %>% 
-  filter(n() > 10) %>% 
-  ungroup() %>% 
-  filter(!(Complex %in% c("Licania2", "Couratari")))
-```
-
-
-# Graphical exploration
-
-We filtered out species with less than 10 individuals and we kept complexes with at least two species resulting in 9 complexes instead of 12 (without *Dyopsiros*, *Licania 2* and *Couratari*). Base on abiotic variable PCA (see figure \@ref(fig:pcaABiot)), We selected less correlated variable: DEM, TWI, and slope. We compared graphically species distribution inside each complexes on both environmental PCAs and TWI density plots.
-
-## PCA
-
-```{r PCA, fig.cap="Abiotic variable PCA", message=FALSE, warning=FALSE}
-lapply(unique(data$Complex), function(c){
-  autoplot(princomp(~ DEM + RelativeElevation + Slope + Curvature + TRI + TWI, 
-                    data = filter(data, Complex == c), cor = T), 
-           data = filter(data, Complex == c),
-           colour = "Species", alpha = 0.3, size = "DBH",
-           loadings.label.size = 6,
-           loadings.label.colour = 'black', loadings.label.vjust = 1.1,
-           loadings = T, loadings.label = T, loadings.colour = 'black') +
-    coord_equal() +
-    geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
-    geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
-    theme(legend.position = c(1, 1), 
-          legend.justification = c(1, 1)) +
-    scale_color_discrete(guide= "none") +
-    ggtitle(paste("Complex", c)) +
-    scale_color_brewer(palette = "Accent")})
-```
-
-## TWI
-
-```{r TWI, fig.cap="Species distributions with TWI", message=FALSE, warning=FALSE}
-lapply(unique(data$Complex), function(c){
-  filter(data, Complex == c) %>% 
-    ggplot(aes(TWI, col = Species, fill = Species)) +
-    geom_density(alpha = 0.3) +
-    ggtitle(paste("Complex", c))})
-```
-
-# Conclusion
-
-Several complexes (4 on 9) seems to show a more or less marked species organisation inside PCA plan 1-2 and along TWI axis (*Escwheilera clade chartacea*, *Lecythis*, *Pourouma* and *Symphonia*). Remaining complexes seems either slightly organised on the PCA and/or the TWI axis (4 on 9: *Aspidosperma*, *Cecropia*, *Licania 1*, and *Eschweilera clade Parvifolia*) or not organised at all (1 on 9: *Couepia*). 
-
-__In conclusion, the question is either to test species distribution differentiation within complexe or all complexes or only for our selected model (*Symphonia* and *Eschweilera clade Parvifolia*) ?__
 
 # References

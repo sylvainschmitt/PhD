@@ -151,17 +151,23 @@ Subsequent analysis aimed to select descriptors of species complex distribution.
 
 Species distribution, and therefore species complex distribution, will be shaped both by abiotic environment and biotic interactions. We will not explore tree interactions with their environment trough herbivory and pathogens, besides their huge impact on tree life history [but see @VanderPutten2001].
 
-We selected functional traits descriptors by studying descriptors co-variation and keeping only little correlated variables with the best ecological meaning to represent abiotic environment and biotic interactions.
+We selected descriptors of species distribution by studying descriptors co-variation and keeping only little correlated variables with the best ecological meaning to represent abiotic environment and biotic interactions.
 
 # Material & Methods
 
+Descriptors co-variation has been investigated tow-by-two by correlations and together by principal component analysis. Co-variations have been investigated together and separately for biotic and abiotic descriptors.
+
+**Details about descriptors.**
+
 # Results
+
+Globally, topographic variables derived from the digital elevation model showed high level of co-variation (correlation between 0.57 and 0.9) at the exception of curvature. Regarding biotic descriptors digital canopy model and basal area showed a non negligible correlation of 0.34 and basal area for genus and species were correlated to 0.74.
 
 ```{r correlations}
 data %>% 
   dplyr::select(DBH, 
                 DEM, RelativeElevation, Slope, Curvature, TRI, TWI,
-                MNC, BA, BAgenus) %>% 
+                MNC, BA, BAgenus, BAspecies) %>% 
   na.omit() %>% 
   cor(.) %>% 
   corrplot::corrplot.mixed()
@@ -170,14 +176,14 @@ data %>%
 ```{r pca12}
 fviz_pca_var(princomp(~ DBH + DEM + RelativeElevation +
                         Slope + Curvature + TRI + TWI +
-                        MNC + BA + BAgenus, data, cor = T),
+                        MNC + BA + BAgenus + BAspecies, data, cor = T),
              axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
 ```{r pca13}
 fviz_pca_var(princomp(~ DBH + DEM + RelativeElevation +
                         Slope + Curvature + TRI + TWI +
-                        MNC + BA + BAgenus, data, cor = T),
+                        MNC + BA + BAgenus + BAspecies, data, cor = T),
              axes = c(1, 3), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
@@ -185,7 +191,7 @@ fviz_pca_var(princomp(~ DBH + DEM + RelativeElevation +
 
 
 ```{r pcaBiotic}
-fviz_pca_var(princomp(~ MNC + BA + BAgenus, data, cor = T),
+fviz_pca_var(princomp(~ MNC + BA + BAgenus + BAspecies, data, cor = T),
              axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
@@ -198,5 +204,7 @@ fviz_pca_var(princomp(~ DEM + RelativeElevation +
 ```
 
 # Conclusion
+
+We thus selected three little correlated variables ($r < 0.13$) to represent species biotic and abiotic environment: (i) topographic wetness index (TWI) representing  water accumulation areas, crucial to tropical ecosystems [@ferry2010higher], (ii) basal area (BA) representing competition and (iii) congeneric basal area (BAgenus) representing biotic interactions between individuals from the same genus.
 
 # References

@@ -33,7 +33,7 @@ library(rstan)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
-  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
@@ -120,7 +120,7 @@ pars <- c("alpha", "betaDBH", "betaTWI", "betaComp", "alphaNCI",
 
 # Introduction {-}
 
-Subsequent analysis aimed to explore determinant of individual leaf functional traits from Symphonia globulifera and Eschweilera clade Parvifolia species complexes. More especially, we investigated how individual ontogeny, abiotic environment, and biotic interactions shaped its leaf phenotype at several taxonomic scale, from individual to complex including species. Determinant of the functional traits have been studied with the interaction model developed in document [A03-Models](A03-Models.html) and are further detailed.
+Subsequent analysis aimed to explore determinant of individual leaf functional traits from *Symphonia globulifera* and *Eschweilera* clade *Parvifolia* species complexes. More especially, we investigated how individual ontogeny, abiotic environment, and biotic interactions shaped its leaf phenotype at several taxonomic scale, from individual to complex including species. Determinant of the functional traits have been studied with the interaction model developed in document [A03-Models](A03-Models.html) and are further detailed.
 
 **Real introduction to be developped (maybe only in the first draft and not directly in this analysis).**
 
@@ -140,7 +140,20 @@ Two sampling campaigns were led in 2017 and 2018 during dry season (between Sept
 
 **We need to add that they are species complex.**
 
-Between 232 and 1 individual have been sampled per species, depending on their natural abundance within the Paracou station, for a total of 823 individuals (Table \@ref(tab:headcount)). *Symphonia globulifera* were collected over all plots of the study site to reach targeted number, whereas *Eschweilera* clade *Parvifolia* were sampled only within non-disturbed plots **introduce it does not matter as competition is taken into account**. For each individual, 5 mature and healthy leaves at the top of the crown were collected, and kept in humidified ziplock with enriched CO2 air in dark until measurement within the next 6 hours following standard protocol [@Perez-Harguindeguy2013]. In addition, light conditions with Dawkins index [@Dawkins1958] and tree, bark and leaf morphology were assessed for every individuals.
+Between 232 and 1 individual have been sampled per species, depending on their natural abundance within the Paracou station, for a total of 823 individuals (Table \@ref(tab:headcount)). *Symphonia globulifera* were collected over all plots of the study site to reach targeted number, whereas *Eschweilera* clade *Parvifolia* were sampled only within non-disturbed plots. Anyway disturbance will be accounted through competition measurement and did not show significant effect for most of *Symphonia* functional traits (Student's T test p-value > 0.1 for SLA, LT and LA, and p-value > 0.02 for LDMC and CC). For each individual, 5 mature and healthy leaves at the top of the crown were collected, and kept in humidified ziplock with enriched CO2 air in dark until measurement within the next 6 hours following standard protocol [@Perez-Harguindeguy2013]. In addition, light conditions with Dawkins index [@Dawkins1958] and tree, bark and leaf morphology were assessed for every individuals.
+
+```{r disturbance, eval=F}
+Individuals %>% 
+  filter(Genus == "Symphonia") %>% 
+  mutate(disturbed = ifelse(Plot %in% c(2:5, 7:10, 12), 1, 0)) %>% 
+  select(SLA, LDMC, LT, LA, CC, disturbed) %>% 
+  reshape2::melt(id.vars = "disturbed",
+                 variable.name = "trait") %>% 
+  group_by(trait) %>% 
+  do(student = t.test(value ~ disturbed, data = .)) %>% 
+  broom::tidy(student) %>% 
+  select(trait, p.value)
+```
 
 ```{r headcount}
 Individuals %>% 
@@ -156,6 +169,8 @@ Individuals %>%
 ## Trait measurements
 
 We calculated 5 functional traits from leaf samples already highlighted in previous studies as phenotypic descriptor of major ecological strategies [@diaz_plant_1998; @wright_worldwide_2004] (Table \@ref(tab:Trait)): specific leaf area (leaf area divided by the fresh weight, $SLA$, $cm^2.g^{-1}$), leaf dry matter content (leaf dry weight divided by the fresh weight, $LDMC$, $g.g^{-1}$), leaf thickness ($LT$, $\mu m$), leaf area ($LA$, $cm^2$), leaf chlorophyll content ($CC$, $g.cm^{-2}$). Leaf petiole was removed for all measurements. Leaf fresh weight was measured with an analytic balance [brand], leaf fresh thickness with a micrometer [brand], leaf area through the ImageJ software [@Schneider2012] using scanned images of fresh leaves, and leaf chlorophyll content with a SPAD measurement [brand] converted with an allometric model [@Coste2010]. Leaf thickness and chlorophyll content measurement was repeated 3 times per leaf to reduce errors due to intra-leaf variation. Leaves were then kept in herbarium and oven-dried for at least 48 hours at 80°C before measurement of dry weight. 
+
+**Need to introduce $\frac{1}{SLA}$ and $\frac{1}{LA}$, and maybe use $LMA$$.**
 
 ```{r Trait}
 Individuals %>% 
@@ -181,7 +196,7 @@ Three little correlated (Pearson's r < 0.14, see analysis [A02-Environment](A02-
 
 A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
 $$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\alpha.\delta_{i,j}}$$
-with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature [ref] **You can also say here that you did a preliminary analysis with only the effect of the NCI on the traits and it showed very little effect beyond 20m.**. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance (note that  set to 0 represent local basal area). 
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature and because NCI effect showed very little effect beyond 20m in preliminary analysis. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance (note that  set to 0 represent local basal area). 
 
 Finally, topographic wetness index ($TWI$) was selected between various abiotic descriptors available (see analysis [A02-Environment](A02-Environment.html)) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher]. Descriptors used were derived from field censuses ($DBH$ and $NCI$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
 
@@ -192,7 +207,7 @@ We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environ
 
 Individual leaf trait $Trait_{c,s,i}$ for species complex $c \in [1;C]$ and species $s \in [1;S_c]$ is first explained by its ontogeny confounded with light though individual DBH $DBH_i$ with a Michaelis Menten form (more likely than a linear form, see analysis [A05-Ontogeny](A05-Ontogeny.html)):
 $$T_{c,s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i}, \sigma)$$
-$\alpha_{env}$ is the trait maximum value in the Michaelis Menten and $\beta_{DBH}$ is the value of DBH for which the trait account for half of its mature value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolves slower towards its plateau, consequently, ontogeny affects more traits values. We will further use $DBH_{90}$ equal to $9.\beta_{DBH}$ being the DBH value for which the trait account for 90% of its maximum value that we can assume as the DBH of trait maturity **There'll be some rephraing to do here as you cannot talk about trait maturity (even if I understand waht you mean).**.
+$\alpha_{env}$ is the trait maximum value in the Michaelis Menten and $\beta_{DBH}$ is the value of DBH for which the trait account for half of its plateau value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolves slower towards its plateau, consequently, ontogeny affects more traits values. We will further use $DBH_{90}$ equal to $9.\beta_{DBH}$ being the DBH value for which the trait account for 90% of its maximum value that we can assume as the DBH for which the individual trait value is close to the maximum ontogenetic value.
 
 Finally $\alpha_{env}$ was represented by an additive linear form of environmental effects represented by $TWI$ for abiotic environment and by $NCI$ for biotic interactions:
 $$alpha_{env} = \alpha_{c,s} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.NCI_i$$
@@ -204,17 +219,17 @@ Traits, DBH and TWI were all reduced for the model inference, in order to ease m
 
 # Results
 
-The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]). Goodness of fit showed globally strong differences between traits (Table \@ref(tab:summary), and supplementary material [S4: Predictions]). SLA, LT displayed a low likelihood in association with a strong residual variation ($\sigma^2 = 0.763$), when CC had an even lower likelihood and increased residual variation ($\sigma^2 = 0.948$). On the other hand, LDMC and LA displayed relatively high likelihood and low residual variation ($\sigma^2 < 0.6$).
+The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]). Goodness of fit showed globally strong differences between traits (Table \@ref(tab:summary), and supplementary material [S4: Predictions]). SLA, LT displayed a strong residual variation ($\sigma^2 = 0.763$), when CC had an even increased residual variation ($\sigma^2 = 0.948$). On the other hand, LDMC and LA displayed relatively low residual variation ($\sigma^2 < 0.6$).
 
-$\alpha$ parameter represents the intercept and $\sigma_{Intercept}$ the variation of species intercepts within complex. They varied from very high and stable value of $6.872 \pm 0.418$ for $CC_{Symphonia}$ to really low and variable value $0.415 \pm 1.294$ for $\frac{1}{LA}_{Eschweilera}$. They globally highlighted smaller, lighter and thicker, leaves with decreased SLA but increased chlorophyll for *Symphonia* compared to *Eschweilera*. More interestingly, LDMC and CC varied much less from one species to the other within complex compared to SLA, LT and LA.
+$\alpha$ parameter represents the intercept and $\sigma_{Intercept}$ the variation of species intercepts within complex. They globally highlighted smaller, lighter and thicker, leaves with decreased SLA but increased chlorophyll for *Symphonia* compared to *Eschweilera*. More interestingly, LDMC and CC varied much less from one species to the other within complex compared to SLA, LT and LA.
 
-$DBH_{90}$, the DBH for which the trait reach 90% of its mature value, varied from 5.22 to 117.62 cm with increasing uncertainty with increased value; whereas it showed a variation from 0.90 to 11 cm between species within complex (Figure \@ref(fig:ontogeny)). Globally, we can consider the effect of ontogeny stable within complex (low $\sigma_{DBH}$), except for $\frac{1}{LA}$ were it stays relatively low. In addition, considering that tree are censused starting from 10 cm DBH, we can consider $DBH_{90}$ under or close to 10 to be negligible. Consequently, we can consider CC and LDMC as not affected by ontogeny for both complex; whereas LT and SLA are moderately affected by ontogeny (maturity between 15 and 20 cm for *Escweilera* and around 58 cm for *Symphonia*); and LA is strongly affected by ontogeny (maturity at 51 and 117 cm for *Symphonia* and *Escweilera* respectively, close to the maximum sampled diameter for each). Note that patterns are similar between complex for each trait but with *Eschweilera* reaching maturity first except for LA, certainly due to a smaller sampled maximum DBH for *Eschweilera*.
+$DBH_{90}$, the DBH for which the trait reach 90% of its mature value, varied from 5.22 to 117.62 cm with increasing uncertainty with increased value; whereas it showed a variation from 0.90 to 11 cm between species within complex (Figure \@ref(fig:ontogeny)). Globally, we can consider the effect of ontogeny stable within complex (low $\sigma_{DBH}$), except for $\frac{1}{LA}$ were it stays relatively low. In addition, considering that tree are censused starting from 10 cm DBH, we can consider $DBH_{90}$ under or close to 10 to be negligible. Consequently, we can consider CC and LDMC as not affected by ontogeny for both complex; whereas LT and SLA are moderately affected by ontogeny ($DBH_{90}$ between 15 and 20 cm for *Escweilera* and around 58 cm for *Symphonia*); and LA is strongly affected by ontogeny ($DBH_{90}$ at 51 and 117 cm for *Symphonia* and *Escweilera* respectively, close to the maximum sampled diameter for each). Note that patterns are similar between complex for each trait but with *Eschweilera* reaching $DBH_{90}$ first except for LA, certainly due to a smaller sampled maximum DBH for *Eschweilera*.
 
-Globally environmental variables have weak values of slope ($\beta_{TWI}$ and $\beta_{Comp}$ between -0.16 and 0.29) with high uncertainty but with a high variance between species within complex ($\sigma_{TWI}$ and $\sigma_{Comp}$ between 0.1 and 1.3, see Figure \@ref(fig:environment) and supplementary material [S3: Species parameters]). In detail, *Symphonia* globally answered to water accumulation, except for LT, with bigger less dense leaves with less chlorophyll but increased SLA in wet areas; whereas competition only seemed to affect LT and LA with smaller and thicker leaves with decreasing competition. On the other hand, *Escwheilera* answered to water accumulation mainly for CC and a little for LT with thicker leaves with less chlorophyll in dryer areas; whereas competition only seemed to affect LT and LA with once again smaller and thicker leaves with decreasing competition. Note that for described parameters species variance was lower than the complex parameter absolute value, indicating that the trend have low probability to be reversed for one species within the complex **but why would you say that when you can check it with the species parameters?**. In addition, response to competition were similar between complexes when response to water were different and sometimes opposed.
+Globally environmental variables have weak values of slope ($\beta_{TWI}$ and $\beta_{Comp}$ between -0.16 and 0.29) with high uncertainty but with a high variance between species within complex ($\sigma_{TWI}$ and $\sigma_{Comp}$ between 0.1 and 1.3, see Figure \@ref(fig:environment) and supplementary material [S3: Species parameters]). In detail, *Symphonia* globally answered to water accumulation, except for LT, with bigger less dense leaves with less chlorophyll but increased SLA in wet areas; whereas competition only seemed to affect LT and LA with smaller and thicker leaves with decreasing competition. On the other hand, *Escwheilera* answered to water accumulation mainly for CC and a little for LT with thicker leaves with less chlorophyll in dryer areas; whereas competition only seemed to affect LT and LA with once again smaller and thicker leaves with decreasing competition. Note that for described parameters species variance was lower than the complex parameter absolute value, indicating that the trend have low probability to be reversed for one species within the complex. In addition, response to competition were similar between complexes when response to water were different and sometimes opposed.
 
 ```{r summary}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "trait") %>% 
   mutate(complex = gsub("([[:alpha:]])", "", term)) %>% 
   select(trait, term, complex, estimate, std.error, rhat) %>% 
@@ -234,8 +249,7 @@ lapply(fits, function(fit)
                               sigmaDBH = "$\\sigma^2_{DBH}$", 
                               sigmaTWI = "$\\sigma^2_{TWI}$",
                               sigmaComp = "$\\sigma^2_{Comp}$",
-                              sigma = "$\\sigma^2$",
-                              lp = "log-likelihood")) %>% 
+                              sigma = "$\\sigma^2$")) %>% 
   mutate(trait = recode_factor(trait, 
                               invSLA = "$\\frac{1}{SLA}$",
                               LDMC = "$LDMC$", 
@@ -244,7 +258,7 @@ lapply(fits, function(fit)
                               CC = "$CC$")) %>% 
   reshape2::dcast(term + complex ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Complex = complex) %>% 
-  kable(caption = "Model parameters for each complex with reduced traits and descriptors. You'll have to explain at some point the rationale for taking 1/SLA and 1/LA.",
+  kable(caption = "Model parameters for each complex with reduced traits and descriptors.",
         escape = F, digits = 3, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
@@ -277,22 +291,26 @@ lapply(fits, function(fit)
                                                          .*9, .))) %>% 
   mutate(parameter = recode_factor(parameter, betaDBH = "DBH[90]",
                                    sigmaDBH = "sigma[DBH]^2")) %>%
-  ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  ggplot(aes(x = complex, xend = complex, 
+             col = complex, fill = complex)) +
   geom_hline(yintercept = 10, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free",
-             nrow = 2) +
+  facet_grid(trait ~ parameter, labeller = label_parsed, scales = "free") +
   xaxis_title(F) + ylab("Diameter at Breast Hieght (DBH, cm)") +
-  scale_color_discrete("Species complex", 
+  scale_color_discrete("Species complex",
                        labels = c("Symphonia", "Eschweilera", "Both")) +
   scale_fill_discrete("Species complex",
                       labels = c("Symphonia", "Eschweilera", "Both")) +
   scale_y_sqrt(breaks = scales::pretty_breaks(10)) +
-  theme(legend.position="bottom")
+  theme(legend.position = "bottom",
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank())
 ```
 
 ```{r environment, fig.cap="Environment effects represented by TWI and NCI (for reduced variables and traits)."}
@@ -317,14 +335,15 @@ lapply(fits, function(fit)
   mutate(parameter = ifelse(grepl("beta", parameter), "beta", "sigma^2")) %>% 
   mutate(parameter = factor(parameter, levels = c("beta", "sigma^2"))) %>%
   mutate(variable = factor(variable, levels = c("TWI", "NCI"))) %>%
-  ggplot(aes(x = trait, xend = trait, col = complex, fill = complex)) +
+  ggplot(aes(x = complex, xend = complex, col = complex, fill = complex)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_grid(variable ~ parameter, labeller = label_parsed, scales = "free") +
+  facet_grid(variable + trait ~ parameter, labeller = label_parsed, scales = "free") +
+  # facet_grid(variable ~ parameter, labeller = label_parsed, scales = "free") +
   xaxis_title(F) +
   yaxis_title(F) +
   scale_color_discrete("Species complex",
@@ -332,12 +351,16 @@ lapply(fits, function(fit)
   scale_fill_discrete("Species complex",
                       labels = c("Symphonia", "Eschweilera", "Both")) +
   scale_y_continuous(trans="S_sqrt") +
-  theme(legend.position="bottom")
+    theme(legend.position = "bottom",
+        axis.title.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.y = element_blank())
 ```
 
 # Discussion
 
-> Discussion only include some ideas for the moment and has not been finished. First we are waiting the results for logged SLA and LA. Second the discussion need to be done with PCAs and sensitivity analysis results together to have a global overview of individual phenotype response to ontogeny and environment.
+> Discussion only include some ideas for the moment and has not been finished. The discussion need to be done with PCAs and sensitivity analysis results together to have a global overview of individual phenotype response to ontogeny and environment.
 
 *Things to be discussed:*
 

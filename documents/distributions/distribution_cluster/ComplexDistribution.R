@@ -23,9 +23,19 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 load("./distribution_save/Competition.Rdata")
 complexes <- bind_rows(
-  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+  data.frame(Complex = "E. Chartacea",
+             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
+             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
                          "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
+                         "alba", "majuscula")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
              Species = c("globulifera", "sp.1"))
 )
@@ -38,17 +48,14 @@ data <- trees %>%
 #### Model Data ####
 
 cat("#### Model Data ####\n\n")
-complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
+complexes <- unique(complexes$Complex)
 data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex)
   list(N = nrow(data),
-       K = 4,
        Y = as.numeric(data$Complex == complex),
-       X = dplyr::select(data, 
-                         TWI, 
-                         BA, BAgenus, BAspecies) %>%
-         mutate_all(funs(scale)) %>%
-         as.matrix(),
+       TWI = as.vector(scale(data$TWI)),
+       BA = as.vector(scale(data$BA)),
+       BAgenus = as.vector(scale(data$BAgenus)),
        w = ifelse(data$Complex == complex,
                   1/(2*sum(data$Complex == complex)),
                   1/(2*sum(data$Complex != complex)))))
@@ -63,13 +70,13 @@ pbPost("note", "Complexes distribution All", "Sampling start")
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("A01-SingleModel.stan")
+Model <- stan_model("./distribution_save/complexes.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
-save(fits, file = "./distribution_save/ComplexesAll.Rdata")
+save(fits, file = "./distribution_save/complexes.Rdata")
 
 #### Alert done ####
 
 cat("#### Alert done ####\n\n")
 library(RPushbullet)
-pbPost("note", "Complexes distribution All", "Sampling done")
+pbPost("note", "Complexes distribution", "Sampling done")
