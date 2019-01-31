@@ -111,9 +111,19 @@ load("./distribution_save/Competition.Rdata")
 
 ```{r complexes}
 complexes <- bind_rows(
-  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+  data.frame(Complex = "E. Chartacea",
+             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
+             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
                          "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
+                         "alba", "majuscula")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
              Species = c("globulifera", "sp.1"))
 )
@@ -124,23 +134,28 @@ data <- trees %>%
   left_join(env) %>% 
   left_join(complexes) %>% 
   left_join(Competition) %>% 
-  filter(!is.na(Plot))
+  filter(!is.na(Plot)) %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Complex, Species) %>% 
+  filter(n() > 10) %>% 
+  ungroup()
 ```
 
 ```{r mdata}
-complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
+complexes <- unique(complexes$Complex)
 mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
-       K = 4,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, 
-                         TWI,
-                         BA, BAgenus, BAspecies) %>%
-         mutate_all(funs(scale)) %>%
-         as.matrix())
+       TWI = as.vector(scale(data$TWI)),
+       BA = as.vector(scale(data$BA)),
+       BAgenus = as.vector(scale(data$BAgenus)))
+})
+mdata <- lapply(mdata, function(data) {
+  data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
+  return (data) 
 })
 names(mdata) <- complexes
 ```
@@ -148,8 +163,8 @@ names(mdata) <- complexes
 ```{r fit}
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/SpeciesAll.Rdata")
-load("./distribution_save/SpeciesAll.Rdata")
+# save(fits, file = "./distribution_save/Species.Rdata")
+load("./distribution_save/Species.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
@@ -360,28 +375,40 @@ functions {
 data {
   int<lower = 1> N  ;       // # of individuals
   int<lower = 1> S  ;       // # of species
-  int<lower = 1> K  ;       // # of environmental descriptors
   int<lower = 0, upper=1> Y[N, S]  ; // individuals presence or absence for each species
-  matrix[N,K] X ;           // environmental descriptors
+  vector[N] TWI ; // Topographical Wetness Index
+  vector[N] BA ; // Basal Area
+  vector[N] BAgenus ; // Congeneric Basla Area
+  vector<lower=0, upper=1>[N] w ; // weights for pseudo-absence to be equal to presence
 }
 parameters {
   vector[S] alpha ; // intercept
-  matrix[S,K] beta ; // sigmoidal slope
-  matrix[S,K] gamma ; // quadratic form
+  matrix[S,3] beta ; // sigmoidal slope
+  matrix[S,3] gamma ; // quadratic form
 }
 transformed parameters {
   simplex[S] theta[N] ; // habitat suitability 
   for (n in 1:N)
-      theta[n] = softmax(alpha + beta*to_vector(X[n,]) + gamma*to_vector(X[n,] .* X[n,])) ;
+      theta[n] = softmax(alpha + TWI[n] * beta[,1] + TWI[n] * TWI[n] * gamma[,1] + BA[n] * beta[,2] + BA[n] .* BA[n] * gamma[,2] + BAgenus[n] * beta[,3] + BAgenus[n] .* BAgenus[n] * gamma[,3]) ;
 }
 model {
   alpha ~ normal(0,1) ;  
-  for(k in 1:K){
+  for(k in 1:3){
     beta[,k] ~ normal(0,1) ;
     gamma[,k] ~ normal(0,1) ;
   }
   for (n in 1:N)
-    Y[n] ~ dirichlet_multinomial(theta[n])  ; // likelihood
+    target += w*dirichlet_multinomial_lpmf(Y[n] | theta[n]) ; // likelihood
+}
+generated quantities {
+  simplex[S] thetaTWI[N] ; // habitat suitability per variable
+  simplex[S] thetaBA[N] ;
+  simplex[S] thetaBAgenus[N] ;
+  for(n in 1:N) {
+    thetaTWI[n] = softmax(alpha + TWI[n] * beta[,1] + TWI[n] .* TWI[n] * gamma[,1] + mean(BA) * beta[,2] + mean(BA) .* mean(BA) * gamma[,2] + mean(BAgenus) * beta[,3] + mean(BAgenus) .* mean(BAgenus) * gamma[,3]) ;
+    thetaBA[n] = softmax(alpha + mean(TWI) * beta[,1] + mean(TWI) .* mean(TWI) * gamma[,1] + BA[n] * beta[,2] + BA[n] .* BA[n] * gamma[,2] + mean(BAgenus) * beta[,3] + mean(BAgenus) .* mean(BAgenus) * gamma[,3]) ;
+    thetaBAgenus[n] = softmax(alpha + mean(TWI) * beta[,1] + mean(TWI) .* mean(TWI) * gamma[,1] + mean(BA) * beta[,2] + mean(BA) .* mean(BA) * gamma[,2] + BAgenus[n] * beta[,3] + BAgenus[n] .* BAgenus[n] * gamma[,3]) ;
+  }
 }
 ```
 

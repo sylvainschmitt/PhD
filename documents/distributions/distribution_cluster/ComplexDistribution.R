@@ -65,12 +65,12 @@ names(mdata) <- complexes
 
 cat("#### Alert start ####\n\n")
 library(RPushbullet)
-pbPost("note", "Complexes distribution All", "Sampling start")
+pbPost("note", "Complexes distribution", "Sampling start")
 
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("./distribution_save/complexes.stan")
+Model <- stan_model("./distribution_cluster/complex.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
 save(fits, file = "./distribution_save/complexes.Rdata")

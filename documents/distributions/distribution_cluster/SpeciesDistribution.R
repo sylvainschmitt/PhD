@@ -23,9 +23,19 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 load("./distribution_save/Competition.Rdata")
 complexes <- bind_rows(
-  data.frame(Complex = "Eschweilera clade Parvifolia", Genus = "Eschweilera",
+  data.frame(Complex = "E. Chartacea",
+             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
+             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
                          "micrantha", "grandiflora", "chartaceifolia")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
+                         "alba", "majuscula")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
              Species = c("globulifera", "sp.1"))
 )
@@ -33,24 +43,29 @@ data <- trees %>%
   left_join(env) %>% 
   left_join(complexes) %>% 
   left_join(Competition) %>% 
-  filter(!is.na(Plot))
+  filter(!is.na(Plot)) %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Complex, Species) %>% 
+  filter(n() > 10) %>% 
+  ungroup()
 
 #### Model Data ####
 
 cat("#### Model Data ####\n\n")
-complexes <- c("Symphonia", "Eschweilera clade Parvifolia")
+complexes <- unique(complexes$Complex)
 mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
-       K = 4,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, 
-                         TWI,
-                         BA, BAgenus, BAspecies) %>%
-         mutate_all(funs(scale)) %>%
-         as.matrix())
+       TWI = as.vector(scale(data$TWI)),
+       BA = as.vector(scale(data$BA)),
+       BAgenus = as.vector(scale(data$BAgenus)))
+})
+mdata <- lapply(mdata, function(data) {
+  data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
+  return (data) 
 })
 names(mdata) <- complexes
 
@@ -58,18 +73,18 @@ names(mdata) <- complexes
 
 cat("#### Alert start ####\n\n")
 library(RPushbullet)
-pbPost("note", "Species distribution All", "Sampling start")
+pbPost("note", "Species distribution", "Sampling start")
 
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("A02-JointModel.stan")
+Model <- stan_model("./distribution_cluster/species.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
-save(fits, file = "./distribution_save/SpeciesAll.Rdata")
+save(fits, file = "./distribution_save/Species.Rdata")
 
 #### Alert done ####
 
 cat("#### Alert done ####\n\n")
 library(RPushbullet)
-pbPost("note", "Species distribution All", "Sampling done")
+pbPost("note", "Species distribution", "Sampling done")
