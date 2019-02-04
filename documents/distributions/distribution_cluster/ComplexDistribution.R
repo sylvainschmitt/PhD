@@ -52,31 +52,20 @@ complexes <- unique(complexes$Complex)
 data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex)
   list(N = nrow(data),
+       K = 3,
        Y = as.numeric(data$Complex == complex),
-       TWI = as.vector(scale(data$TWI)),
-       BA = as.vector(scale(data$BA)),
-       BAgenus = as.vector(scale(data$BAgenus)),
+       X = dplyr::select(data, TWI, BA, BAgenus) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix(),
        w = ifelse(data$Complex == complex,
                   1/(2*sum(data$Complex == complex)),
                   1/(2*sum(data$Complex != complex)))))
 names(mdata) <- complexes
 
-#### Alert start ####
-
-cat("#### Alert start ####\n\n")
-library(RPushbullet)
-pbPost("note", "Complexes distribution", "Sampling start")
-
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("./distribution_cluster/complex.stan")
+Model <- stan_model("A01-SingleModel.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
 save(fits, file = "./distribution_save/complexes.Rdata")
-
-#### Alert done ####
-
-cat("#### Alert done ####\n\n")
-library(RPushbullet)
-pbPost("note", "Complexes distribution", "Sampling done")

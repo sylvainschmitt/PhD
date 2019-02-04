@@ -57,34 +57,19 @@ mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
+       K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       TWI = as.vector(scale(data$TWI)),
-       BA = as.vector(scale(data$BA)),
-       BAgenus = as.vector(scale(data$BAgenus)))
-})
-mdata <- lapply(mdata, function(data) {
-  data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
-  return (data) 
+       X = dplyr::select(data, TWI, BA, BAgenus) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix())
 })
 names(mdata) <- complexes
-
-#### Alert start ####
-
-cat("#### Alert start ####\n\n")
-library(RPushbullet)
-pbPost("note", "Species distribution", "Sampling start")
 
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("./distribution_cluster/species.stan")
+Model <- stan_model("A02-JointModel.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
 save(fits, file = "./distribution_save/Species.Rdata")
-
-#### Alert done ####
-
-cat("#### Alert done ####\n\n")
-library(RPushbullet)
-pbPost("note", "Species distribution", "Sampling done")

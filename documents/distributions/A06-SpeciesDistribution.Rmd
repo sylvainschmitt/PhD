@@ -147,16 +147,17 @@ mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
+       K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       TWI = as.vector(scale(data$TWI)),
-       BA = as.vector(scale(data$BA)),
-       BAgenus = as.vector(scale(data$BAgenus)))
+       X = dplyr::select(data, TWI, BA, BAgenus) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix())
 })
-mdata <- lapply(mdata, function(data) {
-  data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
-  return (data) 
-})
+# mdata <- lapply(mdata, function(data) {
+#   data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
+#   return (data) 
+# })
 names(mdata) <- complexes
 ```
 

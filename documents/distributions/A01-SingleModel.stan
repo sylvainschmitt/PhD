@@ -20,8 +20,3 @@ model {
   gamma ~ normal(0, 10^6) ;
   target += w*bernoulli_lpmf(Y | theta) ; // likelihood
 }
-generated quantities {
-  int<lower=0, upper=1> Yp[N] ; // predictions
-  for(n in 1:N)
-    Yp[n] = bernoulli_rng(theta[n]) ;
-}
