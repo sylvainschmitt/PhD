@@ -1,0 +1,370 @@
+---
+title: "A08 : Interaction Model only with Species"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt & Anne Baranger
+output:
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r data, eval=T}
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+Individuals <- Individuals %>% 
+  group_by(Species) %>% 
+  filter(n() > 10) %>% 
+  ungroup()
+```
+
+```{r mdata}
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+mdata <- lapply(traits, function(trait){
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    left_join(select(Competition, idTree, AreaOutside20) 
+              %>% unique())
+  Competition_trait <- Competition
+  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
+  Competition_trait <- filter(Competition_trait, !is.na(idTree))
+  list(Model = trait,
+       N = nrow(data_trait),
+       J = nrow(Competition_trait),
+       S = length(unique(data_trait$Species)),
+       Trait = unlist(data_trait[trait])/sd(unlist(data_trait[trait])),
+       DBH = data_trait$DBH/sd(data_trait$DBH),
+       TWI = data_trait$TWI/sd(data_trait$TWI),
+       DBHj = Competition_trait$DBHj/sd(Competition_trait$DBHj),
+       Deltaj = Competition_trait$dij/sd(Competition_trait$dij),
+       weights = 1-data_trait$AreaOutside20,
+       individual = as.numeric(as.factor(Competition_trait$idTree)),
+       species = as.numeric(as.factor(data_trait$Species)),
+       data = data_trait,
+       competition = Competition_trait,
+       sd = c(Trait = sd(unlist(data_trait[trait])), 
+              DBH = sd(data_trait$DBH), 
+              TWI = sd(data_trait$TWI), 
+              DBHj = sd(Competition_trait$DBHj), 
+              Deltaj = sd(Competition_trait$dij)))
+})
+names(mdata) <- traits
+```
+
+```{r fits}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F,
+#            include = F, pars = c('NCIj')))
+# names(fits) <- traits
+# save(fits, file = "./functional_save/InteractionSpecies.Rdata")
+load("./functional_save/Interaction.Rdata")
+fits0 <- fits
+load("./functional_save/InteractionSpecies.Rdata")
+pars <- c("alpha", "betaDBH", "betaTWI", "betaComp", "alphaNCI", "sigma")
+```
+
+# Introduction {-}
+
+# Material and Methods
+
+# Results
+
+```{r comparison}
+lapply(list(Complex = fits0, Species = fits), function(fits)
+  lapply(fits, function(fit)
+    broom::tidyMCMC(fit, pars = "lp__", droppars = NULL, rhat = T)) %>%
+    bind_rows(.id = "trait")) %>% 
+  bind_rows(.id = "model") %>% 
+  select(model, trait, estimate) %>% 
+  reshape2::dcast(trait ~ model) %>% 
+  kable(caption = "Models log-likelihood.",
+        escape = F, digits = 3, format = "pandoc")
+```
+
+```{r summarySpecies}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", "betaTWI",
+                                "betaComp", "alphaNCI", "sigma"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:alpha:]])", "", term)) %>% 
+  select(trait, term, species, estimate, std.error, rhat) %>% 
+  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
+  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = recode_factor(term, 
+                              alphas = "$\\alpha$",
+                              betasDBH = "$\\beta_{DBH}$", 
+                              betasTWI = "$\\beta_{TWI}$", 
+                              betasComp = "$\\beta_{Comp}$", 
+                              alphaNCI = "$\\alpha_{NCI}$",
+                              sigma = "$\\sigma^2$")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              invSLA = "$\\frac{1}{SLA}$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(term + species ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Species = species) %>% 
+  kable(caption = "Model parameters for each species with reduced traits and descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r speciesIntercept, fig.cap="Model species effect for Intercept."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "alpha"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
+  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
+  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
+             xend = datatools::reorder_within(species, m, trait),
+             color = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+  facet_wrap( ~ trait, labeller = label_parsed,
+              scales = "free", nrow = 3) +
+  xaxis_title(F) +
+  ylab(expression(alpha)) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+```{r speciesDBH, fig.cap="Model species effect for $DBH_{90}$."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaDBH"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
+  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
+  left_join(lapply(mdata, function(data) 
+    data.frame(variable = names(data$sd), sd = data$sd)) %>% 
+      bind_rows(.id = "trait") %>% 
+      filter(variable == "DBH") %>% 
+      reshape2::dcast(trait ~ variable) %>% 
+      rename(sdDBH = DBH)) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
+  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
+             xend = datatools::reorder_within(species, m, trait),
+             color = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+  facet_wrap( ~ trait, labeller = label_parsed, 
+              scales = "free", nrow = 3) +
+  xaxis_title(F) +
+  ylab(expression(DBH[90]~(cm))) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+```{r speciesTWI, fig.cap="Model species effect for TWI."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaTWI"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
+  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
+  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
+             xend = datatools::reorder_within(species, m, trait),
+             color = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+  facet_wrap( ~ trait, labeller = label_parsed, 
+              scales = "free", nrow = 3) +
+  xaxis_title(F) +
+  ylab(expression(beta[TWI])) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+```{r speciesNCI, fig.cap="Model species effect for NCI."}
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaComp"))) %>% 
+  bind_rows(.id = "trait") %>% 
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
+  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
+  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
+             xend = datatools::reorder_within(species, m, trait),
+             color = species, fill = species)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+  facet_wrap( ~ trait, labeller = label_parsed, 
+              scales = "free", nrow = 3) +
+  xaxis_title(F) +
+  ylab(expression(beta[Comp])) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+# Discussion
+
+# Supplementary materials
+
+## S1: Model
+
+We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels (species complex $C$ and species $S$) with a linear mixed model including interaction between ontogeny and environment (more likely than an additive form without interactions, see analysis [A07-Additive](A07-Additive.html)). We obtained the following model (see [Material and Methods] for more detail on the model form):
+
+\begin{equation}
+  T_{s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{s} + DBH_i} \times (\alpha_{s} + {\beta_{TWI}}_{s}.TWI_i + {\beta_{Comp}}_{s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}.\delta_{i,j}}), \sigma)  
+\end{equation} 
+
+Resulting in the following `stan` code with selected priors:
+
+```{stan stanModel, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1>  J ; // # of neighbors
+  int<lower=1> S ; // # species
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[J] DBHj ; // DBH neighbor
+  vector[J] Deltaj ; // Distance neighbor
+  vector[N] weights ;
+  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  int<lower=1, upper=S> species[N] ; // species index
+}
+parameters {
+  vector [S] alpha ; // Intercept
+  vector<lower=0> [S]  betaDBH ; // DBH half-load
+  vector[S] betaTWI ; // TWI slope
+  vector[S] betaComp ; // Competition slope
+  real<lower=0> alphaNCI ;
+  real<lower=0> sigma ; // Variance
+}
+transformed parameters {
+  vector[J] NCIj ; // Crowding index
+  vector[N] NCI ;
+  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;  // Crowding index
+  NCI = rep_vector(0.0, N) ;
+  for(j in 1:J)
+   NCI[individual[j]] += NCIj[j] ;
+  NCI = (1 ./ weights) .* NCI ;
+  NCI = NCI ./ sd(NCI) ;
+}
+model {
+  alpha ~ normal(0, 10^6) ; // Priors
+  betaDBH ~ lognormal(0,1) ;
+  betaTWI ~ normal(0, 10^6) ;
+  betaComp ~ normal(0, 10^6) ;
+  alphaNCI ~ lognormal(0, 1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha[species] + betaTWI[species] .* TWI +  betaComp[species] .* NCI) .* (DBH ./ (betaDBH[species] + DBH)), sigma) ; // Likelihood
+}
+```
+
+## S2: Diagnostic
+
+```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$LT, pars = c(pars, "lp__")),
+             facet_args = list(labeller = label_parsed))
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+# References
