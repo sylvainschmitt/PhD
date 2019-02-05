@@ -138,7 +138,8 @@ data <- trees %>%
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
   filter(n() > 10) %>% 
-  ungroup()
+  ungroup() %>% 
+  filter(Plot == 1)
 ```
 
 ```{r mdata}
@@ -154,14 +155,19 @@ mdata <- lapply(complexes, function(complex) {
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
+mdata <- lapply(mdata, function(data) {
+  data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
+  return (data)
+})
 names(mdata) <- complexes
 ```
 
 ```{r fit}
-# fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
-# names(fits) <- complexes
-# save(fits, file = "./distribution_save/Species.Rdata")
-load("./distribution_save/Species.Rdata")
+Model <- stan_model("A02-JointModel.stan")
+fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
+names(fits) <- complexes
+save(fits, file = "./distribution_save/SpeciesTestWeighted.Rdata")
+load("./distribution_save/SpeciesTestWeighted.Rdata")
 pars <- c("alpha", "beta", "gamma")
 species <- lapply(mdata, function(data) 
   data.frame(species = 1:length(colnames(data$Y)),

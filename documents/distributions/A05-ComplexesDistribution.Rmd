@@ -193,7 +193,7 @@ We analysed species complex distribution by comparing species complex occurrence
 
 Species complex distribution has been investigating through logistic regression following a Bernoulli distribution (model with the best likelihood and results see document [A01-SingleModel](A01-SingleModel.html)):
 
-$$Presence \sim \mathcal{Bernoulli}[logit^-1(\alpha + \beta*X+\gamma*X^2)]$$
+$$Presence \sim \mathcal{Bernoulli}[logit^{-1}(\alpha + \beta*X+\gamma*X^2)]$$
 with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the intercept, $\beta$ a vector of size $K$ representing the slope and $\gamma$ a vector of size $K$ representing the quadratic form.
 
 Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
@@ -202,7 +202,9 @@ Environmental descriptors were all scaled for the model inference, in order to e
 
 The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
 
-Table \@ref(tab:summary) and figures \@ref(fig:posterior), \@ref(fig:prediction), \@ref(fig:niche), and \@ref(fig:niche2) will not be commented yet as they represent preliminary results. Still, we can note that globally species complexes have a low habitat suitability in the whole environmental space, i.e. they do not show a peculiar niche in Paracou and on the contrary seemed distributed everywhere.
+Table \@ref(tab:summary) and figures \@ref(fig:posterior), \@ref(fig:prediciton) will not be commented yet as they represent preliminary results. 
+
+Still, we can note that globally abiotic and biotic environment through TWI and BA, besides non-null, have little or no effect on species complexes distribution. On the other hand, congeneric basal area (BAgenus) have a little to medium effect on species complexes (especially on *E. charatcea* and *Licania*) with a parabolic answer of optimum near to low consgeneric density but non nul, *i.e.* few congeneric neighboors improves habitat suitability.
 
 ```{r summary}
 lapply(fits, function(fit)
@@ -229,9 +231,6 @@ lapply(fits, function(fit)
 ```
 
 ```{r posterior, fig.cap="Model parameters posterior."}
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",
-                                             function(x) sign(x)*sqrt(abs(x)),
-                                             function(x) x^2*sign(x))
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
   bind_rows(.id = "complex") %>% 
@@ -255,11 +254,10 @@ lapply(fits, function(fit)
   facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
   xlab("") + ylab("") + 
   scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none") +
-  scale_y_continuous(trans="S_sqrt")
+  scale_color_discrete(guide = "none")
 ```
 
-```{r predicitons}
+```{r prediciton, fig.cap="Predictions."}
 preds <- lapply(complexes, function(complex){
 
   TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
@@ -336,7 +334,7 @@ model {
 
 ## S2: Diagnostic
 
-Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters.
+Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex without divergent transition, and relatively uncorrelated parameters.
 
 ```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
