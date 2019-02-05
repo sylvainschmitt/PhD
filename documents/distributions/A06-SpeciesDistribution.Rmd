@@ -154,10 +154,6 @@ mdata <- lapply(complexes, function(complex) {
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
-# mdata <- lapply(mdata, function(data) {
-#   data$w <- apply(sweep(data$Y, 2, colSums(data$Y), `/`)/data$S, 1, sum)
-#   return (data) 
-# })
 names(mdata) <- complexes
 ```
 
@@ -226,18 +222,11 @@ lapply(fits, function(fit)
   mutate(descriptor = substr(index, 2, 2)) %>% 
   dplyr::select(complex, term, species, descriptor, estimate) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus",
-                                    `4` = "BAspecies")) %>% 
+                                    `2` = "BA", `3` = "BAgenus")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
-                              gamma = "$\\gamma$")) %>% 
-  mutate(species = as.numeric(species)) %>% 
-  mutate(species = ifelse(complex == "Symphonia",
-                          levels(as.factor(filter(data, 
-                                                  Complex == "Symphonia")$Species))[species],
-                          levels(as.factor(filter(data, 
-                                                  Complex == "Eschweilera clade Parvifolia"
-                          )$Species))[species])) %>% 
+                              gamma = "$\\gamma$")) %>%
+  mutate(species = levels(as.factor(filter(data, Complex == complex)$Species))[as.numeric(species)]) %>% 
   mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
   reshape2::dcast(term + descriptor ~ species, value.var = "estimate") %>% 
   kable(caption = "Model parameters for each complex with scaled descriptors.",
@@ -258,15 +247,9 @@ lapply(fits, function(fit)
   mutate(species = substr(descriptor, 1, 1)) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus",
-                                    `4` = "BAspecies")) %>% 
+                                    `2` = "BA", `3` = "BAgenus")) %>% 
   mutate(species = as.numeric(species)) %>% 
-  mutate(species = ifelse(complex == "Symphonia",
-                          levels(as.factor(filter(data, 
-                                                  Complex == "Symphonia")$Species))[species],
-                          levels(as.factor(filter(data, 
-                                                  Complex == "Eschweilera clade Parvifolia"
-                          )$Species))[species])) %>% 
+  mutate(species = levels(as.factor(filter(data, Complex == complex)$Species))[as.numeric(species)]) %>% 
   mutate(species = paste0(substr(complex, 1, 1), ". ", species)) %>% 
   dplyr::select(complex, parameter, descriptor, species, ll, l, m, h, hh) %>% 
   filter(parameter != "alpha") %>% 
@@ -284,14 +267,11 @@ lapply(fits, function(fit)
 ```
 
 ```{r prediction, fig.cap="Predictions."}
-mdata <- list(data %>% 
-                filter(Complex == "Symphonia"),
-              data %>% 
-                filter(Complex == "Eschweilera clade Parvifolia"))
+mdata <- lapply(complexes, function(complex) filter(data, Complex == complex))
 names(mdata) <- complexes
 lapply(complexes, function(complex)
   lapply(1:length(unique(mdata[[complex]]$Species)), function(sp)
-    cbind(dplyr::select(mdata[[complex]], TWI, BA, BAgenus, BAspecies),
+    cbind(dplyr::select(mdata[[complex]], TWI, BA, BAgenus),
           complex = complex,
           species = levels(as.factor(mdata[[complex]]$Species))[sp],
           theta = apply(as.matrix(fits[[complex]], 
@@ -331,7 +311,7 @@ lapply(complexes, function(complex)
   bind_rows() %>% 
   filter(species == Species) %>% 
   mutate(Species = paste0(substr(complex, 1, 1), ". ", Species)) %>% 
-  dplyr::select(Species, DBH, theta, TWI, BA, BAgenus, BAspecies) %>% 
+  dplyr::select(Species, DBH, theta, TWI, BA, BAgenus) %>% 
   reshape2::melt(id.vars = c("Species", "DBH", "theta", "TWI")) %>% 
   ggplot(aes(TWI, value, col = theta, size = DBH)) +
   geom_point() +
@@ -387,11 +367,6 @@ parameters {
   matrix[S,3] beta ; // sigmoidal slope
   matrix[S,3] gamma ; // quadratic form
 }
-transformed parameters {
-  simplex[S] theta[N] ; // habitat suitability 
-  for (n in 1:N)
-      theta[n] = softmax(alpha + TWI[n] * beta[,1] + TWI[n] * TWI[n] * gamma[,1] + BA[n] * beta[,2] + BA[n] .* BA[n] * gamma[,2] + BAgenus[n] * beta[,3] + BAgenus[n] .* BAgenus[n] * gamma[,3]) ;
-}
 model {
   alpha ~ normal(0,1) ;  
   for(k in 1:3){
@@ -399,17 +374,7 @@ model {
     gamma[,k] ~ normal(0,1) ;
   }
   for (n in 1:N)
-    target += w*dirichlet_multinomial_lpmf(Y[n] | theta[n]) ; // likelihood
-}
-generated quantities {
-  simplex[S] thetaTWI[N] ; // habitat suitability per variable
-  simplex[S] thetaBA[N] ;
-  simplex[S] thetaBAgenus[N] ;
-  for(n in 1:N) {
-    thetaTWI[n] = softmax(alpha + TWI[n] * beta[,1] + TWI[n] .* TWI[n] * gamma[,1] + mean(BA) * beta[,2] + mean(BA) .* mean(BA) * gamma[,2] + mean(BAgenus) * beta[,3] + mean(BAgenus) .* mean(BAgenus) * gamma[,3]) ;
-    thetaBA[n] = softmax(alpha + mean(TWI) * beta[,1] + mean(TWI) .* mean(TWI) * gamma[,1] + BA[n] * beta[,2] + BA[n] .* BA[n] * gamma[,2] + mean(BAgenus) * beta[,3] + mean(BAgenus) .* mean(BAgenus) * gamma[,3]) ;
-    thetaBAgenus[n] = softmax(alpha + mean(TWI) * beta[,1] + mean(TWI) .* mean(TWI) * gamma[,1] + mean(BA) * beta[,2] + mean(BA) .* mean(BA) * gamma[,2] + BAgenus[n] * beta[,3] + BAgenus[n] .* BAgenus[n] * gamma[,3]) ;
-  }
+    Y[n] ~ dirichlet_multinomial(softmax(alpha + TWI[n] * beta[,1] + TWI[n] * TWI[n] * gamma[,1] + BA[n] * beta[,2] + BA[n] .* BA[n] * gamma[,2] + BAgenus[n] * beta[,3] + BAgenus[n] .* BAgenus[n] * gamma[,3])) ; // likelihood
 }
 ```
 
@@ -423,14 +388,6 @@ Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every compl
 mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
-```
-
-
-```{r ppc, fig.cap="Post predictive check (PPC) with density overlay of observed trait values against predicted trait.", eval=F}
-cowplot::plot_grid(plotlist = mapply(function(fit, data) {
-  yrep <- as.matrix(fit, pars = "Yp")
-  ppc_dens_overlay(data$Y, yrep[sample(nrow(yrep), 100), ])
-}, fit = fits, data = mdata, SIMPLIFY = F), labels = names(fits))
 ```
 
 ## SX: Projections

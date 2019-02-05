@@ -154,7 +154,7 @@ names(mdata) <- complexes
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
 # save(fits, file = "./distribution_save/Complexes.Rdata")
-load("./distribution_save/Complexes.Rdata")
+load("./distribution_save/ComplexesReduced.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
@@ -259,35 +259,52 @@ lapply(fits, function(fit)
   scale_y_continuous(trans="S_sqrt")
 ```
 
-```{r prediction, fig.cap="Predictions."}
-lapply(fits, function(fit)
-  cbind(dplyr::select(data, TWI, BA, BAgenus, BAspecies),
-        theta = apply(as.matrix(fit, pars = "theta"), 2, mean),
-        theta5 = apply(as.matrix(fit, pars = "theta"), 2, quantile, probs = 0.05),
-        theta95 = apply(as.matrix(fit, pars = "theta"), 2, quantile, probs = 0.95))) %>% 
-  bind_rows(.id = "complex") %>% 
-  reshape2::melt(id.vars = c("complex", "theta", "theta5", "theta95")) %>% 
-  ggplot(aes(x = value)) + 
-  geom_ribbon(aes(ymin = theta5, ymax = theta95), alpha = 0.2) +
-  geom_line(aes(y = theta)) +
-  facet_grid(complex ~ variable, scales = "free") +
-  ylab("Habitat suitability")
-```
+```{r predicitons}
+preds <- lapply(complexes, function(complex){
 
-```{r niche, fig.cap="Niche (HabitatSuitability)."}
-lapply(complexes, function(complex)
-  cbind(data,
-        complex = complex,
-        Presence = as.numeric(data$Complex == complex),
-        theta = apply(as.matrix(fits[[complex]], pars = "theta"), 2, mean))) %>%
-  bind_rows() %>% 
-  dplyr::select(complex, DBH, theta, TWI, BA, BAgenus, BAspecies) %>% 
-  reshape2::melt(id.vars = c("complex", "DBH", "theta", "TWI")) %>% 
-  ggplot(aes(TWI, value, col = theta, size = DBH)) +
-  geom_point() +
-  facet_grid(variable ~ complex, scales = "free") +
-  scale_color_gradient2("Habitat\nsuitability", low = scales::muted("blue"), mid = "white",
-                        high = scales::muted("red"), midpoint = 0.5)
+  TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
+             to = max(mdata[[complex]]$X[,1]), length.out = 100)
+  BA <- seq(from = min(mdata[[complex]]$X[,2]), 
+             to = max(mdata[[complex]]$X[,2]), length.out = 100)
+  BAgenus <- seq(from = min(mdata[[complex]]$X[,3]), 
+             to = max(mdata[[complex]]$X[,3]), length.out = 100)
+
+  alpha <- as.matrix(fits[[complex]], pars = "alpha")
+  beta <- as.matrix(fits[[complex]], pars = "beta")
+  gamma <- as.matrix(fits[[complex]], pars = "gamma")
+
+  # Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*BA + beta[n,3]*BAgenus + gamma[n,1]*TWI^2 + gamma[n,2]*BA^2 + gamma[n,3]*BAgenus^2)), simplify = F))
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(BA) + beta[n,3]*mean(BAgenus) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(BA)^2 + gamma[n,3]*mean(BAgenus)^2)), simplify = F))
+  Yba <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*BA + beta[n,3]*mean(BAgenus) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*BA^2 + gamma[n,3]*mean(BAgenus)^2)), simplify = F))
+  Ybagenus <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(BA) + beta[n,3]*BAgenus + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(BA)^2 + gamma[n,3]*BAgenus^2)), simplify = F))
+
+  bind_rows(
+    data.frame(
+      complex = complex,
+      variable = "TWI",
+      value = TWI,
+      Y = apply(Ytwi, 2, mean),
+      Y5 = apply(Ytwi, 2, quantile, probs = 0.05),
+      Y95 = apply(Ytwi, 2, quantile, probs = 0.95)),
+    data.frame(
+      complex = complex,
+      variable = "BA",
+      value = BA,
+      Y = apply(Yba, 2, mean),
+      Y5 = apply(Yba, 2, quantile, probs = 0.05),
+      Y95 = apply(Yba, 2, quantile, probs = 0.95)),
+    data.frame(
+      complex = complex,
+      variable = "BAgenus",
+      value = BAgenus,
+      Y = apply(Ybagenus, 2, mean),
+      Y5 = apply(Ybagenus, 2, quantile, probs = 0.05),
+      Y95 = apply(Ybagenus, 2, quantile, probs = 0.95)))
+}) %>% bind_rows()
+ggplot(preds, aes(x = value)) + 
+  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+   geom_line(aes(y = Y)) +
+  facet_grid(complex ~ variable, scales = "free")
 ```
 
 # Discussion
@@ -299,57 +316,33 @@ lapply(complexes, function(complex)
 ```{stan Model, output.var="Model", echo=T, eval=F, cache = F}
 data {
   int<lower=1> N ;                // # of individuals
+  int<lower=1> K ;                // # of environmental descriptors
   int<lower=0, upper=1> Y[N] ;    // individuals presence or absence (0-1) 
-  vector[N] TWI ; // Topographical Wetness Index
-  vector[N] BA ; // Basal Area
-  vector[N] BAgenus ; // Congeneric Basla Area
+  matrix[N,K] X ;                 // environmental descriptors
   vector<lower=0, upper=1>[N] w ; // weights for pseudo-absence to be equal to presence
 }
 parameters {
   real alpha ;       // intercept
-  vector[3] beta ;   // sigmoidal slope
-  vector[3] gamma ;  // quadratic form
-}
-transformed parameters {
-  vector<lower=0, upper=1>[N] theta ; // habitat suitability
-  theta = inv_logit(alpha + TWI * beta[1] + TWI .* TWI * gamma[1] + BA * beta[2] + BA .* BA * gamma[2] + BAgenus * beta[3] + BAgenus .* BAgenus * gamma[3]) ;
+  vector[K] beta ;   // sigmoidal slope
+  vector[K] gamma ;  // quadratic form
 }
 model {
   alpha ~ normal(0, 10^6) ; // priors
   beta ~ normal(0, 10^6) ;
   gamma ~ normal(0, 10^6) ;
-  target += w*bernoulli_lpmf(Y | theta) ; // likelihood
-}
-generated quantities {
-  int<lower=0, upper=1> Yp[N] ; // predictions
-  vector<lower=0, upper=1>[N] thetaTWI ; // habitat suitability per variable
-  vector<lower=0, upper=1>[N] thetaBA ;
-  vector<lower=0, upper=1>[N] thetaBAgenus ;
-  thetaTWI = inv_logit(alpha + TWI * beta[1] + TWI .* TWI * gamma[1] + mean(BA) * beta[2] + mean(BA) .* mean(BA) * gamma[2] + mean(BAgenus) * beta[3] + mean(BAgenus) .* mean(BAgenus) * gamma[3]) ;
-  thetaBA = inv_logit(alpha + mean(TWI) * beta[1] + mean(TWI) .* mean(TWI) * gamma[1] + BA * beta[2] + BA .* BA * gamma[2] + mean(BAgenus) * beta[3] + mean(BAgenus) .* mean(BAgenus) * gamma[3]) ;
-  thetaBAgenus = inv_logit(alpha + mean(TWI) * beta[1] + mean(TWI) .* mean(TWI) * gamma[1] + mean(BA) * beta[2] + mean(BA) .* mean(BA) * gamma[2] + BAgenus * beta[3] + BAgenus .* BAgenus * gamma[3]) ;
-  for(n in 1:N)
-    Yp[n] = bernoulli_rng(theta[n]) ;
+  target += w*bernoulli_lpmf(Y | inv_logit(alpha + X * beta + X .* X * gamma)) ; // likelihood
 }
 ```
 
 ## S2: Diagnostic
 
-Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters. Post predictive check (PPC) with density overlay of observed presence values against predicted presence values showed closed distribution (figure \@ref(fig:ppc)). 
+Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters.
 
 ```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
 mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
-```
-
-
-```{r ppc, fig.cap="Post predictive check (PPC) with density overlay of observed trait values against predicted trait."}
-cowplot::plot_grid(plotlist = mapply(function(fit, data) {
-  yrep <- as.matrix(fit, pars = "Yp")
-  ppc_dens_overlay(data$Y, yrep[sample(nrow(yrep), 100), ])
-}, fit = fits, data = mdata, SIMPLIFY = F), labels = names(fits))
 ```
 
 # References

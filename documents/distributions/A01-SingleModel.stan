@@ -10,13 +10,9 @@ parameters {
   vector[K] beta ;   // sigmoidal slope
   vector[K] gamma ;  // quadratic form
 }
-transformed parameters {
-  vector<lower=0, upper=1>[N] theta ; // habitat suitability
-  theta = inv_logit(alpha + X * beta + X .* X * gamma) ;
-}
 model {
   alpha ~ normal(0, 10^6) ; // priors
   beta ~ normal(0, 10^6) ;
   gamma ~ normal(0, 10^6) ;
-  target += w*bernoulli_lpmf(Y | theta) ; // likelihood
+  target += w*bernoulli_lpmf(Y | inv_logit(alpha + X * beta + X .* X * gamma)) ; // likelihood
 }
