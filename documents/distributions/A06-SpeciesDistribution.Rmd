@@ -15,7 +15,6 @@ output:
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-    keep_tex: true
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -111,22 +110,21 @@ load("./distribution_save/Competition.Rdata")
 
 ```{r complexes}
 complexes <- bind_rows(
-  data.frame(Complex = "E. Chartacea",
-             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
-             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
-             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
-                         "micrantha", "grandiflora", "chartaceifolia")),
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
   data.frame(Complex = "Licania", Genus = "Licania",
-             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
-                         "alba", "majuscula")),
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
   data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
              Species = c("hostmannii", "sagotiana")),
   data.frame(Complex = "Talisia", Genus = "Talisia",
-             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
+             Species = c("hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
-             Species = c("globulifera", "sp.1"))
-)
+             Species = c("globulifera", "sp.1")))
 ```
 
 ```{r data}
@@ -134,6 +132,7 @@ data <- trees %>%
   left_join(env) %>% 
   left_join(complexes) %>% 
   left_join(Competition) %>% 
+  mutate(BAother = BA - BAspecies) %>% 
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
@@ -150,7 +149,7 @@ mdata <- lapply(complexes, function(complex) {
        K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, BA, BAgenus) %>%
+       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
@@ -160,8 +159,8 @@ names(mdata) <- complexes
 ```{r fit}
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/Species.Rdata")
-load("./distribution_save/Species.Rdata")
+# save(fits, file = "./distribution_save/species.Rdata")
+load("./distribution_save/SpeciesReduced.Rdata")
 pars <- c("alpha", "beta", "gamma")
 species <- lapply(mdata, function(data) 
   data.frame(species = 1:length(colnames(data$Y)),
@@ -182,7 +181,14 @@ Paracou
 
 ## Individuals
 
-Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes.html), in the meantime we focused on the two PhD models, i.e. *Symphonia globulifera*  and *Eschweilera Parvifolia clade*. *Symphonia globulifera* includes two morphotypes, *S. globulifera* and *S. sp1*, and *Eschweilera Parvifolia clade* 11 species.
+Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes.html), 
+
+* *E. charatcaea*
+* *E. Parvifolia*
+* *Licania*
+* *Iryanthera*
+* *Talisia*
+* *Symphonia*
 
 ## Environmental variables
 
@@ -197,8 +203,8 @@ To be defined in document [A03-Descriptors](A03-Descriptors.html),
 
 We analysed species distribution within species complex by comparing to which species belonged occurrences of the species complex. Species distribution within species complex has been investigating through softmax regression following a conjugated Dirchlet and Multinomial distribution (see document [A02-JointModel](A01-JointModel.html)):
 
-$$Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*X + \gamma*X^2)) \\
-{Log~Probability~Mass~Function}_{Dirichlet~Multinomial}(y|\alpha) = \Gamma(\sum \alpha)  + \sum(\Gamma(\alpha + y)) - \Gamma(\sum \alpha+\sum y) - \sum\Gamma(\alpha)$$
+$$Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*X + \gamma*X^2))$$
+$${Log~Probability~Mass~Function}_{Dirichlet~Multinomial}(y|\alpha) = \Gamma(\sum \alpha)  + \sum(\Gamma(\alpha + y)) - \Gamma(\sum \alpha+\sum y) - \sum\Gamma(\alpha)$$
 with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the intercept, $\beta$ a vector of size $K$ representing the slope and $\gamma$ a vector of size $K$ representing the quadratic form.
 
 Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
@@ -214,6 +220,10 @@ Environmental descriptors were all scaled for the model inference, in order to e
 The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
 
 Table \@ref(tab:summary) and figures \@ref(fig:posterior) and \@ref(fig:prediciton) will not be commented yet as they represent preliminary results.
+
+Still we can note globally that inside each complex the abiotic environment represented by TWI seems to affect oppositely niche distribution of species and that they are ranked in their response. Species distributions within complex are also more or less shaped by congeneric interactions represented by BAgenus. *E. Chartacea*, *Symphonia* and *Iryanthera* have similarly a strong differentiation of habitat with water accumulation between more abundant species. This signal is found at a smaller level in *Licania* but with *L. alba* staying dominant all along. Consequently, *S. globulifera* and *S. sp1*, *I. hostmanii* and *I. sagotiana*, and *E. sagotiana* and *E. coriacea* show a very small overlap of ecological niches. Last but not least, whereas *E. pedicellata* genetically closer to *E. coriacea* seems to share a similar niche, and *E. decolorans* seems to show an optimum of TWI when sister species only increase or decrease their habitat suitability with TWI.
+
+**Beware that those quick interpretation have to be confirmed after the final analysis !**
 
 ```{r summary}
 lapply(fits, function(fit)
@@ -240,33 +250,40 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:3)
 ```
 
-```{r posterior, fig.cap="Model parameters posterior."}
-lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
-  bind_rows(.id = "complex") %>% 
-  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
-  left_join(species) %>% 
-  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus")) %>% 
-  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
-  filter(parameter != "alpha") %>% 
-  ggplot(aes(x = SpeciesLong, xend = SpeciesLong, 
-             col = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
-  xlab("") + ylab("") + 
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
+```{r posterior, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
+lapply(complexes, function(complex) 
+  mcmc_intervals_data(as.array(fits[[complex]], pars = pars)) %>% 
+    mutate(complex = complex) %>% 
+    mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+    mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+    mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+    mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+    mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+    left_join(species) %>% 
+    mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+    mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                      `2` = "BA", `3` = "BAgenus")) %>% 
+    filter(descriptor != "BA") %>% 
+    dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+    filter(parameter != "alpha") %>% 
+    mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
+    ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, parameter),
+               xend = datatools::reorder_within(SpeciesLong, m, parameter), 
+               col = SpeciesLong, fill = SpeciesLong)) +
+    geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+    geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+    geom_segment(aes(y = ll, yend = hh),
+                 size = 1, show.legend = F, alpha = 0.5) +
+    geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+    coord_flip() +
+    facet_wrap(~ parameter, labeller = label_parsed, 
+               scales = "free") +
+    datatools::scale_x_reordered() +
+    xlab("") + ylab("") + 
+    scale_fill_discrete(guide = "none") +
+    scale_color_discrete(guide = "none") +
+    ggtitle(complex)) %>% 
+  gridExtra::grid.arrange(grobs = .)
 ```
 
 ```{r prediciton, fig.cap="Predictions."}
@@ -300,10 +317,6 @@ preds <- lapply(complexes, function(complex){
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
     ), simplify = F), along = 3)
-  Yba <- abind::abind(sapply(1:length(TWI), function(i) 
-    sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*BA[i] + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*mean(BAgenus)^2)
-    ), simplify = F), along = 3)
   Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
@@ -335,16 +348,6 @@ preds <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "BA",
-        value = BA,
-        Y = apply(Yba[sp,,], 2, mean),
-        Y5 = apply(Yba[sp,,], 2, quantile, probs = 0.05),
-        Y95 = apply(Yba[sp,,], 2, quantile, probs = 0.95))) %>% 
-      bind_rows(),
-    lapply(1:S, function(sp)
-      data.frame(
-        complex = complex,
-        species = colnames(mdata[[complex]]$Y)[sp],
         variable = "BAgenus",
         value = BAgenus,
         Y = apply(Ybagenus[sp,,], 2, mean),
@@ -352,30 +355,15 @@ preds <- lapply(complexes, function(complex){
         Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
       bind_rows())
 }) %>% bind_rows()
-ggplot(preds, aes(x = value, col = species)) + 
-  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
-   geom_line(aes(y = Y)) +
-  # geom_hline(yintercept = 1, col = "red") +
-  # geom_hline(yintercept = 0, col = "blue") +
-  facet_grid(complex ~ variable, scales = "free_x")
-```
-
-```{r overlap, eval=F}
-lapply(1:length(unique(mdata$Species)), function(sp)
-  cbind(species = unique(mdata$Species)[sp],
-        mdata,
-        Presence = as.numeric(mdata$Species == unique(mdata$Species)[sp]),
-        theta = apply(as.matrix(fit, 
-                                pars = paste0("theta[", 1:nrow(mdata), ",", sp, "]")), 
-                      2, mean))) %>% 
-  bind_rows() %>% 
-  dplyr::select(idTree, species, theta) %>% 
-  group_by(idTree) %>% 
-  summarise(product = prod(theta), sum = sum(theta)) %>% 
-  mutate(overlap = product/sum) %>% 
-  ungroup() %>% 
-  summarise(overlap = mean(overlap)) %>% 
-  mutate(overlap = overlap*length(unique(mdata$Species)))
+preds %>% 
+  group_by(complex) %>% 
+  do(g = ggplot(data = ., aes(x = value, col = species)) + 
+       geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+       geom_line(aes(y = Y)) +
+       facet_grid(complex ~ variable, scales = "free_x") +
+       guides(col = guide_legend(nrow=2)) +
+       theme(legend.position = "bottom")) %>% 
+  gridExtra::grid.arrange(grobs = .$g)
 ```
 
 # Discussion
@@ -427,6 +415,39 @@ Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every compl
 mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+## S3: Posterirors
+
+All posteriors.
+
+```{r posteriorAll, fig.cap="Model all parameters posterior."} 
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "BA", `3` = "BAgenus")) %>% 
+  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+  filter(parameter != "alpha") %>% 
+  ggplot(aes(x = SpeciesLong, xend = SpeciesLong, 
+             col = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
 ```
 
 # References

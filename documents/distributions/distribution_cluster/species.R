@@ -23,26 +23,26 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 load("./distribution_save/Competition.Rdata")
 complexes <- bind_rows(
-  data.frame(Complex = "E. Chartacea",
-             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
-             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
-             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
-                         "micrantha", "grandiflora", "chartaceifolia")),
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
   data.frame(Complex = "Licania", Genus = "Licania",
-             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
-                         "alba", "majuscula")),
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
   data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
              Species = c("hostmannii", "sagotiana")),
   data.frame(Complex = "Talisia", Genus = "Talisia",
-             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
+             Species = c("hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
-             Species = c("globulifera", "sp.1"))
-)
+             Species = c("globulifera", "sp.1")))
 data <- trees %>% 
   left_join(env) %>% 
   left_join(complexes) %>% 
   left_join(Competition) %>% 
+  mutate(BAother = BA - BAspecies) %>% 
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
@@ -60,7 +60,7 @@ mdata <- lapply(complexes, function(complex) {
        K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, BA, BAgenus) %>%
+       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
@@ -72,4 +72,4 @@ cat("#### Sampling ####\n\n")
 Model <- stan_model("A02-JointModel.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
-save(fits, file = "./distribution_save/Species.Rdata")
+save(fits, file = "./distribution_save/species.Rdata")

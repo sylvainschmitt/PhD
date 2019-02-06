@@ -2,19 +2,18 @@
 title: "A05: Complexes distributions"
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-    keep_tex: true
+  bookdown::word_document2: default
+  github_document: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
 linestretch: 1.5
 ---
 
@@ -108,22 +107,21 @@ load("./distribution_save/Competition.Rdata")
 
 ```{r complexes}
 complexes <- bind_rows(
-  data.frame(Complex = "E. Chartacea",
-             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
-             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
-             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
-                         "micrantha", "grandiflora", "chartaceifolia")),
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
   data.frame(Complex = "Licania", Genus = "Licania",
-             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
-                         "alba", "majuscula")),
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
   data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
              Species = c("hostmannii", "sagotiana")),
   data.frame(Complex = "Talisia", Genus = "Talisia",
-             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
+             Species = c("hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
-             Species = c("globulifera", "sp.1"))
-)
+             Species = c("globulifera", "sp.1")))
 ```
 
 ```{r data}
@@ -131,6 +129,7 @@ data <- trees %>%
   left_join(env) %>% 
   left_join(complexes) %>% 
   left_join(Competition) %>% 
+  mutate(BAother = BA - BAspecies) %>% 
   filter(!is.na(Plot))
 ```
 
@@ -141,7 +140,7 @@ mdata <- lapply(complexes, function(complex)
   list(N = nrow(data),
        K = 3,
        Y = as.numeric(data$Complex == complex),
-       X = dplyr::select(data, TWI, BA, BAgenus) %>%
+       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
          mutate_all(funs(scale)) %>%
          as.matrix(),
        w = ifelse(data$Complex == complex,
@@ -153,7 +152,7 @@ names(mdata) <- complexes
 ```{r fit}
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/Complexes.Rdata")
+# save(fits, file = "./distribution_save/complexes.Rdata")
 load("./distribution_save/ComplexesReduced.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
