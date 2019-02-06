@@ -153,7 +153,7 @@ names(mdata) <- complexes
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
 # save(fits, file = "./distribution_save/complexes.Rdata")
-load("./distribution_save/ComplexesReduced.Rdata")
+load("./distribution_save/complexes.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
@@ -207,7 +207,7 @@ Still, we can note that globally abiotic and biotic environment through TWI and 
 
 ```{r summary}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
   dplyr::select(complex, term, descriptor, estimate) %>% 
@@ -219,8 +219,7 @@ lapply(fits, function(fit)
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
-                              gamma = "$\\gamma$",
-                              lp = "log likelihood")) %>% 
+                              gamma = "$\\gamma$")) %>% 
   reshape2::dcast(term + descriptor ~ complex, value.var = "estimate") %>% 
   kable(caption = "Model parameters for each complex with scaled descriptors.",
         escape = F, digits = 3, format = "pandoc") %>% 
@@ -301,7 +300,8 @@ preds <- lapply(complexes, function(complex){
 ggplot(preds, aes(x = value)) + 
   geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
    geom_line(aes(y = Y)) +
-  facet_grid(complex ~ variable, scales = "free")
+  facet_grid(complex ~ variable, scales = "free_x") +
+  scale_y_sqrt()
 ```
 
 # Discussion

@@ -1,3 +1,7 @@
+# PhD 0.1.9104
+* distribution: new complex delineation, draft begin
+* functional: InteractionSpecies2
+
 # PhD 0.1.9103
 * distribution: All complexes and species with reduced outputs
 * functional: Interaction, InteractionSpecies & Sensitivity

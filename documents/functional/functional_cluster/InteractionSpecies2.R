@@ -37,8 +37,6 @@ mdata <- lapply(models, function(model){
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
   list(Model = model,
-       Trait = trait,
-       Complex = complex,
        N = nrow(data_trait),
        J = nrow(Competition_trait),
        S = length(unique(data_trait$Species)),
