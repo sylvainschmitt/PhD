@@ -32,8 +32,8 @@ transformed parameters {
 model {
   alpha ~ normal(0, 10^6) ; // Priors
   betaDBH ~ lognormal(0,1) ;
-  betaTWI ~ normal(0, 10^6) ;
-  betaComp ~ normal(0, 10^6) ;
+  betaTWI ~ lognormal(0,1) ;
+  betaComp ~ lognormal(0,1) ;
   alphaNCI ~ lognormal(0, 1) ;
   sigma ~ cauchy(0, 5) ;
   Trait ~ normal((alpha[species] + betaTWI[species] .* TWI +  betaComp[species] .* NCI) .* (DBH ./ (betaDBH[species] + DBH)), sigma) ; // Likelihood

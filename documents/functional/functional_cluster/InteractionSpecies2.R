@@ -24,14 +24,21 @@ Individuals <- Individuals %>%
 
 cat("#### Model Data ####\n\n")
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-mdata <- lapply(traits, function(trait){
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+mdata <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex) %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
-  list(Model = trait,
+  list(Model = model,
+       Trait = trait,
+       Complex = complex,
        N = nrow(data_trait),
        J = nrow(Competition_trait),
        S = length(unique(data_trait$Species)),
@@ -51,7 +58,7 @@ mdata <- lapply(traits, function(trait){
               DBHj = sd(Competition_trait$DBHj), 
               Deltaj = sd(Competition_trait$dij)))
 })
-names(mdata) <- traits
+names(mdata) <- models
 
 #### Sampling ####
 
@@ -60,5 +67,5 @@ Model <- stan_model("./functional_cluster/InteractionSpecies.stan")
 fits <- lapply(mdata, function(x)
   sampling(Model, chains = 2, data = x, save_warmup = F,
            include = F, pars = c('NCIj')))
-names(fits) <- traits
+names(fits) <- models
 save(fits, file = "./functional_save/InteractionSpecies.Rdata")

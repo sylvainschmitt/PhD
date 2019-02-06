@@ -1,5 +1,5 @@
 ---
-title: "A08 : Interaction Model only with Species"
+title: "A08 : Interaction Model only with Species 2"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
@@ -75,14 +75,21 @@ Individuals <- Individuals %>%
 
 ```{r mdata}
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-mdata <- lapply(traits, function(trait){
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+mdata <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex) %>% 
     left_join(select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
   Competition_trait <- filter(Competition_trait, !is.na(idTree))
-  list(Model = trait,
+  list(Model = model,
+       Trait = trait,
+       Complex = complex,
        N = nrow(data_trait),
        J = nrow(Competition_trait),
        S = length(unique(data_trait$Species)),
@@ -102,7 +109,7 @@ mdata <- lapply(traits, function(trait){
               DBHj = sd(Competition_trait$DBHj), 
               Deltaj = sd(Competition_trait$dij)))
 })
-names(mdata) <- traits
+names(mdata) <- models
 ```
 
 ```{r fits}
