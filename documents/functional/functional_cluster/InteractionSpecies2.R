@@ -66,4 +66,4 @@ fits <- lapply(mdata, function(x)
   sampling(Model, chains = 2, data = x, save_warmup = F,
            include = F, pars = c('NCIj')))
 names(fits) <- models
-save(fits, file = "./functional_save/InteractionSpecies.Rdata")
+save(fits, file = "./functional_save/InteractionSpecies2.Rdata")

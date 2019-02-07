@@ -3,17 +3,17 @@ title: "A08 : Interaction Model only with Species 2"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
   bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
@@ -118,10 +118,16 @@ names(mdata) <- models
 #            include = F, pars = c('NCIj')))
 # names(fits) <- traits
 # save(fits, file = "./functional_save/InteractionSpecies.Rdata")
-load("./functional_save/Interaction.Rdata")
-fits0 <- fits
-load("./functional_save/InteractionSpecies.Rdata")
+load("./functional_save/InteractionSpecies2.Rdata")
 pars <- c("alpha", "betaDBH", "betaTWI", "betaComp", "alphaNCI", "sigma")
+species <- Individuals %>% 
+  group_by(Genus) %>% 
+  select(Species) %>% 
+  unique() %>% 
+  arrange(Genus, Species) %>% 
+  mutate(species = row_number()) %>% 
+  rename(complex = Genus) %>% 
+  mutate(SpeciesLong = paste(substr(complex, 1, 1), Species))
 ```
 
 # Introduction {-}
@@ -130,26 +136,15 @@ pars <- c("alpha", "betaDBH", "betaTWI", "betaComp", "alphaNCI", "sigma")
 
 # Results
 
-```{r comparison}
-lapply(list(Complex = fits0, Species = fits), function(fits)
-  lapply(fits, function(fit)
-    broom::tidyMCMC(fit, pars = "lp__", droppars = NULL, rhat = T)) %>%
-    bind_rows(.id = "trait")) %>% 
-  bind_rows(.id = "model") %>% 
-  select(model, trait, estimate) %>% 
-  reshape2::dcast(trait ~ model) %>% 
-  kable(caption = "Models log-likelihood.",
-        escape = F, digits = 3, format = "pandoc")
-```
-
 ```{r summarySpecies}
 lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", "betaTWI",
                                 "betaComp", "alphaNCI", "sigma"), 
                   droppars = NULL, rhat = T)) %>%
-  bind_rows(.id = "trait") %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>% 
   mutate(species = gsub("([[:alpha:]])", "", term)) %>% 
-  select(trait, term, species, estimate, std.error, rhat) %>% 
+  select(complex, trait, term, species, estimate, std.error, rhat) %>% 
   mutate(species = gsub("([[:punct:]])", "", species)) %>% 
   mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
@@ -167,7 +162,7 @@ lapply(fits, function(fit)
                               LT = "$LT$", 
                               invLA = "$\\frac{1}{LA}$",
                               CC = "$CC$")) %>% 
-  reshape2::dcast(term + species ~ trait, value.var = "estimate") %>% 
+  reshape2::dcast(complex + term + species ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Species = species) %>% 
   kable(caption = "Model parameters for each species with reduced traits and descriptors.",
         escape = F, digits = 3, format = "pandoc") %>% 
@@ -183,14 +178,15 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "alpha"))) %>% 
-  bind_rows(.id = "trait") %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
   mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
-  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
-  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
-             xend = datatools::reorder_within(species, m, trait),
-             color = species, fill = species)) +
+  mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
@@ -214,21 +210,22 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaDBH"))) %>% 
-  bind_rows(.id = "trait") %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
   mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
-  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
+   mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
   left_join(lapply(mdata, function(data) 
     data.frame(variable = names(data$sd), sd = data$sd)) %>% 
-      bind_rows(.id = "trait") %>% 
+      bind_rows(.id = "model") %>% 
       filter(variable == "DBH") %>% 
-      reshape2::dcast(trait ~ variable) %>% 
+      reshape2::dcast(model ~ variable) %>% 
       rename(sdDBH = DBH)) %>% 
   mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
-  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
-             xend = datatools::reorder_within(species, m, trait),
-             color = species, fill = species)) +
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
@@ -252,14 +249,15 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaTWI"))) %>% 
-  bind_rows(.id = "trait") %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
   mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
-  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
-  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
-             xend = datatools::reorder_within(species, m, trait),
-             color = species, fill = species)) +
+    mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
@@ -283,14 +281,15 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaComp"))) %>% 
-  bind_rows(.id = "trait") %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
   mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-  mutate(species = levels(as.factor(Individuals$SpeciesLong))[as.numeric(species)]) %>% 
-  mutate(complex = ifelse(substr(species, 1,1) == "E", "Eschweilera", "Symhponia")) %>% 
-  ggplot(aes(x = datatools::reorder_within(species, m, trait), 
-             xend = datatools::reorder_within(species, m, trait),
-             color = species, fill = species)) +
+    mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
@@ -368,7 +367,7 @@ model {
 
 ```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$LT, pars = c(pars, "lp__")),
+mcmc_trace(as.array(fits$`Eschweilera-LT`, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```

@@ -110,38 +110,21 @@ load("./distribution_save/Competition.Rdata")
 
 ```{r complexes}
 complexes <- bind_rows(
-  data.frame(Complex = "E. Chartacea",
-             Genus = c("Eschweilera", "Lecythis", "Eschweilera", "Courataria", "Lecythis"),
-             Species = c("simiorum", "holocogyne", "congestiflora", "multiflora", "chartacea")),
+  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
-             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana", "parviflora",
-                         "micrantha", "grandiflora", "chartaceifolia")),
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
   data.frame(Complex = "Licania", Genus = "Licania",
-             Species = c("menbranacea", "ovalifolia", "micrantha", "canescens", "laxiflora",
-                         "alba", "majuscula")),
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
   data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
              Species = c("hostmannii", "sagotiana")),
   data.frame(Complex = "Talisia", Genus = "Talisia",
-             Species = c("microphylla", "hexaphylla", "praealta", "simaboides")),
+             Species = c("hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
-             Species = c("globulifera", "sp.1"))
-)
-# complexes <- bind_rows(
-#   data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
-#              Species = c("simiorum", "congestiflora")),
-#   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
-#              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
-#                          "wachenheimii", "grandiflora_form2")),
-#   data.frame(Complex = "Licania", Genus = "Licania",
-#              Species = c("alba", "membranacea", "canescens", "micrantha",
-#                          "ovalifolia", "sprucei", "densiflora",
-#                          "laxiflora", "parvifructa")),
-#   data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
-#              Species = c("hostmannii", "sagotiana")),
-#   data.frame(Complex = "Talisia", Genus = "Talisia",
-#              Species = c("hexaphylla", "praealta", "simaboides")),
-#   data.frame(Complex = "Symphonia", Genus = "Symphonia",
-#              Species = c("globulifera", "sp.1")))
+             Species = c("globulifera", "sp.1")))
 ```
 
 ```{r data}
@@ -177,7 +160,7 @@ names(mdata) <- complexes
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
 # save(fits, file = "./distribution_save/species.Rdata")
-load("./distribution_save/SpeciesReduced.Rdata")
+load("./distribution_save/species.Rdata")
 pars <- c("alpha", "beta", "gamma")
 species <- lapply(mdata, function(data) 
   data.frame(species = 1:length(colnames(data$Y)),

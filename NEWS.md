@@ -1,3 +1,7 @@
+# PhD 0.1.9105
+* distribution: M&M, Results
+* functional: draft begin w all results
+
 # PhD 0.1.9104
 * distribution: new complex delineation, draft begin
 * functional: InteractionSpecies2
