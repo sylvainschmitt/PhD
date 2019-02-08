@@ -349,6 +349,10 @@ preds <- lapply(complexes, function(complex){
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
     ), simplify = F), along = 3)
+  Yba <- abind::abind(sapply(1:length(TWI), function(i) 
+    sapply(1: nrow(alpha), function(n)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*BA[i] + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*mean(BAgenus)^2)
+    ), simplify = F), along = 3)
   Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
@@ -361,6 +365,7 @@ preds <- lapply(complexes, function(complex){
         species = colnames(mdata[[complex]]$Y)[sp],
         variable = "TWI",
         value = TWI,
+        Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ytwi[sp,,], 2, mean),
         Y5 = apply(Ytwi[sp,,], 2, quantile, probs = 0.05),
         Y95 = apply(Ytwi[sp,,], 2, quantile, probs = 0.95))) %>% 
@@ -369,8 +374,20 @@ preds <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
+        variable = "BA",
+        value = BA,
+        Yp = apply(Yp[sp,,], 2, mean),
+        Y = apply(Yba[sp,,], 2, mean),
+        Y5 = apply(Yba[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Yba[sp,,], 2, quantile, probs = 0.95))) %>% 
+      bind_rows(),
+    lapply(1:S, function(sp)
+      data.frame(
+        complex = complex,
+        species = colnames(mdata[[complex]]$Y)[sp],
         variable = "BAgenus",
         value = BAgenus,
+        Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ybagenus[sp,,], 2, mean),
         Y5 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.05),
         Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
@@ -386,6 +403,18 @@ preds %>%
        theme(legend.position = "bottom") +
        scale_y_sqrt()) %>% 
   gridExtra::grid.arrange(grobs = .$g)
+```
+
+```{r sensitivity, fig.cap="Model sensitivity to co-variables."}
+preds %>% 
+  mutate(Delta = sqrt((Yp-Y)^2)) %>% 
+  mutate(SpeciesLong = paste(substr(complex, 1, 1), species)) %>% 
+  ggplot(aes(x = SpeciesLong, y = Delta, fill = variable)) +
+  geom_boxplot() +
+  coord_flip() +
+  ylab("Delta prediction") +
+  xlab("") +
+  scale_y_sqrt()
 ```
 
 # Discussion

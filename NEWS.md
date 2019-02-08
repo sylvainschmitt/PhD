@@ -1,3 +1,6 @@
+# PhD 0.1.9106
+* functional: result begin
+
 # PhD 0.1.9105
 * distribution: M&M, Results
 * functional: draft begin w all results
