@@ -1,19 +1,19 @@
 ---
-title: Individual-tree leaf functional traits answer to species niche within Neotropical species complexes (Temporary)
+title: Ontogeny, neighbor interactions and topgraphy shape individual-tree leaf functional traits within Neotropical species complexes (Temporary)
 author: Sylvain Schmitt$^{*,1}$, Geraldine Derroire$^2$, Emilie Ducouret$^3$, Anne Baranger$^4$, Niklas Tysklind$^5$,  Myriam Heuertz$^6$, Eric Marcon$^7$, Bruno Herault$^{8,9}$
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
+  bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -48,23 +48,27 @@ Individuals <- Individuals %>%
 
 ```{r model}
 load("./functional_save/InteractionSpecies2.Rdata")
-species <- Individuals %>% 
-  group_by(Genus) %>% 
-  select(Species) %>% 
+traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+species <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex) %>% 
+    mutate(species = as.numeric(as.factor(Species))) %>% 
+    mutate(SpeciesLong = paste(substr(complex, 1, 1), Species)) %>% 
+    select(Genus, Species, SpeciesLong, species) %>% 
+    unique()
+}) %>% bind_rows() %>% 
   unique() %>% 
-  arrange(Genus, Species) %>% 
-  mutate(species = row_number()) %>% 
-  rename(complex = Genus) %>% 
-  mutate(SpeciesLong = paste(substr(complex, 1, 1), Species))
+  mutate(complex = Genus)
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
 ```
 
 ```{r predicitons}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-complexes <- c("Symphonia", "Eschweilera")
-models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 preds <- lapply(models, function(model){
   trait <- strsplit(model, "-")[[1]][2]
   complex <- strsplit(model, "-")[[1]][1]
@@ -151,7 +155,7 @@ __$^*$ Corresponding author:__ sylvain.schmitt@agroparistech.fr
 \newpage 
 \newpage 
 
-# Abstract
+ # Abstract
 
 > To be written
 
@@ -240,23 +244,13 @@ Thus, the more the model is sensitive to a variable the less the prediction will
 
 $\alpha$ (Fig. \@ref(fig:Intercept)) represent the intercept and highlight species and genera differences between functional traits independantly from individual response to the ontogeny and the environment. **Is it really interesting to interpret it ? Maybe in introduction of the results to generally speak of traits differences between complexes but also readable on the PCA (Fig. \@ref(fig:PCA)).**
 
-## $DBH_{90}$
+## $DBH_{90}$ (Fig. \@ref(fig:DBH90))
 
-$DBH$ showed a significant effect (with a $DBH_{90}$ > 10cm the recruitment value where we started sampling trees) on almost all traits from all species, indicating that when growing in diameter individuals tend to have thicker and smaller leaves with increased SLA, dry matter and chlorophyll content (Fig. \@ref(fig:DBH90)).
-
-$DBH_{90}$ has globally low to no effect on LDMC with values between 9 and 47 cm.
-
-* CC $DBH_{90}$ was around 10 cm for *E. sagotiana* and *E. coriacea*; between 20-40 cm for *E. decolorans*, *S. sp1*, *S. globulifera*, *E. wachenheimii*, *E. grandiflora*; and at 209 cm for *E. pedicellata*. In a nutshell ontogeny did not affect CC for *E. sagotiana* and *E. coriacea*; strongly affected *E. pedicellata* CC during its whole life (**is it not due to no sampling of the plateau ?**); and affected only new recruits CC between 10 and 40 cm for remaining species.
-* LA $DBH_{90}$ was between 45 and 60 cm for *E. coriacea*, *S. globulifera* and *E. decolorans*; and between 100 and 260 cm for remaing species. In a nutshell ontogeny affected LA only for new recruits between 10 and 60 cm for *E. coriacea*, *S. globulifera*, but during the whole life for remaining species.
-* SLA $DBH_{90}$ was between 30 and 40 cm for *E. sagotiana*, *E. grandiflora*, and *E. coriacea*; between 40 and 100 for *E. decolorans*, *S. sp1*,  and *S. globulifera* ; and above 100 for *E. wachenheimii* and *E. pedicellata*.
-* LT $DBH_{90}$ was close to 10 cm for *E. coriacea*, above 100 cm for *E. pedicellata* and between 30 and 100 cm for remaing species.
-
-**How to sum-up all those informations ?**
+*
 
 ## TWI (Fig. \@ref(fig:TWI))
 
-* All $\beta_{TWI}$ are negative for LA with an effect varying from -0.05 to -0.5 (ten fold)
-* On the opposite all $\beta_{TWI}$  from remaining traits (CC, SLA, LDMC,)
+* 
 
 ## NCI (Fig. \@ref(fig:NCI))
 
@@ -265,6 +259,8 @@ $DBH_{90}$ has globally low to no effect on LDMC with values between 9 and 47 cm
 # Discussion
 
 > To be developed in bullet points to highlight the take home message
+
+> Whereas ontogeny and topography globally shape individual leaf traits, trait answer to neighborhood is more specific.
 
 # Supplementary materials 
 
@@ -406,8 +402,10 @@ lapply(fits, function(fit)
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_wrap( ~ trait, labeller = label_parsed,
-              scales = "free", nrow = 3) +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free") +
+  # facet_wrap( ~ trait, labeller = label_parsed,
+  #             scales = "free", nrow = 3) +
   xlab("") +
   ylab(expression(alpha)) +
   scale_y_sqrt() +
@@ -436,8 +434,10 @@ lapply(fits, function(fit)
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_wrap( ~ trait, labeller = label_parsed, 
-              scales = "free", nrow = 3) +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free") +
+  # facet_wrap( ~ trait, labeller = label_parsed, 
+  #             scales = "free", nrow = 3) +
   xlab("") +
   ylab(expression(DBH[90]~(cm))) +
   scale_y_log10() +
@@ -465,8 +465,10 @@ lapply(fits, function(fit)
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_wrap( ~ trait, labeller = label_parsed, 
-              scales = "free", nrow = 3) +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free") +
+  # facet_wrap( ~ trait, labeller = label_parsed, 
+  #             scales = "free", nrow = 3) +
   xlab("") +
   ylab(expression(beta[TWI])) +
   scale_y_continuous(trans="S_sqrt") +
@@ -494,8 +496,10 @@ lapply(fits, function(fit)
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_wrap( ~ trait, labeller = label_parsed, 
-              scales = "free", nrow = 3) +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free") +
+  # facet_wrap( ~ trait, labeller = label_parsed, 
+  #             scales = "free", nrow = 3) +
   xlab("") +
   ylab(expression(beta[Comp])) +
   scale_y_continuous(trans="S_sqrt") +
@@ -519,7 +523,7 @@ preds %>%
 ```
 
 ```{r predictions, fig.cap="Model predictions.", eval=F}
-g <- preds %>% 
+preds %>% 
   select(Trait, Genus, Species, DBH, TWI, NCI,
          Y, Ydbh, Ydbh5, Ydbh95, 
          Ytwi, Ytwi5, Ytwi95,  Ycomp, Ycomp5, Ycomp95) %>% 
@@ -538,8 +542,8 @@ g <- preds %>%
   geom_ribbon(aes(ymin = Yp5, ymax = Yp95), alpha = 0.2) +
   geom_point(aes(y = Y)) +
   geom_line(aes(y = Yp)) +
-  facet_wrap(~ Trait, scales = "free")
-  # facet_grid(Trait ~ variable, scales = "free")
-# plotly::ggplotly(g)
-# save(g, file = "./functional_save/predictions.Rdata")
+  facet_grid(Trait ~ Genus, scales = "free") +
+  # facet_grid(Genus ~ Trait, scales = "free") +
+  scale_color_brewer("", palette = "Set1") +
+  scale_fill_brewer("", palette = "Set1")
 ```
