@@ -2,18 +2,18 @@
 title: "A05: Complexes distributions"
 date: '`r Sys.Date()`'
 output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
+  github_document: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::word_document2: default
-  github_document: default
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
 linestretch: 1.5
 ---
 
@@ -39,9 +39,11 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # globa
 ```
 
 ```{r trees}
+d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
+  filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
   filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 
   collect()
@@ -106,7 +108,7 @@ load("./distribution_save/Competition.Rdata")
 ```
 
 ```{r complexes}
-complexes <- bind_rows(
+Complexes <- bind_rows(
   data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
@@ -127,33 +129,42 @@ complexes <- bind_rows(
 ```{r data}
 data <- trees %>% 
   left_join(env) %>% 
-  left_join(complexes) %>% 
-  left_join(Competition) %>% 
-  mutate(BAother = BA - BAspecies) %>% 
+  left_join(Complexes) %>% 
   filter(!is.na(Plot))
 ```
 
 ```{r mdata}
-complexes <- unique(complexes$Complex)
+complexes <- unique(Complexes$Complex)
 data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
-mdata <- lapply(complexes, function(complex)
-  list(N = nrow(data),
+mdata <- lapply(complexes, function(complex) {
+  data_complex <- left_join(data,
+                            Competition %>% 
+                              left_join(Complexes, by = c("Genusj" = "Genus", "Speciesj" = "Species")) %>% 
+                              mutate(Complex = ifelse(is.na(Complex), "no", Complex)) %>% 
+                              mutate(dij = ifelse(dij <1, 1, dij)) %>% 
+                              mutate(strata = as.numeric(Complex == complex)) %>% 
+                              group_by(idTree) %>% 
+                              summarise(NCIother = sum(DBHj^2*exp(-0.25*dij)*abs(strata-1)),
+                                        NCIcomplex = sum(DBHj^2*exp(-0.25*dij)*strata)))
+  list(N = nrow(data_complex),
        K = 3,
-       Y = as.numeric(data$Complex == complex),
-       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
+       Y = as.numeric(data_complex$Complex == complex),
+       X = dplyr::select(data_complex, TWI, NCIother, NCIcomplex) %>%
          mutate_all(funs(scale)) %>%
          as.matrix(),
-       w = ifelse(data$Complex == complex,
-                  1/(2*sum(data$Complex == complex)),
-                  1/(2*sum(data$Complex != complex)))))
+       w = ifelse(data_complex$Complex == complex,
+                  1/(2*sum(data_complex$Complex == complex)),
+                  1/(2*sum(data_complex$Complex != complex))))
+})
 names(mdata) <- complexes
 ```
 
 ```{r fit}
+# Model <- stan_model("A01-SingleModel.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
 # save(fits, file = "./distribution_save/complexes.Rdata")
-load("./distribution_save/ComplexesReduced.Rdata")
+load("./distribution_save/complexes.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
@@ -213,8 +224,7 @@ lapply(fits, function(fit)
   dplyr::select(complex, term, descriptor, estimate) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus",
-                                    `4` = "BAspecies")) %>% 
+                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
@@ -236,8 +246,7 @@ lapply(fits, function(fit)
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus",
-                                    `4` = "BAspecies")) %>% 
+                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
   filter(parameter != "alpha") %>% 
@@ -250,7 +259,7 @@ lapply(fits, function(fit)
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
+  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free_y") +
   xlab("") + ylab("") + 
   scale_fill_discrete(guide = "none") +
   scale_color_discrete(guide = "none")
@@ -261,47 +270,51 @@ preds <- lapply(complexes, function(complex){
 
   TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
              to = max(mdata[[complex]]$X[,1]), length.out = 100)
-  BA <- seq(from = min(mdata[[complex]]$X[,2]), 
+  NCIother <- seq(from = min(mdata[[complex]]$X[,2]), 
              to = max(mdata[[complex]]$X[,2]), length.out = 100)
-  BAgenus <- seq(from = min(mdata[[complex]]$X[,3]), 
+  NCIcomplex <- seq(from = min(mdata[[complex]]$X[,3]), 
              to = max(mdata[[complex]]$X[,3]), length.out = 100)
 
   alpha <- as.matrix(fits[[complex]], pars = "alpha")
   beta <- as.matrix(fits[[complex]], pars = "beta")
   gamma <- as.matrix(fits[[complex]], pars = "gamma")
 
-  # Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*BA + beta[n,3]*BAgenus + gamma[n,1]*TWI^2 + gamma[n,2]*BA^2 + gamma[n,3]*BAgenus^2)), simplify = F))
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(BA) + beta[n,3]*mean(BAgenus) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(BA)^2 + gamma[n,3]*mean(BAgenus)^2)), simplify = F))
-  Yba <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*BA + beta[n,3]*mean(BAgenus) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*BA^2 + gamma[n,3]*mean(BAgenus)^2)), simplify = F))
-  Ybagenus <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(BA) + beta[n,3]*BAgenus + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(BA)^2 + gamma[n,3]*BAgenus^2)), simplify = F))
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIcomplex) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIcomplex)^2)), simplify = F))
+  Ynciother <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*NCIother + beta[n,3]*mean(NCIcomplex) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*NCIother^2 + gamma[n,3]*mean(NCIcomplex)^2)), simplify = F))
+  Yncicomplex <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*NCIcomplex + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*NCIcomplex^2)), simplify = F))
 
   bind_rows(
     data.frame(
-      complex = complex,
+      Complex = complex,
       variable = "TWI",
       value = TWI,
       Y = apply(Ytwi, 2, mean),
       Y5 = apply(Ytwi, 2, quantile, probs = 0.05),
       Y95 = apply(Ytwi, 2, quantile, probs = 0.95)),
     data.frame(
-      complex = complex,
-      variable = "BA",
-      value = BA,
-      Y = apply(Yba, 2, mean),
-      Y5 = apply(Yba, 2, quantile, probs = 0.05),
-      Y95 = apply(Yba, 2, quantile, probs = 0.95)),
+      Complex = complex,
+      variable = "NCIother",
+      value = NCIother,
+      Y = apply(Ynciother, 2, mean),
+      Y5 = apply(Ynciother, 2, quantile, probs = 0.05),
+      Y95 = apply(Ynciother, 2, quantile, probs = 0.95)),
     data.frame(
-      complex = complex,
-      variable = "BAgenus",
-      value = BAgenus,
-      Y = apply(Ybagenus, 2, mean),
-      Y5 = apply(Ybagenus, 2, quantile, probs = 0.05),
-      Y95 = apply(Ybagenus, 2, quantile, probs = 0.95)))
+      Complex = complex,
+      variable = "NCIcomplex",
+      value = NCIcomplex,
+      Y = apply(Yncicomplex, 2, mean),
+      Y5 = apply(Yncicomplex, 2, quantile, probs = 0.05),
+      Y95 = apply(Yncicomplex, 2, quantile, probs = 0.95)))
 }) %>% bind_rows()
-ggplot(preds, aes(x = value)) + 
-  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
-   geom_line(aes(y = Y)) +
-  facet_grid(complex ~ variable, scales = "free")
+preds %>% 
+  left_join(group_by(data, Complex) %>% 
+              summarise(Yo = n()/nrow(.))) %>% 
+  ggplot(aes(x = value)) +
+  geom_ribbon(aes(ymin = (Y5 - Yo)/Yo, ymax = (Y95 - Yo)/Yo), alpha = 0.2) +
+  geom_line(aes(y = (Y - Yo)/Yo)) +
+  geom_hline(aes(yintercept = 0), col = "red", lty = "dashed") +
+  facet_grid(Complex ~ variable, scales = "free_x") +
+  xlab("") + ylab("Relative abundance variation (%)")
 ```
 
 # Discussion

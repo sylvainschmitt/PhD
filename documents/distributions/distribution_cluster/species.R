@@ -14,15 +14,24 @@ cores <- 6
 #### Data ####
 
 cat("#### Data ####\n\n")
+d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
+  filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
   filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 
   collect()
 load("./distribution_save/env.Rdata")
 load("./distribution_save/Competition.Rdata")
-complexes <- bind_rows(
+Competition <- Competition %>% 
+  mutate(dij = ifelse(dij <1, 1, dij)) %>% 
+  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
+  mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
+  group_by(idTree) %>% 
+  summarise(NCIother = sum(DBHj^2*exp(-0.25*dij)*abs(strata-1)),
+            NCIspecies = sum(DBHj^2*exp(-0.25*dij)*strata))
+Complexes <- bind_rows(
   data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
@@ -40,9 +49,8 @@ complexes <- bind_rows(
              Species = c("globulifera", "sp.1")))
 data <- trees %>% 
   left_join(env) %>% 
-  left_join(complexes) %>% 
+  left_join(Complexes) %>% 
   left_join(Competition) %>% 
-  mutate(BAother = BA - BAspecies) %>% 
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
@@ -52,7 +60,7 @@ data <- trees %>%
 #### Model Data ####
 
 cat("#### Model Data ####\n\n")
-complexes <- unique(complexes$Complex)
+complexes <- unique(Complexes$Complex)
 mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
@@ -60,7 +68,7 @@ mdata <- lapply(complexes, function(complex) {
        K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
+       X = dplyr::select(data, TWI, NCIother, NCIspecies) %>%
          mutate_all(funs(scale)) %>%
          as.matrix())
 })

@@ -43,9 +43,11 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # globa
 ```
 
 ```{r trees}
+d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
+  filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
   filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 
   collect()
@@ -106,10 +108,17 @@ load("./distribution_save/env.Rdata")
 # Competition <- bind_rows(Competition)
 # save(Competition, file = "./distribution_save/Competition.Rdata")
 load("./distribution_save/Competition.Rdata")
+Competition <- Competition %>% 
+  mutate(dij = ifelse(dij <1, 1, dij)) %>% 
+  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
+  mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
+  group_by(idTree) %>% 
+  summarise(NCIother = sum(DBHj^2*exp(-0.25*dij)*abs(strata-1)),
+            NCIspecies = sum(DBHj^2*exp(-0.25*dij)*strata))
 ```
 
 ```{r complexes}
-complexes <- bind_rows(
+Complexes <- bind_rows(
   data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
@@ -130,18 +139,18 @@ complexes <- bind_rows(
 ```{r data}
 data <- trees %>% 
   left_join(env) %>% 
-  left_join(complexes) %>% 
+  left_join(Complexes) %>% 
   left_join(Competition) %>% 
-  mutate(BAother = BA - BAspecies) %>% 
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
   filter(n() > 10) %>% 
   ungroup()
+data <- data %>% group_by(Complex) %>% sample_n(200) %>% ungroup()
 ```
 
 ```{r mdata}
-complexes <- unique(complexes$Complex)
+complexes <- unique(Complexes$Complex)
 mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
@@ -149,7 +158,7 @@ mdata <- lapply(complexes, function(complex) {
        K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
+       X = dplyr::select(data, TWI, NCIother, NCIspecies) %>%
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
@@ -157,10 +166,11 @@ names(mdata) <- complexes
 ```
 
 ```{r fit}
+# Model <- stan_model("A02-JointModel.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
 # save(fits, file = "./distribution_save/species.Rdata")
-load("./distribution_save/SpeciesReduced.Rdata")
+load("./distribution_save/species.Rdata")
 pars <- c("alpha", "beta", "gamma")
 species <- lapply(mdata, function(data) 
   data.frame(species = 1:length(colnames(data$Y)),
@@ -238,7 +248,7 @@ lapply(fits, function(fit)
   mutate(descriptor = substr(index, 2, 2)) %>% 
   dplyr::select(complex, term, SpeciesLong, descriptor, estimate) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus")) %>% 
+                                    `2` = "NCIother", `3` = "NCIspecies")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$")) %>%
@@ -262,8 +272,7 @@ lapply(complexes, function(complex)
     left_join(species) %>% 
     mutate(descriptor = substr(descriptor, 2, 2)) %>% 
     mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                      `2` = "BA", `3` = "BAgenus")) %>% 
-    filter(descriptor != "BA") %>% 
+                                      `2` = "NCIother", `3` = "NCIspecies")) %>% 
     dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
     filter(parameter != "alpha") %>% 
     mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
@@ -322,17 +331,6 @@ preds <- lapply(complexes, function(complex){
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
     ), simplify = F), along = 3)
 
-  lapply(1:S, function(sp)
-    data.frame(
-      complex = complex,
-      species = colnames(mdata[[complex]]$Y)[sp],
-      variable = "TWI",
-      value = TWI,
-      Y = apply(Ytwi[sp,,], 2, mean),
-      Y5 = apply(Ytwi[sp,,], 2, quantile, probs = 0.05),
-      Y95 = apply(Ytwi[sp,,], 2, quantile, probs = 0.95))) %>% 
-    bind_rows()
-    
   bind_rows(
     lapply(1:S, function(sp)
       data.frame(
@@ -362,7 +360,8 @@ preds %>%
        geom_line(aes(y = Y)) +
        facet_grid(complex ~ variable, scales = "free_x") +
        guides(col = guide_legend(nrow=2)) +
-       theme(legend.position = "bottom")) %>% 
+       theme(legend.position = "bottom") +
+       scale_y_sqrt()) %>% 
   gridExtra::grid.arrange(grobs = .$g)
 ```
 
