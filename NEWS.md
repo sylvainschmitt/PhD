@@ -1,5 +1,20 @@
+# PhD 0.1.9108
+* distribution: NCIcomplex & NCIspecies & Merge
+
+# PhD 0.1.9107
+* functional: NCI change
+
+# PhD 0.1.9106
+* functional: result begin
+
+# PhD 0.1.9105
+* distribution: M&M, Results
+* functional: draft begin w all results
+
 # PhD 0.1.9104
-* distribution: NCIcomplex & NCIspecies
+* distribution: new complex delineation, draft begin
+* functional: InteractionSpecies2
+>>>>>>> 2fc3ea970da283b53bdbfba61a9349c3e5ba536f
 
 # PhD 0.1.9103
 * distribution: All complexes and species with reduced outputs

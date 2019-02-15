@@ -260,6 +260,7 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:3)
 ```
 
+<<<<<<< HEAD
 ```{r posterior, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
 lapply(complexes, function(complex) 
   mcmc_intervals_data(as.array(fits[[complex]], pars = pars)) %>% 
@@ -326,6 +327,10 @@ preds <- lapply(complexes, function(complex){
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
     ), simplify = F), along = 3)
+  Yba <- abind::abind(sapply(1:length(TWI), function(i) 
+    sapply(1: nrow(alpha), function(n)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*BA[i] + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*mean(BAgenus)^2)
+    ), simplify = F), along = 3)
   Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
@@ -338,6 +343,7 @@ preds <- lapply(complexes, function(complex){
         species = colnames(mdata[[complex]]$Y)[sp],
         variable = "TWI",
         value = TWI,
+        Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ytwi[sp,,], 2, mean),
         Y5 = apply(Ytwi[sp,,], 2, quantile, probs = 0.05),
         Y95 = apply(Ytwi[sp,,], 2, quantile, probs = 0.95))) %>% 
@@ -346,8 +352,20 @@ preds <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
+        variable = "BA",
+        value = BA,
+        Yp = apply(Yp[sp,,], 2, mean),
+        Y = apply(Yba[sp,,], 2, mean),
+        Y5 = apply(Yba[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Yba[sp,,], 2, quantile, probs = 0.95))) %>% 
+      bind_rows(),
+    lapply(1:S, function(sp)
+      data.frame(
+        complex = complex,
+        species = colnames(mdata[[complex]]$Y)[sp],
         variable = "BAgenus",
         value = BAgenus,
+        Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ybagenus[sp,,], 2, mean),
         Y5 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.05),
         Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
@@ -357,12 +375,24 @@ preds %>%
   group_by(complex) %>% 
   do(g = ggplot(data = ., aes(x = value, col = species)) + 
        geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
-       geom_line(aes(y = Y)) +
+       geom_line(aes(y = Y), lwd = 1.3) +
        facet_grid(complex ~ variable, scales = "free_x") +
        guides(col = guide_legend(nrow=2)) +
        theme(legend.position = "bottom") +
        scale_y_sqrt()) %>% 
   gridExtra::grid.arrange(grobs = .$g)
+```
+
+```{r sensitivity, fig.cap="Model sensitivity to co-variables."}
+preds %>% 
+  mutate(Delta = sqrt((Yp-Y)^2)) %>% 
+  mutate(SpeciesLong = paste(substr(complex, 1, 1), species)) %>% 
+  ggplot(aes(x = SpeciesLong, y = Delta, fill = variable)) +
+  geom_boxplot() +
+  coord_flip() +
+  ylab("Delta prediction") +
+  xlab("") +
+  scale_y_sqrt()
 ```
 
 # Discussion
@@ -414,39 +444,6 @@ Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every compl
 mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
-```
-
-## S3: Posterirors
-
-All posteriors.
-
-```{r posteriorAll, fig.cap="Model all parameters posterior."} 
-lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
-  bind_rows(.id = "complex") %>% 
-  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
-  left_join(species) %>% 
-  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus")) %>% 
-  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
-  filter(parameter != "alpha") %>% 
-  ggplot(aes(x = SpeciesLong, xend = SpeciesLong, 
-             col = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free") +
-  xlab("") + ylab("") + 
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
 ```
 
 # References

@@ -218,7 +218,7 @@ Still, we can note that globally abiotic and biotic environment through TWI and 
 
 ```{r summary}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c(pars, "lp__"), droppars = NULL, rhat = T)) %>%
+  broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
   dplyr::select(complex, term, descriptor, estimate) %>% 
@@ -229,8 +229,7 @@ lapply(fits, function(fit)
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
-                              gamma = "$\\gamma$",
-                              lp = "log likelihood")) %>% 
+                              gamma = "$\\gamma$")) %>% 
   reshape2::dcast(term + descriptor ~ complex, value.var = "estimate") %>% 
   kable(caption = "Model parameters for each complex with scaled descriptors.",
         escape = F, digits = 3, format = "pandoc") %>% 

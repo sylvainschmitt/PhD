@@ -1,21 +1,19 @@
 ---
-title: Title
-author: "Sylvain Schmitt, Myriam Heuertz, Niklas Tysklind, Bruno Herault"
+title: Pervasive local-scale species niche differentiation within tropical tree species complexes (temporary)
+author: Sylvain Schmitt$^{*,1}$, Niklas Tysklind$^2$, Geraldine Derroire$^3$, Myriam Heuertz$^4$, Bruno Herault$^{5,6}$
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-    keep_tex: true
+  bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -31,9 +29,378 @@ if(knitr:::is_latex_output()) options(knitr.table.format = "latex")
 library(tidyverse)
 library(broom)
 theme_set(bayesplot::theme_default())
-opts_chunk$set( echo = F, message = F, warning = F, 
-                fig.height = 8, fig.width = 12,
-                cache = T, cache.lazy = F)
+opts_chunk$set(echo = F, message = F, warning = F, 
+               fig.height = 8, fig.width = 8,
+               cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 ```
 
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
+  data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("hexaphylla", "praealta", "simaboides")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1")))
+```
+
+```{r data}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+load("./distribution_save/env.Rdata")
+load("./distribution_save/Competition.Rdata")
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(complexes) %>% 
+  left_join(Competition) %>% 
+  mutate(BAother = BA - BAspecies) %>% 
+  filter(!is.na(Plot)) %>% 
+  mutate(Complex = ifelse(is.na(Complex), "no", Complex))
+```
+
+```{r predComplex}
+mdata <- lapply(unique(complexes$Complex), function(complex)
+  list(N = nrow(data),
+       K = 3,
+       Y = as.numeric(data$Complex == complex),
+       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix(),
+       w = ifelse(data$Complex == complex,
+                  1/(2*sum(data$Complex == complex)),
+                  1/(2*sum(data$Complex != complex)))))
+names(mdata) <- unique(complexes$Complex)
+load("./distribution_save/complexes.Rdata")
+names(fits)[1:2] <- c("Chartacea", "Parvifolia")
+predComplex <- lapply(unique(complexes$Complex), function(complex){
+
+  TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
+             to = max(mdata[[complex]]$X[,1]), length.out = 100)
+  BA <- seq(from = min(mdata[[complex]]$X[,2]), 
+             to = max(mdata[[complex]]$X[,2]), length.out = 100)
+  BAgenus <- seq(from = min(mdata[[complex]]$X[,3]), 
+             to = max(mdata[[complex]]$X[,3]), length.out = 100)
+
+  alpha <- as.matrix(fits[[complex]], pars = "alpha")
+  beta <- as.matrix(fits[[complex]], pars = "beta")
+  gamma <- as.matrix(fits[[complex]], pars = "gamma")
+
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(BA) + beta[n,3]*mean(BAgenus) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(BA)^2 + gamma[n,3]*mean(BAgenus)^2)), simplify = F))
+  Yba <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*BA + beta[n,3]*mean(BAgenus) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*BA^2 + gamma[n,3]*mean(BAgenus)^2)), simplify = F))
+  Ybagenus <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(BA) + beta[n,3]*BAgenus + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(BA)^2 + gamma[n,3]*BAgenus^2)), simplify = F))
+
+  bind_rows(
+    data.frame(
+      complex = complex,
+      variable = "TWI",
+      value = TWI,
+      Y = apply(Ytwi, 2, mean),
+      Y5 = apply(Ytwi, 2, quantile, probs = 0.05),
+      Y95 = apply(Ytwi, 2, quantile, probs = 0.95)),
+    data.frame(
+      complex = complex,
+      variable = "BA",
+      value = BA,
+      Y = apply(Yba, 2, mean),
+      Y5 = apply(Yba, 2, quantile, probs = 0.05),
+      Y95 = apply(Yba, 2, quantile, probs = 0.95)),
+    data.frame(
+      complex = complex,
+      variable = "BAgenus",
+      value = BAgenus,
+      Y = apply(Ybagenus, 2, mean),
+      Y5 = apply(Ybagenus, 2, quantile, probs = 0.05),
+      Y95 = apply(Ybagenus, 2, quantile, probs = 0.95)))
+}) %>% bind_rows()
+```
+
+```{r predSpecies}
+mdata <- lapply(unique(complexes$Complex), function(complex){
+  data<- filter(data, Complex == complex)
+  list(N = nrow(data),
+       S = length(unique(data$Species)),
+       K = 3,
+       Y = sapply(levels(as.factor(data$Species)),
+                  function(sp) as.numeric(data$Species == sp)),
+       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
+         mutate_all(funs(scale)) %>%
+         as.matrix())})
+names(mdata) <- unique(complexes$Complex)
+load("./distribution_save/species.Rdata")
+names(fits)[1:2] <- c("Chartacea", "Parvifolia")
+predSpecies <- lapply(unique(complexes$Complex), function(complex){
+
+  N <- 25
+  TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
+             to = max(mdata[[complex]]$X[,1]), length.out = N)
+  BA <- seq(from = min(mdata[[complex]]$X[,2]), 
+             to = max(mdata[[complex]]$X[,2]), length.out = N)
+  BAgenus <- seq(from = min(mdata[[complex]]$X[,3]), 
+             to = max(mdata[[complex]]$X[,3]), length.out = N)
+  
+  S <- mdata[[complex]]$S
+  K <- mdata[[complex]]$K
+  alpha <- as.matrix(fits[[complex]], pars = "alpha")
+  beta0 <- as.matrix(fits[[complex]], pars = "beta")
+  gamma0 <- as.matrix(fits[[complex]], pars = "gamma")
+  beta <- array(dim = c(nrow(alpha), S, K))
+  gamma <- array(dim = c(nrow(alpha), S, K))
+  for(k in 1:K){
+    beta[,,k] <- beta0[,seq.int(1, 3*S, S)[k]:(seq.int(1, 3*S, S)+(S-1))[k]]
+    gamma[,,k] <- gamma0[,seq.int(1, 3*S, S)[k]:(seq.int(1, 3*S, S)+(S-1))[k]]
+  }
+    
+  Yp <- abind::abind(sapply(1:length(TWI), function(i) 
+    sapply(1: nrow(alpha), function(n)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1] * TWI[i] + beta[n,,2]*BA[i] + beta[n,,3]*BAgenus[i] + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*BAgenus[i]^2)
+    ), simplify = F), along = 3)
+  Ytwi <- abind::abind(sapply(1:length(TWI), function(i) 
+    sapply(1: nrow(alpha), function(n)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
+    ), simplify = F), along = 3)
+  Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
+    sapply(1: nrow(alpha), function(n)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
+    ), simplify = F), along = 3)
+
+  bind_rows(
+    lapply(1:S, function(sp)
+      data.frame(
+        Complex = complex,
+        Species = colnames(mdata[[complex]]$Y)[sp],
+        variable = "TWI",
+        value = TWI,
+        Y = apply(Ytwi[sp,,], 2, mean),
+        Y5 = apply(Ytwi[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Ytwi[sp,,], 2, quantile, probs = 0.95))) %>% 
+      bind_rows(),
+    lapply(1:S, function(sp)
+      data.frame(
+        Complex = complex,
+        Species = colnames(mdata[[complex]]$Y)[sp],
+        variable = "BAgenus",
+        value = BAgenus,
+        Y = apply(Ybagenus[sp,,], 2, mean),
+        Y5 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
+      bind_rows())
+}) %>% bind_rows()
+```
+
+$^1$ UMR BIOGECO, Université de Bordeaux, 69 route d’Arcachon, F-33612 Cestas cedex France
+
+$^2$ INRA, UMR EcoFoG (Agroparistech, CNRS, Université des
+Antilles, Université de la Guyane, Cirad), Campus Agronomique, 97310 Kourou, French Guiana
+
+$^3$ Cirad, UMR EcoFoG (Agroparistech, CNRS, Inra, Université des
+Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana
+
+$^4$ UMR BIOGECO, INRA, 69 route d’Arcachon, F-33612 Cestas cedex France
+
+$^5$ Cirad, Univ Montpellier, UR Forests & Societies, Montpellier, France
+
+$^6$ INP-HB, Institut National Polytechnique Félix Houphouët-Boigny, BP 1093, Yamoussoukro, Ivory Coast
+
+__$^*$ Corresponding author:__ sylvain.schmitt@agroparistech.fr
+
+\newpage 
+
+# Abstract
+
+> To be written
+
+## Keywords
+
+species complex; species distribution model; species; ...
+
+\newpage 
+
+# Introduction 
+
+> To be written
+
+# Material and Methods
+
+## Study site
+
+The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
+
+The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
+
+## Species complexes
+
+Species complex were defined based on evidence for low phylogenetic resolution or plastid DNA sharing in the clade [@baraloto_using_2012-1; @Gonzalez2009]: *Eschweilera* with clades Parvifolia and Chartacea (Lecythidaceae; Chave *et al*, unpublished; Heuertz *et al*. unpublished); *Licania* [Chrysobalanaceae; @Bardon2016]; *Iryanthera* (Myristicaceae); *Symphonia* (Clusiaceae); *Talisia* (Sapindaceae). We further removed species with less than 10 individuals in Paracou in 2015, resulting in 6 species complexes including 2 to 9 species (Table \@ref(tab:ComplexTab), see supplementary material S1 [A04-Complexes](A04-Complexes.html)).
+
+## Environmental variables
+
+Three little correlated (Pearson's r < 0.13, see supplementary material S2 [A03-Descriptors](A03-Descriptors.html)) environmental descriptors were chosen to depict species and species complexes distribution. Topographic wetness index ($TWI$) was selected between various abiotic descriptors available and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
+
+Local basala area ($BA$) was used as a descriptor of biotic interactions with tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not taken directly into account. The local basal area ($BA$) was calculated as the sum of all neighboors surface at breast height in a 20-m radius. Local basal area was further split between basal area from individuals belonging to the same genus ($BA_{genus}$) and other individuals ($BA_{other}$).
+
+Descriptors used were derived from field censuses ($BA_{other}$ and $BA_{genus}$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
+
+## Analysis
+
+### Complexes distribution
+
+Species complex distribution was infered by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Occurences were weighted with equal weighting for presences and pseudo-absences, as recommended for regressions methods [ref Barbet-Massin]. Species complex presence $Presence$ was infered with a logistic regression following a Bernoulli distribution (best model form tested, see document [A01-SingleModel](A01-SingleModel.html)):
+$$Presence \sim Bernoulli[logit^{-1}(\alpha + \beta*X+\gamma*X^2)]$$
+were $X$ is the matrix of environmental descriptors, $\alpha$ is the intercept, $\beta$ is a vector representing the slope and $\gamma$ is a vector representing the quadratic form of environment variable effects.
+
+### Species distribution
+
+Species joint-distributions were infered within species complexes with softmax regression following a conjugated Dirchlet and Multinomial distribution:
+$$Presence_{species} \sim Dirichlet~Multinomial(softmax(\alpha + \beta*X + \gamma*X^2))$$
+were $Presence_{species}$ is the tree species with a vector of 0 and 1 (0 for all species of the species complex it belongs except the tree species equal to 1),  $X$ is the matrix of environmental descriptors, $\alpha$ is the vector of species intercepts, $\beta$ is a matrix representing the slope and $\gamma$ is a matrix representing the quadratic form of environment variable effects for each species.
+
+Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between distributions. A Bayesian method was used to infer parameters of the model regarding each complex and species using `stan` language [ref] and `rstan` package [ref] in the R environment [ref].
+
+# Results
+
+The topographic wetness index ($TWI$) and basal area from non-congeneric neighbors ($BA_{other}$) had little or no effect on species complex distribution (Fig. \@ref(fig:ComplexesDistribution)). But *Chartacea*, *Iryanthera*, *Licania*, and *Parvifolia* complexes showed strong or small parabolic answer to congeneric interactions with $BA_{genus}$ with low optimum values. In a nutshell, few congeneric neighboors improves habitat suitabitliy of those species complexes.
+
+On the other hand, the topographic wetness index ($TWI$) strongly influenced species distribution within complexes, with a gradient of response from positive to negative effect within each complex (Fig. \@ref(fig:betaTWI)). For instance, *S. globulifera*, *E. coriacea*, and *I. hostmanii* habitat suitability increased with water accumulation when it decreased for *S. sp1*, *E. sagotiana*, and *I. sagotiana* within *Symphonia*, *Parvifolia* and *Iryanthera* complexes respectively (Fig. \@ref(fig:SpeciesDistribution)). Still, the $TWI$ influence was low for *Chartacea* and *Talisia* complexes.
+
+Finally, $BA_{other}$ had no effect on most of species within complexes (results unshown see supplementary material S4 [A06-SpeciesDistribution](A06-SpeciesDistribution.html)). But congeneric interactions ($BA_{genus}$) had a significant effect on species from *Parvifolia*, *Symphonia* and *Talisia* with a change of dominance within the complex with increasing congeneric interactions (*E. sagotiana* and *E. decolorans* replacing *E. coriacea* and *E. wachenheimii*, *S. globulifera* replacing *S. sp1*, and *T. praelata* replacing *T. hexaphylla* within *Parvifolia*, *Symphonia* and *Talisia* complexes respectively).
+
+# Discussion
+
+> I have to do more bibliography and write the intoduction but I think the take home message will be something like:
+
+> Species complexes of tropical tree are widely spread across habitats at local-scale, but their species show pervasive niche differentiation mainly with water accumulation and also with congeneric interactions.
+
+# Supplementary materials 
+
+* Supplementary material S1 [A04-Complexes](A04-Complexes.html)
+* Supplementary material S2 [A03-Descriptors](A03-Descriptors.html)
+* Supplementary material S3 [A02-JointModel](A01-JointModel.html)
+* Supplementary material S4 [A06-SpeciesDistribution](A06-SpeciesDistribution.html)
+
+# Acknowledgements
+
+We thanks the university of Bordeaux for a PhD grant to Sylvain Schmitt. We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification.
+
+# Authors’ contributions
+
+NT and SS conceived the ideas; SS, BA and NT designed methodology; XX analysed model outputs; SS, and XX led the writing of the manuscript. All authors contributed critically to the drafts and gave final approval for publication.
+
 # References
+
+<div id="refs"></div>
+
+\newpage 
+
+## Table captions
+
+__Table \@ref(tab:ComplexTab)__ Identified species complexes with species including more than 10 individuals in Paracou.
+
+
+## Figure captions
+
+__Figure \@ref(fig:ComplexesDistribution)__ Distribution of species complexes.
+
+__Figure \@ref(fig:betaTWI)__ TWI effect on species  distribution within species complexes. $\beta_{TWI}$ posterior is represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).
+
+__Figure \@ref(fig:SpeciesDistribution)__ Distribution of species wihtin species complexes.
+
+\newpage 
+
+<!-- tables -->
+
+```{r ComplexTab}
+trees %>% 
+  left_join(complexes, by = c("Genus", "Species")) %>% 
+  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Complex, Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  arrange(Complex, desc(N)) %>% 
+  kable(caption = "Identified species complexes with species including more than 10 individuals in Paracou.", format = "pandoc") %>% 
+  kable_styling(full_width = F)
+```
+
+<!-- figures -->
+
+```{r ComplexesDistribution, fig.cap="Distribution of species complexes."}
+ggplot(predComplex, aes(x = value)) + 
+  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+   geom_line(aes(y = Y)) +
+  facet_grid(complex ~ variable, scales = "free_x") +
+  scale_y_sqrt() +
+  ylab("Species complex distribution")
+```
+
+```{r betaTWI, fig.cap="TWI effect on species  distribution within species complexes. $\\beta_{TWI}$ posterior is represented for each species complex and species with mean (circle), 50\\% credibility interval (thick segment) and 95\\% confidence interval (thin segment)."} 
+species <- data %>%
+  filter(Complex != "no") %>% 
+  dplyr::select(Complex, Genus, Species) %>% 
+  unique() %>% 
+  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>% 
+  group_by(Complex) %>% 
+  arrange(Complex, Species) %>% 
+  mutate(species = row_number()) %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species))
+lapply(fits, function(fit) 
+  bayesplot::mcmc_intervals_data(as.array(fit, pars = "beta"))) %>% 
+  bind_rows(.id = "Complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "BA", `3` = "BAgenus")) %>% 
+    filter(descriptor == "TWI") %>% 
+  filter(parameter == "beta") %>%
+  dplyr::select(Complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+  mutate(parameter = ifelse(parameter != "alpha",
+                            paste0(parameter, "[", descriptor, "]"),
+                            parameter)) %>% 
+  mutate(Complex = gsub("E. ", "", Complex)) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, Complex), 
+             xend = datatools::reorder_within(SpeciesLong, m, Complex), 
+             col = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(Complex ~ parameter, labeller = label_parsed, scales = "free") +
+  datatools::scale_x_reordered() +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r SpeciesDistribution, fig.cap="Distribution of species wihtin species complexes.", fig.height=10}
+predSpecies %>%
+  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>%
+  left_join(species) %>% 
+  group_by(Complex) %>% 
+  do(g = ggplot(data = ., aes(x = value, col = SpeciesLong)) + 
+       geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+       geom_line(aes(y = Y), lwd = 1.3) +
+       facet_grid(Complex ~ variable, scales = "free_x") +
+       guides(col = guide_legend(nrow=3)) +
+       scale_color_discrete("") +
+       theme(legend.position = "bottom") +
+       scale_y_sqrt()) %>% 
+  gridExtra::grid.arrange(grobs = .$g)
+```
