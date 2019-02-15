@@ -1,5 +1,6 @@
 # PhD 0.1.9108
 * distribution: NCIcomplex & NCIspecies & Merge
+* functional: Interaction betaNCI lognormal fixed and Interaction reduced
 
 # PhD 0.1.9107
 * functional: NCI change

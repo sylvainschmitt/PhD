@@ -1,5 +1,5 @@
 ---
-title: Ontogeny, neighbor interactions and topgraphy shape individual-tree leaf functional traits within Neotropical species complexes (Temporary)
+title: Ontogeny, topgraphy and competition shape individual-tree leaf functional traits independantly from species identity within Neotropical species complexes (Temporary)
 author: Sylvain Schmitt$^{*,1}$, Geraldine Derroire$^2$, Emilie Ducouret$^3$, Anne Baranger$^4$, Niklas Tysklind$^5$,  Myriam Heuertz$^6$, Eric Marcon$^7$, Bruno Herault$^{8,9}$
 date: '`r Sys.Date()`'
 output:
@@ -43,11 +43,14 @@ load("./functional_save/CompetitionMatrix.Rdata")
 Individuals <- Individuals %>% 
   group_by(Species) %>% 
   filter(n() > 10) %>% 
-  ungroup()
+  ungroup() %>% 
+  left_join(Competition %>% 
+              group_by(idTree) %>% 
+              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij))))
 ```
 
 ```{r model}
-load("./functional_save/InteractionSpecies2.Rdata")
+load("./functional_save/Interaction.Rdata")
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
@@ -79,7 +82,7 @@ preds <- lapply(models, function(model){
   
   DBH <- data_trait$DBH/sd(data_trait$DBH)
   TWI <- data_trait$TWI/sd(data_trait$TWI)
-  NCI <- apply(as.matrix(fits[[model]], pars = "NCI"), 2, mean)
+  NCI <- data_trait$NCI/sd(data_trait$NCI)
   species <- as.numeric(as.factor(data_trait$Species))
   
   alpha <- as.matrix(fits[[model]], pars = "alpha")
@@ -208,8 +211,8 @@ We calculated 5 functional traits from leaf samples already highlighted in previ
 Three little correlated (Pearson's r < 0.14) ontogenetic and environmental descriptors were chosen to depict individual leaf traits. Diameter at breast height ($DBH$, $cm$) was chosen as an indirect proxy for ontogeny effect [but see @roggy_links_2005] but was shown to be confounded with light access through Dawkins index (see supplementary material S1 [A02-Environment](A02-Environment.html)).
 
 A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not directly taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
-$$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\alpha.\delta_{i,j}}$$
-with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature and because NCI effect showed very little effect beyond 20m in preliminary analysis. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance. 
+$$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^\beta e^{-\alpha.\delta_{i,j}}$$
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature and because NCI effect showed very little effect beyond 20m in preliminary analysis. $\beta$ represents the size effect of neighbors through their diameter and was set to 2 to represent neighbors through their surface. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance and was set to 0.25 corresponding to neighbors above 20m having less than 1% effect on $NCI$.
 
 Finally, topographic wetness index ($TWI$) was selected between various abiotic descriptors available (see supplementary material S1 [A02-Environment](A02-Environment.html)) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher]. Descriptors used were derived from field censuses ($DBH$ and $NCI$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
 
@@ -225,8 +228,8 @@ $$T_{s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{s} + DBH_i},
 $\alpha_{env}$ is the trait maximum value in the Michaelis Menten and $\beta_{DBH}$ is the value of DBH for which the trait account for half of its plateau value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolves slower towards its plateau, consequently, ontogeny affects more traits values. We will further use $DBH_{90}$ equal to $9.\beta_{DBH}$ being the DBH value for which the trait account for 90% of its maximum value that we can assume as the DBH for which the individual trait value is close to the maximum ontogenetic value.
 
 Finally $\alpha_{env}$ was represented by an additive linear form of environmental effects represented by $TWI$ for abiotic environment and by $NCI$ for biotic interactions:
-$$alpha_{env} = \alpha_{s} + {\beta_{TWI}}_{s}.TWI_i + {\beta_{Comp}}_{s}.NCI_i$$
-where $\alpha$ is the intercept, $\beta_{TWI}$ is the slope of TWI effect, e.g. positive $\beta_{TWI}$ represents an increase of the trait value with water accumulation; whereas $\beta_{Comp}$ is the slope of competition effect, e.g. negative $\beta_{Comp}$ highlight a decrease of trait value with competition.
+$$alpha_{env} = \alpha_{s} + {\beta_{TWI}}_{s}.TWI_i + {\beta_{NCI}}_{s}.NCI_i$$
+where $\alpha$ is the intercept, $\beta_{TWI}$ is the slope of TWI effect, e.g. positive $\beta_{TWI}$ represents an increase of the trait value with water accumulation; whereas $\beta_{NCI}$ is the slope of competition effect, e.g. negative $\beta_{NCI}$ highlight a decrease of trait value with competition.
 
 Traits, DBH and TWI were all reduced for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits and the two complex, resulting in 10 regressions, using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see Supplementary material S4 [A08-Interaction](A08-Interaction.html) for model equations and `stan` code).
 
@@ -240,27 +243,42 @@ Thus, the more the model is sensitive to a variable the less the prediction will
 
 70% of the total variance was conserved on the first plane from the PCA of leaf traits (Fig. \@ref(fig:PCA)). The first plane highlighted an opposition of SLA to CC and LT, from high SLA leaves to thick leaves rich in chlorophyll, decoupled from a covariation of LA and LDMC, leaf area increasing with dry matter content. Finally, besides both axes showed significative species segregation ($p-value < 10^{-4}$), the second PCA axis segregated the two complexes (*Symphonia* and *Eschweilera* clade Parvifolia) with no overlap when the first axis better ranked species.
 
+* LMA, LT, CC seggregate species => Conservation/Acquisition ? orthogonal to LDMC, LA seggregating complexes
+
 ## Intercept
 
 $\alpha$ (Fig. \@ref(fig:Intercept)) represent the intercept and highlight species and genera differences between functional traits independantly from individual response to the ontogeny and the environment. **Is it really interesting to interpret it ? Maybe in introduction of the results to generally speak of traits differences between complexes but also readable on the PCA (Fig. \@ref(fig:PCA)).**
 
+* ~ CC, and LDMC relatively stable within complex, LA, SLA and LT seemed to differ btw species with a gradient in each complex
+
 ## $DBH_{90}$ (Fig. \@ref(fig:DBH90))
 
-*
+* ~ strong effect on LA, SLA and LT but low or null effect on CC and LDMC
+* ~ + DBH => -LA, -SLA, +LT => +Conservation & -Acquisition with age and light access ?
 
 ## TWI (Fig. \@ref(fig:TWI))
 
-* 
+* ~ Globally more or less strong negative effect on CC, invLA, LMA, LDMC and LT *Symphonia* and *Escwilera* except for CC *Eschweilera* and for less abundant species within *Eschweilera* (*E. pedicellata*, *E. wachenheimii*, and *E. grandiflora* for SLA, LDMC and LT)
+* ~ + TWI => + LA, +SLA, -LDMC, -LT, +/-CC (complex) => +Acquistion & -Conservation ?
+* *S. sp1* more uncertain than *S. globulifera*
+* LT *Symphonia* highly uncertain => Season effect ?
 
 ## NCI (Fig. \@ref(fig:NCI))
 
+* ~ Always positive and non null
+* ~ + NCI => + LA, +SLA, -LDMC, -LT, -CC => +Acquistion & -Conservation with increased competition ?
+
 ## Sensitivity (Fig. \@ref(fig:sensitivity))
+
+* ~ relatively similar, DBH only seems to be more important than environment in shaping traits
+* ~ TWI more important CC *Eschweilera*
+* ~ NCI + TWI faible on LT *Symphonia* => Season effect ?
 
 # Discussion
 
 > To be developed in bullet points to highlight the take home message
 
-> Whereas ontogeny and topography globally shape individual leaf traits, trait answer to neighborhood is more specific.
+> Ontogeny, topography and competition shape individual leaf traits independantly from species identity
 
 # Supplementary materials 
 
@@ -404,8 +422,6 @@ lapply(fits, function(fit)
   datatools::scale_x_reordered() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
              scales = "free") +
-  # facet_wrap( ~ trait, labeller = label_parsed,
-  #             scales = "free", nrow = 3) +
   xlab("") +
   ylab(expression(alpha)) +
   scale_y_sqrt() +
@@ -498,10 +514,8 @@ lapply(fits, function(fit)
   datatools::scale_x_reordered() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
              scales = "free") +
-  # facet_wrap( ~ trait, labeller = label_parsed, 
-  #             scales = "free", nrow = 3) +
   xlab("") +
-  ylab(expression(beta[Comp])) +
+  ylab(expression(beta[NCI])) +
   scale_y_continuous(trans="S_sqrt") +
   scale_color_brewer("", palette = "Set1", guide = "none") +
   scale_fill_brewer("", palette = "Set1", guide = "none")
@@ -510,9 +524,9 @@ lapply(fits, function(fit)
 ```{r sensitivity, fig.cap="Model sensitivity to variables. ..."}
 preds %>%
   select(Trait, Genus, Ddbh, Dtwi, Dcomp) %>% 
-  rename(DBH = Ddbh, TWI = Dtwi, Competition = Dcomp) %>% 
+  rename(DBH = Ddbh, TWI = Dtwi, NCI = Dcomp) %>% 
   reshape2::melt(id.vars = c("Trait", "Genus")) %>% 
-  mutate(variable = factor(variable, levels = c("Competition", "TWI", "DBH"))) %>%
+  mutate(variable = factor(variable, levels = c("NCI", "TWI", "DBH"))) %>%
   ggplot(aes(variable, value, fill = variable)) +
   geom_boxplot() +
   facet_grid(Trait ~ Genus, scales = "free") +
