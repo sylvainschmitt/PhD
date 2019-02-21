@@ -1,6 +1,6 @@
 ---
-title: Ontogeny, topgraphy and competition shape individual-tree leaf functional traits independantly from species identity within Neotropical species complexes (Temporary)
-author: Sylvain Schmitt$^{*,1}$, Geraldine Derroire$^2$, Emilie Ducouret$^3$, Anne Baranger$^4$, Niklas Tysklind$^5$,  Myriam Heuertz$^6$, Eric Marcon$^7$, Bruno Herault$^{8,9}$
+title: Coordinated answer of individual-tree leaf functional traits to ontogeny and water between specie of Neotropical complexes (Temporary)
+author: Sylvain Schmitt$^{*,1}$, Bruno Herault$^{2,3}$, Emilie Ducouret$^4$, Anne Baranger$^5$, Niklas Tysklind$^6$,  Myriam Heuertz$^7$, Eric Marcon$^8$, Saint Omer Cazal $^6$, Geraldine Derroire$^{10}$ 
 date: '`r Sys.Date()`'
 output:
   bookdown::pdf_document2:
@@ -30,6 +30,7 @@ library(tidyverse)
 library(ggfortify)
 library(broom)
 library(rstan)
+library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, 
                fig.height = 8, fig.width = 8,
@@ -39,19 +40,25 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 
 ```{r data}
 load("./functional_save/Individuals.Rdata")
+Individuals0 <- Individuals
 load("./functional_save/CompetitionMatrix.Rdata")
+sdDBH <- sd(Individuals$DBH)
 Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
   group_by(Species) %>% 
-  filter(n() > 10) %>% 
+  filter(n() > 20) %>% 
   ungroup() %>% 
   left_join(Competition %>% 
               group_by(idTree) %>% 
-              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij))))
+              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
+  mutate(NCI = log(NCI)) %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
+            funs(./sd(., na.rm = T)))
 ```
 
 ```{r model}
-load("./functional_save/Interaction.Rdata")
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+load("./functional_save/InteractionReduced.Rdata")
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 species <- lapply(models, function(model){
@@ -72,34 +79,30 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
 ```
 
 ```{r predicitons}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 preds <- lapply(models, function(model){
   trait <- strsplit(model, "-")[[1]][2]
   complex <- strsplit(model, "-")[[1]][1]
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex) %>% 
-    left_join(select(Competition, idTree, AreaOutside20) 
-              %>% unique())
+    filter(Genus == complex)
   
-  DBH <- data_trait$DBH/sd(data_trait$DBH)
-  TWI <- data_trait$TWI/sd(data_trait$TWI)
-  NCI <- data_trait$NCI/sd(data_trait$NCI)
+  DBH <- data_trait$DBH
+  TWI <- data_trait$TWI
+  NCI <- data_trait$NCI
   species <- as.numeric(as.factor(data_trait$Species))
   
   alpha <- as.matrix(fits[[model]], pars = "alpha")
   betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
   betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
-  betaComp <- as.matrix(fits[[model]], pars = "betaComp")
+  betaNCI <- as.matrix(fits[[model]], pars = "betaNCI")
   
-  Y <- unlist(data_trait[trait])/sd(unlist(data_trait[trait]))
-  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaComp[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ycomplex <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaComp[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaComp[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaComp[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ycomp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaComp[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  
-  Ddbh <- sqrt((Yp - Ydbh)^2)
-  Dtwi <- sqrt((Yp - Ytwi)^2)
-  Dcomp <- sqrt((Yp - Ycomp)^2)
+  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ynci <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
   
   data.frame(
     Model = model,
@@ -110,48 +113,46 @@ preds <- lapply(models, function(model){
     NCI = NCI,
     Genus = data_trait$Genus,
     Species = data_trait$Species,
-    Y = unlist(data_trait[trait])/sd(unlist(data_trait[trait])),
+    Y = unlist(data_trait[trait]),
     Yp = apply(Yp, 2, mean),
     Yp5 = apply(Yp, 2, quantile, probs = 0.05),
     Yp95 = apply(Yp, 2, quantile, probs = 0.95),
+    Yalpha = apply(Yalpha, 2, mean),
+    Yalpha5 = apply(Yalpha, 2, quantile, probs = 0.05),
+    Yalpha95 = apply(Yalpha, 2, quantile, probs = 0.95),
     Ydbh = apply(Ydbh, 2, mean),
     Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
     Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
     Ytwi = apply(Ytwi, 2, mean),
     Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
     Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
-    Ycomp = apply(Ycomp, 2, mean),
-    Ycomp5 = apply(Ycomp, 2, quantile, probs = 0.05),
-    Ycomp95 = apply(Ycomp, 2, quantile, probs = 0.95),
-    Ddbh = apply(Ddbh, 2, mean),
-    Ddbh5 = apply(Ddbh, 2, quantile, probs = 0.05),
-    Ddbh95 = apply(Ddbh, 2, quantile, probs = 0.95),
-    Dtwi = apply(Dtwi, 2, mean),
-    Dtwi5 = apply(Dtwi, 2, quantile, probs = 0.05),
-    Dtwi95 = apply(Dtwi, 2, quantile, probs = 0.95),
-    Dcomp = apply(Dcomp, 2, mean),
-    Dcomp5 = apply(Dcomp, 2, quantile, probs = 0.05),
-    Dcomp95 = apply(Dcomp, 2, quantile, probs = 0.95)
+    Ynci = apply(Ynci, 2, mean),
+    Ynci5 = apply(Ynci, 2, quantile, probs = 0.05),
+    Ynci95 = apply(Ynci, 2, quantile, probs = 0.95)
   )}) %>% bind_rows()
 ```
 
 $^1$ UMR BIOGECO, Université de Bordeaux, 69 route d’Arcachon, F-33612 Cestas cedex France
 
-$^2$ Cirad, UMR EcoFoG (Agroparistech, CNRS, Inra, Université des
-Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana
+$^2$ Cirad, Univ Montpellier, UR Forests & Societies, Montpellier, France
+
+$^3$ INP-HB, Institut National Polytechnique Félix Houphouët-Boigny, BP 1093, Yamoussoukro, Ivory Coast
 
 $^4$ 
 
-$^3$
+$^5$
 
-$^5$ INRA, UMR EcoFoG (Agroparistech, CNRS, Université des
+$^6$ INRA, UMR EcoFoG (Agroparistech, CNRS, Université des
 Antilles, Université de la Guyane, Cirad), Campus Agronomique, 97310 Kourou, French Guiana
 
-$^6$ UMR BIOGECO, INRA, 69 route d’Arcachon, F-33612 Cestas cedex France
+$^7$ UMR BIOGECO, INRA, 69 route d’Arcachon, F-33612 Cestas cedex France
 
-$^7$ Cirad, Univ Montpellier, UR Forests & Societies, Montpellier, France
+$^8$ Agroparistech, UMR EcoFoG (CNRS, Inra, Université des
+Antilles, Université de la Guyane, Cirad), Campus Agronomique, 97310 Kourou, French Guiana
 
-$^8$ INP-HB, Institut National Polytechnique Félix Houphouët-Boigny, BP 1093, Yamoussoukro, Ivory Coast
+$^9$ Cirad, UMR EcoFoG (Agroparistech, CNRS, Inra, Université des
+Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana
+
 
 __$^*$ Corresponding author:__ sylvain.schmitt@agroparistech.fr
 
@@ -170,7 +171,46 @@ Intraspecific trait variation; species complexes; ...
 
 # Introduction 
 
-> To be written
+<!-- FT & community assembly / biodiversity -->
+
+Whereas functional traits are more and more used by community ecologists to explain the ecosystem structure [@Paine2011] and response to environment [@kraft_functional_2008]  in order to adapt to increasing change [@Sakschewski2016]; the outstanding biodiversity of tropical forests is still an open question [@wright2002plant], already highlighted 40 years ago [@connell_diversity_1978].
+
+<!-- FT and individual and species ecology - few examples of FT role -->
+
+Functional traits have been defined as phenotypic traits impacting fitness indirectly through their effect on individual performance whcih can be related to tree abilities to grow, survive and reproduce in a given enironment [@violle_let_2007]. Consequently, functional traits expresses fundamental trade-offs determining individual, and species co-occurences along environmental gradients [@Wright2002]. For instance, specific leaf mass per area (fresh weight divided by area) varies along soil fertility and shade gradients and represents a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Evans2001; @hodgson_is_2011]. 
+
+<!-- FT covariations -->
+
+In addition, functional traits vary at community [@Bruelheide2018] and species [@diaz_global_2015] levels according to basic leaf [@wright_worldwide_2004; but see @lloyd_photosynthetically_2013; @osnas_global_2013] and wood [@chave_towards_2009] economic spectra; despite some authors advocate for a unique economics specrtum [@reich_world-wide_2014] evidenced in subarctic grasslands [@freschet_evidence_2010]. The leaf economics spectrum opposes acquisitive to conservative ecological strategies, often expressed at the leaf level. The wood economics spectrum opposes slow to fast growing species, expressed at leaf, twig and stem levels [@chave_towards_2009].
+
+<!-- Biodiversity structure from community to individual & Species coexistence theories-->
+
+On the other hand, the outstanding biodiversity of tropical forest can be seen in three nested level: (i) communities, (ii) species, and (iii) individual diversity. Community can be defined as a group of interacting organisms classified into species [ref]. Species have been defined as groups of organisms which are reproducing isolated from other such groups, protecting the integrity of their genotypes [@Mayr1996]. This reflects the biological species concept based on reproductive isolation. Different theories have been developed at the species level to explain community assembly and biodiversity maintenance. Niche theory explains species coexistence depending on niche differences to limit competitive exclusion [@Lortie2004a; @weiher_assembly_1995], while neutral theory shows that maintenance of high diversity is possible even for functionally equivalent species, because of stochastic life, death, reproduction and dispersal dynamics [@Hubbell2001]. But numerous theories exists to explain species coexistence [@wright2002plant].
+
+<!-- Species issue and species complexes, Increased role of individual & Determinant of phenotypîc variation-->
+
+Still, species concepts and definitions have been largely debated [@Mayden1997], especially concerning plants, and many species concepts can be defined (phylogenetic, biological, ecological, morphological or genetic, see @DeQueiroz2007a). Morevoer, some closely related species share a large amount of common genetic variation due to a recent common ancestor or hybrdization and form a species complex challenging the static vision of species [@Fujita2012]. However, individuals present variation in performance, phenotypes, and genes within the species. These variations result in intraspecific variability, ultimately represented by phenotypic variation among communities and ecosystems. Phenotypic variation will be shaped (i) by genetic heritage, through genotypes, (ii) by the environment (both abiotic and biotic) with spatial and temporal heterogeneity, and (iii) by random stochastic factors [@Whitlock2007].
+
+<!-- ITV evidence -->
+
+But intraspecifc trait variability is relatively unexplored [@Hallgrimsson2005] beside being highlighted as larged in tree allometric relations [@Vieilledent2010], in leaf traits [@Hulshof2010a; @Messier2010], and within community itself [@Siefert2015a]. Thus several authors advocates for a better understanding of intraspecific variability role in ecology [@Albert2010a; @chave_neutral_2004; @Violle2012]. Beyond the assessment of intraspecific trait variation, some studies investigated the role of intraspecific variability in community assembly and evidenced environmental filtering [@Messier2010; @Paine2011], traits shif along environmental and resources gradient [@Siefert2016; @jung_intraspecific_2010 ], and  niche differentiationat [@jung_intraspecific_2010; @Paine2011] at the individual level.
+
+<!-- ITV Theory -->
+
+Effectivelly, several author suggested that intraspecific variability helped to maintain biodiversity increasing species answer to their environment to pass environmental filtering [@Clark2010], exceeding negative interspecific interactions [@Chesson2000], and increasing species capacity to answer to their neighborhood [@Aarssen1983]. @Laughlin2012 even suggested that intraspecific variability could answer paradox in theories of species coexistence.
+
+<!-- What we did -->
+
+In the present study, we used a trait-based approach to address the role of ontogeny, abiotic environement and tree neighborhood in shaping leaf functional traits of tree individuals belonging to 5 species and 2 genera from two Neotropical species complexes. We took advantage of a large dataset (766 trees > 10 cm in diameter at breast height) from a highly diverse tropical forest plot located within the Guiana Shield from the Amazon Bassin. The plots encompass a diversity of microhabitats through topographic variation between seasonally flooded, bottom land, and dry plateau [@Allie2015] and competition variation between opened gaps and mature forest patches [@ferry2010higher] expected to strongly impacts tree functional traits. Combining tree level, LiDAR-derived topographical data and newly measured functional traits, we used regressions through a bayesian framework to address the following questions:
+
+<!-- Questions -->
+
+* How traits covary between individuals within closely related tropical tree species ? 
+* How ontogeny and environment shape the individual trait covariation across ecological scales ?
+
+<!-- Hypothesis -->
+
+Based on conservation of functioanl strategies both at the community and species scale [@Bruelheide2018; @diaz_global_2015], we hypothesized trait covariation to be maintained at the individual level [but see @messier_trait_2016]. In addition, we hypothesized ontogeny in interaction with abitoic environement and biotic interaction to shape individual trait variation without assuming response similarity or differences between species or genus and the ramining variance associated to intra-individual variation.
 
 # Material and Methods
 
@@ -187,7 +227,7 @@ Two sampling campaigns were led in 2017 and 2018 during dry season (between Sept
 
 *Symphonia* genus only include the *Symphonia globulifera* L.f (Clusiaceae) species in French Guiana but presents two morphotypes, *S. globulifera* and *S. sp.1*, living in sympatry but apparently in differentiated habitats, with *S. globulifera* preferentially growing in valley bottoms and *S. sp1* preferentially exploiting a variety of drier habitats. Similarly, *Eschweilera* clade *parvifolia* include numerous species, with *E. sagotiana* and *E. coriacea* which have been shown to follow a niche differentiation similar to *S. sp1* and *S. globulifera* respectively [Schmitt *et al*. In prep;  @Allie2015]. In addition, *Symphonia* genus and *Eschweilera* clade Parvifolia have been both highlighted as species complexes with low genetic resolution and high plastid DNA sharing between sister species [Heuertz *et al*. unpublished; @baraloto_using_2012-1; @Gonzalez2009].
 
-Between 232 and 1 individual have been sampled per species, depending on their natural abundance within the Paracou station, for a total of 823 individuals (Table \@ref(tab:headcount)). *Symphonia globulifera* were collected over all plots of the study site to reach targeted number, whereas *Eschweilera* clade *Parvifolia* were sampled only within non-disturbed plots. Anyway disturbance will be accounted through competition measurement and did not show significant effect for most of *Symphonia* functional traits (Student's T test p-value > 0.1 for SLA, LT and LA, and p-value > 0.02 for LDMC and CC). For each individual, 5 mature and healthy leaves at the top of the crown were collected, and kept in humidified ziplock with enriched CO2 air in dark until measurement within the next 6 hours following standard protocol [@Perez-Harguindeguy2013]. In addition, light conditions with Dawkins index [@Dawkins1958] and tree, bark and leaf morphology were assessed for every individuals.
+Between 232 and 1 individual have been sampled per species, depending on their natural abundance within the Paracou station, for a total of 823 individuals, but species with a minimum of 10 individuals were kept (Table \@ref(tab:headcount)). *Symphonia globulifera* were collected over all plots of the study site to reach targeted number, whereas *Eschweilera* clade *Parvifolia* were sampled only within non-disturbed plots. Anyway disturbance will be accounted through competition measurement and did not show significant effect for most of *Symphonia* functional traits (Student's T test p-value > 0.1 for SLA, LT and LA, and p-value > 0.02 for LDMC and CC). For each individual, 5 mature and healthy leaves at the top of the crown were collected, and kept in humidified ziplock with enriched CO2 air in dark until measurement within the next 6 hours following standard protocol [@Perez-Harguindeguy2013]. In addition, light conditions with Dawkins index [@Dawkins1958] and tree, bark and leaf morphology were assessed for every individuals.
 
 ```{r disturbance, eval=F}
 Individuals %>% 
@@ -204,7 +244,7 @@ Individuals %>%
 
 ## Trait measurements
 
-We calculated 5 functional traits from leaf samples already highlighted in previous studies as phenotypic descriptor of major ecological strategies [@diaz_plant_1998; @wright_worldwide_2004] (Table \@ref(tab:Trait)): specific leaf area (leaf area divided by the fresh weight, $SLA$, $cm^2.g^{-1}$), leaf dry matter content (leaf dry weight divided by the fresh weight, $LDMC$, $g.g^{-1}$), leaf thickness ($LT$, $\mu m$), leaf area ($LA$, $cm^2$), leaf chlorophyll content ($CC$, $g.cm^{-2}$). Leaf petiole was removed for all measurements. Leaf fresh weight was measured with an analytic balance [brand], leaf fresh thickness with a micrometer [brand], leaf area through the ImageJ software [@Schneider2012] using scanned images of fresh leaves, and leaf chlorophyll content with a SPAD measurement [brand] converted with an allometric model [@Coste2010]. Leaf thickness and chlorophyll content measurement was repeated 3 times per leaf to reduce errors due to intra-leaf variation. Leaves were then kept in herbarium and oven-dried for at least 48 hours at 80°C before measurement of dry weight. Subsequent analysis will use $\frac{1}{SLA}$ and $\frac{1}{LA}$ to ease regressions with functional traits covarying with diameter at breast height ($DBH$).
+We calculated 5 functional traits from leaf samples already highlighted in previous studies as phenotypic descriptor of major ecological strategies [@diaz_plant_1998; @wright_worldwide_2004] (Table \@ref(tab:Trait)): leaf mass per area (fresh weight divided by the leaf area, $LMA$, $cm^2.g^{-1}$), leaf dry matter content (leaf dry weight divided by the fresh weight, $LDMC$, $g.g^{-1}$), leaf thickness ($LT$, $\mu m$), leaf area ($LA$, $cm^2$), leaf chlorophyll content ($CC$, $g.cm^{-2}$). Leaf petiole was removed for all measurements. Leaf fresh weight was measured with an analytic balance [brand], leaf fresh thickness with a micrometer [brand], leaf area through the ImageJ software [@Schneider2012] using scanned images of fresh leaves, and leaf chlorophyll content with a SPAD measurement [brand] converted with an allometric model [@Coste2010]. Leaf thickness and chlorophyll content measurement was repeated 3 times per leaf to reduce errors due to intra-leaf variation. Leaves were then kept in herbarium and oven-dried for at least 48 hours at 80°C before measurement of dry weight. Subsequent analysis will use $\frac{1}{LA}$ to ease regressions with functional traits covarying with diameter at breast height ($DBH$).
 
 ## Environmental variables
 
@@ -224,61 +264,69 @@ We first explored leaf functional traits covariation between individuals with pr
 Then, we explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and species ($S$) thanks to a model with fixed species effect including interaction between ontogeny and environment (more likely than an additive form without interactions, see supplementary material S2 [A07-Additive](A07-Additive.html)).
 
 Individual leaf trait $Trait_{s,i}$ for species $s \in [1;S]$ is first explained by its ontogeny confounded with light though individual DBH $DBH_i$ with a Michaelis Menten form (more likely than a linear form, see supplementary material S3 [A05-Ontogeny](A05-Ontogeny.html)):
-$$T_{s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{s} + DBH_i}, \sigma)$$
+$$Trait_{s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{s} + DBH_i}, \sigma)$$
 $\alpha_{env}$ is the trait maximum value in the Michaelis Menten and $\beta_{DBH}$ is the value of DBH for which the trait account for half of its plateau value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolves slower towards its plateau, consequently, ontogeny affects more traits values. We will further use $DBH_{90}$ equal to $9.\beta_{DBH}$ being the DBH value for which the trait account for 90% of its maximum value that we can assume as the DBH for which the individual trait value is close to the maximum ontogenetic value.
 
 Finally $\alpha_{env}$ was represented by an additive linear form of environmental effects represented by $TWI$ for abiotic environment and by $NCI$ for biotic interactions:
 $$alpha_{env} = \alpha_{s} + {\beta_{TWI}}_{s}.TWI_i + {\beta_{NCI}}_{s}.NCI_i$$
 where $\alpha$ is the intercept, $\beta_{TWI}$ is the slope of TWI effect, e.g. positive $\beta_{TWI}$ represents an increase of the trait value with water accumulation; whereas $\beta_{NCI}$ is the slope of competition effect, e.g. negative $\beta_{NCI}$ highlight a decrease of trait value with competition.
 
-Traits, DBH and TWI were all reduced for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits and the two complex, resulting in 10 regressions, using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see Supplementary material S4 [A08-Interaction](A08-Interaction.html) for model equations and `stan` code).
+Traits, DBH, TWI and NCI were all reduced for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits and the two complex, resulting in 10 regressions, using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see Supplementary material S4 [A08-Interaction](A08-Interaction.html) for model equations and `stan` code).
 
-Finally, to assess the relative importance of ontogeny and environmental variables we conducted a sensitivity analysis of co-variables. We compared the full model prediction $\overline {Y_{full}}$ against the model prediction with all variables set to their mean except the tested one $\overline {Y_{variable}}$ with the following formula:
-$$\Delta(Prediction) = \sqrt{(\overline {Y_{full}} - \overline {Y_{variable}})^2}$$
+Finally, to assess the relative importance of ontogeny and environmental variables we conducted a sensitivity analysis of co-variables. We compared the full model prediction $\hat {Y_{full}}$ against the model prediction with all variables set to their mean except the tested one $\hat {Y_{variable}}$ with the following formula:
+$$\Delta(Prediction) = \sqrt{(\hat {Y_{full}} - \hat {Y_{variable}})^2}$$
 Thus, the more the model is sensitive to a variable the less the prediction will change resulting in low valus of $\Delta(Prediction)$.
 
 # Results
 
-## PCA
+70% of the total variance was conserved on the first plane from the PCA of leaf traits (Fig. \@ref(fig:PCA)). Globally, the first plane highlighted the covariation of the five leaf traits on the first axis bearing almost 40% of the total trait variation, with big, thick leaves rich in dry matter and chlorophyll content with high LMA. Finally, besides both axes showed significative species segregation ($p-value < 10^{-4}$), the second PCA axis segregated the two complexes (*Symphonia* and *Eschweilera* clade Parvifolia) with little overlap when the first axis better ranked species.
 
-70% of the total variance was conserved on the first plane from the PCA of leaf traits (Fig. \@ref(fig:PCA)). The first plane highlighted an opposition of SLA to CC and LT, from high SLA leaves to thick leaves rich in chlorophyll, decoupled from a covariation of LA and LDMC, leaf area increasing with dry matter content. Finally, besides both axes showed significative species segregation ($p-value < 10^{-4}$), the second PCA axis segregated the two complexes (*Symphonia* and *Eschweilera* clade Parvifolia) with no overlap when the first axis better ranked species.
+Intercept posteriors and PCA (Fig. \@ref(fig:PCA) and \@ref(fig:Intercept)) highlilghted complexes and species differences with $LA$ and $LT$ showing more species differentation than $LMA$, $LDMC$ and $CC$, for which *Symphonia* species values were equal. **Useless ?**
 
-* LMA, LT, CC seggregate species => Conservation/Acquisition ? orthogonal to LDMC, LA seggregating complexes
+$DBH$ significantly increased $LMA$, $LT$, and decreased $LA$ of the two species complexes whereas $DBH$ had no effect for *Eschweilera* and a medium positive effect for *Symphonia* on $CC$ and $LDMC$ (Fig. \@ref(fig:DBH90) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)).
 
-## Intercept
+$TWI$ had a significative negative effect on $LMA$, $LDMC$ and $CC$ and positive effect on $LA$ for *Symphonia* complex whereas $TWI$ had significative positive effect for $CC$ and negative effect for $LT$ for *Eschweilera* complex (Fig. \@ref(fig:TWI) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)). Finally, only *E. decolorans* showed a negative answer of $LMA$ and $LDMC$ to $TWI$.
 
-$\alpha$ (Fig. \@ref(fig:Intercept)) represent the intercept and highlight species and genera differences between functional traits independantly from individual response to the ontogeny and the environment. **Is it really interesting to interpret it ? Maybe in introduction of the results to generally speak of traits differences between complexes but also readable on the PCA (Fig. \@ref(fig:PCA)).**
+$NCI$ had globally no effect on leaf trait variation except a negative effect on *Sympohnia* $LA$ (Fig. \@ref(fig:NCI) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)).
 
-* ~ CC, and LDMC relatively stable within complex, LA, SLA and LT seemed to differ btw species with a gradient in each complex
-
-## $DBH_{90}$ (Fig. \@ref(fig:DBH90))
-
-* ~ strong effect on LA, SLA and LT but low or null effect on CC and LDMC
-* ~ + DBH => -LA, -SLA, +LT => +Conservation & -Acquisition with age and light access ?
-
-## TWI (Fig. \@ref(fig:TWI))
-
-* ~ Globally more or less strong negative effect on CC, invLA, LMA, LDMC and LT *Symphonia* and *Escwilera* except for CC *Eschweilera* and for less abundant species within *Eschweilera* (*E. pedicellata*, *E. wachenheimii*, and *E. grandiflora* for SLA, LDMC and LT)
-* ~ + TWI => + LA, +SLA, -LDMC, -LT, +/-CC (complex) => +Acquistion & -Conservation ?
-* *S. sp1* more uncertain than *S. globulifera*
-* LT *Symphonia* highly uncertain => Season effect ?
-
-## NCI (Fig. \@ref(fig:NCI))
-
-* ~ Always positive and non null
-* ~ + NCI => + LA, +SLA, -LDMC, -LT, -CC => +Acquistion & -Conservation with increased competition ?
-
-## Sensitivity (Fig. \@ref(fig:sensitivity))
-
-* ~ relatively similar, DBH only seems to be more important than environment in shaping traits
-* ~ TWI more important CC *Eschweilera*
-* ~ NCI + TWI faible on LT *Symphonia* => Season effect ?
+Finally, models showed a strong residual variation (from 0.5 to 1, Table \@ref(tab:parameters)) and were sensitive primarily to $DBH$, and secondly equally sensitive to $TWI$ and $NCI$ at the exception of $CC$ for *Eschweielra* more sensitive to $TWI$ than the two remaining covariables (Fig. \@ref(fig:sensitivity)). **Useless after posteriors results ?**
 
 # Discussion
 
-> To be developed in bullet points to highlight the take home message
+## Take home message
 
-> Ontogeny, topography and competition shape individual leaf traits independantly from species identity
+> Individual leaf functional traits varies coordinately between species of species complexes mainly with ontogeny in interaction with abiotic environment through water accumulation.
+
+## Interpretations
+
+**To be further developed with litterature !**
+
+* First PCA axis highlighted covariation of big, thick leaves rich in dry matter and chlorophyll content with high LMA similar to the covariation of leaves with dense tissues and high chlorophyll content with low SLA observed by @Baraloto2010 and interpreted as the leaf economics spectrum [@wright_worldwide_2004]. In addition LMA, LDMC, and LT have been shown to participate to a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Evans2001; @hodgson_is_2011; @Vile2005]. Moreover LA participation to the leaf economics spectrum is debated [@Ackerly2002] and its role is still unclear [@Nicotra2011]. But @Yang2010 evidenced a negative ratio between leaf area and mass interpreted as an investment in photosynthesis or lifespan for large leaves. We effectivelly found LA to be orthogonal to LMA but covarying with LDMC (Fig. \@ref(fig:PCA)), which may illustrate the ambiguous strategy of high value of LA between defense and acquisition. Finally, CC was covarying along the major axis of functional strategy opposing acquisition to conservation and was correlated to LMA and LT. @Baraloto2010 highlighted CC participation to the LES, interestingly opposed to SLA and the leaf nitrogen content without further interpretation. **...**
+
+* DBH globally increased trait values highlighting a shift of individual leaves toward small and thick leaves with high LMA, and even increased dry matter content and chlorophyll for *Symphonia*. This can be interpreted as a shift from acquisitve to conservative leaves during individual ontogeny confounded with individual access to light as bigger DBH represent both old trees and canopy trees with full light access.
+    * [@roggy_links_2005]
+    * [@Herault2011]
+    * [@Niinemets2006]
+    * [@Wright2002a]
+    * [@Coleman1994]
+    * [@Spasojevic2014]
+    * [@Lusk2007]
+    * [@Sciences2009]
+    * [@Charles-Dominique2012]
+    * [@Dang-Le2013]
+    * [@Rijkers2000]
+    * [@Rozendaal2006b]
+
+* Both biotic and abiotic local environment had globally little or no effect on leaf trait variation at the intraspecific level. Still water accumulation resulted in bigger leaves with decreased dry matter content and lower LMA for *Symphonia* and *E.decolorans* and thinner leaves for *Eschweilera*, indicating a shift from conservative to acquisitive species as water became available for individuals. In addition, chlorophyll content showed opposite resonse to water accumulation between the two complexes **??**. Finally, competition only decreased leaf size of *Symphonia* species**...**
+
+* As highlighted by posteriors, once the mean differences between species leaf functional traits taken into account, leaf functional trait variability was primarily due to ontogeny and light access and a little by the interaction with environment mainly represented by abiotic environment through water accumulation. Still the remaining variation remains strong ($\sigma ^2 \in [0.5;1]$) due to measurement errors, seasonal variation (Supp Mat ...) and mainly intra-individual variation **...**
+
+## Paragraphs to be developped
+
+1. Traits answer to ontogeny
+1. Traits answer to environment (water and competition)
+1. Traits covariation along conservation / Acquisition
+1. Traits variation between ecological scale (community, speices, individual) and methodological implications (Fig. \@ref(fig:bootstrap))
 
 # Supplementary materials 
 
@@ -294,7 +342,7 @@ We thanks the university of Bordeaux for a PhD grant to Sylvain Schmitt and ackn
 
 # Authors’ contributions
 
-SS, BH, GD, ED, and AB conceived the ideas; SS, BH, GD and AB designed methodology; SS and XX analysed model outputs; SS, and XX led the writing of the manuscript. All authors contributed critically to the drafts and gave final approval for publication.
+SS, GD, BH, ED, and AB conceived the ideas; SS, GD, BH, and AB designed methodology; SS and GD analysed model outputs; SS, and XX led the writing of the manuscript. All authors contributed critically to the drafts and gave final approval for publication.
 
 # References
 
@@ -308,6 +356,10 @@ __Table \@ref(tab:headcount)__ Number of individuals sampled per genus and speci
 
 __Table \@ref(tab:Trait)__ Functional traits measured, with trait unit, abbreviation, headcount, mean and standard error.
 
+__Table \@ref(tab:parameters)__ Model parameters for complex, species and traits.
+
+__Table \@ref(tab:lm)__ Similar linear model results.
+
 ## Figure captions
 
 __Figure \@ref(fig:PCA)__ Principal Component Analysis (PCA) of leaf trait  between species and species seggregation on the two first axis. Dot and box colors indicates the species complex, whereas dot size indicates individual diameter at breast height. Species seggregation has been investigated generally by Anova, **** indicates a $p-value < 0.0001$ and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \@ref(tab:Trait) for traits abbreviation.
@@ -316,11 +368,15 @@ __Figure \@ref(fig:Intercept)__  Species model intercept.
 
 __Figure \@ref(fig:DBH90)__  Species DBH effect ($DBH_{90}$).
 
+__Figure \@ref(fig:DBHpred)__  Model predictions for DBH.
+
 __Figure \@ref(fig:TWI)__  Species TWI effect.
 
 __Figure \@ref(fig:NCI)__  Species NCI effect.
 
 __Figure \@ref(fig:sensitivity)__ Model sensiticity to variables. ...
+
+__Figure \@ref(fig:bootstrap)__  Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm.
 
 \newpage 
 
@@ -338,28 +394,95 @@ Individuals %>%
 ```
 
 ```{r Trait}
-Individuals %>% 
-  select(SLA, LDMC, LT, LA, CC) %>% 
+Individuals0 %>% 
+  mutate(LMA = (1/SLA)*10^4) %>% 
+  select(LMA, LDMC, LT, LA, CC) %>% 
   reshape2::melt(variable.name = "trait") %>% 
   filter(!is.na(value)) %>% 
   group_by(trait) %>% 
   summarise(N = n(),
             Value = paste0("$",round(mean(value), 2), "\\pm", 
                            round(sd(value), 2), "$")) %>% 
-  mutate(Trait = c("Specific Leaf Area", "Leaf Dry Matter Content",
-                    "leaf Thickness", "Leaf Area", "Chlorophyll Content")) %>% 
-  mutate(Unit = c("$cm^2.g^{-1}$", "$g.g^{-1}$", "$\\mu m$", "$cm^2$", "$g.cm^{-2}$")) %>%
+  mutate(Trait = c("Leaf Mass per Area", "Leaf Dry Matter Content",
+                    "Leaf Thickness", "Leaf Area", "Chlorophyll Content")) %>% 
+  mutate(Unit = c("$g.m^{-2}$", "$g.g^{-1}$", "$\\mu m$", "$cm^2$", "$g.cm^{-2}$")) %>%
   select(Trait, Unit, trait, N, Value) %>% 
   kable(col.names = c("Trait", "Unit", "Abbreviation", "N", "Mean (sd)"), format = "pandoc",
     caption = "Functional traits measured, with trait unit, abbreviation, headcount, mean and standard error.", escape = F) %>% 
   kable_styling(full_width = F)
 ```
 
+```{r parameters}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", "betaTWI",
+                                "betaNCI", "sigma"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>% 
+  mutate(species = gsub("([[:alpha:]])", "", term)) %>% 
+  select(complex, trait, term, species, estimate, std.error, rhat) %>% 
+  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
+  mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = recode_factor(term, 
+                              alpha = "$\\alpha$",
+                              betaDBH = "$\\beta_{DBH}$", 
+                              betaTWI = "$\\beta_{TWI}$", 
+                              betaNCI = "$\\beta_{Comp}$",
+                              sigma = "$\\sigma^2$")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              LMA = "$LMA$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(complex + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
+  mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "", SpeciesLong)) %>% 
+  rename(Parameter = term, Species = SpeciesLong) %>% 
+  kable(caption = "Model parameters for complex, species and traits.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+```{r lm}
+Individuals %>%
+  select(Genus, Species, DBH, TWI, NCI, LMA, LDMC, LT, invLA, CC) %>%
+  reshape2::melt(id.vars = c("Genus", "Species", "DBH", "TWI", "NCI"),
+                 variable.name = "Trait") %>%
+  group_by(Trait, Genus) %>%
+  do(model = lm(value ~ Species + DBH + DBH:TWI + DBH:NCI, data = .)) %>% 
+  broom::tidy(model) %>% 
+  ungroup() %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(term = gsub("Species", "", term)) %>% 
+  mutate(`P-value` = ifelse(p.value < 0.001, "***",
+                            ifelse(p.value < 0.01, "**",
+                                   ifelse(p.value < 0.05, "*",
+                                          ifelse(p.value < 0.1, ".", 
+                                                 "n.s."))))) %>% 
+    mutate(Trait = recode_factor(Trait, 
+                              LMA = "$LMA$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  mutate(Coefficient = round(estimate,2)) %>% 
+  mutate(value = paste(Coefficient, `P-value`)) %>%
+  reshape2::dcast(term + Genus ~ Trait, value.var = "value") %>% 
+  kable(escape = F, format = "pandoc",
+        caption = "Similar linear model results.") %>% 
+  kable_styling(full_width = F)
+```
+
 <!-- figures -->
 
 ```{r PCA, fig.cap='Principal Component Analysis (PCA) of leaf trait  between species and species seggregation on the two first axis. Dot and box colors indicates the species complex, whereas dot size indicates individual diameter at breast height. Species seggregation has been investigated generally by Anova and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \\@ref(tab:Trait) for traits abbreviation.'}
-pca.plot <- drop_na(Individuals, SLA, LDMC, LT, LA, CC) %>% 
-  autoplot(princomp(~ SLA + LDMC + LT + LA + CC, data = ., cor = T), 
+pca.plot <- drop_na(Individuals, LMA, LDMC, LT, LA, CC) %>% 
+  autoplot(princomp(~ LMA + LDMC + LT + LA + CC, data = ., cor = T), 
            data = .,
            colour = "SpeciesLong", alpha = 0.5, size = "DBH",
            loadings.label.size = 6,
@@ -383,7 +506,7 @@ tHSD <- pca.plot$data %>%
   lapply(tHSD, function(x) multcompView::multcompLetters(x[,4])) %>% 
   lapply(function(x) data.frame(SpeciesLong = names(x$Letters), group = x$Letters)) %>% 
   bind_rows() %>% 
-  mutate(axis = c(rep("Comp.1", 8), rep("Comp.2", 8)))
+  mutate(axis = c(rep("Comp.1", nrow(species)), rep("Comp.2", nrow(species))))
 axes.boxplots <- pca.plot$data %>%
   select(Comp.1, Comp.2, SpeciesLong) %>%
   reshape2::melt(id.vars = "SpeciesLong", variable.name = "axis") %>%
@@ -403,7 +526,7 @@ cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
 
 ```{r Intercept, fig.cap="Species model intercept."}
 lapply(fits, function(fit) 
-  bayesplot::mcmc_intervals_data(as.array(fit,
+  mcmc_intervals_data(as.array(fit,
                                pars = "alpha"))) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-") %>%
@@ -411,6 +534,7 @@ lapply(fits, function(fit)
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
   mutate(species = as.numeric(species)) %>% 
   left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
@@ -420,18 +544,17 @@ lapply(fits, function(fit)
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free") +
-  xlab("") +
+  facet_grid(trait ~ ., labeller = label_parsed, scales = "free_y") +
+  xaxis_title(F) +
   ylab(expression(alpha)) +
-  scale_y_sqrt() +
+  scale_y_continuous(trans="S_sqrt") +
   scale_color_brewer("", palette = "Set1", guide = "none") +
   scale_fill_brewer("", palette = "Set1", guide = "none")
 ```
 
 ```{r DBH90, fig.cap="Species DBH effect ($DBH_{90}$)."}
 lapply(fits, function(fit) 
-  bayesplot::mcmc_intervals_data(as.array(fit,
+  mcmc_intervals_data(as.array(fit,
                                pars = "betaDBH"))) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-",remove = F) %>%
@@ -439,11 +562,12 @@ lapply(fits, function(fit)
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
    mutate(species = as.numeric(species)) %>% 
   left_join(species) %>% 
-  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sd(Individuals$DBH)*9)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
@@ -451,19 +575,28 @@ lapply(fits, function(fit)
   coord_flip() +
   datatools::scale_x_reordered() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free") +
-  # facet_wrap( ~ trait, labeller = label_parsed, 
-  #             scales = "free", nrow = 3) +
-  xlab("") +
+             scales = "free_y") +
+  xaxis_title(F) +
   ylab(expression(DBH[90]~(cm))) +
   scale_y_log10() +
-  scale_color_brewer("", palette = "Set1", guide = "none") +
-  scale_fill_brewer("", palette = "Set1", guide = "none")
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+```{r DBHpred, fig.cap="Model predictions for DBH."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(DBH*sdDBH, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ydbh5, ymax = Ydbh95), alpha = 0.2) +
+  geom_line(aes(y = Ydbh)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed) +
+  scale_y_log10()
 ```
 
 ```{r TWI, fig.cap="Species TWI effect."}
 lapply(fits, function(fit) 
-  bayesplot::mcmc_intervals_data(as.array(fit,
+  mcmc_intervals_data(as.array(fit,
                                pars = "betaTWI"))) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-") %>%
@@ -471,63 +604,70 @@ lapply(fits, function(fit)
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
     mutate(species = as.numeric(species)) %>% 
   left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  datatools::scale_x_reordered() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free") +
-  # facet_wrap( ~ trait, labeller = label_parsed, 
-  #             scales = "free", nrow = 3) +
-  xlab("") +
+              scales = "free_y") +
+  datatools::scale_x_reordered() +
+  xaxis_title(F) +
   ylab(expression(beta[TWI])) +
   scale_y_continuous(trans="S_sqrt") +
-  scale_color_brewer("", palette = "Set1", guide = "none") +
-  scale_fill_brewer("", palette = "Set1", guide = "none")
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none") +
+  ylim(-0.5, 0.5)
 ```
 
 ```{r NCI, fig.cap="Species NCI effect."}
 lapply(fits, function(fit) 
-  bayesplot::mcmc_intervals_data(as.array(fit,
-                               pars = "betaComp"))) %>% 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaNCI"))) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-") %>%
   mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
     mutate(species = as.numeric(species)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>%
   left_join(species) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free") +
-  xlab("") +
+    facet_grid(trait ~ Genus, labeller = label_parsed, 
+              scales = "free") +
+  xaxis_title(F) +
   ylab(expression(beta[NCI])) +
   scale_y_continuous(trans="S_sqrt") +
-  scale_color_brewer("", palette = "Set1", guide = "none") +
-  scale_fill_brewer("", palette = "Set1", guide = "none")
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none") +
+  ylim(-0.5, 0.5)
 ```
 
 ```{r sensitivity, fig.cap="Model sensitivity to variables. ..."}
 preds %>%
-  select(Trait, Genus, Ddbh, Dtwi, Dcomp) %>% 
-  rename(DBH = Ddbh, TWI = Dtwi, NCI = Dcomp) %>% 
-  reshape2::melt(id.vars = c("Trait", "Genus")) %>% 
+  select(Trait, Genus, Yp, Ydbh, Ytwi, Ynci) %>% 
+  rename(DBH = Ydbh, TWI = Ytwi, NCI = Ynci) %>% 
+  reshape2::melt(id.vars = c("Trait", "Genus", "Yp")) %>% 
+  mutate(Delta = sqrt((Yp - value)^2)) %>% 
   mutate(variable = factor(variable, levels = c("NCI", "TWI", "DBH"))) %>%
-  ggplot(aes(variable, value, fill = variable)) +
+  ggplot(aes(variable, Delta, fill = variable)) +
   geom_boxplot() +
   facet_grid(Trait ~ Genus, scales = "free") +
   coord_flip() +
@@ -536,28 +676,27 @@ preds %>%
   xlab("") + ylab(expression(Delta(Prediction)))
 ```
 
-```{r predictions, fig.cap="Model predictions.", eval=F}
-preds %>% 
-  select(Trait, Genus, Species, DBH, TWI, NCI,
-         Y, Ydbh, Ydbh5, Ydbh95, 
-         Ytwi, Ytwi5, Ytwi95,  Ycomp, Ycomp5, Ycomp95) %>% 
-  reshape2::melt(id.vars = c("Trait", "Genus", "Species", 
-                             "Y", "Ydbh", "Ydbh5", "Ydbh95", 
-                            "Ytwi", "Ytwi5", "Ytwi95",  "Ycomp", "Ycomp5", "Ycomp95")) %>% 
-  mutate(Yp =  ifelse(variable == "DBH", Ydbh,
-                      ifelse(variable == "TWI", Ytwi, Ycomp))) %>% 
-  mutate(Yp5 =  ifelse(variable == "DBH", Ydbh5,
-                      ifelse(variable == "TWI", Ytwi5, Ycomp5))) %>% 
-  mutate(Yp95 =  ifelse(variable == "DBH", Ydbh95,
-                      ifelse(variable == "TWI", Ytwi95, Ycomp95))) %>% 
-  select(Trait, Genus, Species, Y, Yp, Yp5, Yp95, variable, value) %>% 
-  filter(variable == "NCI") %>% 
-  ggplot(aes(value, col = Species)) +
-  geom_ribbon(aes(ymin = Yp5, ymax = Yp95), alpha = 0.2) +
-  geom_point(aes(y = Y)) +
-  geom_line(aes(y = Yp)) +
-  facet_grid(Trait ~ Genus, scales = "free") +
-  # facet_grid(Genus ~ Trait, scales = "free") +
-  scale_color_brewer("", palette = "Set1") +
-  scale_fill_brewer("", palette = "Set1")
+```{r bootstrap, fig.cap="Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm."}
+t <- Individuals0 %>% 
+  mutate(LMA = (1/SLA)*10^4) %>% 
+  group_by(Species) %>% 
+  filter(n() > 10) %>% 
+  filter(DBH*sdDBH > 30) %>%
+  select(Genus, Species, LMA, LDMC, LT, LA, CC) %>% 
+  reshape2::melt(id.vars = c("Genus", "Species"), variable.name = "Trait") %>% 
+  na.omit() %>% 
+  group_by(Genus, Species, Trait, value) %>% 
+  expand(n = 2:10) %>% 
+  group_by(Genus, Species, Trait, n) %>% 
+  do(cv = sd(apply(replicate(1000, sample(.$value, .$n)), 2, mean))/mean(.$value)*100) %>% 
+  broom::tidy(cv) %>% 
+  rename(cv = x)
+ggplot(t, aes(as.factor(n), cv, fill = Trait)) +
+  geom_boxplot() +
+  stat_summary(fun.y=mean, geom="line", aes(group=1)) +
+  facet_grid(~ Trait) +
+  scale_fill_discrete(guide = "none") +
+  xlab("Sampled tree number") +
+  ylab("Coefficient of variation (%).") +
+  scale_y_sqrt()
 ```

@@ -1,3 +1,6 @@
+# PhD 0.1.9110
+* functional draft: Introduction, Fig. 8 Bootstrap & Interpretations
+
 # PhD 0.1.9108
 * distribution: NCIcomplex & NCIspecies & Merge
 * functional: Interaction betaNCI lognormal fixed and Interaction reduced
@@ -15,7 +18,6 @@
 # PhD 0.1.9104
 * distribution: new complex delineation, draft begin
 * functional: InteractionSpecies2
->>>>>>> 2fc3ea970da283b53bdbfba61a9349c3e5ba536f
 
 # PhD 0.1.9103
 * distribution: All complexes and species with reduced outputs
