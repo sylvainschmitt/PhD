@@ -24,16 +24,19 @@ bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
+
 ```{r setup, include=FALSE}
 #rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(rstan)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
-  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
@@ -68,361 +71,96 @@ path <- "../../data/Paracou/"
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
+sdDBH <- sd(Individuals$DBH)
+Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
+  group_by(Species) %>% 
+  filter(n() > 20) %>% 
+  ungroup() %>% 
+  left_join(Competition %>% 
+              group_by(idTree) %>% 
+              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
+  mutate(NCI = log(NCI)) %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
+            funs(./sd(., na.rm = T)))
 ```
 
-# Introduction {-}
-
-The aim of this document is to fit the additive full model with observed values of functional traits for our individuals. We prepared data excluding oultiers and reducing variance of all continuous variable to ease model fit (see figure \@ref(fig:mdata)).
-
-
-We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels ($C, S$ mixed effects, respectivelly fixed and random):
-
-\begin{equation} 
-$$  T_{c,s,i} \sim \mathcal{N}(\alpha_{c,s}.\frac{DBH_i}{{\beta_{DBH}}_{c,s} + DBH_i} + {\beta_{TWI}}_{c,s}.TWI_i + {\beta_{Comp}}_{c,s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}_{c,s}.\delta_{i,j}}, \sigma)    \\
-  \Theta_{c,s} \sim \mathcal{N}^5(\Theta_c,\sigma_{species}) ~|~ \Theta =
-   \begin{bmatrix}
-           \alpha \\
-           \beta_{DBH} \\
-           \beta_{TWI} \\
-           \beta_{Comp} \\
-           \alpha_{NCI}
-  \end{bmatrix},~\sigma_{species}
-  \begin{bmatrix}
-           \sigma_{Intercept} \\
-           \sigma_{DBH} \\
-           \sigma_{TWI} \\
-           \sigma_{Comp} \\
-           \sigma_{NCI}
-  \end{bmatrix}  \\
-  \Theta_c \sim \mathcal{N}^{5}(0, + \infty) \\
-  (\sigma, \sigma_{species}) \sim \Gamma^{6}(- \infty, + \infty)$$
-(\#eq:final)
-\end{equation}
-
-* $Trait_{c,s,i}$ is a trait of an individual i, from the species s, and the complex c;
-* $i \in [1,I_s]$ where $I_s$ is the number of individuals in species s;
-* $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
-* $c \in [1,C]$ where $C$ is the number of complexes.
-* $i \in [1,I]$ where I is the number of individuals;
-* $j \in [1,J_i]$ where $J_i$ is the number of neighbors within the area of diameter $\delta_{max}$ surrounding the individual i, and $DBH_j$ the value of $DBH$ for neighbor $j$;
-* $\alpha$ represents both the plateau of the Michaelis Menten and the intercept of each submodel (ontogeny, biotic & abiotic);
-* $\beta_{DBH}$  is the value of DBH for which the trait account for half of its saturation value, and thus, ranges in positive values;
-* $\beta_{TWI}$ is linear abiotic model parameters. $\beta_{TWI}$ can range in positive or negative value;
-* $\beta_{Comp}$ is linear biotic model parameters. $\beta_{Comp}$ can range in positive or negative value;
-* $\alpha_{NCI}$ represents the effect of neighbors distance to the individual and will be chosen positive;
-* all $\sigma_{species}$ represents parameters variance for species;
-* $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
-* therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$  and $\sigma_{species}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all $\Theta_{c,s}$ and $\Theta_c$.
-
-```{r mdata, fig.cap="prepared data",fig.width=12}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-# traits <- c("LDMC")
-mdata <- lapply(traits, function(trait){
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>%
-    # sample_n(50) %>%
-    left_join(select(Competition, idTree, AreaOutside20)
-              %>% unique())
-  Competition_trait <- Competition
-  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
-  Competition_trait <- filter(Competition_trait, !is.na(idTree))
-  list(trait = trait,
-       N = nrow(data_trait),
-       J = nrow(Competition_trait),
-       C = length(unique(data_trait$Genus)),
+```{r mdata}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+mdata <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex)
+  list(N = nrow(data_trait),
        S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait], center = F)),
-       DBH = as.numeric(scale(data_trait$DBH, center = F)),
-       TWI = as.numeric(scale(data_trait$TWI, center = F)),
-       DBHj = as.numeric(scale(Competition_trait$DBHj, center = F)),
-       Deltaj = as.numeric(scale(Competition_trait$dij, center = F)),
-       weights = 1-data_trait$AreaOutside20,
-       individual = as.numeric(as.factor(Competition_trait$idTree)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       complex = as.numeric(as.factor(data_trait$Genus)),
-       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2],
-       data = data_trait,
-       competition = Competition_trait)
-})
-names(mdata) <- traits
-# lapply(as.list(traits), function(trait)
-#   cbind(Model = trait, 
-#         Trait = mdata[[trait]]$Trait, 
-#         Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
-#   bind_rows() %>% 
-#   select(Model, Trait, Genus, DBH, TWI) %>% 
-#   reshape2::melt(id.vars = c("Model", "Trait", "Genus")) %>% 
-#   ggplot(aes(x = value, y = Trait, col = Genus)) +
-#   geom_point() +
-#   geom_smooth() +
-#   facet_grid(Model ~ variable, scales = "free")
+       Trait = unlist(data_trait[trait]),
+       DBH = data_trait$DBH,
+       TWI = data_trait$TWI,
+       NCI = data_trait$NCI,
+       species = as.numeric(as.factor(data_trait$Species)))
+  })
+names(mdata) <- models
 ```
 
-# Sampling
-
-## Code
-
-```{stan, output.var="Model", echo=T, eval=F}
+```{stan stanModel, output.var="Model", echo=T, eval=F}
 data {
   int<lower=1>  N ; // # of observations
-  int<lower=1>  J ; // # of neighbors
   int<lower=1> S ; // # species
-  int<lower=1> C ; // # complex
   vector[N] Trait ; // Trait
   vector[N] DBH ; // Diameter at Breast Height
   vector[N] TWI ; // Topographic Wetness Index
-  vector[J] DBHj ; // DBH neighbor
-  vector[J] Deltaj ; // Distance neighbor
-  vector[N] weights ;
-  int<lower=1, upper=N>  individual[J] ; // individuals index in neighbor matrix
+  vector[N] NCI ; // DBH neighbor
   int<lower=1, upper=S> species[N] ; // species index
-  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
-  int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  vector [C] alpha_c ; // Intercept for complexes
-  vector<lower=0> [C]  betaDBH_c ; // DBH half-load for complexes
-  vector[C] betaTWI_c ; // Abiotic slope for complexes
-  vector[C] betaComp_c ; // Biotic slope for complexes
-  real<lower=0> alphaNCI ;
-  vector<lower=0> [S] alpha_s_tilde ; // Intercept for species
-  vector<lower=0> [S] betaDBH_s_tilde ; // DBH half-load for species
-  vector[S] betaTWI_s_tilde ; // Abiotic slope for species
-  vector[S] betaComp_s_tilde ; // Biotic slope for species
-  real<lower=0> sigmaIntercept ; // Intercept variance for species
-  real<lower=0> sigmaDBH ; // DBH half-load variance for species
-  real<lower=0> sigmaTWI ; // Abiotic slope variance for species
-  real<lower=0, upper=10> sigmaComp ; // Biotic slope variance for species
+  vector [S] alpha ; // Intercept
+  vector<lower=0> [S]  betaDBH ; // DBH half-load
+  vector[S] betaTWI ; // TWI slope
+  vector[S] betaNCI ; // Competition slope
   real<lower=0> sigma ; // Variance
 }
-transformed parameters {
-  vector[S] alpha_s ;
-  vector<lower=0> [S] betaDBH_s ;
-  vector[S] betaTWI_s ;
-  vector[S] betaComp_s ;
-  vector[J] NCIj ;
-  vector[N] NCI ;
-  alpha_s = alpha_c[speciesincomplex] + sigmaIntercept*alpha_s_tilde ;
-  betaDBH_s = betaDBH_c[speciesincomplex] + sigmaDBH*betaDBH_s_tilde ;
-  betaTWI_s = betaTWI_c[speciesincomplex] + sigmaTWI*betaTWI_s_tilde ;
-  betaComp_s = betaComp_c[speciesincomplex] + sigmaComp*betaComp_s_tilde ;
-  NCIj = DBHj .* DBHj .* exp(-alphaNCI * Deltaj) ;
-  NCI = rep_vector(0.0, N) ;
-  for(j in 1:J)
-   NCI[individual[j]] += NCIj[j] ;
-  NCI = NCI ./ sd(NCI) ;
-}
 model {
-  alpha_c ~ normal(0, 10^6) ;
-  betaDBH_c ~ lognormal(0,1) ;
-  betaTWI_c ~ normal(0, 10^6) ;
-  betaComp_c ~ normal(0, 10^6) ;
-  alphaNCI ~ lognormal(0, 1) ;
-  alpha_s_tilde ~ normal(0, 1) ;
-  betaDBH_s_tilde ~ normal(0, 1) ;
-  betaTWI_s_tilde ~ normal(0, 1) ;
-  betaComp_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ lognormal(0, 1) ;
-  sigmaDBH ~ lognormal(0, 1) ;
-  sigmaTWI ~ lognormal(0, 1) ;
-  sigmaComp ~ lognormal(0, 1) ;
+  alpha ~ normal(0, 10^6) ; // Priors
+  betaDBH ~ normal(0,1) ;
+  betaTWI ~ normal(0,1) ;
+  betaNCI ~ normal(0,1) ;
   sigma ~ cauchy(0, 5) ;
-  Trait ~ normal(alpha_s[species] .* (DBH ./ (betaDBH_s[species] + DBH)) + betaTWI_s[species] .* TWI +  betaComp_s[species] .* (1 ./ weights) .* NCI, sigma) ; // Likelihood
-}
-generated quantities {
-  vector[N] Trait_pred ;
-  real Rsquared ;
-  vector[N] Trait_predDBH ;
-  vector[N] Trait_predTWI ;
-  vector[N] Trait_predNCI ;
-  Trait_pred = alpha_c[complex] .* (DBH ./ (betaDBH_c[complex] + DBH)) + betaTWI_c[complex] .* TWI + betaComp_c[complex] .* (1 ./ weights) .* NCI ;
-  Rsquared = 1 - dot_self(Trait - Trait_pred)/dot_self(Trait - mean(Trait)) ;
-  Trait_predDBH = alpha_c[complex] .* (DBH ./ (betaDBH_c[complex] + DBH)) + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] * mean((1 ./ weights) .* NCI) ;
-  Trait_predTWI = alpha_c[complex] .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) + betaTWI_c[complex] .* TWI + betaComp_c[complex] * mean((1 ./ weights) .* NCI) ;
-  Trait_predNCI = alpha_c[complex] .* (mean(DBH) ./ (betaDBH_c[complex] + mean(DBH))) + betaTWI_c[complex] * mean(TWI) + betaComp_c[complex] .* (1 ./ weights) .* NCI ;
+  Trait ~ normal(alpha[species] .* (DBH ./ (betaDBH[species] + DBH)) + betaTWI[species] .* TWI +  betaNCI[species] .* NCI, sigma) ; // Likelihood
 }
 ```
 
-## Summary
-
-```{r }
+```{r fits}
 # fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c('NCIj', "alpha_s", "betaDBH_s", "betaTWI_s", "betaComp_s",
-#                                  "alpha_s_tilde", "betaDBH_s_tilde", "betaTWI_s_tilde", "betaComp_s_tilde")))
-# names(fits) <- traits
+#   sampling(Model, chains = 2, data = x, save_warmup = F))
+# names(fits) <- models
 # save(fits, file = "./functional_save/Additive.Rdata")
 load("./functional_save/Additive.Rdata")
-pars <- c("alpha_c", "betaDBH_c", "betaTWI_c", "betaComp_c", "alphaNCI",
-          "sigmaIntercept", "sigmaDBH", "sigmaTWI", "sigmaComp", "sigma")
-lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), 
-                  droppars = NULL, rhat = T) %>%
-   mutate(Trait = trait)) %>%
-  bind_rows() %>%
-  kable() %>%
-  kable_styling()
 ```
 
-## Chains
-
-```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
-# lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$LDMC), regex_pars = c(pars, "lp__"),
-             facet_args = list(labeller = label_parsed))
-```
-
-## Pairs
-
-```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model."}
-# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
-```
-
-## Posteriors
-
-```{r posteriorsLp}
-gdata <- lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("lp__"))) %>% 
-  bind_rows(.id = "trait") %>% 
-  mutate(parameter = "logged-likelihood")
-ggplot(gdata, aes(x = trait, xend = trait)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
-```
-
-```{r posteriorsBeta, fig.width=12, fig.height=12}
-gdata <- lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("alpha_c", "betaDBH_c",
-                                     "betaTWI_c", "betaComp_c"))) %>% 
-  bind_rows(.id = "trait") %>% 
-  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
-  mutate(complex = ifelse(complex == 2, "Symphonia", "Eschweilera")) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(parameter = as.factor(gsub("c", "", parameter))) %>% 
-  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
-                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
-  mutate(parameter = factor(parameter, levels = c("alpha", "beta[DBH]", 
-                                                  "beta[TWI]", "beta[Comp]")))
-student <- lapply(fits, function(fit) 
-  as.data.frame(fit, pars = c("alpha_c", "betaDBH_c",
-                                     "betaTWI_c", "betaComp_c"))) %>% 
-  bind_rows(.id = "trait") %>%
-  reshape2::melt(id.vars = "trait", variable.name = "parameter") %>% 
-  mutate(complex = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(complex = gsub("([[:punct:]])", "", complex)) %>% 
-  mutate(complex = ifelse(complex == 2, "Symphonia", "Eschweilera")) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(parameter = as.factor(gsub("c", "", parameter))) %>% 
-  mutate(parameter = recode_factor(parameter, betaDBH = "beta[DBH]", 
-                                   betaTWI = "beta[TWI]", betaComp = "beta[Comp]")) %>% 
-  group_by(trait, parameter) %>% 
-  do(student = t.test(value ~ complex, data = .)) %>% 
-  mutate(student = student$p.value) %>% 
-  mutate(student = ifelse(student < 0.001, "***",
-                          ifelse(student < 0.01, "**",
-                                 ifelse(student < 0.05, "*",
-                                        ifelse(student < 0.1, ".", 
-                                               "n.s."))))) %>% 
-  left_join(gdata %>% 
-              group_by(trait, parameter) %>% 
-              summarise(x = mean(m)))
-ggplot(gdata, aes(x = trait, xend = trait, col = complex, fill = complex)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  geom_text(aes(x = trait, y = x, label = student,
-                col = NA, fill = NA), position = position_nudge(x = 0.1),
-            data = student) +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
-```
-
-```{r posteriorsAlpha}
-gdata <- lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("alphaNCI"))) %>% 
-  bind_rows(.id = "trait") %>% 
-  mutate(parameter = recode_factor(parameter, alphaNCI = "alpha[NCI]"))
-ggplot(gdata, aes(x = trait, xend = trait)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
-```
-
-```{r posteriorsSigma2, fig.width=12, fig.height=12}
-gdata <- lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit),
-                      regex_pars = c("sigma"))) %>% 
-  bind_rows(.id = "trait") %>% 
-  mutate(parameter = recode_factor(parameter, 
-                                   sigma = "sigma^2",
-                                   sigmaIntercept = "sigma[Intercept]^2",
-                                   sigmaDBH = "sigma[DBH]^2", 
-                                   sigmaTWI = "sigma[TWI]^2",
-                                   sigmaComp = "sigma[Comp]^2"))
-ggplot(gdata, aes(x = trait, xend = trait)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ parameter, labeller = label_parsed, scales = "free") +
-  xaxis_title(F) +
-  yaxis_title(F)
-```
-
-## Predictions
-
-```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
-lapply(as.list(c("DBH", "TWI", "NCI")), function(variable)
-  lapply(as.list(traits), function(trait) {
-    if(variable == "NCI") {
-      value <- apply(as.matrix(fits[[trait]], pars = "NCI"), 2, mean)
-    } else {
-      value <- mdata[[trait]][[variable]]
-    }
-    data.frame(
-      trait = trait, 
-      variable = variable,
-      Y = mdata[[trait]]$Trait,
-      value = value,
-      Genus = mdata[[trait]]$complex,
-      mu = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
-                 2, mean),
-      mu5 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
-                  2, quantile, probs = 0.05),
-      mu95 = apply(as.matrix(fits[[trait]], pars = paste0("Trait_pred", variable)), 
-                   2, quantile, probs = 0.95)
-    )
-  }) %>% bind_rows()) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = value, col = as.factor(Genus))) +
-  geom_point(aes(y = Y)) +
-  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
-  geom_line(aes(y = mu)) +
-  facet_grid(trait ~ variable, scales = "free") +
-  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```{r additiveModel}
+load("./functional_save/InteractionReduced.Rdata")
+models <- list(Interaction = fits)
+load("./functional_save/Additive.Rdata")
+models$Additive <- fits
+lapply(models, function(model)
+  lapply(model, function(trait)
+    broom::tidyMCMC(trait, pars = "lp__", droppars = NULL, rhat = T)
+  ) %>% bind_rows(.id = "Model")) %>% 
+  bind_rows(.id = "Form") %>% 
+  separate(Model, c("Genus", "Trait"), "-") %>% 
+  mutate(Trait = recode_factor(Trait, 
+                               LMA = "$LMA$",
+                               LDMC = "$LDMC$", 
+                               LT = "$LT$", 
+                               invLA = "$\\frac{1}{LA}$",
+                               CC = "$CC$")) %>% 
+  reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
+  mutate(Difference = Additive - Interaction) %>%
+  kable(caption = "Log-likelihood for ontogenic model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
 ```
 
 # Conclusion
