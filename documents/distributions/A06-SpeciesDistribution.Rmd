@@ -16,8 +16,8 @@ output:
     number_sections: false
     toc: false
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
+# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+# bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
 
@@ -144,9 +144,8 @@ data <- trees %>%
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
-  filter(n() > 10) %>% 
+  filter(n() > 10) %>%
   ungroup()
-data <- data %>% group_by(Complex) %>% sample_n(200) %>% ungroup()
 ```
 
 ```{r mdata}
@@ -260,43 +259,74 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:3)
 ```
 
-<<<<<<< HEAD
 ```{r posterior, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
-lapply(complexes, function(complex) 
-  mcmc_intervals_data(as.array(fits[[complex]], pars = pars)) %>% 
-    mutate(complex = complex) %>% 
-    mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
-    mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-    mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-    mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-    mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
-    left_join(species) %>% 
-    mutate(descriptor = substr(descriptor, 2, 2)) %>% 
-    mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                      `2` = "NCIother", `3` = "NCIspecies")) %>% 
-    dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
-    filter(parameter != "alpha") %>% 
-    mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
-    ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, parameter),
-               xend = datatools::reorder_within(SpeciesLong, m, parameter), 
-               col = SpeciesLong, fill = SpeciesLong)) +
-    geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-    geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-    geom_segment(aes(y = ll, yend = hh),
-                 size = 1, show.legend = F, alpha = 0.5) +
-    geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-    coord_flip() +
-    facet_wrap(~ parameter, labeller = label_parsed, 
-               scales = "free") +
-    datatools::scale_x_reordered() +
-    xlab("") + ylab("") + 
-    scale_fill_discrete(guide = "none") +
-    scale_color_discrete(guide = "none") +
-    ggtitle(complex)) %>% 
-  gridExtra::grid.arrange(grobs = .)
+lapply(lapply(fits, as.array, pars = "beta"), 
+       bayesplot::mcmc_intervals_data) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(complex = gsub("E. ", "", complex)) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "NCIother", `3` = "NCIspecies")) %>% 
+  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+  filter(parameter != "alpha") %>% 
+  mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
+  ggplot(aes(x = SpeciesLong,
+             xend = SpeciesLong, 
+             col = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(complex ~ parameter, labeller = label_parsed, 
+             scales = "free") +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
 ```
 
-```{r prediciton, fig.cap="Predictions."}
+```{r posterior, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
+lapply(lapply(fits, as.array, pars = "gamma"), 
+       bayesplot::mcmc_intervals_data) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(complex = gsub("E. ", "", complex)) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "NCIother", `3` = "NCIspecies")) %>% 
+  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+  filter(parameter != "alpha") %>% 
+  mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
+  ggplot(aes(x = SpeciesLong,
+             xend = SpeciesLong, 
+             col = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(complex ~ parameter, labeller = label_parsed, 
+             scales = "free") +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+
+```{r prediciton}
 preds <- lapply(complexes, function(complex){
 
   N <- 25
@@ -383,6 +413,48 @@ preds %>%
   gridExtra::grid.arrange(grobs = .$g)
 ```
 
+```{r pred1, fig.cap="Predictions."}
+preds %>% 
+  group_by(complex) %>% 
+  left_join(data %>% 
+              group_by(Complex) %>% 
+              mutate(N_complex = n()) %>% 
+              group_by(Complex, N_complex, Genus, Species) %>% 
+              summarise(N_species = n()) %>% 
+              mutate(RelAbund = N_species / N_complex),
+            by = c("complex" = "Complex", "species" = "Species")) %>% 
+  do(g = ggplot(data = ., aes(x = value, col = species)) + 
+       geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+       geom_line(aes(y = Y), lwd = 1.3) +
+       geom_hline(aes(yintercept = RelAbund, col = species), linetype = "dashed") +
+       facet_grid(complex ~ variable, scales = "free_x") +
+       guides(col = guide_legend(nrow=2)) +
+       theme(legend.position = "bottom") +
+       scale_y_sqrt()) %>% 
+  gridExtra::grid.arrange(grobs = .$g)
+```
+
+```{r pred2, fig.cap="Predictions."}
+preds %>% 
+  group_by(complex) %>% 
+  left_join(data %>% 
+              group_by(Complex) %>% 
+              mutate(N_complex = n()) %>% 
+              group_by(Complex, N_complex, Genus, Species) %>% 
+              summarise(N_species = n()) %>% 
+              mutate(Yo = N_species / N_complex),
+            by = c("complex" = "Complex", "species" = "Species")) %>% 
+  do(g = ggplot(data = ., aes(x = value, col = species)) + 
+       geom_ribbon(aes(ymin = (Y5)/Yo, ymax = (Y95)/Yo), alpha = 0.2) +
+       geom_line(aes(y = (Y)/Yo), lwd = 1.3) +
+       # geom_hline(aes(yintercept = RelAbund, col = species), linetype = "dashed") +
+       facet_grid(complex ~ variable, scales = "free_x") +
+       guides(col = guide_legend(nrow=2)) +
+       theme(legend.position = "bottom")) %>% 
+       # scale_y_sqrt()) %>% 
+  gridExtra::grid.arrange(grobs = .$g)
+```
+
 ```{r sensitivity, fig.cap="Model sensitivity to co-variables."}
 preds %>% 
   mutate(Delta = sqrt((Yp-Y)^2)) %>% 
@@ -401,7 +473,7 @@ preds %>%
 
 ## S1: Model
 
-```{stan Model, output.var="Model", echo=T, eval=F}
+```{stan Model, output.var="Model", echo=T, eval=F, cache=F}
 functions {
   real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
     real alpha_plus = sum(alpha);
