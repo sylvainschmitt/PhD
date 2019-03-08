@@ -64,6 +64,36 @@ path <- "../../data/Paracou/"
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
+sdDBH <- sd(Individuals$DBH)
+Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
+  group_by(Species) %>% 
+  filter(n() > 20) %>% 
+  ungroup() %>% 
+  left_join(Competition %>% 
+              group_by(idTree) %>% 
+              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
+  mutate(NCI = log(NCI)) %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
+            funs(./sd(., na.rm = T)))
+```
+
+```{r mdata}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+mdata <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex)
+  list(N = nrow(data_trait),
+       S = length(unique(data_trait$Species)),
+       Trait = unlist(data_trait[trait]),
+       DBH = data_trait$DBH,
+       species = as.numeric(as.factor(data_trait$Species)))
+  })
+names(mdata) <- models
 ```
 
 # Introduction {-}
@@ -103,77 +133,28 @@ where:
 * $\beta_{DBH}$ represents the slope of the DBH effect;
 * $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 
-```{r mdata, fig.cap="Prepared data."}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-mdata <- lapply(traits, function(trait){
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
-  list(N = nrow(data_trait),
-       C = length(unique(data_trait$Genus)),
-       S = length(unique(data_trait$Species)),
-       Trait = as.numeric(scale(data_trait[trait],center = F)),
-       DBH = as.numeric(scale(data_trait$DBH,center = F)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       complex = as.numeric(as.factor(data_trait$Genus)),
-       speciesincomplex = unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[order(unique(cbind(as.numeric(as.factor(data_trait$Species)), as.numeric(as.factor(data_trait$Genus))))[,1]),2])})
-names(mdata) <- traits
-lapply(as.list(traits), function(trait)
-  cbind(Model = trait, 
-        Trait = mdata[[trait]]$Trait, 
-        Individuals[unlist(!is.na(Individuals[trait])),])) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = DBH, y = Trait, col = Genus)) +
-  geom_point() +
-  geom_smooth() +
-  facet_wrap(~ Model, scales = "free", nrow = 3)
-```
-
 # Michaelis Menten {-}
 
-The model correclty converged with acceptable parameters correlation and correct predictions. Parameters posterior values and uncertainties will be discussed once the full model sampled in another document.
-
 ## Code
 
 ```{stan output.var="Model",echo=T, eval=F}
 data {
-  int<lower=1> N ; // # obs
+  int<lower=1>  N ; // # of observations
   int<lower=1> S ; // # species
-  int<lower=1> C ; // # complex
-  vector[N] Trait ; // Phenotype continuous descriptor
-  vector[N] DBH ; // Topographic Wetness Index
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
   int<lower=1, upper=S> species[N] ; // species index
-  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
-  int<lower=1, upper=C> complex[N] ; // species index
 }
 parameters {
-  vector [C] alpha_c ; // Abiotic intercept for complexes
-  vector<lower=0> [C] betaDBH_c ; // Abiotic slope for complexes
-  vector[S] alpha_s_tilde ; // Abiotic intercept for species
-  vector<lower=0> [S] betaDBH_s_tilde ; // Abiotic slope for species
-  real<lower=0> sigmaIntercept ; // Abiotic intercept variance for species
-  real<lower=0> sigmaDBH ; // Abiotic slope variance for species
-  real<lower=0> sigma ; // Abiotic variance
-}
-transformed parameters {
-  vector[S] alpha_s ; // Intercept for species
-  vector[S] betaDBH_s ; // Abiotic slope for species
-  alpha_s = alpha_c[speciesincomplex] + alpha_s_tilde*sigmaIntercept ;
-  betaDBH_s = betaDBH_c[speciesincomplex] + betaDBH_s_tilde*sigmaDBH ;
+  vector [S] alpha ; // Intercept
+  vector<lower=0> [S]  betaDBH ; // DBH half-load
+  real<lower=0> sigma ; // Variance
 }
 model {
-  alpha_c ~ normal(0, 10^6) ;
-  betaDBH_c ~ lognormal(0,1) ;
-  alpha_s_tilde ~ normal(0, 1) ;
-  betaDBH_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ lognormal(0,1) ;
-  sigmaDBH ~ lognormal(0,1) ;
-  sigma ~ cauchy(0,5) ;
-  Trait ~ normal((alpha_s[species].*DBH) ./ (betaDBH_s[species]+DBH), sigma) ; // Likelihood
-}
-generated quantities {
-  vector[N] Trait_pred ;
-  real Rsquared ;
-  Trait_pred = (alpha_c[complex] .* DBH )./ (betaDBH_c[complex] + DBH) ; // Predictions
-  Rsquared = 1 - sum((Trait - Trait_pred) .* (Trait - Trait_pred))/sum((Trait - mean(Trait)) .* (Trait - mean(Trait))) ;
+  alpha ~ normal(0, 10^6) ; // Priors
+  betaDBH ~ normal(0,1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal(alpha[species] .* (DBH ./ (betaDBH[species] + DBH)), sigma) ; // Likelihood
 }
 ```
 
@@ -181,131 +162,12 @@ generated quantities {
 
 ```{r }
 # fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c("alpha_s", "betaDBH_s",
-#                                  "alpha_s_tilde", "betaDBH_s_tilde")))
-# names(fits) <- traits
+#   sampling(Model, chains = 2, data = x, save_warmup = F))
+# names(fits) <- models
 # save(fits, file = "./functional_save/DBH.Rdata")
 load("./functional_save/DBH.Rdata")
-pars <- c( "alpha_c", "betaDBH_c", "sigmaIntercept", "sigmaDBH", "sigma" )
-lapply(as.list(traits), function(trait)
-  broom::tidyMCMC(fits[[trait]], pars = c(pars, "Rsquared", "lp__"), 
-                  droppars = NULL, rhat = T) %>%
-   mutate(Trait = trait)) %>%
-  bind_rows() %>%
-  kable() %>%
-  kable_styling()
-```
-
-## Chains
-
-```{r , fig.cap="Markov chains trace plot after warmup for LA model."}
-# lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
-             facet_args = list(labeller = label_parsed))
-```
-
-## Pairs
-
-```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model.", fig.width=12, fig.height=12}
-mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
-```
-
-## Posteriors
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
-  labels = traits, nrow = 2)
-```
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaDBH_c")),
-  labels = traits, nrow = 2)
-```
-
-## Predictions
-
-```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
-lapply(as.list(traits), function(trait)
-  data.frame(trait = trait, 
-        Y = mdata[[trait]]$Trait,
-        DBH = mdata[[trait]]$DBH,
-        Genus = mdata[[trait]]$complex,
-        mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, mean),
-        mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.05),
-        mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.95)
-  )) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = DBH, col = as.factor(Genus))) +
-  geom_point(aes(y = Y)) +
-  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
-  geom_line(aes(y = mu)) +
-  facet_wrap(~ trait, scales = "free", nrow = 3) +
-  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
-```
-
-# Linear {-}
-
-The model correclty converged with acceptable parameters correlation and correct predictions. Parameters posterior values and uncertainties will be discussed once the full model sampled in another document.
-
-## Code
-
-```{stan output.var="Model",echo=T, eval=F}
-data {
-  int<lower=1> N ; // # obs
-  int<lower=1> S ; // # species
-  int<lower=1> C ; // # complex
-  vector[N] Trait ; // Phenotype continuous descriptor
-  vector[N] DBH ; // Topographic Wetness Index
-  int<lower=1, upper=S> species[N] ; // species index
-  int<lower=1, upper=C> speciesincomplex[S] ; // species index wihtin complex
-  int<lower=1, upper=C> complex[N] ; // species index
-}
-parameters {
-  vector [C] alpha_c ; // Abiotic intercept for complexes
-  vector<lower=0> [C] betaDBH_c ; // Abiotic slope for complexes
-  vector[S] alpha_s_tilde ; // Abiotic intercept for species
-  vector<lower=0> [S] betaDBH_s_tilde ; // Abiotic slope for species
-  real<lower=0> sigmaIntercept ; // Abiotic intercept variance for species
-  real<lower=0> sigmaDBH ; // Abiotic slope variance for species
-  real<lower=0> sigma ; // Abiotic variance
-}
-transformed parameters {
-  vector[S] alpha_s ; // Intercept for species
-  vector[S] betaDBH_s ; // Abiotic slope for species
-  alpha_s = alpha_c[speciesincomplex] + alpha_s_tilde*sigmaIntercept ;
-  betaDBH_s = betaDBH_c[speciesincomplex] + betaDBH_s_tilde*sigmaDBH ;
-}
-model {
-  alpha_c ~ normal(0, 10^6) ;
-  betaDBH_c ~ normal(0, 10^6) ;
-  alpha_s_tilde ~ normal(0, 1) ;
-  betaDBH_s_tilde ~ normal(0, 1) ;
-  sigmaIntercept ~ lognormal(0,1) ;
-  sigmaDBH ~ lognormal(0,1) ;
-  sigma ~ cauchy(0,5) ;
-  Trait ~ normal(alpha_s[species] + betaDBH_s[species] .* DBH, sigma) ; // Likelihood
-}
-generated quantities {
-  vector[N] Trait_pred ;
-  Trait_pred = alpha_c[complex] + betaDBH_c[complex] .* DBH ; // Predictions
-}
-```
-
-## Summary
-
-```{r }
-# fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c("alpha_s", "betaDBH_s",
-#                                  "alpha_s_tilde", "betaDBH_s_tilde")))
-# names(fits) <- traits
-# save(fits, file = "./functional_save/DBHlin.Rdata")
-load("./functional_save/DBHlin.Rdata")
-pars <- c( "alpha_c", "betaDBH_c", "sigmaIntercept", "sigmaDBH", "sigma" )
-lapply(as.list(traits), function(trait)
+pars <- c( "alpha", "betaDBH", "sigma" )
+lapply(as.list(models), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), 
                   droppars = NULL, rhat = T) %>%
    mutate(Trait = trait)) %>%
@@ -314,53 +176,47 @@ lapply(as.list(traits), function(trait)
   kable_styling()
 ```
 
-## Chains
+# Linear {-}
 
-```{r , fig.cap="Markov chains trace plot after warmup for LA model."}
-# lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$invLA), regex_pars = c(pars, "lp__"),
-             facet_args = list(labeller = label_parsed))
+## Code
+
+```{stan output.var="Model",echo=T, eval=F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1> S ; // # species
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  int<lower=1, upper=S> species[N] ; // species index
+}
+parameters {
+  vector [S] alpha ; // Intercept
+  vector<lower=0> [S]  betaDBH ; // DBH half-load
+  real<lower=0> sigma ; // Variance
+}
+model {
+  alpha ~ normal(0, 10^6) ; // Priors
+  betaDBH ~ normal(0,1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal(alpha[species] + betaDBH[species] .* DBH, sigma) ; // Likelihood
+}
 ```
 
-## Pairs
+## Summary
 
-```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model.", fig.width=12, fig.height=12}
-mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
-```
-
-## Posteriors
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = pars)),
-  labels = traits, nrow = 2)
-```
-
-```{r , fig.cap="Model parameters posterior."}
-cowplot::plot_grid(plotlist = lapply(traits, function(trait)
-  mcmc_intervals(as.array(fits[[trait]]), regex_pars = "betaDBH_c")),
-  labels = traits, nrow = 2)
-```
-
-## Predictions
-
-```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
-lapply(as.list(traits), function(trait)
-  data.frame(trait = trait, 
-        Y = mdata[[trait]]$Trait,
-        DBH = mdata[[trait]]$DBH,
-        Genus = mdata[[trait]]$complex,
-        mu = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, mean),
-        mu5 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.05),
-        mu95 = apply(as.matrix(fits[[trait]], pars = "Trait_pred"), 2, quantile, probs = 0.95)
-  )) %>% 
-  bind_rows() %>% 
-  ggplot(aes(x = DBH, col = as.factor(Genus))) +
-  geom_point(aes(y = Y)) +
-  geom_ribbon(aes(ymin = mu5, ymax = mu95), alpha = 0.2) +
-  geom_line(aes(y = mu)) +
-  facet_wrap(~ trait, scales = "free", nrow = 3) +
-  scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
+```{r }
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F))
+# names(fits) <- models
+save(fits, file = "./functional_save/DBHlin.Rdata")
+load("./functional_save/DBHlin.Rdata")
+pars <- c( "alpha", "betaDBH", "sigma" )
+lapply(as.list(models), function(trait)
+  broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), 
+                  droppars = NULL, rhat = T) %>%
+   mutate(Trait = trait)) %>%
+  bind_rows() %>%
+  kable() %>%
+  kable_styling()
 ```
 
 # Comparison
@@ -373,10 +229,21 @@ models$linear <- fits
 lapply(models, function(model)
   lapply(model, function(trait)
     broom::tidyMCMC(trait, pars = "lp__", droppars = NULL, rhat = T)
-  ) %>% bind_rows(.id = "trait")) %>% 
-  bind_rows(.id = "model") %>% 
-  reshape2::dcast(trait ~ model, value.var = "estimate") %>% 
-  kable(caption = "log-likelihood for ontogenic model depending on model form.")
+  ) %>% bind_rows(.id = "Model")) %>% 
+  bind_rows(.id = "Form") %>% 
+  separate(Model, c("Genus", "Trait"), "-") %>% 
+  mutate(Trait = recode_factor(Trait, 
+                               LMA = "$LMA$",
+                               LDMC = "$LDMC$", 
+                               LT = "$LT$", 
+                               invLA = "$\\frac{1}{LA}$",
+                               CC = "$CC$")) %>% 
+  mutate(Form = recode_factor(Form, 
+                              linear = "Linear",
+                              michaelis = "Michaelis Menten")) %>% 
+  reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
+  mutate(Difference = Linear - `Michaelis Menten`) %>% 
+  kable(caption = "Log-likelihood for ontogenic model depending on model form (linear vs Michaelis-Menten).", digits = 3)
 ```
 
 

@@ -1,19 +1,19 @@
 ---
-title: "A08 : Interaction Model only with Species 4"
+title: "A08 : Interaction Model Reduced"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
   bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
@@ -67,59 +67,49 @@ path <- "../../data/Paracou/"
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
+sdDBH <- sd(Individuals$DBH)
 Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
   group_by(Species) %>% 
-  filter(n() > 10) %>% 
+  filter(n() > 20) %>% 
   ungroup() %>% 
   left_join(Competition %>% 
               group_by(idTree) %>% 
-              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij))))
+              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
+  mutate(NCI = log(NCI)) %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
+            funs(./sd(., na.rm = T)))
 ```
 
 ```{r mdata}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 mdata <- lapply(models, function(model){
   trait <- strsplit(model, "-")[[1]][2]
   complex <- strsplit(model, "-")[[1]][1]
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex) %>% 
-    left_join(select(Competition, idTree, AreaOutside20) 
-              %>% unique())
-  Competition_trait <- Competition
-  Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
-  Competition_trait <- filter(Competition_trait, !is.na(idTree))
-  list(Model = model,
-       Complex = complex,
-       N = nrow(data_trait),
-       J = nrow(Competition_trait),
+    filter(Genus == complex)
+  list(N = nrow(data_trait),
        S = length(unique(data_trait$Species)),
-       Trait = unlist(data_trait[trait])/sd(unlist(data_trait[trait])),
-       DBH = data_trait$DBH/sd(data_trait$DBH),
-       TWI = data_trait$TWI/sd(data_trait$TWI),
-       NCI = data_trait$NCI/sd(data_trait$NCI),
-       weights = 1-data_trait$AreaOutside20,
-       individual = as.numeric(as.factor(Competition_trait$idTree)),
-       species = as.numeric(as.factor(data_trait$Species)),
-       data = data_trait,
-       competition = Competition_trait,
-       sd = c(Trait = sd(unlist(data_trait[trait])), 
-              DBH = sd(data_trait$DBH), 
-              TWI = sd(data_trait$TWI), 
-              NCI = sd(data_trait$NCI)))
-})
+       Trait = unlist(data_trait[trait]),
+       DBH = data_trait$DBH,
+       TWI = data_trait$TWI,
+       NCI = data_trait$NCI,
+       species = as.numeric(as.factor(data_trait$Species)))
+  })
 names(mdata) <- models
 ```
 
 ```{r fits}
 # fits <- lapply(mdata, function(x)
-#   sampling(Model, chains = 2, data = x, save_warmup = F,
-#            include = F, pars = c('NCIj')))
+#   sampling(Model, chains = 2, data = x, save_warmup = F))
 # names(fits) <- models
-# save(fits, file = "./functional_save/InteractionSpecies4.Rdata")
-load("./functional_save/InteractionSpecies4.Rdata")
-pars <- c("alpha", "betaDBH", "betaTWI", "betaComp", "sigma")
+# save(fits, file = "./functional_save/InteractionReduced.Rdata")
+load("./functional_save/InteractionReduced.Rdata")
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
 ```
 
 ```{r species}
@@ -137,16 +127,72 @@ species <- lapply(models, function(model){
   mutate(complex = Genus)
 ```
 
+```{r predicitons}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+preds <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex)
+  
+  DBH <- data_trait$DBH
+  TWI <- data_trait$TWI
+  NCI <- data_trait$NCI
+  species <- as.numeric(as.factor(data_trait$Species))
+  
+  alpha <- as.matrix(fits[[model]], pars = "alpha")
+  betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
+  betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
+  betaNCI <- as.matrix(fits[[model]], pars = "betaNCI")
+  
+  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ynci <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  
+  data.frame(
+    Model = model,
+    Trait = trait,
+    Complex = complex,
+    DBH = data_trait$DBH, 
+    TWI = data_trait$TWI, 
+    NCI = NCI,
+    Genus = data_trait$Genus,
+    Species = data_trait$Species,
+    Y = unlist(data_trait[trait]),
+    Yp = apply(Yp, 2, mean),
+    Yp5 = apply(Yp, 2, quantile, probs = 0.05),
+    Yp95 = apply(Yp, 2, quantile, probs = 0.95),
+    Yalpha = apply(Yalpha, 2, mean),
+    Yalpha5 = apply(Yalpha, 2, quantile, probs = 0.05),
+    Yalpha95 = apply(Yalpha, 2, quantile, probs = 0.95),
+    Ydbh = apply(Ydbh, 2, mean),
+    Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
+    Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
+    Ytwi = apply(Ytwi, 2, mean),
+    Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
+    Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
+    Ynci = apply(Ynci, 2, mean),
+    Ynci5 = apply(Ynci, 2, quantile, probs = 0.05),
+    Ynci95 = apply(Ynci, 2, quantile, probs = 0.95)
+  )}) %>% bind_rows()
+```
+
 # Introduction {-}
 
 # Material and Methods
 
 # Results
 
+## Summary
+
 ```{r summarySpecies}
 lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", "betaTWI",
-                                "betaComp", "sigma"), 
+                                "betaNCI", "sigma", "lp__"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-") %>% 
@@ -158,14 +204,14 @@ lapply(fits, function(fit)
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, 
-                              alphas = "$\\alpha$",
-                              betasDBH = "$\\beta_{DBH}$", 
-                              betasTWI = "$\\beta_{TWI}$", 
-                              betasComp = "$\\beta_{Comp}$", 
-                              alphaNCI = "$\\alpha_{NCI}$",
-                              sigma = "$\\sigma^2$")) %>% 
+                              alpha = "$\\alpha$",
+                              betaDBH = "$\\beta_{DBH}$", 
+                              betaTWI = "$\\beta_{TWI}$", 
+                              betaNCI = "$\\beta_{Comp}$",
+                              sigma = "$\\sigma^2$",
+                              lp = "log-likelihood")) %>% 
   mutate(trait = recode_factor(trait, 
-                              invSLA = "$\\frac{1}{SLA}$",
+                              LMA = "$LMA$",
                               LDMC = "$LDMC$", 
                               LT = "$LT$", 
                               invLA = "$\\frac{1}{LA}$",
@@ -179,10 +225,9 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:2)
 ```
 
+## Intercept
+
 ```{r speciesIntercept, fig.cap="Model species effect for Intercept."}
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",
-                                             function(x) sign(x)*sqrt(abs(x)),
-                                             function(x) x^2*sign(x))
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "alpha"))) %>% 
@@ -192,6 +237,7 @@ lapply(fits, function(fit)
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
   mutate(species = as.numeric(species)) %>% 
   left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
@@ -201,19 +247,17 @@ lapply(fits, function(fit)
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   datatools::scale_x_reordered() +
-  facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free") +
+  facet_grid(trait ~ ., labeller = label_parsed, scales = "free_y") +
   xaxis_title(F) +
   ylab(expression(alpha)) +
   scale_y_continuous(trans="S_sqrt") +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none")
+  scale_color_brewer("", palette = "Set1", guide = "none") +
+  scale_fill_brewer("", palette = "Set1", guide = "none")
 ```
 
+## DBH
+
 ```{r speciesDBH, fig.cap="Model species effect for $DBH_{90}$."}
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",
-                                             function(x) sign(x)*sqrt(abs(x)),
-                                             function(x) x^2*sign(x))
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaDBH"))) %>% 
@@ -223,17 +267,12 @@ lapply(fits, function(fit)
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
    mutate(species = as.numeric(species)) %>% 
   left_join(species) %>% 
-  left_join(lapply(mdata, function(data) 
-    data.frame(variable = names(data$sd), sd = data$sd)) %>% 
-      bind_rows(.id = "model") %>% 
-      filter(variable == "DBH") %>% 
-      reshape2::dcast(model ~ variable) %>% 
-      rename(sdDBH = DBH)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
   mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
@@ -241,17 +280,27 @@ lapply(fits, function(fit)
   coord_flip() +
   datatools::scale_x_reordered() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free") +
+             scales = "free_y") +
   ylab(expression(DBH[90]~(cm))) +
-  scale_y_continuous(trans="S_sqrt") +
+  scale_y_log10() +
   scale_color_discrete(guide = "none") +
   scale_fill_discrete(guide = "none")
 ```
 
+```{r speciesDBH2, fig.cap="Model species effect for DBH."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(DBH*sdDBH, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ydbh5, ymax = Ydbh95), alpha = 0.2) +
+  geom_line(aes(y = Ydbh)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed) +
+  scale_y_log10()
+```
+
+## TWI
+
 ```{r speciesTWI, fig.cap="Model species effect for TWI."}
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",
-                                             function(x) sign(x)*sqrt(abs(x)),
-                                             function(x) x^2*sign(x))
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaTWI"))) %>% 
@@ -261,42 +310,58 @@ lapply(fits, function(fit)
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
     mutate(species = as.numeric(species)) %>% 
   left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
-              scales = "free") +
+              scales = "free_y") +
   datatools::scale_x_reordered() +
   xaxis_title(F) +
   ylab(expression(beta[TWI])) +
   scale_y_continuous(trans="S_sqrt") +
   scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none")
+  scale_fill_discrete(guide = "none") +
+  ylim(-0.5, 0.5)
 ```
 
+```{r speciesTWI2, fig.cap="Model species effect for DBH."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(TWI, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ytwi5, ymax = Ytwi95), alpha = 0.2) +
+  geom_line(aes(y = Ytwi)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed)
+```
+
+## NCI
+
 ```{r speciesNCI, fig.cap="Model species effect for NCI."}
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",
-                                             function(x) sign(x)*sqrt(abs(x)),
-                                             function(x) x^2*sign(x))
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
-                               pars = "betaComp"))) %>% 
+                               pars = "betaNCI"))) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-") %>%
   mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
   mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
     mutate(species = as.numeric(species)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>%
   left_join(species) %>% 
   ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
              xend = datatools::reorder_within(SpeciesLong, m, trait),
              color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
@@ -306,93 +371,80 @@ lapply(fits, function(fit)
     facet_grid(trait ~ Genus, labeller = label_parsed, 
               scales = "free") +
   xaxis_title(F) +
-  ylab(expression(beta[Comp])) +
+  ylab(expression(beta[NCI])) +
   scale_y_continuous(trans="S_sqrt") +
   scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none")
-```
-
-```{r predicitons}
-traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
-complexes <- c("Symphonia", "Eschweilera")
-models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
-preds <- lapply(models, function(model){
-  trait <- strsplit(model, "-")[[1]][2]
-  complex <- strsplit(model, "-")[[1]][1]
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex) %>% 
-    left_join(select(Competition, idTree, AreaOutside20) 
-              %>% unique())
-  
-  DBH <- data_trait$DBH/sd(data_trait$DBH)
-  TWI <- data_trait$TWI/sd(data_trait$TWI)
-  NCI <- data_trait$NCI/sd(data_trait$NCI)
-  species <- as.numeric(as.factor(data_trait$Species))
-  
-  alpha <- as.matrix(fits[[model]], pars = "alpha")
-  betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
-  betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
-  betaComp <- as.matrix(fits[[model]], pars = "betaComp")
-  
-  Y <- unlist(data_trait[trait])/sd(unlist(data_trait[trait]))
-  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaComp[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ycomplex <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaComp[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaComp[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaComp[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ycomp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaComp[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  
-  Ddbh <- sqrt((Yp - Ydbh)^2)
-  Dtwi <- sqrt((Yp - Ytwi)^2)
-  Dcomp <- sqrt((Yp - Ycomp)^2)
-  
-  data.frame(
-    Model = model,
-    Trait = trait,
-    Complex = complex,
-    DBH = data_trait$DBH, 
-    TWI = data_trait$TWI, 
-    NCI = NCI,
-    Genus = data_trait$Genus,
-    Species = data_trait$Species,
-    Y = unlist(data_trait[trait])/sd(unlist(data_trait[trait])),
-    Yp = apply(Yp, 2, mean),
-    Yp5 = apply(Yp, 2, quantile, probs = 0.05),
-    Yp95 = apply(Yp, 2, quantile, probs = 0.95),
-    Ydbh = apply(Ydbh, 2, mean),
-    Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
-    Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
-    Ytwi = apply(Ytwi, 2, mean),
-    Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
-    Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
-    Ycomp = apply(Ycomp, 2, mean),
-    Ycomp5 = apply(Ycomp, 2, quantile, probs = 0.05),
-    Ycomp95 = apply(Ycomp, 2, quantile, probs = 0.95),
-    Ddbh = apply(Ddbh, 2, mean),
-    Ddbh5 = apply(Ddbh, 2, quantile, probs = 0.05),
-    Ddbh95 = apply(Ddbh, 2, quantile, probs = 0.95),
-    Dtwi = apply(Dtwi, 2, mean),
-    Dtwi5 = apply(Dtwi, 2, quantile, probs = 0.05),
-    Dtwi95 = apply(Dtwi, 2, quantile, probs = 0.95),
-    Dcomp = apply(Dcomp, 2, mean),
-    Dcomp5 = apply(Dcomp, 2, quantile, probs = 0.05),
-    Dcomp95 = apply(Dcomp, 2, quantile, probs = 0.95)
-  )}) %>% bind_rows()
-```
-
-```{r sensitivity, fig.cap="Model sensitivity to variables. ..."}
-preds %>%
-  select(Trait, Genus, Ddbh, Dtwi, Dcomp) %>% 
-  rename(DBH = Ddbh, TWI = Dtwi, Competition = Dcomp) %>% 
-  reshape2::melt(id.vars = c("Trait", "Genus")) %>% 
-  mutate(variable = factor(variable, levels = c("Competition", "TWI", "DBH"))) %>%
-  ggplot(aes(variable, value, fill = variable)) +
-  geom_boxplot() +
-  facet_grid(Trait ~ Genus, scales = "free") +
-  coord_flip() +
-  scale_y_sqrt() +
   scale_fill_discrete(guide = "none") +
-  xlab("") + ylab(expression(Delta(Prediction)))
+  ylim(-0.5, 0.5)
 ```
+
+```{r speciesNCI2, fig.cap="Model species effect for DBH."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(NCI, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ynci5, ymax = Ynci95), alpha = 0.2) +
+  geom_line(aes(y = Ynci)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed)
+```
+
+## Sensitivity
+
+```{r sensitivity, fig.cap="Model sensitivity to variables. ...", eval=F}
+preds %>%
+  select(Trait, Genus, Species, Yp, Y, Yalpha, Ydbh, Ytwi, Ynci) %>% 
+  rename(Intercept = Yalpha, DBH = Ydbh, TWI = Ytwi, NCI = Ynci) %>% 
+  reshape2::melt(id.vars = c("Trait", "Genus", "Species", "Yp", "Y"),
+                 value.name = "Yvariable") %>% 
+  group_by(Trait, Genus, Species, variable) %>%
+  mutate(Dvariable = sqrt((Y-Yp)^2), Dmean = sqrt((Y - mean(Y))^2)) %>% 
+  group_by(Trait, Genus, Dvariable > Dmean) %>% 
+  summarise(n())
+  
+#   mutate(value = (Yp-Yvariable)/(Yp-mean(Y))*100) %>% 
+#   group_by(Trait, Genus, variable) %>%
+#   summarise(mean = mean(value), sd = sd(value)) %>% 
+#   group_by(Trait, Genus) %>% summarise(sum(mean))
+# 
+#     mutate(variable = factor(variable, levels = c("DBH", "TWI", "NCI"))) %>%
+#     ggplot(aes(variable, fill = variable)) +
+#   geom_bar(aes(y = mean), stat = "identity") +
+#   geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), width=.2) + 
+#   facet_grid(Trait ~ Genus, scales = "free") +
+#   scale_fill_discrete(guide = "none") +
+#   xlab("") + ylab(expression(Delta(Prediction))) +
+#   ylim(0,100)
+#     
+# preds %>% 
+#   group_by(Trait, Complex, Species) %>% 
+#   mutate(Ymean = mean(Y)) %>% 
+#   ggplot(aes(Ymean, Yalpha, col = Species)) + geom_point() +   
+#   facet_grid(Trait ~ Genus, scales = "free") +
+#   geom_abline(slope = 1, intercept = 1)
+```
+
+```{r}
+Individuals %>%
+  select(Genus, Species, DBH, TWI, NCI, LMA, LDMC, LT, invLA, CC) %>%
+  reshape2::melt(id.vars = c("Genus", "Species", "DBH", "TWI", "NCI"),
+                 variable.name = "Trait") %>%
+  group_by(Trait, Genus) %>%
+  do(model = lm(value ~ Species + DBH + DBH:TWI + DBH:NCI, data = .)) %>% 
+  broom::tidy(model) %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(term = gsub("Species", "", term)) %>% 
+  mutate(`P-value` = ifelse(p.value < 0.001, "***",
+                            ifelse(p.value < 0.01, "**",
+                                   ifelse(p.value < 0.05, "*",
+                                          ifelse(p.value < 0.1, ".", 
+                                                 "n.s."))))) %>% 
+  mutate(Coefficient = round(estimate,2)) %>% 
+  mutate(value = paste(Coefficient, `P-value`)) %>%
+  reshape2::dcast(term + Genus ~ Trait, value.var = "value") %>% 
+  kable(escape = F, format = "pandoc") %>% 
+  kable_styling(full_width = F)
+```
+
 
 # Discussion
 
@@ -422,16 +474,16 @@ parameters {
   vector [S] alpha ; // Intercept
   vector<lower=0> [S]  betaDBH ; // DBH half-load
   vector[S] betaTWI ; // TWI slope
-  vector[S] betaComp ; // Competition slope
+  vector[S] betaNCI ; // Competition slope
   real<lower=0> sigma ; // Variance
 }
 model {
   alpha ~ normal(0, 10^6) ; // Priors
   betaDBH ~ normal(0,1) ;
   betaTWI ~ normal(0,1) ;
-  betaComp ~ lognormal(0,1) ;
+  betaNCI ~ normal(0,1) ;
   sigma ~ cauchy(0, 5) ;
-  Trait ~ normal((alpha[species] + betaTWI[species] .* TWI +  betaComp[species] .* NCI) .* (DBH ./ (betaDBH[species] + DBH)), sigma) ; // Likelihood
+  Trait ~ normal((alpha[species] + betaTWI[species] .* TWI +  betaNCI[species] .* NCI) .* (DBH ./ (betaDBH[species] + DBH)), sigma) ; // Likelihood
 }
 ```
 
@@ -439,9 +491,9 @@ model {
 
 ```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$`Eschweilera-LT`, pars = c(pars, "lp__")),
+mcmc_trace(as.array(fits$`Symphonia-LT`, pars = c("alpha", "betaDBH", "betaTWI",
+                                                  "betaNCI", "sigma", "lp__")),
              facet_args = list(labeller = label_parsed))
-# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
 
 # References
