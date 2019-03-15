@@ -6,7 +6,7 @@ opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
 theme_set(bayesplot::theme_default())
-path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomic/Niklas_transcripts/k2rt"
 ```
 
 # (APPENDIX) Appendix {-} 
@@ -50,11 +50,11 @@ count_SNP %>%
 More than half of candidate genes do not present SNP in coding sequence (41 308, see figure \@ref(fig:genesVenCDS)). We will first focus on candidate genes with SNPs in coding sequences. Among those candidate genes, we have a broad distribution of SNPs synonymous or not and morphotype specific or not (figure \@ref(fig:genesVen)). More particularly 3 317 candidate genes include SNPs of all types.
 
 ```{r genesVenCDS, fig.cap="Genes having SNPs in CDS, UTR or both."}
-include_graphics("./probes_data/genesVenCDS.jpg") 
+include_graphics("./symcapture_data//genesVenCDS.jpg") 
 ```
 
 ```{r genesVen, fig.cap="Genes distribution depending on the type of their SNPs. Gene including SNP with coding DNA sequences (CDS), functional synonymy, or morphtype specificity."}
-include_graphics("./probes_data/genesVen.jpg") 
+include_graphics("./symcapture_data/genesVen.jpg") 
 ```
 
 ## Gene ontology
@@ -69,7 +69,7 @@ snp <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type
   filter(Possible_sequencing_error != "True") %>% 
   dplyr::rename(transcript_id = `#Component_ID`, snp_id = SNP_ID)
 
-transcript <- src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
+transcript <- src_sqlite(file.path(path, "../Trinotate/",
                            "symphonia.trinity500.trinotate.sqlite")) %>% 
   tbl("Diff_expression") %>% 
   collect() %>%  
@@ -97,7 +97,7 @@ data <- snp %>%
   mutate(type = gsub("CDS-", "", type)) %>% 
   filter(gene_id %in% Reduce(intersect, split(.$gene_id, .$type)))
 
-OE <- sapply(list.files("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/GO_term_enrichment/",
+OE <- sapply(list.files(path, "../GO_term_enrichment/",
                         full.names = T), read_tsv, simplify = F) %>%
   bind_rows(.id = "id") %>% 
   mutate(id = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Niklas/GO_term_enrichment//OE_",
@@ -142,7 +142,7 @@ rm(goe_gene)
 ```
 
 ```{r enrichedGO, fig.cap="Candidate genes distribution depending on their GO term enrichment. This graph include the 5 403 candidate genes which represents all type of SNPs."}
-include_graphics("./probes_data/GOEVen.jpg")
+include_graphics("./symcapture_data/GOEVen.jpg")
 ```
 
 

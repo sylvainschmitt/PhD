@@ -20,9 +20,7 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 
 ## Post-enrichment PCR1 quantification
 
-After the enrichment and the purification of the first PCR (PCR1), we quantified double strand DNA in every plates in order to adjust the second PCR (PCR2), and more especially in order to increase the number of cycles in PCR2.
-
-We used the Quant-It technology and we need to transform raw absorbance results into concentration with the scale.
+After the enrichment and the purification of the first PCR (PCR1), we quantified double strand DNA in every plates in order to adjust the second PCR (PCR2), and more especially in order to increase the number of cycles in PCR2. We used both Quant-It and few samples on Qbit and transformed raw absorbance results into concentration with regressions.
 
 ```{r quantit}
 quantit <- read_csv(file.path(path, "QuantIt", 
@@ -61,16 +59,7 @@ quantit <- read_csv(file.path(path, "QuantIt",
                                 rep(c(0, 5, 10, 20, 40, 60)*19/20, each = 2), concentration))
 ```
 
-```{r regression, fig.cap = "Ladder relation between concentration and fluorescence."}
-quantit %>% 
-  filter(!is.na(concentration)) %>% 
-  ggplot(aes(fluorescence, concentration)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  facet_wrap(~QuantIt, labeller = "label_both")
-```
-
-```{stan quantitModel, output.var="quantitModel", echo=T, eval=F}
+```{stan quantitModel, output.var="quantitModel", echo=F, eval=F}
   data {
     int N ;
     real fluorescence[N] ;
@@ -98,13 +87,7 @@ data2 <- quantit %>% filter(QuantIt == 2, plate == "ladder")
 #                             fluorescence = data2$fluorescence,
 #                             concentration = data2$concentration))
 # save(fit1, fit2, file = "./probes_save/MQantIt.Rdata")
-load("./probes_save/MQantIt.Rdata")
-broom::tidyMCMC(fit1, droppars = NULL, rhat = T) %>% 
-  mutate(QuantIt = 1) %>% 
-  bind_rows(broom::tidyMCMC(fit2, droppars = NULL, rhat = T) %>% 
-              mutate(QuantIt = 2)) %>% 
-  select(QuantIt, term, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the model")
+load("./symcapture_save/MQantIt.Rdata")
 ```
 
 ```{r quantitConcentration}
@@ -119,31 +102,6 @@ quantit <- quantit %>%
                                 fluorescence*beta2, concentration))
 ```
 
-```{r quantitConcentrationPlot1}
-quantit %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:12])),
-             x = factor(col,levels = 1:24))) + 
-  geom_point(aes(col = concentration), size =6)  +
-  geom_text(aes(label = round(concentration)), size = 2.5, col = "white") +
-  facet_wrap(~ QuantIt, nrow = 2, labeller = "label_both") +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-```
-
-```{r quantitConcentrationPlot2}
-quantit %>% 
-  filter(plate %in% 1:4) %>% 
-  ggplot(aes(y = factor(row_plate,levels = rev(LETTERS[1:8])),
-             x = factor(col_plate,levels = 1:12))) + 
-  geom_point(aes(col = concentration), size =6)  +
-  geom_text(aes(label = round(concentration)), size = 2.5, col = "white") +
-  facet_wrap(~ plate, nrow = 2, labeller = "label_both") +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-```
-
-And if we increase QuantIt resolution with Qubit:
-
 ```{r qbit}
 qbit <- data.frame(
   plate = as.character(1),
@@ -156,14 +114,7 @@ qbit <- data.frame(
             by = c("plate" = "plate", "row" = "row_plate", "col" = "col_plate"))
 ```
 
-```{r regressionQbit, fig.cap = "Relation between concentration with QuantIt and Qbit."}
-qbit %>% 
-  ggplot(aes(concentration, Qbit)) +
-  geom_point() +
-  geom_smooth(method = "lm")
-```
-
-```{stan qbitModelRes, output.var="qbitModel", echo=T, eval=F}
+```{stan qbitModelRes, output.var="qbitModel", echo=F, eval=F}
   data {
     int N ;
     real quantit[N] ;
@@ -185,9 +136,7 @@ qbit %>%
 #                             quantit = qbit$concentration,
 #                             qbit = qbit$Qbit))
 # save(fit, file = "./probes_save/MQbit.Rdata")
-load("./probes_save/MQbit.Rdata")
-broom::tidyMCMC(fit, droppars = NULL, rhat = T) %>% 
-  kable()
+load("./symcapture_save/MQbit.Rdata")
 ```
 
 ```{r quantitQbit}
@@ -210,6 +159,8 @@ quantit %>%
 ```
 
 ## Post-enrichment (PCR1 & PCR2) and amplification quantification
+
+Library showing no band or light smir in the electrophoresis have been reamplified, resulting in amplified plates A1 and A2. We used the Quant-It to dose all samples (original libraries and reamplified libraries).
 
 ```{r quantit2}
 quantit <- read_csv(file.path(path, "QuantIt", 
@@ -274,16 +225,6 @@ quantit <- read_csv(file.path(path, "QuantIt",
   ungroup()
 ```
 
-```{r regression2, fig.cap = "Ladder relation between concentration and fluorescence."}
-quantit %>% 
-  filter(!is.na(concentration)) %>% 
-  filter(!(plate == "ladder" & position %in% c("M4", "M10"))) %>% 
-  ggplot(aes(fluorescence, concentration)) +
-  geom_point() +
-  geom_smooth(method = "lm") +
-  facet_wrap(~QuantIt, labeller = "label_both")
-```
-
 ```{r fitQuantit2}
 data1 <- quantit %>% filter(QuantIt == 1, plate == "ladder")
 data2 <- quantit %>% filter(QuantIt == 2, plate == "ladder")
@@ -296,13 +237,7 @@ data2 <- quantit %>% filter(QuantIt == 2, plate == "ladder")
 #                             fluorescence = data2$fluorescence,
 #                             concentration = data2$concentration))
 # save(fit1, fit2, file = "./probes_save/MQantIt2.Rdata")
-load("./probes_save/MQantIt2.Rdata")
-broom::tidyMCMC(fit1, droppars = NULL, rhat = T) %>% 
-  mutate(QuantIt = 1) %>% 
-  bind_rows(broom::tidyMCMC(fit2, droppars = NULL, rhat = T) %>% 
-              mutate(QuantIt = 2)) %>% 
-  select(QuantIt, term, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the model")
+load("./symcapture_save//MQantIt2.Rdata")
 ```
 
 ```{r quantitConcentration2}
@@ -315,17 +250,6 @@ quantit <- quantit %>%
                                 fluorescence*beta1, concentration)) %>% 
   mutate(concentration = ifelse(QuantIt == 2 & plate != "ladder", 
                                 fluorescence*beta2, concentration))
-```
-
-```{r quantitConcentrationPlot3}
-quantit %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:16])),
-             x = factor(col,levels = 1:24))) + 
-  geom_point(aes(col = concentration), size =6)  +
-  geom_text(aes(label = round(concentration)), size = 2.5, col = "white") +
-  facet_wrap(~ QuantIt, nrow = 2, labeller = "label_both") +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
 ```
 
 ```{r quantitConcentrationPlot4}
@@ -341,151 +265,39 @@ quantit %>%
   scale_color_continuous(guide = F)
 ```
 
-## Amplified Results
-
-```{r quantitAmplified}
-amplifiedQuantit <- quantit %>% 
-  filter(plate %in% c("A1", "A2")) %>% 
-  mutate(plate = c("A1" = 1, "A2" = 2)[plate]) %>% 
-  mutate(amplifiedPosition = paste0(row_plate, col_plate)) %>% 
-  select(plate, amplifiedPosition, concentration) %>% 
-  dplyr::rename(amplifiedPlate = plate, amplifiedQuantItConcentration = concentration)
-amplifiedQuantit %>% 
-  mutate(row = substr(amplifiedPosition, 1, 1)) %>% 
-  mutate(col = substr(amplifiedPosition, 2, 3)) %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12))) + 
-  geom_point(aes(col = amplifiedQuantItConcentration), size =6)  +
-  geom_text(aes(label = round(amplifiedQuantItConcentration)), size = 2.5, col = "white") +
-  facet_wrap(~ amplifiedPlate, ncol = 2, labeller = "label_both") +
-  theme_bw() +
-  labs(x=NULL, y = NULL) +
-  scale_color_continuous(guide = F)
+```{r}
+googlesheets::gs_title("Symcapture") %>% 
+  googlesheets::gs_read("Amplification") %>% 
+  left_join(quantit %>% 
+              filter(grepl("A", plate)) %>% 
+              mutate(Plate_amplification = as.numeric(sub("A", "", plate))) %>% 
+              mutate(Position_amplification = paste0(row_plate, col_plate)) %>% 
+              mutate(Concentration_QuantIt = concentration) %>% 
+              select(Plate_amplification, Position_amplification, Concentration_QuantIt)) %>% 
+  write_csv(path = file.path(path, "Amplification.csv"))
 ```
+
+
+## Amplification result
+
+We used electrophoresis and noticed if re-amplified sampled had a band (B), a light smir (L) or nothing (A). Samples without anything (A) had their library remade.
 
 ```{r elecrtophoresisAmplified, fig.cap="Electrophoresis Amplified"}
-amplfiiedElectrophoresis <- read_csv(file.path(path, "Symphonia_sequence_capture - Amplified.csv")) %>% 
-  mutate(amplifiedPosition = paste0(Row, Col)) %>% 
-  dplyr::rename(amplifiedPlate = Plate, amplifiedElectrophoresis = Electrophoresis) %>% 
-  mutate(amplifiedPlate = c("A1" = 1, "A2" = 2)[amplifiedPlate]) %>% 
-  select(amplifiedPlate, amplifiedPosition, amplifiedElectrophoresis)
-amplfiiedElectrophoresis %>% 
-  mutate(row = substr(amplifiedPosition, 1, 1)) %>% 
-  mutate(col = substr(amplifiedPosition, 2, 3)) %>% 
+googlesheets::gs_title("Symcapture") %>% 
+  googlesheets::gs_read("Amplification") %>% 
+  mutate(row = substr(Position_amplification, 1, 1)) %>% 
+  mutate(col = substr(Position_amplification, 2, 3)) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
              x = factor(col,levels = 1:12))) + 
-  geom_point(aes(col = amplifiedElectrophoresis), size =6)  +
-  geom_text(aes(label = amplifiedElectrophoresis), size = 2.5, col = "white") +
-  facet_wrap(~ amplifiedPlate, ncol = 2, labeller = "label_both") +
+  geom_point(aes(col = Quality_Electrophoresis), size =6)  +
+  geom_text(aes(label = Quality_Electrophoresis), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_amplification, ncol = 2, labeller = "label_both") +
   theme_bw() +
   labs(x=NULL, y = NULL)
 ```
 
-```{r libraryToAmplified}
-libraryToAmplified <- read_csv(file.path(path, "Library samples - Amplfication1.csv")) %>% 
-  mutate(libraryPlate = c("PCR1" = 1, "PCR2" = 2, "PCR3" = 3)[source_Plate]) %>% 
-  mutate(amplifiedPlate = 1) %>% 
-  bind_rows(read_csv(file.path(path, "Library samples - Amplification2.csv")) %>% 
-              mutate(libraryPlate = c("PCR1" = 3, "PCR2" = 4, "PCR3" = 5)[source_Plate]) %>% 
-              mutate(amplifiedPlate = 2)) %>% 
-  dplyr::rename(libraryPosition = source_Position, amplifiedPosition = dest_Position) %>% 
-  select(libraryPlate, libraryPosition, amplifiedPlate, amplifiedPosition)
-```
+## Library & extraction repetition result
 
-```{r extraction}
-extraction <- read_csv(file.path(path, "Final plate.csv")) %>% 
-  select(ID, final_Plate, final_Position, volume, concentration, Status) %>% 
-  dplyr::rename(geneticId = ID, extractionVolume = volume, extractionPlate = final_Plate,
-         extractionConcentration = concentration, extractionPosition = final_Position,
-         extractionElectrophoresis = Status)
-```
+69 libraries were still not ok after re-amplification. Those library have been rebuilt from source DNA. Among them, 43 were still not good at the electrophoresis and have bee re-extracted. Electrophoresis of re-extracted samples show a high heterogeneity of size, and around 8 of them seem to have not worked. **All new samples need to be quantified.**.
 
-```{r newVolumes, eval=F}
-extraction <- extraction %>% 
-  mutate(extractionVolume = ifelse(extractionPlate %in% 1:2, 
-                                   (extractionVolume*extractionConcentration)/20,
-                                   extractionVolume)) %>% 
-  mutate(extractionVolume = ifelse(extractionPlate %in% 1:2 & extractionVolume < 10, 
-                                   10, extractionVolume)) %>% 
-  mutate(resuspendedEstimatedConcentration = ifelse(extractionPlate %in% 1:2, 20,
-                                                    extractionConcentration)) %>% 
-  mutate(libraryVolume = 100/resuspendedEstimatedConcentration) %>% 
-  mutate(libraryVolume = ifelse(libraryVolume < 1, 1, libraryVolume)) %>% 
-  mutate(libraryVolume = ifelse(is.na(libraryVolume), 1.5, libraryVolume)) %>% 
-  mutate(remainingVolume = extractionVolume - libraryVolume)
-```
-
-```{r allData}
-badlyAmplified <- extraction %>% 
-  left_join(libraryToAmplified, by = c("extractionPlate" = "libraryPlate", 
-                                       "extractionPosition" = "libraryPosition")) %>% 
-  filter(!is.na(amplifiedPlate)) %>% 
-  left_join(amplifiedQuantit) %>% 
-  left_join(amplfiiedElectrophoresis) %>% 
-  filter(amplifiedElectrophoresis == "A")
-```
-
-```{r badlyAmplifiedPosition, eval=F}
-badlyAmplified %>% 
-  write_csv(path = file.path(path, "badlyAmplified.csv"))
-badlyAmplified %>% 
-  mutate(Paracou = as.numeric(grepl("P", geneticId))) %>% 
-  mutate(row = substr(extractionPosition, 1, 1)) %>% 
-  mutate(col = substr(extractionPosition, 2, 3)) %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12))) + 
-  geom_point(aes(col = remainingVolume,
-                 shape = as.factor(Paracou)), size =6)  +
-  geom_text(aes(label = round(resuspendedEstimatedConcentration)), size = 2.5, col = "white") +
-  facet_wrap(~ extractionPlate, ncol = 2, labeller = "label_both") +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-```
-
-## Whole Genome Amplification (WGA)
-
-* Concentration estimation : Concentration NanoDrop adjusted by Qbit on 12 individuals
-* Concentration $\leq 5 ng.\mu L^{-1}$
-* Concentration NA, individuals for which NanoDrop did not worked out. To be redone or considered above $5 ng.\mu L^{-1}$
-
-
-```{r badlyAmplifiedPosition2, eval=F}
-badlyAmplified %>% 
-  filter(extractionConcentration < 5) %>% 
-  mutate(Paracou = as.numeric(grepl("P", geneticId))) %>% 
-  mutate(row = substr(extractionPosition, 1, 1)) %>% 
-  mutate(col = substr(extractionPosition, 2, 3)) %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12))) + 
-  geom_point(aes(col = as.factor(Paracou)), size =6)  +
-  geom_text(aes(label = round(extractionConcentration)), size = 2.5, col = "white") +
-  facet_wrap(~ extractionPlate, ncol = 2, labeller = "label_both") +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-```
-
-## November $18^{th}$ extraction
-
-```{r}
-# extraction <- googlesheets::gs_title("Symphonia_sequence_capture") %>% 
-#   googlesheets::gs_read("18.11Extraction")
-# plates <- googlesheets::gs_title("Symphonia_sequence_capture") %>% 
-#   googlesheets::gs_read("Plates") %>% 
-#   mutate(geneticId = paste0("P", Plot, "_", Subplot, "_", Number)) %>% 
-#   mutate(geneticId = ifelse(is.na(Origin), ID_genetic, geneticId)) %>% 
-#   select(geneticId, Plate, Position)
-# left_join(extraction, plates, by = "geneticId") %>%
-#   write_csv(path = file.path(path, "18.11Extraction.csv"))
-googlesheets::gs_title("Symphonia_sequence_capture") %>% 
-  googlesheets::gs_read("18.11Extraction") %>% 
-  filter(!is.na(Plate)) %>% 
-  mutate(row = substr(Position, 1, 1)) %>% 
-  mutate(col = substr(Position, 2, 3)) %>% 
-  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
-             x = factor(col,levels = 1:12))) + 
-  geom_point(shape=21, size =3, fill = "blue")  +
-  facet_wrap(~ Plate, nrow = 3) +
-  theme_bw() +
-  labs(x=NULL, y = NULL)
-```
 

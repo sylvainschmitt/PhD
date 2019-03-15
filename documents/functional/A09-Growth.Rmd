@@ -1,0 +1,142 @@
+---
+title: "A09 : Traits and growth"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r data, eval=T}
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+sdDBH <- sd(Individuals$DBH)
+Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
+  group_by(Species) %>% 
+  filter(n() > 20) %>% 
+  ungroup() %>% 
+  left_join(Competition %>% 
+              group_by(idTree) %>% 
+              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
+  mutate(NCI = log(NCI)) %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
+            funs(./sd(., na.rm = T)))
+```
+
+```{stan stanModel, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1> N ; // Nb of observations
+  vector<lower=0>[N] AGR ; // growth vector
+  vector<lower=0>[N] dbh ; // dbh vector
+  int<lower=1> S ; // Nb of individuals
+  int<lower=0> sp[N] ; // individuals vector
+}
+parameters {
+  vector<lower=0.1,upper=10>[S] AGRmax ; // individual potential growth deviation
+  vector<lower=0,upper=200>[S] Dopt ; // optimal diameter
+  vector<lower=0.1,upper=10>[S] Ks ; // kurtosis
+  real<lower=0,upper=10> sigma ;
+}
+model {
+  log(AGR+1) ~ normal(AGRmax[sp] .* exp(-0.5*(log(dbh ./ Dopt[sp]) ./ Ks[sp])) .* (log(dbh ./ Dopt[sp]) ./ Ks[sp])), sigma) ;
+}
+generated quantities {
+  vector<lower=0>[N] AGRpred ;
+  AGRpred = AGRmax[sp] .* exp(-0.5*(log(dbh ./ Dopt[sp]) ./ Ks[sp])) .* (log(dbh ./ Dopt[sp]) ./ Ks[sp])) ;
+}
+```
+
+```{r mdata}
+paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(idTree %in% Individuals$idTree) %>%
+  mutate(dbh = CircCorr/pi) %>% 
+  group_by(idTree) %>% 
+  arrange(idTree, CensusYear) %>% 
+  collect() %>% 
+  mutate(ddbh = dbh - lag(dbh), 
+         dt = CensusYear - lag(CensusYear)) %>% 
+  filter(ddbh > 0) %>% 
+  mutate(agr = ddbh/dt)
+```
+
+```{r fits}
+data <- sample_n(ungroup(paracou), 1000)
+fit <- sampling(Model, chains = 2, save_warmup = F,
+                data = list(N = nrow(data),
+                            AGR = data$agr,
+                            dbh = data$dbh,
+                            S = length(unique(data$Species)),
+                            sp = as.numeric(as.factor(data$Species))))
+save(fit, file = "./functional_save/growth.Rdata")
+load("./functional_save/growth.Rdata")
+```
+
+```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+check_divergences(fit)
+mcmc_trace(as.array(fit), facet_args = list(labeller = label_parsed))
+```
+
+```{r prediciton}
+data %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  ggplot(aes(x = dbh)) + geom_point(aes(y = log(agr+1))) + geom_line(aes(y = AGRpred))
+```

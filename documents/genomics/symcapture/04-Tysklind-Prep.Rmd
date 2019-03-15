@@ -6,7 +6,7 @@ opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
 theme_set(bayesplot::theme_default())
-path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/k2rt"
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomic/Niklas_transcripts/k2rt"
 ```
 
 #  Tysklind *et al (in prep)* transcript preparation
@@ -101,7 +101,7 @@ snp <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_type
   filter(!is.na(type)) %>% 
   dplyr::rename(transcript_id = `#Component_ID`, snp_id = SNP_ID)
 
-transcript <- src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
+transcript <- src_sqlite(file.path(path, "..", "Trinotate",
                            "symphonia.trinity500.trinotate.sqlite")) %>% 
   tbl("Transcript") %>% 
   collect()
@@ -117,7 +117,7 @@ snp_genes <- data %>%
   arrange(desc(freq))
 
 g <- VennDiagram::venn.diagram(split(data$gene_id, data$Is_in_CDS), 
-                               "./probes_data/genesVenCDS.tiff",
+                               "./symcapture_data/genesVenCDS.tiff",
                                # fill = RColorBrewer::brewer.pal(3, "Accent"),
                                alpha = 0.5)
 
@@ -127,7 +127,7 @@ data2 <- data %>%
   mutate(type = gsub("CDS-", "", type))
 
 g <- VennDiagram::venn.diagram(split(data2$gene_id, data2$type), 
-                               "./probes_data/genesVen.tiff",
+                               "./symcapture_data/genesVen.tiff",
                                fill = RColorBrewer::brewer.pal(4, "Accent"),
                                alpha = 0.5)
 
@@ -156,7 +156,7 @@ filtered_data <- snp_genes %>%
 filtered_data_fasta <- do.call(rbind, lapply(seq(nrow(filtered_data)),
                                              function(i) t(filtered_data[i, ])))
 write.table(filtered_data_fasta, row.names = F, col.names = F, quote = F, 
-            file = "~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/filtered_transcripts.fasta")
+            file = file.path(path, "..", "filtered_transcripts.fasta"))
 ```
 
 ## Total filtered transcript

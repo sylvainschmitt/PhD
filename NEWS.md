@@ -1,3 +1,9 @@
+# PhD 0.1.9115
+* symcapture: (i) renaming probes > symcapture, (ii) library preparation update, (iii) capture begin
+* general: updateSylvain rm
+* functional analysis: growth test begin
+* functional draft: abstract ATBC v1
+
 # PhD 0.1.9114
 * functional draft: introduction review in progress & coauthor share 1
 

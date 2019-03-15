@@ -1,8 +1,3 @@
----
-output:
-  pdf_document: default
-  html_document: default
----
 ```{r setup_func_sel, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
@@ -14,7 +9,7 @@ theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
-path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/"
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Genomic/"
 ```
 
 # Fuctional region selection
@@ -28,8 +23,8 @@ We used open reading frames (ORF) to target genes within scaffolds. ORFs have be
 173 828 ORFs including a start codon (Methyonin, M) were detected (over 231 883, 75%, see figure \@ref(fig:orfFilterGraph).
 
 ```{r orfFilterGraph, fig.cap="Open Reading Frames left and right peptides."}
-src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
-                           "symphonia.trinity500.trinotate.sqlite")) %>% 
+src_sqlite(file.path(path, "Niklas_transcripts/Trinotate/",
+                     "symphonia.trinity500.trinotate.sqlite")) %>% 
   tbl("ORF") %>% 
   dplyr::rename(orf = orf_id, trsc = transcript_id, width = length) %>% 
   collect() %>% 
@@ -46,7 +41,7 @@ src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
 ```
 
 ```{r orfFilterBed, echo=T}
-orf <- src_sqlite(file.path("~/Documents/BIOGECO/PhD/data/Symphonia_Niklas/Trinotate/",
+orf <- src_sqlite(file.path(path, "Niklas_transcripts/Trinotate/",
                            "symphonia.trinity500.trinotate.sqlite")) %>% 
   tbl("ORF") %>% 
   dplyr::rename(orf = orf_id, trsc = transcript_id,
@@ -207,7 +202,7 @@ genes %>%
 Figure \@ref(fig:diffExprFig) shows genes differential expression. First circle represent genes with isoforms not enriched whereas second and third circle represents respectivelly genes with isoforms *S. sp1* and *S. globulifera* enriched. Relatively few genes contained enriched isoforms, and most of them were *S. globulifera* enriched.
 
 ```{r diffExprFig, fig.cap="Genes differential expression."}
-de <- read_delim(file.path(path, "..", "Symphonia_Niklas", "edgeR",
+de <- read_delim(file.path(path, "Niklas_transcripts", "edgeR",
                      "juv_sympho_43k_retained_genes_DecisionTest.txt"), 
            delim = " ") %>% 
   select(-X) %>% 
@@ -381,7 +376,7 @@ data.frame(n = length(targets),
         format.args = list(big.mark = " "))
 ```
 
-```{bash funcRepeatFilter8}
+```{bash funcRepeatFilter8, eval=F}
 cd ~/Documents/BIOGECO/PhD/data/Symphonia_Genomes/functional_selection2
 cp targets.filtered.masked.fasta functional.targets.20180717.fasta
 ```

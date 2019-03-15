@@ -1,0 +1,63 @@
+```{r setup_capture, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+# Capture
+
+We will do 16 reactions of gene capture by hybridization. Each reaction can have up to 32 samples. We first need to dispatch samples. In order to do that we will pull re-amplified samples from plate A1 and A2 to their original pit in the original library samples P1 to P5. The plate used for re-extraction and library rebuild will be named P6 anbd treated as an independant plate with repeated samples. We will thus have 6 plates of library P1 to P6. Due to non uniformity of fragment size re-extracted samples from P6 (P6.2) will be treated in a single separated reaction (so 15 remainings). All other samples will be pulled by batch of 32 following plate order.
+
+## Reactions design
+
+```{r capture}
+library <- googlesheets::gs_title("Symcapture") %>% 
+  googlesheets::gs_read("Library")
+amplification <- googlesheets::gs_title("Symcapture") %>% 
+  googlesheets::gs_read("Amplification")
+repetitions <- googlesheets::gs_title("Symcapture") %>% 
+  googlesheets::gs_read("Repetitions")
+capture <- bind_rows(library %>% 
+                         select(ID, Plate_library, Position_library, i5, i7, Concentration_QuantIt) %>% 
+                         left_join(amplification %>% 
+                                     select(Plate_library, Position_library, Concentration_Amplified)),
+                       repetitions %>% 
+                         select(ID, Plate_library_1, Position_library_1, i5, i7, Repeated_Extraction) %>% 
+                         dplyr::rename(Plate_library = Plate_library_1, Position_library = Position_library_1))
+```
+
+```{r concentrationsCapture}
+capture %>% 
+  mutate(row = substr(Position_library, 1, 1)) %>% 
+  mutate(col = substr(Position_library, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = Concentration_QuantIt), size =6)  +
+  geom_text(aes(label = round(Concentration_QuantIt)), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_library, ncol = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r reactionCapture}
+capture %>%
+  mutate(reaction = as.factor(rep(1:16, each = 32)[1:nrow(capture)])) %>% 
+  mutate(row = substr(Position_library, 1, 1)) %>% 
+  mutate(col = substr(Position_library, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = reaction), size =6)  +
+  geom_text(aes(label = reaction), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_library, ncol = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
