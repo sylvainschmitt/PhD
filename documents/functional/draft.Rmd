@@ -1,19 +1,19 @@
 ---
 title: Ontogeny, light and topography shape leaf functional trait values of individuals in Neotropical tree species complexes
-author: Sylvain Schmitt$^{*,1}$, Bruno Herault$^{2,3}$, Emilie Ducouret$^4$, Anne Baranger$^5$, Niklas Tysklind$^6$,  Myriam Heuertz$^5$, Eric Marcon$^7$, Saint Omer Cazal $^6$, Geraldine Derroire$^{4}$ 
+author: Sylvain Schmitt$^{*,1}$, Bruno Herault$^{2,3}$, Emilie Ducouret$^4$, Anne Baranger$^1$, Niklas Tysklind$^4$,  Myriam Heuertz$^1$, Eric Marcon$^4$, Saint Omer Cazal $^4$, Geraldine Derroire$^{4}$ 
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -132,59 +132,53 @@ preds <- lapply(models, function(model){
   )}) %>% bind_rows()
 ```
 
-$^1$ UMR BIOGECO, Université de Bordeaux, 69 route d’Arcachon, F-33612 Cestas cedex France
+$^1$ UMR BIOGECO, INRA - Université de Bordeaux, 69 route d’Arcachon, F-33612 Cestas cedex France
 
-$^2$ Cirad, Univ Montpellier, UR Forests & Societies, Montpellier, France
+$^2$ UR Forests & Societies, Cirad - Univ Montpellier, Montpellier, France
 
 $^3$ INP-HB, Institut National Polytechnique Félix Houphouët-Boigny, BP 1093, Yamoussoukro, Ivory Coast
 
-$^4$ Cirad, UMR EcoFoG (Agroparistech, CNRS, Inra, Université des
+$^4$ UMR ECOFOG (Agroparistech, CNRS, Inra, Université des
 Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana
 
-$^5$ UMR BIOGECO, INRA, 69 route d’Arcachon, F-33612 Cestas cedex France
-
-$^6$ INRA, UMR EcoFoG (Agroparistech, CNRS, Université des
-Antilles, Université de la Guyane, Cirad), Campus Agronomique, 97310 Kourou, French Guiana
-
-$^7$ Agroparistech, UMR EcoFoG (CNRS, Inra, Université des
-Antilles, Université de la Guyane, Cirad), Campus Agronomique, 97310 Kourou, French Guiana
-
-__$^*$ Corresponding author:__ sylvain.schmitt@agroparistech.fr
+__$^*$ Corresponding author:__ sylvain.m.schmitt@gmail.com
 
 \newpage 
 
  # Abstract
  
-Theories on the maintenance of biodiversity have  mainly considered the species coexistence level, however,  this approach has limitations: there is no unanimity about how to define species, and individuals within species present variation in performance, phenotypes, and genes. A growing body of theories and research  have suggested that intraspecific trait variability is likely to shape  community assembly. To gain insights on the organization of intraspecific trait variation in tropical tree species complexes, we examined leaf functional trait variation with ontogeny and environment in a highly diverse tropical forest of the Guiana Shield. We collected leaf functional traits from 766 trees belonging to 5 species and 2 genera in permanent plots encompassing a diversity of micro-habitats, i.e. competition and topographical levels. We tested the role of ontogeny, abiotic environment and competition in leaf functional trait variation with a hierarchical  Bayesian model. Diameter at breast height, representing indissociable effects of ontogeny and access to light, was positively correlated with leaf thickness and mass per area and negatively with leaf area. The changes towards more conservative trait values, previously observed between seedling/sapling and adults, persist in later life changes. Moreover, higher topographic position resulted in a shift from acquisitive to conservative strategy, both across and within species. Our results suggest that intraspecific trait variability could increase species tolerance to environmental filtering and contribute to species coexistence. This highlights the interest of a structured  and thoughtful sampling effort within species and individuals for trait-based studies of community assemblage.
+Theories on the maintenance of biodiversity have mainly considered questions pertaining to the species coexistence level. This approach, however, has some limitations as there is no unanimity about how to define a species, and individuals within species present variation in performance, phenotypes, and genes. A growing body of research has suggested that intraspecific trait variability is likely to shape community assembly. To gain insights into the structure of intraspecific trait variation in tropical tree species complexes, we examined leaf functional trait variation along ontogeny and across the environment in a highly diverse tropical forest of the Guiana Shield. We collected leaf functional traits from 766 adult trees belonging to five species and two genera in permanent plots encompassing a diversity of micro-habitats, i.e. topographical levels. We tested the role of ontogeny and abiotic environment on leaf functional trait variation with a hierarchical  Bayesian model. Diameter at breast height, representing indissociable effects of ontogeny and access to light, was positively correlated with leaf thickness and leaf mass per area and negatively with leaf area. The changes towards more conservative trait values for bigger trees in more luminous environment, previously observed between seedling/sapling and adults, persist in later life changes. Moreover, higher topographic position resulted in a shift from acquisitive to conservative strategies, both across and within species. Our results suggest that intraspecific trait variability could increase species tolerance to environmental filtering and contribute to species coexistence. This highlights the interest of a structured and thoughtful sampling effort within species and individuals for trait-based studies of community assemblage.
  
 ## Keywords
 
-Intraspecific trait variation; species complexes; ...
+Intraspecific trait variation; leaf trait; ontogeny;  species coexistence; biodiversity maintenance; species complexes
 
 \newpage 
 
 # Introduction 
 
-Whereas functional traits are used extensively by ecologists to explain the community structure [@Paine2011] and response to environment [@kraft_functional_2008] in order to adapt to increasing local and global changes [@Sakschewski2016]; the species coexistence in the outstanding biodiversity of tropical forests is still an open question [@wright2002plant], already highlighted 40 years ago [@connell_diversity_1978].
+Whereas functional traits are used extensively by ecologists to explain the structure of community [@Paine2011] and response to environment [@kraft_functional_2008] in order to adapt to increasing local and global changes [@Sakschewski2016]; the species coexistence in the outstanding biodiversity of tropical forests is still an open question [@wright2002plant], already highlighted 40 years ago [@connell_diversity_1978].
 
-Functional traits have been defined as phenotypic traits impacting fitness indirectly through their effect on individual performance which can be related to tree abilities to grow, survive and reproduce in a given environment [@violle_let_2007]. For instance, specific leaf mass per area (fresh weight divided by area) varies along soil fertility and shade gradients and represents a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Evans2001; @hodgson_is_2011]. 
+Functional traits have been defined as phenotypic traits impacting fitness indirectly through their effect on individual performance, which can be related for trees to abilities to grow, survive and reproduce in a given environment [@violle_let_2007]. For instance, specific leaf mass per area (fresh weight divided by area) varies along soil fertility and shade gradients and represents a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Evans2001; @hodgson_is_2011]. 
 
-Moreover, functional traits covary at community [@Bruelheide2018] and species [@diaz_global_2015] levels according to basic leaf [@wright_worldwide_2004; but see @lloyd_photosynthetically_2013; @osnas_global_2013] and wood [@chave_towards_2009] economic spectra. Nevertheless, some authors advocate for a unique economics spectrum [@reich_world-wide_2014] evidenced in subarctic grasslands [@freschet_evidence_2010]. The leaf economics spectrum opposes acquisitive to conservative ecological strategies, often expressed at the leaf level. The wood economics spectrum opposes slow to fast growing species, expressed at leaf, twig and stem levels [@chave_towards_2009]. Consequently, functional traits expresses fundamental trade-offs determining species co-occurrences along environmental gradients [@Wright2002].
+Moreover, functional traits covary at community [@Bruelheide2018] and species [@diaz_global_2015] levels according to basic leaf [@wright_worldwide_2004; but see @lloyd_photosynthetically_2013; @osnas_global_2013] and wood [@chave_towards_2009] economic spectra. Nevertheless, some authors advocate for a unique economics spectrum [@reich_world-wide_2014] evidenced in subarctic grasslands [@freschet_evidence_2010]. The leaf economics spectrum opposes acquisitive to conservative ecological strategies, often expressed at the leaf level. The wood economics spectrum opposes slow to fast growing species, expressed at leaf, twig and stem levels [@chave_towards_2009]. Consequently, functional traits expresse fundamental trade-offs determining species co-occurrences along environmental gradients [@Wright2002].
 
-Thus trait-based studies help testing the different theories developed at the species level to explain community assembly and biodiversity maintenance. In particular, niche theory explains species coexistence depending on niche differences to limit competitive exclusion [@Lortie2004a; @weiher_assembly_1995], while neutral theory shows that maintenance of high diversity is possible even for functionally equivalent species, because of stochastic life, death, reproduction and dispersal dynamics [@Hubbell2001]. But numerous theories exists to explain species coexistence [@wright2002plant].
+Thus trait-based studies help testing the different theories developed at the species level to explain community assembly and biodiversity maintenance [@wright2002plant]. In particular, niche theory explains species coexistence depending on niche differences to limit competitive exclusion [@Lortie2004a; @weiher_assembly_1995], while neutral theory shows that maintenance of high diversity is possible even for functionally equivalent species, because of stochastic life, death, reproduction and dispersal dynamics [@Hubbell2001].
 
 In addition, species have been defined as groups of organisms which are reproducing isolated from other such groups, protecting the integrity of their genotypes [@Mayr1996]. This reflects the biological species concept based on reproductive isolation. Still, species concepts and definitions have been largely debated [@Mayden1997], especially concerning plants, and many species concepts can be defined (phylogenetic, biological, ecological, morphological or genetic, see @DeQueiroz2007a). Moreover, some closely related species share a large amount of common genetic variation due to a recent common ancestor or hybridization and form a species complex challenging the static vision of species [@Fujita2012]. 
 
+<!-- perhaps include the idea that in tropical tree species are defined usually by morphology -->
+
 But trait-based studies of species often failt to explain demography [@Yang2018], higlighting the need to integrate individual variation [@Albert2010a; @chave_neutral_2004; @Violle2012]. Effectively, individuals present variation in performance, phenotypes, and genes within the species, resulting in intraspecific trait variability. Phenotypic variation will be shaped (i) by genetic heritage, through genotypes, (ii) by the environment (both abiotic and biotic) with spatial and temporal heterogeneity, and (iii) by random stochastic factors [@Whitlock2007]. But intraspecific trait variability remains relatively unexplored [@Hallgrimsson2005].
 
-Nevertheless, intraspecific trait variability was evidenced as large in tree allometric relations [@Vieilledent2010], in leaf traits [@Hulshof2010a; @Messier2010], and within community itself [@Siefert2015a]. Beyond the assessment of intraspecific trait variation, some studies investigated the role of intraspecific variability in community assembly and evidenced environmental filtering [@Messier2010; @Paine2011], traits shift along environmental and resources gradient [@Siefert2016; @jung_intraspecific_2010 ], and  niche differentiation [@jung_intraspecific_2010; @Paine2011] at the individual level.
+Nevertheless, intraspecific trait variability was found to be large in tree allometric relations [@Vieilledent2010], in leaf traits [@Hulshof2010a; @Messier2010], and within community itself [@Siefert2015a]. Some studies investigated the role of intraspecific variability in community assembly and evidenced environmental filtering [@Messier2010; @Paine2011], traits shifting along environmental and resources gradient [@Siefert2016; @jung_intraspecific_2010 ], and  niche differentiation [@jung_intraspecific_2010; @Paine2011] within species.
 
-Finally, several author suggested that intraspecific variability helped to maintain biodiversity increasing species answer to their environment to pass environmental filtering [@Clark2010], exceeding negative interspecific interactions [@Chesson2000], and increasing species capacity to answer to their neighborhood [@Aarssen1983]. @Laughlin2012 even suggested that intraspecific variability could answer paradox in theories of species coexistence.
+Finally, several author suggested that intraspecific variability helps to maintain biodiversity through increasing species response to their environment to pass environmental filtering [@Clark2010], surpassing negative interspecific interactions [@Chesson2000], and increasing species' capacity to answer to their neighborhood [@Aarssen1983]. @Laughlin2012 even suggested that intraspecific variability could answer paradox in theories of species coexistence.
 
-In the present study, we used a trait-based approach to address the role of ontogeny, abiotic environment and tree neighborhood in shaping leaf functional traits of tree individuals belonging to 5 species and 2 genera from two Neotropical species complexes. We took advantage of a large dataset with numerous individual (766 trees > 10 cm in diameter at breast height) from a highly diverse tropical forest plot located within the Guiana Shield from the Amazon Basin. The plots encompass a diversity of micro-habitats through topographic variation between seasonally flooded, bottom land, and dry plateau [@Allie2015] and competition variation between opened gaps and mature forest patches [@ferry2010higher] expected to strongly impacts tree functional traits. Combining tree level, LiDAR-derived topographical data and newly measured functional traits, we used regressions through a Bayesian framework to address the following questions:
+In the present study, we used a trait-based approach to address the role of ontogeny, abiotic environment and tree neighborhood in shaping leaf functional traits of tree individuals belonging to five species and two genera from two Neotropical species complexes. We took advantage of a large dataset (766 trees > 10 cm in diameter at breast height) from a highly diverse tropical forest plot located within the Guiana Shield from the Amazon Basin. The plots encompass a diversity of micro-habitats through topographic variation ranging from seasonally flooded, bottom land, to dry plateau [@Allie2015] and variation in competition variation including opened gaps and mature forest patches [@ferry2010higher] expected to strongly impact tree functional traits. Combining tree censuses, LiDAR-derived topographical data and leaf functional traits, we used regressions through a Bayesian framework to address the following questions:
 
-* How traits co-vary between individuals within closely related tropical tree species ? 
-* How ontogeny and environment shape the individual trait co-variation ?
+* How do traits co-vary across individuals in closely related tropical tree species ? 
+* How do ontogeny and environment shape individual leaf traits ?
 
 Based on conservation of functional strategies both at the community and species scale [@Bruelheide2018; @diaz_global_2015], we hypothesized trait co-variation to be maintained at the individual level [but see @messier_trait_2016]. In addition, we hypothesized ontogeny and light to primarly shape individual trait variation [@roggy_links_2005; @Sciences2009] in interaction with abiotic environment and tree nieghbors.
 
@@ -192,93 +186,97 @@ Based on conservation of functional strategies both at the community and species
 
 ## Study site
 
-The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
+The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site is characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed across this lowland forest charcterized by a diverse microtopography with numerous small hills [@Gourlet-Fleury2004].
 
 The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
 
 
 ## Individuals sampling of traits values
 
-Two sampling campaigns were led in 2017 and 2018 during dry season (between September and December). Sampling was made for respectively 14 and 2 species from *Eschweilera* (Lecythidaceae) and *Symphonia* (Clusiaceae) genera present in the Paracou station. Species from *Eschweilera* genus were all included in the *Parvifolia* clade [Heuertz *et al*. unpublished; @Mori2016]. Both *Eschweilera* clade *Parvifolia* and *Symphonia* species are Amazonian hyperdominant tree species [@TerSteege2013] and part of the most abundant trees within Paracou station (*Eschweilera sagotiana* from the clade *Parvifolia* is the most abundant tree species in 2017 for Paracou).
+Two sampling campaigns were led in 2017 and 2018 during the dry season (between September and December). Sampling was made for 14 species of *Eschweilera* (Lecythidaceae) and and 2 species of *Symphonia* (Clusiaceae) present in the Paracou station. *Eschweilera* species were all included in the *Parvifolia* clade [Heuertz *et al*. unpublished; @Mori2016]. Both *Eschweilera* clade *Parvifolia* and *Symphonia* species are Amazonian hyperdominant tree species [@TerSteege2013] and part of the most abundant trees within Paracou station (*Eschweilera sagotiana* from the clade *Parvifolia* is the most abundant tree species in 2017 for Paracou).
 
-*Symphonia* genus only include the *Symphonia globulifera* L.f (Clusiaceae) species in French Guiana but presents two morphotypes, *S. globulifera* and *S. sp.1*, living in sympatry but in differentiated habitats, with *S. globulifera* preferentially growing in valley bottoms and *S. sp1* preferentially exploiting a variety of drier habitats. Similarly, *Eschweilera* clade *parvifolia* include numerous species, with *E. sagotiana* and *E. coriacea* which have been shown to follow a niche differentiation similar to *S. sp1* and *S. globulifera* respectively [Schmitt *et al*. In prep;  @Allie2015]. In addition, *Symphonia* genus and *Eschweilera* clade Parvifolia have been both highlighted as species complexes with low genetic resolution and high plastid DNA sharing between sister species [Heuertz *et al*. unpublished; @baraloto_using_2012-1; @Gonzalez2009].
+The genus *Symphonia* only include the *Symphonia globulifera* L.f (Clusiaceae) in French Guiana but presents two morphotypes, *S. globulifera* and *S. sp.1*, living in sympatry but in differentiated habitats, with *S. globulifera* preferentially growing in valley bottoms and *S. sp1* preferentially exploiting a variety of drier habitats. Similarly, *Eschweilera* clade *parvifolia* includes numerous species, with *E. sagotiana* and *E. coriacea* which have been shown to follow a niche differentiation similar to *S. sp1* and *S. globulifera* respectively [Schmitt *et al*. In prep;  @Allie2015]. In addition, *Symphonia* genus and *Eschweilera* clade Parvifolia have been both highlighted as species complexes with low genetic resolution and high plastid DNA sharing between sister species [Heuertz *et al*. unpublished; @baraloto_using_2012-1; @Gonzalez2009; @Torroba-Balmori2017].
 
-Between 232 and 1 individual have been sampled per species, depending on their natural abundance within the Paracou station, for a total of 823 individuals, but only species with a minimum of 70 individuals were kept (Table \@ref(tab:headcount)). *Symphonia globulifera* were collected over all plots of the study site to reach targeted number, whereas *Eschweilera* clade *Parvifolia* were sampled only within non-disturbed plots. Anyway disturbance will be accounted through competition measurement and did not show significant effect for most of *Symphonia* functional traits (see Supplementary Material S1). For each individual, 5 mature and healthy leaves at the top of the crown were collected, and kept in humidified ziplock with enriched CO2 air in dark until measurement within the next 6 hours following standard protocol [@Perez-Harguindeguy2013]. In addition, light conditions with Dawkins index [@Dawkins1958] and tree, bark and leaf morphology were assessed for every individuals.
+<!-- A bit more explicit info on Eschweilera distribution would be good. -->
+
+Between 1 and 232 individuals have been sampled per species, depending on their natural abundance within the Paracou station, for a total of 823 individuals, but only species with a minimum of 70 individuals were kept for analysis (Table \@ref(tab:headcount)). *Symphonia globulifera* were collected over all plots of the study site to reach targeted sample size, whereas *Eschweilera* clade *Parvifolia* were sampled only within non-disturbed plots. Disturbance  level of plots was accounted for through the quantification of competition and did not show any significant effect for most *Symphonia* functional traits (see Supplementary Material S1). For each individual, 5 mature and healthy leaves at the top of the crown were collected, and kept in humidified ziplock bags with enriched CO2 air in dark until measurement within the next 6 hours following of standard protocol [@Perez-Harguindeguy2013]. In addition, light conditions were quantified using the Dawkins index [@Dawkins1958] and tree, bark and leaf morphology were assessed for every individual.
+
+<!-- morphology details to give somewhere -->
 
 ## Trait measurements
 
-We calculated 5 functional traits from leaf samples already highlighted in previous studies as phenotypic descriptor of major ecological strategies [@diaz_plant_1998; @wright_worldwide_2004] (Table \@ref(tab:Trait)): leaf mass per area (fresh weight divided by the leaf area, $LMA$, $cm^2.g^{-1}$), leaf dry matter content (leaf dry weight divided by the fresh weight, $LDMC$, $g.g^{-1}$), leaf thickness ($LT$, $\mu m$), leaf area ($LA$, $cm^2$), and leaf chlorophyll content ($CC$, $g.cm^{-2}$). Leaf petiole was removed for all measurements. Leaf fresh weight was measured with an analytic balance [brand], leaf fresh thickness with a micrometer [brand], leaf area through the ImageJ software [@Schneider2012] using scanned images of fresh leaves, and leaf chlorophyll content with a SPAD measurement [brand] converted with an allometric model [@Coste2010]. Leaf thickness and chlorophyll content measurement was repeated 3 times per leaf to reduce errors due to intra-leaf variation. Leaves were then kept in herbarium and oven-dried for at least 48 hours at 80°C before measurement of dry weight.
+We calculated 5 functional traits from leaf samples already highlighted in previous studies as phenotypic descriptors of major ecological strategies [@diaz_plant_1998; @wright_worldwide_2004] (Table \@ref(tab:Trait)): leaf mass per area (fresh weight divided by the leaf area, $LMA$, $cm^2.g^{-1}$), leaf dry matter content (leaf dry weight divided by the fresh weight, $LDMC$, $g.g^{-1}$), leaf thickness ($LT$, $\mu m$), leaf area ($LA$, $cm^2$), and leaf chlorophyll content ($CC$, $g.cm^{-2}$). Leaf petiole was removed for all measurements. Leaf fresh weight was measured with an analytic balance [brand], leaf fresh thickness with a micrometer [brand], leaf area was quantified using the ImageJ software [@Schneider2012] using scanned images of fresh leaves, and leaf chlorophyll content was determined with a SPAD measurement [brand] converted with an allometric model [@Coste2010]. Leaf thickness and chlorophyll content measurements were repeated 3 times per leaf to reduce errors due to intra-leaf variation. Leaves were then kept in herbarium and oven-dried for at least 48 hours at 80°C before measurement of dry weight.
 
 ## Phenotype descriptors
 
-Three little correlated (Pearson's r < 0.14) ontogenetic and environmental descriptors were chosen to depict individual leaf traits. Diameter at breast height ($DBH$, $cm$) was chosen as an indirect proxy for ontogeny effect [but see @roggy_links_2005] but was shown to be confounded with light access through Dawkins index (see supplementary material S2). DBH of sampled individual was representative of DBH distribution for corresponding genus (see supplementary material S3).
+Three little correlated (Pearson's r < 0.14) ontogenetic and environmental descriptors were chosen to depict individual leaf traits. Diameter at breast height ($DBH$, $cm$) was chosen as an indirect proxy for ontogeny effect [but see @roggy_links_2005] but was shown to be confounded with light access through Dawkins index (see supplementary material S2). DBH of sampled individuals was representative of DBH distribution for corresponding genus (see supplementary material S3).
 
-A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic competition through tree neighborhood, implying that other biotic effects, as herbivory and pathogens effects, were not directly taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
+A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic competition through tree neighborhood, implying that other biotic effects, such as herbivory and pathogen effects, were not directly taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
 $$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^\beta e^{-\alpha.\delta_{i,j}}$$
-with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in literature and because NCI effect showed very little effect beyond 20m in preliminary analysis. $\beta$ represents the size effect of neighbors through their diameter and was set to 2 to represent neighbors through their surface. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance and was set to 0.25 corresponding to neighbors above 20m having less than 1% effect on $NCI$.
+where $DBH_j$ is the diameter of neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m as often observed in the literature and because NCI showed very little effect beyond 20m in preliminary analysis. $\beta$ represents the size effect of neighbors through their diameter and was set to 2 to represent neighbors through their surface. $\alpha$ represents the decrease of neighbors $DBH_j$ effect with distance and was set to 0.25 corresponding to neighbors above 20m having less than 1% effect on $NCI$.
 
-Finally, topographic wetness index ($TWI$) was selected between various abiotic descriptors available (see supplementary material S4) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher]. Descriptors used were derived from field censuses ($DBH$ and $NCI$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
+Finally, topographic wetness index ($TWI$) was selected between various abiotic descriptors available (see supplementary material S4) and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher]. Descriptors used were derived from field censuses ($DBH$ and $NCI$) or derived from a 1-m resolution digital elevation model built using data from a LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [@Conrad2015].
 
 
 ## Analysis
 
-We first explored leaf functional traits co-variation between individuals with principal component analyses (PCA). Species organisation within the PCA was explored by ANOVA on PCA axis from the first plane with post-hoc groups investigated by Tukey honest significant differences.
+We first explored co-variation in leaf functional traits across individuals using principal component analyses (PCA). Species organisation within the PCA was explored by ANOVA on PCA axes from the first plane with post-hoc group values investigated using the Tukey honest significant differences.
 
-Then, we explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and species ($S$) thanks to a model with fixed species effect including interaction between ontogeny and environment (more likely than an additive form without interactions, see Supplementary material S5).
+Then, we explained leaf trait ($Trait$) variation with ontogeny and light ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and species ($S$) using a model with fixed species effect including interaction between ontogeny and environment (more likely than an additive form without interactions, see Supplementary material S5).
 
-Individual leaf trait $Trait_{s,i}$ for species $s \in [1;S]$ is first explained by its ontogeny confounded with light though individual DBH $DBH_i$ with a Michaelis Menten form (more likely than a linear form, see Supplementary Material S6):
+Individual leaf trait $Trait_{s,i}$ for species $s \in [1;S]$ is first explained by its ontogeny confounded with access to light through individual DBH, $DBH_i$, using an equation with a Michaelis Menten form (more likely than a linear form, see Supplementary Material S6):
 $$Trait_{s,i} \sim \mathcal{N}(\alpha_{env}.\frac{DBH_i}{{\beta_{DBH}}_{s} + DBH_i}, \sigma)$$
-$\alpha_{env}$ is the trait maximum value in the Michaelis Menten and $\beta_{DBH}$ is the value of DBH for which the trait account for half of its plateau value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolves slower towards its plateau, consequently, ontogeny affects more traits values. We will further use $DBH_{90}$ equal to $9.\beta_{DBH}$ being the DBH value for which the trait account for 90% of its maximum value that we can assume as the DBH for which the individual trait value is close to the maximum ontogenetic value. We used $\frac{1}{LA}$ instead of $LA$ to ease regressions with functional traits co-varying positively with diameter at breast height ($DBH$).
+$\alpha_{env}$ is the trait maximum value in the equation and $\beta_{DBH}$ is the value of DBH for which the trait accounts for half of its plateau value (when DBH tend to its maximum value). With higher $\beta_{DBH}$, traits evolve slower towards their plateau, consequently, ontogeny affects trait values more strongly. We will further use $DBH_{90}$ being the DBH value for which the trait accounts for 90% of its maximum value. We can assume this the DBH for which the individual trait value is close to the maximum ontogenetic value. We used $\frac{1}{LA}$ instead of $LA$ to ease regressions with functional traits co-varying positively with diameter at breast height ($DBH$).
 
 Finally $\alpha_{env}$ was represented by an additive linear form of environmental effects represented by $TWI$ for abiotic environment and by $NCI$ for biotic interactions:
 $$alpha_{env} = \alpha_{s} + {\beta_{TWI}}_{s}.TWI_i + {\beta_{NCI}}_{s}.NCI_i$$
 where $\alpha$ is the intercept, $\beta_{TWI}$ is the slope of TWI effect, e.g. positive $\beta_{TWI}$ represents an increase of the trait value with water accumulation; whereas $\beta_{NCI}$ is the slope of competition effect, e.g. negative $\beta_{NCI}$ highlight a decrease of trait value with competition.
 
-Traits, DBH, TWI and NCI were all reduced for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits and the two complex, resulting in 10 regressions, using `stan` language [ref] and `rstan` package [ref] in the R environment [ref].
+Traits, DBH, TWI and NCI were all reduced for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf trait and the two complexes, resulting in 10 regressions, using `stan` language [@Carpenter2017] and `rstan` package [@Team2018] in the R environment [@RCoreTeam2018].
 
 # Results
 
-Regressions intercepts and principal component analysis (PCA) highlighted complexes and species differences with LA and LT showing more species differentiation than LMA, LDMC and CC, for which *Symphonia* species values were equal (Fig. \@ref(fig:PCA) and \@ref(fig:Intercept)).
+Intercepts of regressions and principal component analysis (PCA) highlighted between complexes and species differences in trait values with LA and LT showing stronger species differentiation than LMA, LDMC and CC, for which *Symphonia* species did not show differences (Fig. \@ref(fig:PCA) and \@ref(fig:Intercept)).
 
-70% of the total variance was conserved on the first plane from the PCA of leaf traits (Fig. \@ref(fig:PCA)). Globally, the first plane highlighted the co-variation of the five leaf traits on the first axis bearing almost 40% of the total trait variation, with big, thick leaves rich in dry matter and chlorophyll content and high LMA. Finally, besides both axes showed significative species segregation ($p-value < 10^{-4}$), the second PCA axis segregated the two complexes (*Symphonia* and *Eschweilera* clade Parvifolia) with little overlap when the first axis better ranked species.
+Seventy percent of the total variance was explained by the first plane from the PCA of leaf traits (Fig. \@ref(fig:PCA)). Globally, the first plane highlighted the co-variation of the five leaf traits on the first axis bearing almost 40% of the total trait variation, with big, thick leaves rich in dry matter and chlorophyll content and high LMA. Both axes showed significant species segregation (ANOVA $p-value < 10^{-4}$). The second PCA axis segregated the two complexes (*Symphonia* and *Eschweilera* clade Parvifolia) with little overlap, whereas the first axis better ranked species.
 
-Regressions had globally a strong residual variation (from 0.5 to 1, Table \@ref(tab:parameters)), with significant effect of DBH but little to no effect from TWI and NCI. First, DBH significantly increased LMA, LT, and decreased LA of the two species complexes whereas DBH had no effect for *Eschweilera* and a medium positive effect for *Symphonia* on CC and LDMC (Fig. \@ref(fig:DBH90) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)). Second, TWI had a significative negative effect on LMA, LDMC and CC and a positive effect on LA for *Symphonia* whereas TWI had significative positive effect for CC and negative effect for LT for *Eschweilera* (Fig. \@ref(fig:TWI) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)). But only *E. decolorans* showed a negative answer of LMA and LDMC to TWI within the *Eschweilera*. Finally, NCI had only a negative effect on *Sympohnia* LA (Fig. \@ref(fig:NCI) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)).
+Regressions had globally a strong residual variation ($\sigma ^2$ from 0.5 to 1, Table \@ref(tab:parameters)), with significant effect of DBH but little to no effect from TWI and NCI. First, DBH significantly increased LMA, LT, and decreased LA in both species complexes whereas DBH had no effect on CC and LDMC for *Eschweilera* and a small positive effect for *Symphonia* (Fig. \@ref(fig:DBH90) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)). Second, TWI had a significant negative effect on LMA, LDMC and CC and a positive effect on LA for *Symphonia* whereas TWI had significant positive effect on CC and a negative effect on LT for *Eschweilera* (Fig. \@ref(fig:TWI) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)). But only *E. decolorans* showed a negative response of LMA and LDMC to TWI within the *Eschweilera*. Finally, NCI had a negative effect on LA in *Symphonia* but did not affect other *Symphonia* traits or *Eschweilera* species (Fig. \@ref(fig:NCI) and \@ref(fig:DBHpred) and Table \@ref(tab:parameters)).
 
 # Discussion
 
-> Take home message to be written
+Theories on the maintenance of biodiversity have mainly considered questions pertaining to the species coexistence level. However, individuals within species present variation in performance, phenotypes, and genes. In this paper, we show that changes towards more conservative trait values for bigger trees in more luminous environment, previously observed between seedling/sapling and adults, persist in later life changes. Moreover, higher topographic position resulted in a shift from acquisitive to conservative strategies, both across and within species. Our results suggest that intraspecific trait variability could increase species tolerance to environmental filtering and thus contribute to species coexistence. This highlights the interest of a structured and thoughtful sampling effort within species and individuals for trait-based studies of community assemblage.
 
 ## Leaf traits covary from resources acquisition to conservation
 
-First PCA axis highlighted a covariation of big, thick leaves rich in dry matter and chlorophyll content with high LMA. LMA, LDMC, and LT covariation has been already linked to a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Baraloto2010; @Evans2001; @hodgson_is_2011; @Vile2005]. Moreover, LA covary with LDMC but is othogonal to LMA, highlighting LA unclear functional role  [@Nicotra2011] and debated participation to common leaf functional trade-offs [@Ackerly2002]. Nevertheless, evidencing a negative ratio between leaf area and mass, @Yang2010 hypothesized LA increase to be an investment in photosynthesis or durability, which might explain our contrasted pattern of LA variation with an acquisitive vs conservative trade-off. Finally, CC covaried with LMA and LT toward resource conservation, already highlighted by @Baraloto2010's PCA but still unexplained **??**. Consequently, all sampled leaf functional traits seems to highlight a major variation at the individual scale around the so called leaf economics spectrum [@wright_worldwide_2004], indicating a potential conservation of the functional strategy from species to the individual that need to be further investigated with a more robust and diverse set of functional traits [but see @messier_trait_2016].
+The first PCA axis highlighted a covariation of large (LA), thick (LT) leaves rich in dry matter (LDMC) and chlorophyll content (CC) with high LMA. LMA, LDMC, and LT covariation has already been linked to a trade-off between resource acquisition by photosynthesis and investment in leaf defense and durability [@Baraloto2010; @Evans2001; @hodgson_is_2011; @Vile2005]. Moreover, LA correlates more with LDMC but is othogonal to LMA, highlighting LA unclear functional role  [@Nicotra2011] and debated participation to common leaf functional trade-offs [@Ackerly2002]. Nevertheless, evidencing a negative ratio between leaf area and mass, @Yang2010 hypothesized LA increase to be an investment in photosynthesis or durability, which might explain our contrasted pattern of LA variation with an acquisitive vs conservative trade-off. Finally, CC covaried with LMA and LT toward resource conservation, already highlighted by @Baraloto2010's PCA but still unexplained. Consequently, all sampled leaf functional traits seems to highlight a major variation at the individual scale around the so called leaf economics spectrum [@wright_worldwide_2004], indicating a potential conservation of the functional strategy from species to the individual that need to be further investigated with a more robust and diverse set of functional traits [but see @messier_trait_2016].
 
 ## Ontogeny and light shape individual leaf traits
 
-Diameter at breast hieght (DBH) represented confounded effect of ontogeny and light (Supplementary Material S2) already highlighted as difficultly disentangled [@Lusk2007; @roggy_links_2005; but see @Poorter2012] besides showing little to no interaction [@roggy_links_2005; @Sciences2009]. DBH increased LT and LMA and decreased LA during the whole tree growth, similarly to previous evidences of  LMA, LT and LDMC increase [@Lusk2007; @Spasojevic2014; @Niinemets2006; @Rozendaal2006b; @roggy_links_2005; @Sciences2009; @Dang-Le2013; @Rijkers2000] and LA decrease [@Dang-Le2013; @Rozendaal2006b] with ontogeny and light. But DBH had little or no effect on LDMC and CC, also in agreements with previous studies [@roggy_links_2005; @Rijkers2000; @Rozendaal2006b]. Consequently, following previous traits covariation, ontogeny and light resulted in a shift from acquisitive to conservative functional strategy.
+Diameter at breast hieght (DBH) represented confounded effect of ontogeny and light (Supplementary Material S2) already highlighted as difficult to disentangle experimentally [@Lusk2007; @roggy_links_2005; @Sciences2009; but see @Poorter2012] and impossible to separate *in natura*. DBH had a positive effect on LT and LMA and a negative effect on LA during the whole tree growth, similarly to previous evidences of  LMA, LT and LDMC increase [@Lusk2007; @Spasojevic2014; @Niinemets2006; @Rozendaal2006b; @roggy_links_2005; @Sciences2009; @Dang-Le2013; @Rijkers2000] and LA decrease [@Dang-Le2013; @Rozendaal2006b] with ontogeny and light. But DBH had little or no effect on LDMC and CC, also in agreements with previous studies [@roggy_links_2005; @Rijkers2000; @Rozendaal2006b]. Consequently, considering the previously highlighted traits covariation, advancing ontogenic status and access to light led to a shift from acquisitive to conservative leaf functional strategy.
 
-Conservative strategy with increased ontogeny and light can be explained by (i) height effect on water potential due to gravity [@Koch2004; @WOODRUFF2007], (ii) light effect with thicker mesophyll with elongated and more layers of palisade parenchyma [@Chazdon1993], and (iii) herbivory and mechanical damage effects increased in canopy [@Sterck1992]. On the opposite, acquisitive strategy with decreased ontogeny and light can be explained either by increased light capture need in more shaded understory [@Chazdon1996] or by increased development cost of smaller individuals [@Herault2011].
+Conservative strategy in old trees with good access to light can be explained by (i) height effect on water potential due to gravity [@Koch2004; @WOODRUFF2007], (ii) light effect with thicker mesophyll with elongated and more layers of palisade parenchyma [@Chazdon1993], and (iii) herbivory and mechanical damage effects increased in canopy [@Sterck1992]. On the opposite, acquisitive strategy in younger trees with unfavourable access to light can be explained either by increased light capture need in more shaded understory [@Chazdon1996] or by increased development cost of smaller individuals [@Herault2011].
 
-Consequently, ontogeny and light cannot be dissociated *in natura* and their effect shape leaf traits all along tree life. Thus, shade and light leaf concept should not be dissociated from ontogeny [@Lusk2007; @Dang-Le2013] and ontogenic cohort should integrate trait continuous evolution with diameter [@Rozendaal2006b]. We thus advocate for a comprehensive assessment of ontogeny following @Wright2002a and @Coleman1994. Finally, we evidenced smaller effect of other environmental factors, advocating for the primordial role of light and ontogeny in individual leaf trait variation [in response to @Dang-Le2013].
-
-## Leaf and individual sampling implications in trait-based studies
-
-We evidenced ontogeny and light strong influence on individual phenotypic variability within species. In addition, species mean differences are low once ontogenetic and environmental effect are controlled (Fig. \@ref(fig:Intercept)). Thus, individual trait variation compared to species trait variation is strong (see Supplementary Material S7) and question sampling design for trait-based study of the community. Effectively, resampling 5 mature individuals with a DBH > 30 cm, as adviced in standard protocol [@Perez-Harguindeguy2013], we were able to show that estimation of the species mean trait value can vary from 5 to 15% percent (see Supplementary Material S8); whereas increasing sampled individuals to 10 almost reduced of two folds the coefficient of variation from species mean trait value. In addition, improving ontogeny and habitat control in the sampling help better estimate species mean trait value (results unshwon).
-
-On the other hand, regressions of individual leaf traits showed a strong residual variation ($\sigma ^2 \in [0.5;1]$, Table \@ref(tab:parameters)). We assume this variation not to be measurement errors (due to tools accuracy), nor climatic effect (homogeneous sampling dates), neither intra-leaf variation (controlled with whole limb measurement or repetitions) but to be mainly linked to intra-individual variation (besides sampling efforts in upper canopy, see Supplementary Material S7). Effectively, a strong trait intra-individual variation has already been highlighted on leaf thickness, transfusion tissue, and mass per area with leaf height within the tree [@Koch2004; @Oldham2010] and on leaves vein density, stomatal pore index and hydraulic conductance  with shoot length [@Leigh2011]. Consequently, we also advocate for an accurate sampling of individual leaf within the tree in future trait-based study of intraspecific variation, controlling for instance architectural development stage and position of the sampled branch and leaf.
+Consequently, ontogeny and light cannot be dissociated *in natura* and their effects, previously observed between seedling/sapling and adults, persist in later life changes. Thus, the concept of shade and light leaves should not be dissociated from ontogeny to avoid biased results [@Lusk2007; @Dang-Le2013] and ontogenic cohort should integrate trait late evolution with diameter, even between adults [@Rozendaal2006b]. We thus advocate for a comprehensive assessment of ontogeny following @Wright2002a and @Coleman1994. Finally, we evidenced a smaller effect of other environmental factors, advocating for the primordial role of light and ontogeny in individual leaf trait variation [answering @Dang-Le2013].
 
 ## Intraspecific trait variability increase species tolerance to environmental filtering
 
-Topographic wetness index (TWI) represent low topographic position where water accumulate, whereas neighbor crowding index (NCI) represent neighbor competition and thus nutriment and light access. Thus, TWI and NCI highlight habitat differences with wetter and lighter habitats more dynamic and fertile from lower to upper topographic position [@ferry2010higher; @Allie2015]. In our study, TWI decreased LDMC, and LMA and increased LA but had opposite effect on CC **(unexplained for the moment ??)**; whereas NCI increased LA for *Symphonia* individuals. 
+Topographic wetness index (TWI) reflects topographic position where water accumulates, whereas neighbor crowding index (NCI) represents competition with neighbors and thus access to nutriments and light. Thus, TWI and NCI highlight habitat differences with wetter and bright habitats  with increased fertility and tree growth, mortality, and recruitment from lower to upper topographic position [@ferry2010higher; @Allie2015]. In our study, TWI had a negative effect on LDMC, and LMA and a positive effect on LA but had opposite effect on CC ; whereas NCI only had a positive effect on LA for *Symphonia* individuals.
 
-Consequently, following previous traits covariation, higher topographic position result in a shift from acquisitive to conservative functional strategy. Tolerance to drier or less fertile habitat can explain conservative strategy with increasing TWI [@Gotsch2010; @Cunningham2007; @Mendez-Toribio2017]. On the opposite, increased dynamic and fertility from lower habitats can explain acquisitive strategy.
+Consequently, considering the previously highlighted traits covariation, higher topographic position results in a shift from acquisitive to conservative functional strategy. Tolerance to drier or less fertile habitat can explain conservative strategy with increasing TWI [@Gotsch2010; @Cunningham2007; @Mendez-Toribio2017]. On the opposite, increased fertility and tree growth, mortality, and recruitment from lower habitats can explain acquisitive strategy.
 
-In addition, decreased of LA and increase of LDMC and LMA with lower topographic position, wetter and more fertile site have also been evidenced at the species level: (i) between valley botooms and ridge-tops [@kraft_functional_2008], (ii) with decreasing climatic water avilability [@Gotsch2010], and (iii) with increased precipitation and phosphorous [@Cunningham2007].  As a consequence, response to abiotic environment and neighbors is here conserved from species to individuals. 
+In addition, a decrease of LA and an increase of LDMC and LMA with lower topographic position, wetter and more fertile sites have also been evidenced at the species level: (i) between valley botooms and ridge-tops [@kraft_functional_2008], (ii) with decreasing climatic water avilability [@Gotsch2010], and (iii) with increased precipitation and phosphorous [@Cunningham2007].  As a consequence, our reults suggest that the response to abiotic environment and neighbors is here conserved from the community level, with species, to the within species level, with individuals. 
 
-For instance, _S. globulifera_ and _E. coriacea_ had respectively a lower mean LDMC, and LMA but higher mean LA than _E. sagotiana_ and _S. sp1_ at the species level. And _S. globulifera_ and _E. coriacea_ preferentially grow in flooded valley bottom than drier slopes and hilltops where grow _E. sagotiana_ and _S. sp1_ [Schmitt et al. unpublished; @Allie2015]. Thus, the two genus highlight a response between species conserved at the intraspecific level between individuals and occuring simultanously in two species complexes. In conclusion, we hypothesize that intraspecific trait variability (ITV) answering similarly to environment effects helps to increase species tolerance to environmental filtering [@Clark2010], and thus contribute to species coexistence.
+For instance, _S. globulifera_ and _E. coriacea_ had respectively a lower mean LDMC, and LMA but higher mean LA than _E. sagotiana_ and _S. sp1_ at the species level. And _S. globulifera_ and _E. coriacea_ preferentially grow in flooded valley bottom rather than in drier slopes and hilltops where _E. sagotiana_ and _S. sp1_ grow [Schmitt et al. unpublished; @Allie2015]. Thus, the two genera highlight a response between species conserved at the intraspecific level between individuals and occuring simultanously in two species complexes. In conclusion, we hypothesize that intraspecific trait variability (ITV) answering similarly to environment effects helps to increase species tolerance to environmental filtering [@Clark2010], and thus contribute to species coexistence.
+
+## Leaf and individual sampling implications in trait-based studies
+
+We evidenced a strong influence of ontogeny and light on individual phenotypic variability within species. In addition, species mean differences are low once ontogenetic and environmental effect are controlled (Fig. \@ref(fig:Intercept)). Thus, trait variation within species compared to trait variation between species is strong (see Supplementary Material S7), which prompts a critical appreciation of sampling design for trait-based studies of the community. Effectively, resampling 5 mature individuals with a DBH > 30 cm, as advised in standard protocol [@Perez-Harguindeguy2013], we were able to show that estimation of the species mean trait value can vary from 5 to 15% percent (see Supplementary Material S8); whereas increasing sampled individuals to 10 almost reduced of two-fold the coefficient of variation of the mean trait values. In addition, improving ontogeny and habitat control in the sampling help better estimate species mean trait value (results not shown).
+
+On the other hand, regressions of individual leaf traits showed a strong residual variation ($\sigma ^2 \in [0.5;1]$, Table \@ref(tab:parameters)). We assume this variation not to be measurement errors (due to accuracy of tools), nor climatic effect (homogeneous sampling dates), nor intra-leaf variation (controlled with whole limb measurement or repetitions) but to be mainly linked to intra-individual variation (besides sampling efforts in the upper layer of the tree crown, see Supplementary Material S7). Effectively, a strong intra-individual variation from functional traits has already been highlighted for leaf thickness, transfusion tissue, and mass per area with leaf height within the tree [@Koch2004; @Oldham2010] and for leaf vein density, stomatal pore index and hydraulic conductance  with shoot length [@Leigh2011]. Consequently, we also advocate for a thoughtful sampling of individual leaf within the tree in future trait-based study of intraspecific variation, controlling for instance architectural development stage and position of the sampled branch and leaf.
 
 # Acknowledgements
 
-We thanks the university of Bordeaux for a PhD grant to Sylvain Schmitt and acknowledge support of a grant from Investissement d’Avenir grants of the ANR (CEBA:ANR-10-LABX-25-01) and from GUYAMAZON program (LECYTHOMICS project). We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification. Special thanks go to Saint-Omer and Josselin Cazal, Ilke Gelaldi, Fabien Lehuede, Adeline Adam, Agathe Benfredj Zaleski, Numa Faucherre, and David Zipper for their assistance during sampling in Paracou station.
+We thank the university of Bordeaux for a PhD grant to Sylvain Schmitt and acknowledge support of a grant from Investissement d’Avenir grants of the ANR (CEBA:ANR-10-LABX-25-01) and from GUYAMAZON program (LECYTOMICS project). We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification. Special thanks go to Saint-Omer and Josselin Cazal, Ilke Gelaldi, Fabien Lehuede, Adeline Adam, Agathe Benfredj Zaleski, Numa Faucherre, and David Zipper for their assistance during sampling in Paracou station.
 
 # Authors’ contributions
 
@@ -296,29 +294,19 @@ __Table \@ref(tab:headcount)__ Number of individuals sampled per genus and speci
 
 __Table \@ref(tab:Trait)__ Functional traits measured, with trait unit, abbreviation, headcount, mean and standard error.
 
-__Table \@ref(tab:parameters)__ Model estimated parameters for complex, species and traits.
-
-__Table \@ref(tab:lm)__ Linear model results for a similar model (to be further removed, only here to help bayesian septics and double check results).
+__Table \@ref(tab:parameters)__ Model estimated parameters for complexes, species and traits.
 
 ## Figure captions
 
-__Figure \@ref(fig:PCA)__ Principal Component Analysis (PCA) of leaf trait  between species and species segregation on the two first axis. Dot and box colors indicates the species complex, whereas dot size indicates individual diameter at breast height. Species segregation has been investigated generally by Anova, **** indicates a $p-value < 0.0001$ and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \@ref(tab:Trait) for traits abbreviation.
+__Figure \@ref(fig:PCA)__ Principal Component Analysis (PCA) of leaf trait  between species and segregation of species on the two first axes. Circle and box colors indicate the species complex, whereas size of circles indicates individual diameter at breast height. Species segregation has been investigated by Anova, **** indicates a $p-value < 0.0001$ and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \@ref(tab:Trait) for abbreviation of traits.
 
-__Figure \@ref(fig:Intercept)__  Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species.
+__Figure \@ref(fig:Intercept)__  Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.
 
-__Figure \@ref(fig:DBH90)__  Species DBH effect ($DBH_{90}$) for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter, (ii) Eschweilera 95th percentile of diameter and (iii) Eschweilera 95th percentile of diameter.
+__Figure \@ref(fig:DBH90)__  Species DBH effect ($DBH_{90}$) for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter, (ii) Eschweilera 95th percentile of diameter and (iii) Eschweilera 95th percentile of diameter.
 
-__Figure \@ref(fig:DBHpred)__  Model predictions for DBH (to be further removed).
+__Figure \@ref(fig:TWI)__  Species TWI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.
 
-__Figure \@ref(fig:TWI)__  Species TWI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species.
-
-__Figure \@ref(fig:NCI)__  Species NCI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species.
-
-__Figure \@ref(fig:sensitivity)__ Model sensitivity to variables (to be further removed).
-
-__Figure \@ref(fig:bootstrap)__  Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm (to be further moved in Supplementary Material).
-
-__Figure \@ref(fig:varcomp)__ Variance decomposition between ecological level (to be further moved in Supplementary Material).
+__Figure \@ref(fig:NCI)__  Species NCI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.
 
 \newpage 
 
@@ -372,7 +360,7 @@ lapply(fits, function(fit)
                               alpha = "$\\alpha$",
                               betaDBH = "$\\beta_{DBH}$", 
                               betaTWI = "$\\beta_{TWI}$", 
-                              betaNCI = "$\\beta_{Comp}$",
+                              betaNCI = "$\\beta_{NCI}$",
                               sigma = "$\\sigma^2$")) %>% 
   mutate(trait = recode_factor(trait, 
                               LMA = "$LMA$",
@@ -383,46 +371,16 @@ lapply(fits, function(fit)
   reshape2::dcast(complex + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
   mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "", SpeciesLong)) %>% 
   rename(Parameter = term, Species = SpeciesLong) %>% 
-  kable(caption = "Model estimated parameters for complex, species and traits.",
+  kable(caption = "Model estimated parameters for complexes, species and traits.",
         escape = F, digits = 3, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1:2)
 ```
 
-```{r lm}
-Individuals %>%
-  select(Genus, Species, DBH, TWI, NCI, LMA, LDMC, LT, invLA, CC) %>%
-  reshape2::melt(id.vars = c("Genus", "Species", "DBH", "TWI", "NCI"),
-                 variable.name = "Trait") %>%
-  group_by(Trait, Genus) %>%
-  do(model = lm(value ~ Species + log(DBH) + log(DBH):TWI + log(DBH):NCI, data = .)) %>% 
-  broom::tidy(model) %>% 
-  ungroup() %>% 
-  filter(term != "(Intercept)") %>% 
-  mutate(term = gsub("Species", "", term)) %>% 
-  mutate(`P-value` = ifelse(p.value < 0.001, "***",
-                            ifelse(p.value < 0.01, "**",
-                                   ifelse(p.value < 0.05, "*",
-                                          ifelse(p.value < 0.1, ".", 
-                                                 "n.s."))))) %>% 
-    mutate(Trait = recode_factor(Trait, 
-                              LMA = "$LMA$",
-                              LDMC = "$LDMC$", 
-                              LT = "$LT$", 
-                              invLA = "$\\frac{1}{LA}$",
-                              CC = "$CC$")) %>% 
-  mutate(Coefficient = round(estimate,2)) %>% 
-  mutate(value = paste(Coefficient, `P-value`)) %>%
-  reshape2::dcast(term + Genus ~ Trait, value.var = "value") %>% 
-  kable(escape = F, format = "pandoc",
-        caption = "Linear model results for a similar model (to be further removed, only here to help bayesian septics and double check results).") %>% 
-  kable_styling(full_width = F)
-```
-
 <!-- figures -->
 
-```{r PCA, fig.cap='Principal Component Analysis (PCA) of leaf trait  between species and species seggregation on the two first axis. Dot and box colors indicates the species complex, whereas dot size indicates individual diameter at breast height. Species seggregation has been investigated generally by Anova and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \\@ref(tab:Trait) for traits abbreviation.'}
+```{r PCA, fig.cap='Principal Component Analysis (PCA) of leaf trait  between species and segregation of species on the two first axes. Circle and box colors indicate the species complex, whereas size of circles indicates individual diameter at breast height. Species segregation has been investigated by Anova, **** indicates a $p-value < 0.0001$ and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \\@ref(tab:Trait) for abbreviation of traits.'}
 pca.plot <- drop_na(Individuals, LMA, LDMC, LT, LA, CC) %>% 
   autoplot(princomp(~ LMA + LDMC + LT + LA + CC, data = ., cor = T), 
            data = .,
@@ -466,7 +424,7 @@ axes.boxplots <- pca.plot$data %>%
 cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
 ```
 
-```{r Intercept, fig.cap="Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species."}
+```{r Intercept, fig.cap="Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "alpha"))) %>% 
@@ -494,7 +452,7 @@ lapply(fits, function(fit)
   scale_fill_brewer("", palette = "Set1", guide = "none")
 ```
 
-```{r DBH90, fig.cap="Species DBH effect ($DBH_{90}$) for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter, (ii) Eschweilera 95th percentile of diameter and (iii) Eschweilera 95th percentile of diameter."}
+```{r DBH90, fig.cap="Species DBH effect ($DBH_{90}$) for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter, (ii) Eschweilera 95th percentile of diameter and (iii) Eschweilera 95th percentile of diameter."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaDBH"))) %>% 
@@ -525,18 +483,7 @@ lapply(fits, function(fit)
   scale_fill_discrete(guide = "none")
 ```
 
-```{r DBHpred, fig.cap="Model predictions for DBH (to be further removed)."}
-preds %>% 
-  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
-  ggplot(aes(DBH*sdDBH, col = Species)) +
-  geom_point(aes(y = Y), alpha = 0.2) +
-  geom_ribbon(aes(ymin = Ydbh5, ymax = Ydbh95), alpha = 0.2) +
-  geom_line(aes(y = Ydbh)) +
-  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed) +
-  scale_y_log10()
-```
-
-```{r TWI, fig.cap="Species TWI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species."}
+```{r TWI, fig.cap="Species TWI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaTWI"))) %>% 
@@ -569,7 +516,7 @@ lapply(fits, function(fit)
   ylim(-0.5, 0.5)
 ```
 
-```{r NCI, fig.cap="Species NCI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Dot represents mean estimation, thick line the 50% confidence interval and thin line the 95% confidence interval, and color the corresponding species."}
+```{r NCI, fig.cap="Species NCI effect for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaNCI"))) %>% 
@@ -600,87 +547,4 @@ lapply(fits, function(fit)
   scale_color_discrete(guide = "none") +
   scale_fill_discrete(guide = "none") +
   ylim(-0.5, 0.5)
-```
-
-```{r sensitivity, fig.cap="Model sensitivity to variables (to be further removed)."}
-preds %>%
-  select(Trait, Genus, Yp, Ydbh, Ytwi, Ynci) %>% 
-  rename(DBH = Ydbh, TWI = Ytwi, NCI = Ynci) %>% 
-  reshape2::melt(id.vars = c("Trait", "Genus", "Yp")) %>% 
-  mutate(Delta = sqrt((Yp - value)^2)) %>% 
-  mutate(variable = factor(variable, levels = c("NCI", "TWI", "DBH"))) %>%
-  ggplot(aes(variable, Delta, fill = variable)) +
-  geom_boxplot() +
-  facet_grid(Trait ~ Genus, scales = "free") +
-  coord_flip() +
-  scale_y_sqrt() +
-  scale_fill_discrete(guide = "none") +
-  xlab("") + ylab(expression(Delta(Prediction)))
-```
-
-```{r bootstrap, fig.cap="Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm (to be further moved in Supplementary Material)."}
-t <- Individuals0 %>% 
-  mutate(LMA = (1/SLA)*10^4) %>% 
-  group_by(Species) %>% 
-  filter(n() > 10) %>% 
-  filter(DBH*sdDBH > 30) %>%
-  select(Genus, Species, LMA, LDMC, LT, LA, CC) %>% 
-  reshape2::melt(id.vars = c("Genus", "Species"), variable.name = "Trait") %>% 
-  na.omit() %>% 
-  group_by(Genus, Species, Trait, value) %>% 
-  expand(n = 2:10) %>% 
-  group_by(Genus, Species, Trait, n) %>% 
-  do(cv = sd(apply(replicate(1000, sample(.$value, .$n)), 2, mean))/mean(.$value)*100) %>% 
-  broom::tidy(cv) %>% 
-  rename(cv = x)
-ggplot(t, aes(as.factor(n), cv, fill = Trait)) +
-  geom_boxplot() +
-  stat_summary(fun.y=mean, geom="line", aes(group=1)) +
-  facet_grid(~ Trait) +
-  scale_fill_discrete(guide = "none") +
-  xlab("Sampled tree number") +
-  ylab("Coefficient of variation (%).") +
-  scale_y_sqrt()
-```
-
-```{r varcomp, fig.cap="Variance decomposition between ecological level (to be further moved in Supplementary Material)."}
-traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
-  googlesheets::gs_read("AllTraits") %>%
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
-  mutate(Genus = "Symphonia") %>%
-  rename(Species = Morphotype) %>%
-  mutate(Species = ifelse(Species == "Indet.",
-                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
-                                     "sp.1" =  "S")], Species))
-traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
-  googlesheets::gs_read("AllTraits") %>%
-  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
-  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
-  group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
-           SpeciesLong, Bark, Dawkins)
-traits %>% 
-  mutate(LMA = (1/SLA)*10^4) %>% 
-  group_by(Species) %>% 
-  filter(n() > 10) %>% 
-  filter(CC > 0) %>% # CC have an issue for lme
-  select(Plot, Genus, Species, idTree, Leaf,
-         LMA, LDMC, LT, LA, CC) %>% 
-  reshape2::melt(id.vars = c("Plot", "Genus", "Species", "idTree", "Leaf"), 
-                 variable.name = "Trait") %>% 
-  na.omit() %>% 
-  group_by(Trait) %>% 
-  do(varcomp = as.vector(ape::varcomp(nlme::lme(log(value) ~ Plot,
-                            random=~1|Genus/Species/idTree/Leaf, 
-                            data = ., na.action = na.omit), 1))) %>% 
-  broom::tidy(varcomp) %>% 
-  rename(Variance = x) %>% 
-  mutate(Component = c("Genus", "Species", "Tree", "Leaf", "Residual")) %>% 
-  ggplot(aes(Trait, Variance, label = round(Variance*100), 
-             fill = factor(Component, levels = c("Genus", "Species", 
-                                                 "Tree", "Leaf", "Residual")))) +
-  geom_bar(stat = "identity") +
-  scale_fill_brewer("Component", palette = "Accent") +
-  geom_text(position = position_stack(vjust = 0.5))
 ```

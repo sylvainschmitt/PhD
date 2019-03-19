@@ -1,15 +1,15 @@
 ---
 title: Supplementary Materials
-author: Sylvain Schmitt$^{*,1}$, Bruno Herault$^{2,3}$, Emilie Ducouret$^4$, Anne Baranger$^5$, Niklas Tysklind$^6$,  Myriam Heuertz$^5$, Eric Marcon$^7$, Saint Omer Cazal $^6$, Geraldine Derroire$^{4}$ 
+author: Sylvain Schmitt, Bruno Herault, Emilie Ducouret, Anne Baranger, Niklas Tysklind,  Myriam Heuertz, Eric Marcon, Saint Omer Cazal, Geraldine Derroire
 date: '`r Sys.Date()`'
 output:
+  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::word_document2: default
   bookdown::html_document2:
     number_sections: false
     toc: true
@@ -320,7 +320,7 @@ ggplot(t, aes(as.factor(n), cv, fill = Trait)) +
   stat_summary(fun.y=mean, geom="line", aes(group=1)) +
   facet_grid(~ Trait) +
   scale_fill_discrete(guide = "none") +
-  xlab("Sampled tree number") +
+  xlab("Number of tree sampled") +
   ylab("Coefficient of variation (%).") +
   scale_y_sqrt()
 ```
