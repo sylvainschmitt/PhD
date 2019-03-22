@@ -3,17 +3,17 @@ title: "A09 : Traits and growth"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
   bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
@@ -32,7 +32,7 @@ library(rstan)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
-  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 8,
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
@@ -81,26 +81,36 @@ Individuals <- Individuals %>%
             funs(./sd(., na.rm = T)))
 ```
 
+## Individual growth
+
 ```{stan stanModel, output.var="Model", echo=T, eval=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
   vector<lower=0>[N] dbh ; // dbh vector
-  int<lower=1> S ; // Nb of individuals
-  int<lower=0> sp[N] ; // individuals vector
+  int<lower=1> S ; // Nb of species
+  int<lower=0> sp[N] ; // species vector
+  int<lower=1> I ; // Nb of individuals
+  int<lower=0> ind[N] ; // individual vector
+  int<lower=0> indsp[I] ; // individual in species vector
 }
 parameters {
-  vector<lower=0.1,upper=10>[S] AGRmax ; // individual potential growth deviation
+  vector<lower=0.1,upper=10>[I] AGRmaxind ; // individual potential growth
+  vector<lower=0.1,upper=10>[S] AGRmax ; // species potential growth
+  vector<lower=0,upper=10>[S] sigmaInd ; // individual potential growth deviation
   vector<lower=0,upper=200>[S] Dopt ; // optimal diameter
   vector<lower=0.1,upper=10>[S] Ks ; // kurtosis
   real<lower=0,upper=10> sigma ;
 }
 model {
-  log(AGR+1) ~ normal(AGRmax[sp] .* exp(-0.5*(log(dbh ./ Dopt[sp]) ./ Ks[sp])) .* (log(dbh ./ Dopt[sp]) ./ Ks[sp])), sigma) ;
+  AGRmaxind ~ normal(AGRmax[indsp], sigmaInd[indsp]) ;
+  for(n in 1:N)
+    log(AGR[n]+1) ~ normal(AGRmaxind[ind[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2)), sigma) ;
 }
 generated quantities {
   vector<lower=0>[N] AGRpred ;
-  AGRpred = AGRmax[sp] .* exp(-0.5*(log(dbh ./ Dopt[sp]) ./ Ks[sp])) .* (log(dbh ./ Dopt[sp]) ./ Ks[sp])) ;
+  for(n in 1:N)
+    AGRpred[n] = AGRmaxind[ind[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2)) ;
 }
 ```
 
@@ -119,24 +129,170 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 ```
 
 ```{r fits}
-data <- sample_n(ungroup(paracou), 1000)
-fit <- sampling(Model, chains = 2, save_warmup = F,
-                data = list(N = nrow(data),
-                            AGR = data$agr,
-                            dbh = data$dbh,
-                            S = length(unique(data$Species)),
-                            sp = as.numeric(as.factor(data$Species))))
-save(fit, file = "./functional_save/growth.Rdata")
+# data <- sample_n(ungroup(paracou), 1000)
+data <- ungroup(paracou)
+# fit <- sampling(Model, chains = 2, save_warmup = F,
+#                 data = list(N = nrow(data),
+#                             AGR = data$agr,
+#                             dbh = data$dbh,
+#                             S = length(unique(data$Species)),
+#                             sp = as.numeric(as.factor(data$Species)),
+#                             I = length(unique(data$idTree)),
+#                             ind = as.numeric(as.factor(data$idTree)),
+#                             indsp = data %>%
+#                               select(Species, idTree) %>%
+#                               mutate_all(as.factor) %>%
+#                               mutate_all(as.numeric) %>%
+#                               arrange(idTree) %>%
+#                               unique() %>%
+#                               select(Species) %>%
+#                               unlist()
+#                 ))
+# save(fit, file = "./functional_save/growth.Rdata")
 load("./functional_save/growth.Rdata")
 ```
 
 ```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 check_divergences(fit)
-mcmc_trace(as.array(fit), facet_args = list(labeller = label_parsed))
+# mcmc_trace(as.array(fit), facet_args = list(labeller = label_parsed))
 ```
 
 ```{r prediciton}
 data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
-  ggplot(aes(x = dbh)) + geom_point(aes(y = log(agr+1))) + geom_line(aes(y = AGRpred))
+  ggplot(aes(x = dbh, col = SpeciesLong, group = idTree)) + 
+  geom_point(aes(y = log(agr+1))) + 
+  geom_line(aes(y = AGRpred))
+```
+
+```{r trait}
+data %>% 
+  mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
+  left_join(Individuals) %>% 
+  select(Genus, Species, idTree, AGRmaxind, SLA, LDMC, LT, LA, CC) %>% 
+  filter(!is.na(SLA)) %>% 
+  unique() %>% 
+  reshape2::melt(id.vars = c("Genus", "Species", "idTree", "AGRmaxind"),
+                 variable.name = "Trait") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  ggplot(aes(value, AGRmaxind)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_grid(SpeciesLong ~ Trait, scales = "free")
+```
+
+```{r traitLm}
+data %>% 
+  mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
+  left_join(Individuals) %>% 
+  select(Genus, Species, idTree, AGRmaxind, SLA, LDMC, LT, LA, CC) %>% 
+  filter(!is.na(SLA)) %>% 
+  unique() %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  group_by(SpeciesLong) %>% 
+  do(lm = lm(AGRmaxind ~ SLA + LDMC + LT + LA + CC, data = .)) %>% 
+  broom::tidy(lm) %>% 
+  filter(p.value < 0.05) %>% 
+  kable(digits = 3)
+```
+
+## Individual vigor
+
+```{stan stanModelSp, output.var="Model", echo=T, eval=F}
+data {
+  int<lower=1> N ; // Nb of observations
+  vector<lower=0>[N] AGR ; // growth vector
+  vector<lower=0>[N] dbh ; // dbh vector
+  int<lower=1> S ; // Nb of species
+  int<lower=0> sp[N] ; // species vector
+}
+parameters {
+  vector<lower=0.1,upper=10>[S] AGRmax ; // species potential growth
+  vector<lower=0,upper=200>[S] Dopt ; // optimal diameter
+  vector<lower=0.1,upper=10>[S] Ks ; // kurtosis
+  real<lower=0,upper=10> sigma ;
+}
+model {
+  for(n in 1:N)
+    log(AGR[n]+1) ~ normal(AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2)), sigma) ;
+}
+generated quantities {
+  vector<lower=0>[N] AGRpred ;
+  for(n in 1:N)
+    AGRpred[n] = AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2)) ;
+}
+```
+
+```{r mdataSp}
+paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(idTree %in% Individuals$idTree) %>%
+  mutate(dbh = CircCorr/pi) %>% 
+  group_by(idTree) %>% 
+  arrange(idTree, CensusYear) %>% 
+  collect() %>% 
+  mutate(ddbh = dbh - lag(dbh), 
+         dt = CensusYear - lag(CensusYear)) %>% 
+  filter(ddbh > 0) %>% 
+  mutate(agr = ddbh/dt)
+```
+
+```{r fitsSp}
+# data <- sample_n(ungroup(paracou), 1000)
+data <- ungroup(paracou)
+# fit <- sampling(Model, chains = 2, save_warmup = F,
+#                 data = list(N = nrow(data),
+#                             AGR = data$agr,
+#                             dbh = data$dbh,
+#                             S = length(unique(data$Species)),
+#                             sp = as.numeric(as.factor(data$Species))
+#                 ))
+# save(fit, file = "./functional_save/growthsp.Rdata")
+load("./functional_save/growthsp.Rdata")
+```
+
+```{r predicitonSp}
+data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  ggplot(aes(x = dbh, col = SpeciesLong, group = idTree)) + 
+  geom_point(aes(y = log(agr+1)), alpha = 0.1) + 
+  geom_line(aes(y = AGRpred))
+```
+
+```{r traitSp}
+data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  filter(CensusYear == 2015) %>% 
+  mutate(Vigor = agr - AGRpred) %>% 
+  left_join(Individuals) %>% 
+  select(Genus, Species, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
+  filter(!is.na(SLA)) %>% 
+  unique() %>% 
+  reshape2::melt(id.vars = c("Genus", "Species", "idTree", "Vigor"),
+                 variable.name = "Trait") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  ggplot(aes(value, Vigor)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_grid(SpeciesLong ~ Trait, scales = "free")
+```
+
+```{r traitSpLm}
+data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  filter(CensusYear == 2015) %>% 
+  mutate(Vigor = agr - AGRpred) %>% 
+  left_join(Individuals) %>% 
+  select(Genus, Species, SpeciesLong, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
+  filter(!is.na(SLA)) %>% 
+  unique() %>% 
+  group_by(SpeciesLong) %>% 
+  do(lm = lm(Vigor ~ SLA + LDMC + LT + LA + CC, data = .)) %>% 
+  broom::tidy(lm) %>% 
+  filter(p.value < 0.05) %>% 
+  kable(digits = 3)
 ```

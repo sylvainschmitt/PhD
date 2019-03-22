@@ -12,12 +12,6 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
-# Capture
-
-We will do 16 reactions of gene capture by hybridization. Each reaction can have up to 32 samples. We first need to dispatch samples. In order to do that we will pull re-amplified samples from plate A1 and A2 to their original pit in the original library samples P1 to P5. The plate used for re-extraction and library rebuild will be named P6 anbd treated as an independant plate with repeated samples. We will thus have 6 plates of library P1 to P6. Due to non uniformity of fragment size re-extracted samples from P6 (P6.2) will be treated in a single separated reaction (so 15 remainings). All other samples will be pulled by batch of 32 following plate order.
-
-## Reactions design
-
 ```{r capture}
 library <- googlesheets::gs_title("Symcapture") %>% 
   googlesheets::gs_read("Library")
@@ -34,18 +28,64 @@ capture <- bind_rows(library %>%
                          dplyr::rename(Plate_library = Plate_library_1, Position_library = Position_library_1))
 ```
 
-```{r concentrationsCapture}
+# Capture
+
+We will do 16 reactions of gene capture by hybridization. Each reaction can have up to 32 samples. We will proceed as follow:
+
+1. __Plate reorganization__: plates state and volme will be assessed and 6 new plates (P1 to P6) will be build from (i) original libraries (P1-P5), (ii) reamplified libraries (A1-A2), and (iii) extraction and library repeat (P6). In order to do so, P6 will stay unchanged, and new plate 1 to 5 will be either reamplified libraries or original libraries if not reamplified. *Tip: remove unwanted cone from boxes when transfering original P1 to P5 to new ones to work with multi-channel pipette and prepare correspondance table to transfer reamplified plates A1 and A2 to new P1 to P5 plates crossing each line one-by-one.*
+1. __DNA dosage__: with [PicoGreen](https://www.thermofisher.com/document-connect/document-connect.html?url=https%3A%2F%2Fassets.thermofisher.com%2FTFS-Assets%2FLSG%2Fmanuals%2Fmp07581.pdf&title=UXVhbnQtaVQgUGljb0dyZWVuIGRzRE5BIFJlYWdlbnQgYW5kIEtpdHM) we will assess DNA concentration of each sample with a lader from 5 to 30 $ng.\mu L^{-1}$ in order to correctly dose low concentration samples. *Tip: PicoGreen have to be used before the 26/03 12h or after the 1/04.*
+1. __Pool building__:  Pool building will follow plate organization, with re-extracted samples (P6.2) pooled together due to high fragmet size heterogeneity. Pool building must be equimolar and will thus depend on DNA dosage. Because we won't pipette less than 0.5 $\mu L$ of the most concentrated sample of one pool, depending on the concetration of the less concentrated sample, we might need to do dilution.
+1. __Purification & Concentration__: AMPure beads will be used to clean pools. We will also use this step to concentrate samples in a smaller volume for the reaction (targeted volume of reaction is [7 $\mu L$ with 100 to 500 $ng$ of DNA](https://arborbiosci.com/wp-content/uploads/2018/04/myBaits-Manual-v4.pdf)).
+1. __Size assessment__: Pools fragments size will be assessed with  [TapeStation](https://www.agilent.com/en/promotions/agilent-4200-tapestation-system?gclid=Cj0KCQjwj9LkBRDnARIsAGQ-hUcY74n88A8zk5NB8XdzdlXYtE0IiZF7aUzKr9-RG1duhTQ7_5PoMykaAgByEALw_wcB&gclsrc=aw.ds), in order to check for correct fragment size distribution, and eventuelly further clean library pools.
+1. __Size selection ?__:  if size distribution result is not good enough, we will further clean library pools through size selection with a [BluePippin](http://www.sagescience.com/products/bluepippin/). *Info: we thus avoid capture fail with too small fragments but we risk losing libraries.*
+
+## Plate reorganization
+
+```{r originToKeep, fig.cap="Original libraries to be kept (P1-P5)."}
 capture %>% 
+  filter(Plate_library != 6) %>% 
+  mutate(origin = ifelse(is.na(Concentration_Amplified), "first", "amplified")) %>% 
   mutate(row = substr(Position_library, 1, 1)) %>% 
   mutate(col = substr(Position_library, 2, 3)) %>% 
   ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
              x = factor(col,levels = 1:12))) + 
-  geom_point(aes(col = Concentration_QuantIt), size =6)  +
-  geom_text(aes(label = round(Concentration_QuantIt)), size = 2.5, col = "white") +
+  geom_point(aes(col = origin), size =6)  +
+  geom_text(aes(label = Position_library), size = 2.5, col = "white") +
   facet_wrap(~ Plate_library, ncol = 2, labeller = "label_both") +
+  theme_bw() +
+  theme(legend.position = c(0.9, 0.1)) +
+  labs(x=NULL, y = NULL)
+```
+
+```{r amplifiedReorganizationFig, fig.cap="Original position of amplified samples."}
+amplification %>% 
+  mutate(Plate_library = as.factor(Plate_library)) %>% 
+  mutate(row = substr(Position_amplification, 1, 1)) %>% 
+  mutate(col = substr(Position_amplification, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = Plate_library), size =6)  +
+  geom_text(aes(label = Position_library), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_amplification, ncol = 2, labeller = "label_both") +
   theme_bw() +
   labs(x=NULL, y = NULL)
 ```
+
+```{r amplifiedReorganizationTab}
+amplification %>% 
+  select(Plate_amplification, Position_amplification, Plate_library, Position_library) %>% 
+  kable(caption = "Original position of amplified samples.",
+        col.names = c("Plate amplification", "Position amplification",
+                      "Plate library", "Position library"),
+        format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
+```
+
+## DNA dosage
+
+## Pool building
+
+Due to non uniformity of fragment size re-extracted samples from P6 (P6.2) will be treated in a single separated reaction (so 15 remainings). All other samples will be pulled by batch of 32 following plate order.
 
 ```{r reactionCapture}
 capture %>%
@@ -61,3 +101,8 @@ capture %>%
   labs(x=NULL, y = NULL)
 ```
 
+## Purification & Concentration
+
+## Size assessment
+
+## Size selection ?

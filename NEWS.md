@@ -1,3 +1,8 @@
+# PhD 0.1.9117
+* symcapture: capture prep
+* functional: growth test
+* bidouille: regular expressions
+
 # PhD 0.1.9116
 * functional draft: abstract ATBC & Myriam review 1
 
