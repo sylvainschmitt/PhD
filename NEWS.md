@@ -1,4 +1,7 @@
 # PhD 0.1.9117
+* symcapture: PicoGreen1
+
+# PhD 0.1.9117
 * symcapture: capture prep
 * functional: growth test
 * bidouille: regular expressions

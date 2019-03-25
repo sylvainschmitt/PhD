@@ -5,6 +5,9 @@ library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -71,7 +74,7 @@ amplification %>%
   labs(x=NULL, y = NULL)
 ```
 
-```{r amplifiedReorganizationTab}
+```{r amplifiedReorganizationTab, eval=F}
 amplification %>% 
   select(Plate_amplification, Position_amplification, Plate_library, Position_library) %>% 
   kable(caption = "Original position of amplified samples.",
@@ -82,6 +85,42 @@ amplification %>%
 ```
 
 ## DNA dosage
+
+```{r PicoGreen}
+picogreen <- read_csv(file.path(path, "QuantIt", 
+                   "SYMCAPTURE_25032019_PicoGreen_fluo.csv"), skip = 52)[2:4] %>% 
+  dplyr::rename(position = Well, fluo = `dosage_fluo_384_CB:485,520`) %>% 
+  dplyr::select(position, fluo) %>% 
+  filter(!is.na(fluo)) %>% 
+  left_join(read_csv(file.path(path, "QuantIt", 
+                               "SYMCAPTURE_25032019_PicoGreen_plates.csv"),  skip = 36) %>% 
+              dplyr::rename(row = X1) %>% 
+              reshape2::melt(id.vars = "row", variable.name = "col", value.name = "library") %>% 
+              mutate(position = paste0(row, col)) %>% 
+              select(position, library)) %>% 
+  separate(library, c("Plate_library", "Position_library"), "_") %>% 
+  mutate(Plate_library = as.numeric(gsub("P", "", Plate_library))) %>% 
+  select(Plate_library, Position_library, fluo) %>% 
+  arrange(Plate_library, Position_library) %>% 
+  left_join(data.frame(Plate_library = 0,
+                       Position_library = as.vector(sapply(1:6, function(x) paste0(LETTERS[1:4], x))),
+                       concentration = rep(c(0, 5, 10, 20, 25, 40), each = 4)))
+data1 <- picogreen %>% filter(Plate_library == 0)
+picogreen <- picogreen %>% 
+  mutate(concentration_est = lm(concentration ~ fluo, data = data1)$coefficients[2]*fluo)
+picogreen %>% 
+  filter(Plate_library != 0) %>% 
+  mutate(row = substr(Position_library, 1, 1)) %>% 
+  mutate(col = substr(Position_library, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = round(concentration_est)), size =6)  +
+  geom_text(aes(label = round(concentration_est)), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_library, ncol = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
 
 ## Pool building
 
