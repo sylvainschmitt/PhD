@@ -1,3 +1,8 @@
+# PhD 0.1.9118
+* symcapture: capture
+* functional: rm bullets & growth
+* performance: reorganisation and death
+
 # PhD 0.1.9117
 * symcapture: PicoGreen1
 

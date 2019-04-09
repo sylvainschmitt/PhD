@@ -39,46 +39,62 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data, eval=T}
-# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
-#   googlesheets::gs_read("AllTraits") %>%
-#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
-#   mutate(Genus = "Symphonia") %>%
-#   rename(Species = Morphotype) %>%
-#   mutate(Species = ifelse(Species == "Indet.",
-#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
-#                                      "sp.1" =  "S")], Species))
-# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
-#   googlesheets::gs_read("AllTraits") %>%
-#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
-#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
-#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
-#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
-#            SpeciesLong, Bark, Dawkins) %>%
-#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
-#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
-#   ungroup() %>%
-#   mutate(invSLA=1/SLA) %>%
-#   mutate(invLA=1/LA)
-# load("./functional_save/env.Rdata")
-# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
-# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
-# save(Individuals, file = "./functional_save/Individuals.Rdata")
-load("./functional_save/Individuals.Rdata")
-load("./functional_save/CompetitionMatrix.Rdata")
-sdDBH <- sd(Individuals$DBH)
-Individuals <- Individuals %>% 
-  rename(LMA = invSLA) %>% 
-  group_by(Species) %>% 
-  filter(n() > 20) %>% 
+```{r data}
+d <- 20
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
+  filter(Species != "Indet.") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+load("./distribution_save/env.Rdata")
+load("./distribution_save/Competition.Rdata")
+Competition <- Competition %>% 
+  mutate(dij = ifelse(dij <1, 1, dij)) %>% 
+  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
+  mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
+  group_by(idTree) %>% 
+  summarise(NCIother = sum(DBHj^2*exp(-0.25*dij)*abs(strata-1)),
+            NCIspecies = sum(DBHj^2*exp(-0.25*dij)*strata))
+Complexes <- bind_rows(
+  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
+  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("hexaphylla", "praealta", "simaboides")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1")))
+load("./distribution_save/species.Rdata")
+alpha <- apply(as.matrix(fits$Symphonia, pars = "alpha"), 2, mean)
+beta <- apply(as.matrix(fits$Symphonia, pars = "beta"), 2, mean)
+gamma <- apply(as.matrix(fits$Symphonia, pars = "gamma"), 2, mean)
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(Complexes) %>% 
+  left_join(Competition) %>% 
+  filter(!is.na(Plot)) %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Complex, Species) %>% 
+  filter(n() > 10) %>%
   ungroup() %>% 
-  left_join(Competition %>% 
-              group_by(idTree) %>% 
-              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
-  mutate(NCI = log(NCI)) %>% 
-  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
-            funs(./sd(., na.rm = T)))
+  filter(Complex == "Symphonia") %>% 
+  mutate_at(c("TWI", "NCIother", "NCIspecies"), funs(scale)) %>% 
+  mutate(suitability = ifelse(Species == "globulifera",
+                              tsensembler:::softmax(alpha[1] + beta[1]*TWI + beta[3]*NCIother +
+                                                      beta[5]*NCIspecies + gamma[1]*TWI^2 +
+                                                      gamma[3]*NCIother^2 + gamma[5]*NCIspecies^2),
+                              tsensembler:::softmax(alpha[2] + beta[2]*TWI + beta[4]*NCIother +
+                                                      beta[6]*NCIspecies + gamma[2]*TWI^2 +
+                                                      gamma[4]*NCIother^2 + gamma[6]*NCIspecies^2)))
 ```
 
 ## Individual growth
@@ -117,7 +133,7 @@ generated quantities {
 ```{r mdata}
 paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
-  filter(idTree %in% Individuals$idTree) %>%
+  filter(idTree %in% data$idTree) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
@@ -125,31 +141,31 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(ddbh = dbh - lag(dbh), 
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
-  mutate(agr = ddbh/dt)
+  mutate(agr = ddbh/dt) %>% 
+  ungroup(paracou) %>% 
+  na.omit()
 ```
 
 ```{r fits}
-# data <- sample_n(ungroup(paracou), 1000)
-data <- ungroup(paracou)
-# fit <- sampling(Model, chains = 2, save_warmup = F,
-#                 data = list(N = nrow(data),
-#                             AGR = data$agr,
-#                             dbh = data$dbh,
-#                             S = length(unique(data$Species)),
-#                             sp = as.numeric(as.factor(data$Species)),
-#                             I = length(unique(data$idTree)),
-#                             ind = as.numeric(as.factor(data$idTree)),
-#                             indsp = data %>%
-#                               select(Species, idTree) %>%
-#                               mutate_all(as.factor) %>%
-#                               mutate_all(as.numeric) %>%
-#                               arrange(idTree) %>%
-#                               unique() %>%
-#                               select(Species) %>%
-#                               unlist()
-#                 ))
-# save(fit, file = "./functional_save/growth.Rdata")
-load("./functional_save/growth.Rdata")
+fit <- sampling(Model, chains = 2, save_warmup = F,
+                data = list(N = nrow(paracou),
+                            AGR = paracou$agr,
+                            dbh = paracou$dbh,
+                            S = length(unique(paracou$Species)),
+                            sp = as.numeric(as.factor(paracou$Species)),
+                            I = length(unique(paracou$idTree)),
+                            ind = as.numeric(as.factor(paracou$idTree)),
+                            indsp = paracou %>%
+                              select(Species, idTree) %>%
+                              mutate_all(as.factor) %>%
+                              mutate_all(as.numeric) %>%
+                              arrange(idTree) %>%
+                              unique() %>%
+                              select(Species) %>%
+                              unlist()
+                ))
+save(fit, file = "./distribution_save/growth.Rdata")
+load("./distribution_save/growth.Rdata")
 ```
 
 ```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
@@ -227,7 +243,7 @@ generated quantities {
 ```{r mdataSp}
 paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
-  filter(idTree %in% Individuals$idTree) %>%
+  filter(idTree %in% data$idTree) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
@@ -235,25 +251,25 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(ddbh = dbh - lag(dbh), 
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
-  mutate(agr = ddbh/dt)
+  mutate(agr = ddbh/dt) %>% 
+  ungroup(paracou) %>% 
+  na.omit()
 ```
 
 ```{r fitsSp}
-# data <- sample_n(ungroup(paracou), 1000)
-data <- ungroup(paracou)
-# fit <- sampling(Model, chains = 2, save_warmup = F,
-#                 data = list(N = nrow(data),
-#                             AGR = data$agr,
-#                             dbh = data$dbh,
-#                             S = length(unique(data$Species)),
-#                             sp = as.numeric(as.factor(data$Species))
-#                 ))
-# save(fit, file = "./functional_save/growthsp.Rdata")
-load("./functional_save/growthsp.Rdata")
+fit <- sampling(Model, chains = 2, save_warmup = F,
+                data = list(N = nrow(paracou),
+                            AGR = paracou$agr,
+                            dbh = paracou$dbh,
+                            S = length(unique(paracou$Species)),
+                            sp = as.numeric(as.factor(paracou$Species))
+                ))
+save(fit, file = "./distribution_save/growthsp.Rdata")
+load("./distribution_save/growthsp.Rdata")
 ```
 
 ```{r predicitonSp}
-data %>% 
+left_join(paracou, data) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
   ggplot(aes(x = dbh, col = SpeciesLong, group = idTree)) + 
@@ -262,22 +278,17 @@ data %>%
 ```
 
 ```{r traitSp}
-data %>% 
+left_join(paracou, data) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
   filter(CensusYear == 2015) %>% 
   mutate(Vigor = agr - AGRpred) %>% 
-  left_join(Individuals) %>% 
-  select(Genus, Species, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
-  filter(!is.na(SLA)) %>% 
-  unique() %>% 
-  reshape2::melt(id.vars = c("Genus", "Species", "idTree", "Vigor"),
-                 variable.name = "Trait") %>% 
+  select(Genus, Species, idTree, Vigor, suitability) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
-  ggplot(aes(value, Vigor)) +
+  ggplot(aes(suitability, Vigor, col = Species)) +
   geom_point() +
   geom_smooth(method = "lm") +
-  facet_grid(SpeciesLong ~ Trait, scales = "free")
+  scale_x_log10()
 ```
 
 ```{r traitSpLm}
