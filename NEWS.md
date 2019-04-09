@@ -1,3 +1,6 @@
+# PhD 0.1.9119
+* parvicapture: init & trscAlign on genologin
+
 # PhD 0.1.9118
 * symcapture: capture
 * functional: rm bullets & growth
