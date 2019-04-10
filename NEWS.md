@@ -1,3 +1,6 @@
+# PhD 0.1.9120
+* parvicapture: funcitonal selection v1
+
 # PhD 0.1.9119
 * parvicapture: init & trscAlign on genologin
 

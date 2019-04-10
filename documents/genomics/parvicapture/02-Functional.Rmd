@@ -16,13 +16,22 @@ path <- "../../../data/Eschweilera_Genomic/Oscar_Transcriptome/"
 
 @Vargas2019 used 8 individuals of *Lecythidaceae* including 2 *Eschweilera coriacea* and 1 *Eschweilera sagotiana* for transcriptomic analysis. RNA reads were assembled with `Trinity` into transcripts. We will proceed with following steps:
 
-1. __*E. coriacea* alignment on *E. sagotiana*__: `BLAT` will be used to align *E. coriacea* transcripts alignment on *E. sagotiana*, and we will keep transcript matching only one transcripts from the other species to avoid paralogs and have robust targets among species.
+1. __*E. coriacea* alignment on *E. sagotiana*__: `BLAT` will be used to align *E. coriacea* transcripts alignment on *E. sagotiana*, and we will keep transcript reciprocally matching only one transcripts from the other species to avoid paralogs and have robust targets among species.
 1. __Open Reading Frames (ORFs) detection__: `transdecoder` will be used to detect Open Reading Frames (ORFs) in previously selected scaffolds within *E. sagotiana*. ORFs with a starting codon (Methyonin M) and genes without overlapping genes will be kept.
-1. __Annotation ?__:
-1. __Candidates genes ?__:
 1. __Selection__:
 
 ## *E. coriacea* alignment on *E. sagotiana*
+
+After alignement we obtained the following statistics :
+
+* 2 954 134 transcripts with match
+* 19 973 transcripts with reciprocal single-match
+* 9 481 *E. sagotiana* transcripts with reciprocal single-match
+* 5 636 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **1**
+* 3 833 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **2**
+* 896 *E. sagotiana* transcripts with reciprocal single-match  with both *E. coriacea*
+
+For the moment we will use the  896 *E. sagotiana* transcripts with reciprocal single-match  with both *E. coriacea* (to be changed because of not enough transcripts). We obtained relativelly small transcripts (mean length < 250 bp) but with high coverage (mean close to 100%, Fig. \@ref(fig:alignmentFilteringFig)).
 
 ```{bash trscAlign, eval=F, echo=T}
 #!/bin/bash
@@ -46,14 +55,153 @@ Essagot=EssagoL.trinity.Trinity.fasta
 # blat=~/Tools/blatSrc/bin/blat
 
 # alignment
-blat $Escor1 $Essagot alignment_Escor1.psl
-blat $Escor2 $Essagot alignment_Escor2.psl
+blat $Escor1 $Essagot alignment_Essagot1.psl
+blat $Escor2 $Essagot alignment_Essagot2.psl
+blat $Essagot $Escor1 alignment_Escor1.psl
+blat $Essagot $Escor2 alignment_Escor2.psl
+```
+
+```{r alignment}
+alignment <- lapply(c("alignment_Escor1.psl", "alignment_Escor2.psl",
+                      "alignment_Essagot1.psl", "alignment_Essagot2.psl"), function(file)
+  read_tsv(file.path(path, file), skip = 4, 
+           col_names = c("matches", "misMatches", "repMatches", "nCount", 
+                         "qNumInsert", "qBaseInsert",
+                         "tNumInsert", "tBaseInsert", "strand", 
+                         "qName", "qSize", "qStart", "qEnd", 
+                         "tName", "tSize", "tStart", "tEnd", 
+                         "blockCount", "blockSizes", "qStarts", "tStarts")) %>% # psl3 generics
+  mutate(query = file)) %>% 
+  bind_rows() %>% 
+  mutate(query = gsub("alignment_", "", query)) %>% 
+  mutate(query = gsub(".psl", "", query)) %>% 
+  mutate(reference = ifelse(grepl("Escor", query), "Essagot",
+                            ifelse(grepl(1, query), "Escor1", "Escor2"))) %>% 
+  mutate(alnSize = matches + misMatches + repMatches) %>% 
+  select(query, reference, alnSize,
+         qName, qSize, qStart, qEnd,
+         tName, tSize, tStart, tEnd)
+```
+
+```{r alignmentFiltering}
+alignmentFiltered <- alignment %>% 
+  mutate(sagotName = ifelse(reference == "Essagot", tName, qName)) %>% 
+  group_by(query, reference, qName) %>% 
+  mutate(Nq = n()) %>% 
+  group_by(query, reference, tName) %>% 
+  mutate(Nt = n()) %>% 
+  filter(Nq ==1, Nt == 1) %>% 
+  group_by(query, sagotName) %>% 
+  summarise(Nmatch = n()) %>% 
+  # filter(Nmatch == 1) %>% 
+  spread(query, Nmatch) %>% 
+  filter(Escor1 == 1, Essagot1 == 1, Escor2 == 1, Essagot2 == 1)
+select(alignmentFiltered, sagotName) %>% 
+  write_tsv(path = file.path(path, "Essago.filtered.list"),
+            col_names = F)
+```
+
+```{r alignmentFilteringFig, fig.cap="E. sagotiana transcripts distribution by size and alignment coverage."}
+g <- alignment %>% 
+  filter(reference == "Essagot") %>% 
+  filter(tName %in% alignmentFiltered$sagotName) %>% 
+  group_by(tName) %>% 
+  filter(alnSize == max(alnSize)) %>% 
+  mutate(coverage = alnSize/tSize*100) %>% 
+  ggplot(aes(tSize, coverage)) +
+  geom_point() +
+  xlab("E. sagotiana transcript size (bp)") +
+  ylab("Alignement coverage on transcript (%)")
+ggExtra::ggMarginal(g)
+```
+
+```{bash alignmentFilteringFasta, eval=F, echo=T}
+cd ../../../data/Eschweilera_Genomic/Oscar_Transcriptome/
+ref=EssagoL.trinity.Trinity.fasta
+ids=Essago.filtered.list
+~/Tools/SeqFilter/bin/SeqFilter $ref --ids $ids -o Essago.filtered.fasta
 ```
 
 ## Open Reading Frames (ORFs) detection
 
-## Annotation ?
+We detected 187 ORFs with `transdecoder` resulting in 41 ORFs including a starting codon (Fig. \@ref(fig:orfFilterGraph)) and 41 non-overlapping ORFs (Fig. \@ref(fig:orfOverlap)) with a starting codon used for transcript filtering.
 
-## Candidates genes ?
+```{bash ORFdetection, eval=F, echo=T}
+cd ../../../data/Eschweilera_Genomic/Oscar_Transcriptome/
+mkdir TransDecoder
+cp Essago.filtered.fasta TransDecoder/
+cd TransDecoder
+TransDecoder.LongOrfs -t Essago.filtered.fasta
+TransDecoder.Predict -t Essago.filtered.fasta
+rm Essago.filtered.fasta
+awk 'BEGIN{RS=">";OFS="\t"}NR>1{print $1,$4,$5,$6,$7,$8$9$10$11$12}' Essago.filtered.fasta.transdecoder.pep > Essago.filtered.fasta.transdecoder.pep.tsv
+```
+
+```{r orf}
+orf <- read_tsv(file.path(path, "TransDecoder", "Essago.filtered.fasta.transdecoder.pep.tsv"), 
+         col_names = c("orf", "type", "length", "strandScore", 
+                      "transcriptPositionStrand", "peptide")) %>% 
+  mutate(type = gsub("type:", "", type)) %>% 
+  mutate(length = gsub("len:", "", length)) %>% 
+  separate(strandScore, c("strand", "score"), "=") %>% 
+  mutate(strand = gsub("(", "", strand, fixed = T)) %>% 
+  mutate(strand = gsub("),score", "", strand)) %>% 
+  separate(transcriptPositionStrand, c("transcript", "position"), ":") %>% 
+  separate(position, c("trscStart", "trscStop"), "-") %>% 
+  mutate(trscStop = gsub("[[:punct:]]", "", trscStop)) %>% 
+  mutate(left = substr(peptide, 1, 1)) %>% 
+  mutate(right = substr(peptide, nchar(peptide), nchar(peptide))) %>% 
+  group_by(transcript) %>% 
+  arrange(transcript, trscStart) %>% 
+  mutate(overlap = ifelse(trscStart < lag(trscStop), 1, 0)) %>% 
+  mutate(overlap = ifelse(is.na(overlap), 0, overlap)) %>% 
+  ungroup()
+orf %>% 
+  filter(left == "M") %>% 
+  select(transcript) %>% 
+  write_tsv(path = file.path(path, "Essago.filteredORF.list"),
+            col_names = F)
+```
+
+```{r orfFilterGraph, fig.cap="Open Reading Frames left and right peptides."}
+orf %>% 
+  select(orf, strand, left, right) %>% 
+  reshape2::melt(id.vars = c("orf", "strand"),
+                 variable.name = "side",
+                 value.name = "peptide") %>% 
+  ggplot(aes(peptide, fill = (peptide %in% c("M", "*")))) +
+  geom_bar() +
+  facet_grid(strand~side, labeller = "label_both") +
+  scale_fill_discrete(guide = F)
+```
+
+```{r orfOverlap, fig.cap="Open Reading Frames overlaps."}
+ggplot(orf, aes(overlap, fill = (overlap == 0))) +
+  geom_bar()
+```
+
+```{bash orfFilteringFasta, eval=F, echo=T}
+cd ../../../data/Eschweilera_Genomic/Oscar_Transcriptome/
+ref=Essago.filtered.fasta
+ids=Essago.filteredORF.list
+~/Tools/SeqFilter/bin/SeqFilter $ref --ids $ids -o Essago.filteredORF.fasta
+```
 
 ## Selection
+
+We need to include more transcripts to select enough sequences. In the meantime we selected all sequences.
+
+```{r functional}
+targets <- readDNAStringSet(file.path(path, "Essago.filteredORF.fasta"))
+data.frame(n = length(targets),
+           width = sum(width(targets))/10^6,
+           Nperc = sum(letterFrequency(targets, "N"))/sum(width(targets))) %>% 
+    kable(caption = "Selected, funcional targets.",
+        col.names = c("N", "Width (Mbp)", "Mask (%N)"),
+        format.args = list(big.mark = " "))
+```
+
+```{bash arborSciencefunctional, eval=F}
+cd ../../../data/Eschweilera_Genomic/Oscar_Transcriptome/
+cp XXXX.fasta functional.targets.2019XXXX.fasta
+```
