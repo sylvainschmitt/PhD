@@ -92,10 +92,9 @@ alignmentFiltered <- alignment %>%
   mutate(Nt = n()) %>% 
   filter(Nq ==1, Nt == 1) %>% 
   group_by(query, sagotName) %>% 
-  summarise(Nmatch = n()) %>% 
-  # filter(Nmatch == 1) %>% 
+  summarise(Nmatch = n()) %>%
   spread(query, Nmatch) %>% 
-  filter(Escor1 == 1, Essagot1 == 1, Escor2 == 1, Essagot2 == 1)
+  filter((Escor1 == 1 & Essagot1 == 1) | (Escor2 == 1 & Essagot2 == 1))
 select(alignmentFiltered, sagotName) %>% 
   write_tsv(path = file.path(path, "Essago.filtered.list"),
             col_names = F)
@@ -110,8 +109,11 @@ g <- alignment %>%
   mutate(coverage = alnSize/tSize*100) %>% 
   ggplot(aes(tSize, coverage)) +
   geom_point() +
+  geom_hline(yintercept = 50, col = "red") +
+  geom_vline(xintercept = 1000, col = "red") +
   xlab("E. sagotiana transcript size (bp)") +
-  ylab("Alignement coverage on transcript (%)")
+  ylab("Alignement coverage on transcript (%)") +
+  ggtitle("N = 54", "too few we need to reduce transcript minimum size and/or minimum coverage.")
 ggExtra::ggMarginal(g)
 ```
 
@@ -132,10 +134,43 @@ mkdir TransDecoder
 cp Essago.filtered.fasta TransDecoder/
 cd TransDecoder
 TransDecoder.LongOrfs -t Essago.filtered.fasta
-TransDecoder.Predict -t Essago.filtered.fasta
+hmmscan --cpu 4 --domtblout pfam.domtblout ~/Tools/Trinotate/admin/Pfam-A.hmm Essago.filtered.fasta.transdecoder_dir/longest_orfs.pep
+blastp -query Essago.filtered.fasta.transdecoder_dir/l
+ongest_orfs.pep -db ~/Tools/UniProt/uniprot_sprot.fasta -max_target_seqs 1 -outfmt 6 -evalue 1e-5 -num_threads 10 > blastp.outfmt6
+TransDecoder.Predict -t Essago.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
 rm Essago.filtered.fasta
 awk 'BEGIN{RS=">";OFS="\t"}NR>1{print $1,$4,$5,$6,$7,$8$9$10$11$12}' Essago.filtered.fasta.transdecoder.pep > Essago.filtered.fasta.transdecoder.pep.tsv
 ```
+
+```{bash ORFdetectionCluster, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=48:00:00
+#SBATCH -J transdecoder
+#SBATCH -o transdecoder.out
+#SBATCH -e transdecoder.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=4
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+# Environment
+module purge
+module load bioinfo/TransDecoder-v5.0.2
+module load bioinfo/hmmer-3.1b2
+module load bioinfo/ncbi-blast-2.7.1+
+
+# script
+mkdir TransDecoder
+cp Essago.filtered.fasta TransDecoder/
+cd TransDecoder
+TransDecoder.LongOrfs -t Essago.filtered.fasta
+hmmscan --cpu 4 --domtblout pfam.domtblout ../Pfam/Pfam-A.hmm Essago.filtered.fasta.transdecoder_dir/longest_orfs.pep
+blastp -query Essago.filtered.fasta.transdecoder_dir/longest_orfs.pep -db /bank/ebi/uniprot/current/fasta/uniprot_sprot.fasta -max_target_seqs 1 -outfmt 6 -evalue 1e-5 -num_threads 10 > blastp.outfmt6
+TransDecoder.Predict -t Essago.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+rm Essago.filtered.fasta
+awk 'BEGIN{RS=">";OFS="\t"}NR>1{print $1,$4,$5,$6,$7,$8$9$10$11$12}' Essago.filtered.fasta.transdecoder.pep > Essago.filtered.fasta.transdecoder.pep.tsv
+```
+
+<!-- /java -jar ~/Tools/genomeview/genomeview.jar ../Essago.filtered.fasta Essago.filtered.fasta.transdecoder.bed -->
 
 ```{r orf}
 orf <- read_tsv(file.path(path, "TransDecoder", "Essago.filtered.fasta.transdecoder.pep.tsv"), 
