@@ -458,7 +458,34 @@ nanodrop %>%
 
 ## Size assessment
 
-## Size selection ?
+We have an heterogeneity of ffragments size distribution among pools with a large spectrum (Fig. \@ref(fig:TapeStation)). We will use TapeStation to select fragments between 330 and 700 bp.
+
+```{r TapeStation, fig.cap="Pools size assessment."}
+knitr::include_graphics("symcapture_data/TapeStation.png")
+```
+
+## Size selection
+
+We will do pools of pools for the size selection with Pippin (Fig. \@ref(fig:PoolGraph)), resulting in $22*4=88 \mu L$ per pool. But the Pippin uses 30 $\mu L$ and we want to do two reactions of Pippin per pool. So we reduced pool volume to 60 $\mu L$ per pool with the speed vac. Then we used TapeStation with a repeat of the 4 pools with 30 $\mu L$ per pool and size selection. We obtained ... about final size distribution...
+
+```{r PoolData}
+capture <- capture %>% 
+  mutate(Pool = rep(1:4, each = 4)[Reaction])
+# write_csv(capture, file.path(path, "capture.csv"))
+```
+
+```{r PoolGraph, fig.cap="Pool of reactions."}
+capture %>% 
+  mutate(row = substr(Position_library, 1, 1)) %>% 
+  mutate(col = substr(Position_library, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = Pool), size =6)  +
+  geom_text(aes(label = Pool), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_library) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
 
 ## Capture
 

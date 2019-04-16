@@ -1,3 +1,7 @@
+# PhD 0.1.9122
+* symcapture: pdf & size selection
+* parvicapture: functional targets v1
+
 # PhD 0.1.9121
 * parvicapture: transdecoder
 

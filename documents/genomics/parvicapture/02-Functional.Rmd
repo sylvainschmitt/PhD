@@ -25,13 +25,12 @@ path <- "../../../data/Eschweilera_Genomic/Oscar_Transcriptome/"
 After alignement we obtained the following statistics :
 
 * 2 954 134 transcripts with match
-* 19 973 transcripts with reciprocal single-match
-* 9 481 *E. sagotiana* transcripts with reciprocal single-match
-* 5 636 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **1**
-* 3 833 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **2**
-* 896 *E. sagotiana* transcripts with reciprocal single-match  with both *E. coriacea*
+* 19 973 transcripts with single-match
+* 9 474 *E. sagotiana* transcripts with reciprocal single-match
+* 5 637 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **1**
+* 3 837 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **2**
 
-For the moment we will use the  896 *E. sagotiana* transcripts with reciprocal single-match  with both *E. coriacea* (to be changed because of not enough transcripts). We obtained relativelly small transcripts (mean length < 250 bp) but with high coverage (mean close to 100%, Fig. \@ref(fig:alignmentFilteringFig)).
+We will use the 9 474  *E. sagotiana* transcripts with reciprocal single-match on one or both *E. coriacea*. We obtained relativelly small transcripts (mean length < 250 bp) but with high coverage (mean close to 100%, Fig. \@ref(fig:alignmentFilteringFig)).
 
 ```{bash trscAlign, eval=F, echo=T}
 #!/bin/bash
@@ -55,15 +54,17 @@ Essagot=EssagoL.trinity.Trinity.fasta
 # blat=~/Tools/blatSrc/bin/blat
 
 # alignment
-blat $Escor1 $Essagot alignment_Essagot1.psl
-blat $Escor2 $Essagot alignment_Essagot2.psl
-blat $Essagot $Escor1 alignment_Escor1.psl
-blat $Essagot $Escor2 alignment_Escor2.psl
+blat $Escor1 $Essagot EssagotonEscor1.psl
+blat $Escor2 $Essagot EssagotonEscor2.psl
+blat $Essagot $Escor1 Escor1onEssagot.psl
+blat $Essagot $Escor2 Escor2onEssagot.psl
+mkdir Alignment
+mv *.psl Alignment
 ```
 
 ```{r alignment}
-alignment <- lapply(c("alignment_Escor1.psl", "alignment_Escor2.psl",
-                      "alignment_Essagot1.psl", "alignment_Essagot2.psl"), function(file)
+alignment <- lapply(list.files(file.path(path, "Alignment"), full.names = T), 
+                    function(file)
   read_tsv(file.path(path, file), skip = 4, 
            col_names = c("matches", "misMatches", "repMatches", "nCount", 
                          "qNumInsert", "qBaseInsert",
@@ -73,10 +74,10 @@ alignment <- lapply(c("alignment_Escor1.psl", "alignment_Escor2.psl",
                          "blockCount", "blockSizes", "qStarts", "tStarts")) %>% # psl3 generics
   mutate(query = file)) %>% 
   bind_rows() %>% 
-  mutate(query = gsub("alignment_", "", query)) %>% 
+  mutate(query = gsub("../../../data/Eschweilera_Genomic/Oscar_Transcriptome//Alignment/", 
+                      "", query)) %>% 
   mutate(query = gsub(".psl", "", query)) %>% 
-  mutate(reference = ifelse(grepl("Escor", query), "Essagot",
-                            ifelse(grepl(1, query), "Escor1", "Escor2"))) %>% 
+  separate(query, c("query", "reference"), "on") %>% 
   mutate(alnSize = matches + misMatches + repMatches) %>% 
   select(query, reference, alnSize,
          qName, qSize, qStart, qEnd,
@@ -84,37 +85,44 @@ alignment <- lapply(c("alignment_Escor1.psl", "alignment_Escor2.psl",
 ```
 
 ```{r alignmentFiltering}
+# alignmentFiltered <- alignment %>% 
+#   mutate(sagotName = ifelse(reference == "Essagot", tName, qName)) %>% 
+#   group_by(query, reference, qName) %>% 
+#   mutate(Nq = n()) %>% 
+#   group_by(query, reference, tName) %>% 
+#   mutate(Nt = n()) %>% 
+#   filter(Nq == 1, Nt == 1) %>% 
+#   group_by(query, sagotName) %>% 
+#   summarise(Nmatch = n()) %>%
+#   spread(query, Nmatch) %>% 
+#   filter((Escor1 == 1 & Essagot1 == 1) | (Escor2 == 1 & Essagot2 == 1))
 alignmentFiltered <- alignment %>% 
-  mutate(sagotName = ifelse(reference == "Essagot", tName, qName)) %>% 
   group_by(query, reference, qName) %>% 
   mutate(Nq = n()) %>% 
   group_by(query, reference, tName) %>% 
   mutate(Nt = n()) %>% 
-  filter(Nq ==1, Nt == 1) %>% 
-  group_by(query, sagotName) %>% 
-  summarise(Nmatch = n()) %>%
-  spread(query, Nmatch) %>% 
-  filter((Escor1 == 1 & Essagot1 == 1) | (Escor2 == 1 & Essagot2 == 1))
-select(alignmentFiltered, sagotName) %>% 
-  write_tsv(path = file.path(path, "Essago.filtered.list"),
-            col_names = F)
+  filter(Nq == 1, Nt == 1) %>% 
+  ungroup() %>% 
+  filter(qName %in% tName & tName %in% qName) %>% 
+  filter(reference == "Essagot") 
+write_tsv(data.frame(trsc = unique(alignmentFiltered$tName)),
+          path = file.path(path, "Essago.filtered.list"),
+          col_names = F)
 ```
 
 ```{r alignmentFilteringFig, fig.cap="E. sagotiana transcripts distribution by size and alignment coverage."}
-g <- alignment %>% 
-  filter(reference == "Essagot") %>% 
-  filter(tName %in% alignmentFiltered$sagotName) %>% 
-  group_by(tName) %>% 
-  filter(alnSize == max(alnSize)) %>% 
+alignmentFiltered %>%
+  group_by(tName, tSize) %>%
+  summarise(tStart = min(tStart), tEnd = max(tEnd)) %>% 
+  mutate(alnSize = tEnd - tStart) %>% 
   mutate(coverage = alnSize/tSize*100) %>% 
   ggplot(aes(tSize, coverage)) +
   geom_point() +
   geom_hline(yintercept = 50, col = "red") +
-  geom_vline(xintercept = 1000, col = "red") +
+  geom_vline(xintercept = 500, col = "red") +
   xlab("E. sagotiana transcript size (bp)") +
   ylab("Alignement coverage on transcript (%)") +
-  ggtitle("N = 54", "too few we need to reduce transcript minimum size and/or minimum coverage.")
-ggExtra::ggMarginal(g)
+  ggtitle("N = 616", "too few we need to reduce transcript minimum size and/or minimum coverage.")
 ```
 
 ```{bash alignmentFilteringFasta, eval=F, echo=T}
@@ -126,21 +134,7 @@ ids=Essago.filtered.list
 
 ## Open Reading Frames (ORFs) detection
 
-We detected 187 ORFs with `transdecoder` resulting in 41 ORFs including a starting codon (Fig. \@ref(fig:orfFilterGraph)) and 41 non-overlapping ORFs (Fig. \@ref(fig:orfOverlap)) with a starting codon used for transcript filtering.
-
-```{bash ORFdetection, eval=F, echo=T}
-cd ../../../data/Eschweilera_Genomic/Oscar_Transcriptome/
-mkdir TransDecoder
-cp Essago.filtered.fasta TransDecoder/
-cd TransDecoder
-TransDecoder.LongOrfs -t Essago.filtered.fasta
-hmmscan --cpu 4 --domtblout pfam.domtblout ~/Tools/Trinotate/admin/Pfam-A.hmm Essago.filtered.fasta.transdecoder_dir/longest_orfs.pep
-blastp -query Essago.filtered.fasta.transdecoder_dir/l
-ongest_orfs.pep -db ~/Tools/UniProt/uniprot_sprot.fasta -max_target_seqs 1 -outfmt 6 -evalue 1e-5 -num_threads 10 > blastp.outfmt6
-TransDecoder.Predict -t Essago.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
-rm Essago.filtered.fasta
-awk 'BEGIN{RS=">";OFS="\t"}NR>1{print $1,$4,$5,$6,$7,$8$9$10$11$12}' Essago.filtered.fasta.transdecoder.pep > Essago.filtered.fasta.transdecoder.pep.tsv
-```
+We detected 1530 ORFs on 1530 unique transcripts with `transdecoder` in previously selected transcripts, representing . Only, 469 included a start codon (Fig. \@ref(fig:orfFilterGraph)), which was too low and not retained as a filtering criterion.
 
 ```{bash ORFdetectionCluster, eval=F, echo=T}
 #!/bin/bash
@@ -165,12 +159,11 @@ cd TransDecoder
 TransDecoder.LongOrfs -t Essago.filtered.fasta
 hmmscan --cpu 4 --domtblout pfam.domtblout ../Pfam/Pfam-A.hmm Essago.filtered.fasta.transdecoder_dir/longest_orfs.pep
 blastp -query Essago.filtered.fasta.transdecoder_dir/longest_orfs.pep -db /bank/ebi/uniprot/current/fasta/uniprot_sprot.fasta -max_target_seqs 1 -outfmt 6 -evalue 1e-5 -num_threads 10 > blastp.outfmt6
-TransDecoder.Predict -t Essago.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+# TransDecoder.Predict -t Essago.filtered.fasta --retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+TransDecoder.Predict -t Essago.filtered.fasta
 rm Essago.filtered.fasta
 awk 'BEGIN{RS=">";OFS="\t"}NR>1{print $1,$4,$5,$6,$7,$8$9$10$11$12}' Essago.filtered.fasta.transdecoder.pep > Essago.filtered.fasta.transdecoder.pep.tsv
 ```
-
-<!-- /java -jar ~/Tools/genomeview/genomeview.jar ../Essago.filtered.fasta Essago.filtered.fasta.transdecoder.bed -->
 
 ```{r orf}
 orf <- read_tsv(file.path(path, "TransDecoder", "Essago.filtered.fasta.transdecoder.pep.tsv"), 
@@ -191,10 +184,8 @@ orf <- read_tsv(file.path(path, "TransDecoder", "Essago.filtered.fasta.transdeco
   mutate(overlap = ifelse(trscStart < lag(trscStop), 1, 0)) %>% 
   mutate(overlap = ifelse(is.na(overlap), 0, overlap)) %>% 
   ungroup()
-orf %>% 
-  filter(left == "M") %>% 
-  select(transcript) %>% 
-  write_tsv(path = file.path(path, "Essago.filteredORF.list"),
+write_tsv(data.frame(trsc = unique(orf$transcript)),
+          path = file.path(path, "Essago.filteredORF.list"),
             col_names = F)
 ```
 
@@ -208,11 +199,6 @@ orf %>%
   geom_bar() +
   facet_grid(strand~side, labeller = "label_both") +
   scale_fill_discrete(guide = F)
-```
-
-```{r orfOverlap, fig.cap="Open Reading Frames overlaps."}
-ggplot(orf, aes(overlap, fill = (overlap == 0))) +
-  geom_bar()
 ```
 
 ```{bash orfFilteringFasta, eval=F, echo=T}
@@ -231,7 +217,7 @@ targets <- readDNAStringSet(file.path(path, "Essago.filteredORF.fasta"))
 data.frame(n = length(targets),
            width = sum(width(targets))/10^6,
            Nperc = sum(letterFrequency(targets, "N"))/sum(width(targets))) %>% 
-    kable(caption = "Selected, funcional targets.",
+    kable(caption = "Selected funcional targets.",
         col.names = c("N", "Width (Mbp)", "Mask (%N)"),
         format.args = list(big.mark = " "))
 ```
