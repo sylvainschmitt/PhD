@@ -16,16 +16,16 @@ path <- "../../../data/Eschweilera_Genomic/Oscar_Transcriptome/"
 
 @Vargas2019 used 8 individuals of *Lecythidaceae* including 2 *Eschweilera coriacea* and 1 *Eschweilera sagotiana* for transcriptomic analysis. RNA reads were assembled with `Trinity` into transcripts. We will proceed with following steps:
 
-1. __*E. coriacea* alignment on *E. sagotiana*__: `BLAT` will be used to align *E. coriacea* transcripts alignment on *E. sagotiana*, and we will keep transcript reciprocally matching only one transcripts from the other species to avoid paralogs and have robust targets among species.
-1. __Open Reading Frames (ORFs) detection__: `transdecoder` will be used to detect Open Reading Frames (ORFs) in previously selected scaffolds within *E. sagotiana*. ORFs with a starting codon (Methyonin M) and genes without overlapping genes will be kept.
-1. __Selection__:
+1. __*E. coriacea* alignment on *E. sagotiana*__: `BLAT` will be used to reciprocally align *E. coriacea* and *E. sagotiana* individuals, and we will keep transcript reciprocally matching only one transcripts from the other species to avoid paralogs and have robust targets among species.
+1. __Open Reading Frames (ORFs) detection__: `transdecoder` will be used to detect Open Reading Frames (ORFs) in previously selected scaffolds within *E. sagotiana*.
+1. __Selection__: Selection will be operated depending on the number, size, coverage, ORF and annotation of transcripts.
 
 ## *E. coriacea* alignment on *E. sagotiana*
 
 After alignement we obtained the following statistics :
 
-* 2 954 134 transcripts with match
-* 19 973 transcripts with single-match
+* 2 954 134 match
+* 19 973 reciprocal single-match
 * 9 474 *E. sagotiana* transcripts with reciprocal single-match
 * 5 637 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **1**
 * 3 837 *E. sagotiana* transcripts with reciprocal single-match  with *E. coriacea* **2**
@@ -58,6 +58,8 @@ blat $Escor1 $Essagot EssagotonEscor1.psl
 blat $Escor2 $Essagot EssagotonEscor2.psl
 blat $Essagot $Escor1 Escor1onEssagot.psl
 blat $Essagot $Escor2 Escor2onEssagot.psl
+blat $Escor1 $Escor2 Escor2onEscor1.psl
+blat $Escor2 $Escor1 Escor1onEscor2.psl
 mkdir Alignment
 mv *.psl Alignment
 ```
@@ -121,8 +123,7 @@ alignmentFiltered %>%
   geom_hline(yintercept = 50, col = "red") +
   geom_vline(xintercept = 500, col = "red") +
   xlab("E. sagotiana transcript size (bp)") +
-  ylab("Alignement coverage on transcript (%)") +
-  ggtitle("N = 616", "too few we need to reduce transcript minimum size and/or minimum coverage.")
+  ylab("Alignement coverage on transcript (%)")
 ```
 
 ```{bash alignmentFilteringFasta, eval=F, echo=T}
@@ -134,7 +135,7 @@ ids=Essago.filtered.list
 
 ## Open Reading Frames (ORFs) detection
 
-We detected 1530 ORFs on 1530 unique transcripts with `transdecoder` in previously selected transcripts, representing . Only, 469 included a start codon (Fig. \@ref(fig:orfFilterGraph)), which was too low and not retained as a filtering criterion.
+We detected 1530 ORFs on 1530 unique transcripts with `transdecoder` in previously selected transcripts. Only, 469 included a start codon (Fig. \@ref(fig:orfFilterGraph)), which was too low and not retained as a filtering criterion.
 
 ```{bash ORFdetectionCluster, eval=F, echo=T}
 #!/bin/bash
@@ -210,7 +211,7 @@ ids=Essago.filteredORF.list
 
 ## Selection
 
-We need to include more transcripts to select enough sequences. In the meantime we selected all sequences.
+We thus selected all transcripts to reach required number and length of sequences.
 
 ```{r functional}
 targets <- readDNAStringSet(file.path(path, "Essago.filteredORF.fasta"))

@@ -1,3 +1,8 @@
+# PhD 0.1.9123
+* functional: review integration and wihtinPCA
+* symcapture: capture & BDgenet
+* parvicapture: functional targets v2 & neutral target begin
+
 # PhD 0.1.9122
 * symcapture: pdf & size selection
 * parvicapture: functional targets v1

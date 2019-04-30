@@ -14,11 +14,50 @@ path <- "../../../data/Eschweilera_Genomic/"
 
 # Neutral region selection
 
-Myriam *et al, unpublished* used 6 individuals of several species from the *Eschweilera* clade *Parvifolia*. Thomas Folituu is assembling ddRAD-seq reads with `iPyrad`. We will thus use consensus sequences to design targets among species.
+Myriam *et al, unpublished* used 6 individuals of several species from the *Eschweilera* clade *Parvifolia*. Thomas Folituu assembled ddRAD-seq reads with `iPyrad`. We used consensus sequences to design targets among species.
 
-1. __Consens sequence alignment__: `BLAT` will be used to align concensus sequences, after deNovo assembly through `iPyrad` from ddRAD-seq, on transcripts from @Vargas2019. We will keep consensus scaffolds matching no transcripts as neutral sequences. *We still risk to select for sequences with paralogs genes ?*
+1. __Consens sequence selection__: deNovo assembly through `iPyrad` from ddRAD-seq will be used to select consensus sequences based on ...
+1. __Consens sequence alignment__: `BLAT` will be used to align concensus sequences on transcripts from @Vargas2019. We will keep consensus scaffolds matching no transcripts as neutral sequences. *(We still risk to select for sequences with paralogs genes).*
 1. __Selection__:
 
+## Consens sequence selection
+
+There is no a reference consensus sequence so we wimply used the first sequence as a consensus sequence (besides it can have more missing data than the following aligned sequence).
+
+```{batch consensSel, eval=F, echo=T}
+awk '/\/\// {f=NR} f && NR==f+2;NR==f+1' Assemb1_catclust_90.fasta | head > Assemb1_catclust_90_first.fasta
+```
+
 ## Consens sequence alignment
+
+```{bash ddRADAlign, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J ddRADAlign
+#SBATCH -o ddRADAlign_output.out
+#SBATCH -e ddRADAlign_error.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+# Environment
+module purge
+module load bioinfo/blatSuite.36
+
+# variables
+cd ../../../data/Eschweilera_Genomic/Thomas_assembled_ddRAD/
+ddRAD=Assemb1_catclust_90_first.fasta
+Escor1=../Oscar_Transcriptome/Escoria1L.trinity.Trinity.fasta
+Escor2=../Oscar_Transcriptome/Escoria2L.trinity.Trinity.fasta
+Essagot=../Oscar_Transcriptome/EssagoL.trinity.Trinity.fasta
+# blat=~/Tools/blatSrc/bin/blat
+
+# alignment
+blat $Essagot $ddRAD ddRADonEssagot.psl
+blat $Escor1 $ddRAD ddRADonEscor1.psl
+blat $Escor2 $ddRAD ddRADonEscor2.psl
+mkdir Alignment
+mv *.psl Alignment
+```
 
 ## Selection

@@ -43,8 +43,8 @@ We will do 16 reactions of gene capture by hybridization. Each reaction can have
 1. __Pool building__:  Pool building will follow plate organization, with re-extracted samples (P6.2) pooled together due to high fragmet size heterogeneity. Pool building must be equimolar and will thus depend on DNA dosage. Because we won't pipette less than 0.5 $\mu L$ of the most concentrated sample of one pool, depending on the concetration of the less concentrated sample, we might need to do dilution.
 1. __Purification & Concentration__: AMPure beads will be used to clean pools. We will also use this step to concentrate samples in a smaller volume for the reaction (targeted volume of reaction is [7 $\mu L$ with 100 to 500 $ng$ of DNA](https://arborbiosci.com/wp-content/uploads/2018/04/myBaits-Manual-v4.pdf)).
 1. __Size assessment__: Pools fragments size will be assessed with  [TapeStation](https://www.agilent.com/en/promotions/agilent-4200-tapestation-system?gclid=Cj0KCQjwj9LkBRDnARIsAGQ-hUcY74n88A8zk5NB8XdzdlXYtE0IiZF7aUzKr9-RG1duhTQ7_5PoMykaAgByEALw_wcB&gclsrc=aw.ds), in order to check for correct fragment size distribution, and eventuelly further clean library pools.
-1. __Size selection ?__:  if size distribution result is not good enough, we will further clean library pools through size selection with a [BluePippin](http://www.sagescience.com/products/bluepippin/). *Info: we thus avoid capture fail with too small fragments but we risk losing libraries.*
-1. __Capture__: ...
+1. __Size selection__:  if size distribution result is not good enough, we will further clean library pools through size selection with a [Pippin](http://www.sagescience.com/products/bluepippin/). *Info: we thus avoid capture fail with too small fragments but we risk losing libraries.*
+1. __Capture__: Finally we realized capture by hybridization following [ArborScience protocol](https://arborbiosci.com/wp-content/uploads/2018/04/myBaits-Manual-v4.pdf)
 
 ## Amplifcation 1 Plate reorganization
 
@@ -466,11 +466,11 @@ knitr::include_graphics("symcapture_data/TapeStation.png")
 
 ## Size selection
 
-We will do pools of pools for the size selection with Pippin (Fig. \@ref(fig:PoolGraph)), resulting in $22*4=88 \mu L$ per pool. But the Pippin uses 30 $\mu L$ and we want to do two reactions of Pippin per pool. So we reduced pool volume to 60 $\mu L$ per pool with the speed vac. Then we used TapeStation with a repeat of the 4 pools with 30 $\mu L$ per pool and size selection. We obtained ... about final size distribution...
+We will do pools of pools for the size selection with Pippin (Fig. \@ref(fig:PoolGraph)), resulting in $22*4=88 \mu L$ per pool. But the Pippin uses 30 $\mu L$ and we want to do two reactions of Pippin per pool. So we reduced pool volume to 60 $\mu L$ per pool with the speed vac. Then we used Pippin with a repeat of the 4 pools with 30 $\mu L$ per pool. We used Pippin to filter fragments between 330 and 750 bp. After the Pippin, we cleaned the sampled with 1.8X PGTB Beads from Batch J, and assessed their concentration with QuBIT and their fragment size distribution with TapeStation. We obtained between 180 and 280 ng of DNA (Table \@ref(tab:PoolsConcentration)) with fragments distributed between 300 and 700 bp (Fig. \@ref(fig:TapeStationPoolOfPools)).
 
 ```{r PoolData}
 capture <- capture %>% 
-  mutate(Pool = rep(1:4, each = 4)[Reaction])
+  mutate(Pool = as.factor(rep(1:4, each = 4)[Reaction]))
 # write_csv(capture, file.path(path, "capture.csv"))
 ```
 
@@ -487,5 +487,53 @@ capture %>%
   labs(x=NULL, y = NULL)
 ```
 
+```{r PoolsConcentration}
+data.frame(
+  Pool = rep(1:4, 2),
+  Repetition = rep(1:2, each = 4),
+  Volume = 40 - 2 - 1, # QuBIT and TapeStation
+  Concentration = c(4.94, 5.33, 7.38, 3.98, rep(NA, 4))
+) %>% 
+  mutate(DNA = Concentration*Volume) %>% 
+  mutate(DNA0 = rep(c(1748, 978, 1177, 1028)/2,2)) %>% 
+  mutate(Drop = round(DNA0/DNA)) %>% 
+  filter(!is.na(DNA)) %>% 
+  kable(caption = "Pool of pools result.",
+        col.names = c("Pool", "Repetition", "Volume ($\\mu L$)", 
+                      "Concentration ($ng. \\mu L^{-1}$)", "DNA ($ng$)", 
+                      "DNA origin ($ng$)", "Loss factor"),
+        format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
+```
+
+```{r TapeStationPoolOfPools, fig.cap="Size selected pools assessment."}
+knitr::include_graphics("symcapture_data/TapeStationPoolOfPools1.png")
+```
+
 ## Capture
 
+We split the 4 pools in 16 reactions (4 replicates for each) and realized the capture following [ArborScience protocol](https://arborbiosci.com/wp-content/uploads/2018/04/myBaits-Manual-v4.pdf). After amplification we obtained between 227 and 987 ng of DNA per pool assessed by Qubit (with the four replicates summed, Table \@ref(tab:QubitCapture)). We then pooled back the reaction, assessed their concentration by qPCR and adjust final samples for sequencing by an equimolar pooling Pool 1 and 2 and 3 and 4 togethers. Finally half of the material has been sent to Genotoul Get team for sequencing on Illumina HiSeq 3000 on two lanes of pair-ends 150 bp sequences.
+
+```{r QubitCapture}
+data.frame(
+  Reaction = 1:16,
+  Pool = rep(1:4, each = 4),
+  Concentration = c(22.6, 11.7, 11, 3.8, 2.5, 2.15, 4.7, 3.1,
+                    14.7, 11.3, 11.6, 13, 2.76, 2.19, 3.87, 2.87)/2
+) %>% 
+  mutate(DNA = Concentration*39) %>% 
+  group_by(Pool) %>% 
+  mutate(PoolDNA = sum(DNA)) %>% 
+    kable(caption = "Capture result (Qubit).",
+        col.names = c("Reaction", "Pool",
+                      "Concentration ($ng. \\mu L^{-1}$)", 
+                      "DNA ($ng$)", 
+                      "DNA pool ($ng$)"),
+        format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
+```
+
+$$ C~in~nM = \frac{C~in~ng/\mu L}{660 .average~fragment~size}.10^6$$
+
+> __Dilution for qPCR (1 pM)__
+> Dilute in cascade your samples from 20.4 - 4.9 nM to almost 1 pM. So we need a 10 000 times dilution. We will do 4 1:10 dilutuions with $1 \mu L$ of sample in $9 \mu L$ of $H_2O~miliQ$. Change of tips for every step and better use pipette in the middle of their range than in their extreme (*e.g.* for $100 \mu L$ better use a $200 \mu L$ than a $100 \mu L$ pipette).
