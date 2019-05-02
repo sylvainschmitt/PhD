@@ -1,3 +1,8 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
 ```{r setup_neutral, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
@@ -22,13 +27,15 @@ Myriam *et al, unpublished* used 6 individuals of several species from the *Esch
 
 ## Consens sequence selection
 
-There is no a reference consensus sequence so we wimply used the first sequence as a consensus sequence (besides it can have more missing data than the following aligned sequence).
+There is no a reference consensus sequence so we simply used the first sequence as a consensus sequence (besides it can have more missing data than the following aligned sequence).
 
 ```{batch consensSel, eval=F, echo=T}
-awk '/\/\// {f=NR} f && NR==f+2;NR==f+1' Assemb1_catclust_90.fasta | head > Assemb1_catclust_90_first.fasta
+awk '/\/\// {getline; getline; print(">" $0) ; getline; print}' Assemb1_catclust_90.fasta > Assemb1_catclust_90_first.fasta 
 ```
 
 ## Consens sequence alignment
+
+Over the 28 232 consensus sequences of ddRADseq data for *Eschweilera* (`Assemb1_catclust_90_first.fasta`) and 9 143 aligned on transcripts from @Vargas2019. We thus have 19 089 consensus sequences with a mean length of 231.5 bp among which we need to select 0.5 Mbp of neutral targets. Consequently we need to select around 2160 sequences (24%).
 
 ```{bash ddRADAlign, eval=F, echo=T}
 #!/bin/bash
@@ -60,4 +67,84 @@ mkdir Alignment
 mv *.psl Alignment
 ```
 
+```{r alignmentNeutral}
+alignment <- lapply(list.files(file.path(path, "Thomas_assembled_ddRAD", "Alignment"), full.names = T), 
+                    function(file)
+  read_tsv(file.path(file), skip = 4, 
+           col_names = c("matches", "misMatches", "repMatches", "nCount", 
+                         "qNumInsert", "qBaseInsert",
+                         "tNumInsert", "tBaseInsert", "strand", 
+                         "qName", "qSize", "qStart", "qEnd", 
+                         "tName", "tSize", "tStart", "tEnd", 
+                         "blockCount", "blockSizes", "qStarts", "tStarts")) %>% # psl3 generics
+  mutate(query = file)) %>% 
+  bind_rows() %>% 
+  mutate(query = gsub("../../../data/Eschweilera_Genomic//Thomas_assembled_ddRAD/Alignment/", 
+                      "", query)) %>% 
+  mutate(query = gsub(".psl", "", query)) %>% 
+  separate(query, c("query", "reference"), "on") %>% 
+  mutate(alnSize = matches + misMatches + repMatches) %>% 
+  select(query, reference, alnSize,
+         qName, qSize, qStart, qEnd,
+         tName, tSize, tStart, tEnd)
+```
+
+```{r neutralFiltering}
+sequences <- data.frame(name = read_tsv(file.path(path, "Thomas_assembled_ddRAD", "Assemb1_catclust_90_first.fasta"), 
+                           col_names = F)[seq(1, 56463, 2),1],
+           seq = read_tsv(file.path(path, "Thomas_assembled_ddRAD", "Assemb1_catclust_90_first.fasta"), 
+                          col_names = F)[seq(2, 56464, 2),1]) %>% 
+  dplyr::rename(name = X1, seq = X1.1) %>% 
+  mutate(name = gsub(">", "", name)) %>% 
+  filter(!(name %in% alignment$qName))
+write_tsv(data.frame(sequences$name),
+          path = file.path(path, "Thomas_assembled_ddRAD", "Assemb1_catclust_90_first.filtered.list"),
+          col_names = F)
+```
+
+```{bash neutralFilteringFasta, eval=F, echo=T}
+cd ../../../data/Eschweilera_Genomic/Thomas_assembled_ddRAD/
+ref=Assemb1_catclust_90_first.fasta
+ids=Assemb1_catclust_90_first.filtered.list
+~/Tools/SeqFilter/bin/SeqFilter $ref --ids $ids -o Assemb1_catclust_90_first.filtered.fasta
+```
+
 ## Selection
+
+We then excluded sequences smaller than 100 bp (probes are 80 bp) and sampled 2 200 fragments with a probabilty based on their width and missing base percentage (Fig. \@ref(fig:neutralSelectionFig)). We obtained 0.5 Mbp of sequences with a mean missing base percentage of 2.6% (Tab. \@ref(tab:neutral)).
+
+```{r neutralSelection}
+targets <- readDNAStringSet(file.path(path, "Thomas_assembled_ddRAD", "Assemb1_catclust_90_first.filtered.fasta"))
+targets <- as.data.frame(cbind(names(targets), alphabetFrequency(targets))) %>% 
+  dplyr::rename(name = V1) %>% 
+  mutate_at(vars(-name), as.character) %>% 
+  mutate_at(vars(-name), as.numeric) %>% 
+  group_by(name) %>% 
+  mutate(ACGT = sum(A, C, G, `T`), Other = sum(M, R, W, S, Y, K, V, H, D, B, N, `-`, `+`, `.`)) %>% 
+  select(name, ACGT, Other) %>% 
+  mutate(Width = sum(ACGT, Other)) %>% 
+  mutate(Nperc = Other/Width*100) %>% 
+  ungroup() %>% 
+  filter(Width > 100) %>% 
+  mutate(P = Width/max(Width)*(1-Nperc/100))
+targets <- mutate(targets, Selection = ifelse(name %in% sample_n(targets, 2200, weight = P)$name, 1, 0))
+```
+
+```{r neutralSelectionFig, fig.cap="Select neutral targets depending on sequence width and mising base percentage."}
+ggplot(targets, aes(Width, Nperc, color = P)) +
+  geom_point() +
+  facet_wrap(~ Selection, labeller = "label_both") +
+  xlab("Width (bp)") +
+  ylab("Missing base (%)") +
+  scale_color_continuous("Selection\nProbability")
+```
+
+```{r neutral}
+targets %>% 
+  filter(Selection == 1) %>% 
+  summarise(N = n(), Width = sum(Width)/10^6, Nperc = mean(Nperc)) %>% 
+  kable(caption = "Selected funcional targets.",
+        col.names = c("N", "Width (Mbp)", "Mask (%N)"),
+        format.args = list(big.mark = " ")) 
+```
+

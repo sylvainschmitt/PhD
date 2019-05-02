@@ -1,3 +1,7 @@
+# PhD 0.1.9124
+* general: CST2
+* parvicapture: targets v1
+
 # PhD 0.1.9123
 * functional: review integration and wihtinPCA
 * symcapture: capture & BDgenet
