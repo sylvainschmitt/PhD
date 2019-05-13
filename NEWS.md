@@ -1,3 +1,8 @@
+# PhD 0.1.9125
+* functional: v2 end
+* parvicapture: targets final
+* symcapture: capture end
+
 # PhD 0.1.9124
 * general: CST2
 * parvicapture: targets v1

@@ -1,7 +1,7 @@
 ---
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 ```{r setup_neutral, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
@@ -111,7 +111,7 @@ ids=Assemb1_catclust_90_first.filtered.list
 
 ## Selection
 
-We then excluded sequences smaller than 100 bp (probes are 80 bp) and sampled 2 200 fragments with a probabilty based on their width and missing base percentage (Fig. \@ref(fig:neutralSelectionFig)). We obtained 0.5 Mbp of sequences with a mean missing base percentage of 2.6% (Tab. \@ref(tab:neutral)).
+We then filtered sequences with a missing base percentage inferior to 8% and with a width between 150 bp (probes are 80 bp) and 280 bp (ddRADseq are ca 250 bp longer sequences are due to indels). Finally we sampled 2 200 fragments with a probabilty based on their width and missing base percentage (Fig. \@ref(fig:neutralSelectionFig)). We obtained 0.5 Mbp of sequences with a mean missing base percentage of 2.6% (Tab. \@ref(tab:neutral)).
 
 ```{r neutralSelection}
 targets <- readDNAStringSet(file.path(path, "Thomas_assembled_ddRAD", "Assemb1_catclust_90_first.filtered.fasta"))
@@ -125,9 +125,12 @@ targets <- as.data.frame(cbind(names(targets), alphabetFrequency(targets))) %>%
   mutate(Width = sum(ACGT, Other)) %>% 
   mutate(Nperc = Other/Width*100) %>% 
   ungroup() %>% 
-  filter(Width > 100) %>% 
+  filter(Width > 150, Width < 280, Nperc < 8) %>% 
   mutate(P = Width/max(Width)*(1-Nperc/100))
 targets <- mutate(targets, Selection = ifelse(name %in% sample_n(targets, 2200, weight = P)$name, 1, 0))
+write_tsv(data.frame(filter(targets, Selection == 1)$name),
+          path = file.path(path, "Thomas_assembled_ddRAD", "Assemb1_catclust_90_first.filtered.selection.list"),
+          col_names = F)
 ```
 
 ```{r neutralSelectionFig, fig.cap="Select neutral targets depending on sequence width and mising base percentage."}
@@ -136,15 +139,21 @@ ggplot(targets, aes(Width, Nperc, color = P)) +
   facet_wrap(~ Selection, labeller = "label_both") +
   xlab("Width (bp)") +
   ylab("Missing base (%)") +
-  scale_color_continuous("Selection\nProbability")
+  scale_color_continuous("Selection\nProbability") 
 ```
 
 ```{r neutral}
 targets %>% 
   filter(Selection == 1) %>% 
   summarise(N = n(), Width = sum(Width)/10^6, Nperc = mean(Nperc)) %>% 
-  kable(caption = "Selected funcional targets.",
+  kable(caption = "Selected neutral targets.",
         col.names = c("N", "Width (Mbp)", "Mask (%N)"),
-        format.args = list(big.mark = " ")) 
+        format.args = list(big.mark = " "))
 ```
 
+```{bash arborScienceNeutral, eval=F, echo=T}
+cd ../../../data/Eschweilera_Genomic/Oscar_Transcriptome/
+ref=Assemb1_catclust_90_first.filtered.fasta
+ids=Assemb1_catclust_90_first.filtered.selection.list
+~/Tools/SeqFilter/bin/SeqFilter $ref --ids $ids -o neutral.targets.20190503.fasta
+```
