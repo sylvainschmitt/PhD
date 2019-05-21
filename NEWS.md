@@ -1,3 +1,6 @@
+# PhD 0.1.9126
+* distribution: reorganisation, model exploration, complex distribution, draft, & species distribution @genologin
+
 # PhD 0.1.9125
 * functional: v2 end
 * parvicapture: targets final

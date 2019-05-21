@@ -18,7 +18,7 @@ linestretch: 1.5
 ---
 
 ```{r setup, include=FALSE}
-rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
 library(parallel)
@@ -144,8 +144,8 @@ mdata <- lapply(complexes, function(complex) {
                               mutate(dij = ifelse(dij <1, 1, dij)) %>% 
                               mutate(strata = as.numeric(Complex == complex)) %>% 
                               group_by(idTree) %>% 
-                              summarise(NCIother = sum(DBHj^2*exp(-0.25*dij)*abs(strata-1)),
-                                        NCIcomplex = sum(DBHj^2*exp(-0.25*dij)*strata)))
+                              summarise(NCIother = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
+                                        NCIcomplex = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1)))
   list(N = nrow(data_complex),
        K = 3,
        Y = as.numeric(data_complex$Complex == complex),
@@ -153,14 +153,14 @@ mdata <- lapply(complexes, function(complex) {
          mutate_all(funs(scale)) %>%
          as.matrix(),
        w = ifelse(data_complex$Complex == complex,
-                  1/(2*sum(data_complex$Complex == complex)),
-                  1/(2*sum(data_complex$Complex != complex))))
+                  1-sum(data_complex$Complex == complex)/length(data_complex$Complex),
+                  sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
 ```
 
 ```{r fit}
-# Model <- stan_model("A01-SingleModel.stan")
+# Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
 # save(fits, file = "./distribution_save/complexes.Rdata")
@@ -180,7 +180,7 @@ Paracou
 
 ## Individuals
 
-Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes.html), 
+Ddefined in document [A04-Complexes](A04-Complexes.html):
 
 * *E. charatcaea*
 * *E. Parvifolia*
@@ -191,30 +191,24 @@ Studied complexes remain to be defined in document [A04-Complexes](A04-Complexes
 
 ## Environmental variables
 
-To be defined in document [A03-Descriptors](A03-Descriptors.html),
+Defined in document [A03-Descriptors](A03-Descriptors.html):
 
 * TWI
-* BA
-* BAgenus
+* $NCI_{other}$
+* $NCI_{complex}$
 
 ## Analysis
 
-We analysed species complex distribution by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Because there will be more pseudo-absence than presence, they will be weighted with equal weighting for presences and absences.
-
-Species complex distribution has been investigating through logistic regression following a Bernoulli distribution (model with the best likelihood and results see document [A01-SingleModel](A01-SingleModel.html)):
+We analysed species complex distribution by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Species complex distribution has been investigating through logistic regression following a Bernoulli distribution (model with the best likelihood and results see document [A01-SingleModel](A01-SingleModel.html)):
 
 $$Presence \sim \mathcal{Bernoulli}[logit^{-1}(\alpha + \beta*X+\gamma*X^2)]$$
 with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the intercept, $\beta$ a vector of size $K$ representing the slope and $\gamma$ a vector of size $K$ representing the quadratic form.
 
-Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
+Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language and `rstan` package in the R environment (see supplementary material [S1: Model] for model equations and `stan` code).
 
 # Results
 
 The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
-
-Table \@ref(tab:summary) and figures \@ref(fig:posterior), \@ref(fig:prediciton) will not be commented yet as they represent preliminary results. 
-
-Still, we can note that globally abiotic and biotic environment through TWI and BA, besides non-null, have little or no effect on species complexes distribution. On the other hand, congeneric basal area (BAgenus) have a little to medium effect on species complexes (especially on *E. charatcea* and *Licania*) with a parabolic answer of optimum near to low consgeneric density but non nul, *i.e.* few congeneric neighboors improves habitat suitability.
 
 ```{r summary}
 lapply(fits, function(fit)
@@ -265,7 +259,7 @@ lapply(fits, function(fit)
 ```
 
 ```{r prediciton, fig.cap="Predictions."}
-preds <- lapply(complexes, function(complex){
+preds <- lapply(names(fits), function(complex){
 
   TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
              to = max(mdata[[complex]]$X[,1]), length.out = 100)
@@ -308,12 +302,58 @@ preds <- lapply(complexes, function(complex){
 preds %>% 
   left_join(group_by(data, Complex) %>% 
               summarise(Yo = n()/nrow(.))) %>% 
-  ggplot(aes(x = value)) +
-  geom_ribbon(aes(ymin = (Y5 - Yo)/Yo, ymax = (Y95 - Yo)/Yo), alpha = 0.2) +
-  geom_line(aes(y = (Y - Yo)/Yo)) +
-  geom_hline(aes(yintercept = 0), col = "red", lty = "dashed") +
-  facet_grid(Complex ~ variable, scales = "free_x") +
-  xlab("") + ylab("Relative abundance variation (%)")
+  ggplot(aes(x = value, col = Complex)) +
+  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+  geom_line(aes(y = Y)) +
+  geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
+  facet_wrap(~ variable) + 
+  xlab("") + ylab("Species complex relative abundance") +
+  scale_y_sqrt() +
+  theme(legend.position = "bottom")
+```
+
+```{r PosteriorNPrediction, fig.cap="Model parameters posterior and predictions."}
+g1 <-lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit, pars = "beta"))) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
+                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
+  mutate(descriptor = factor(descriptor, levels = c("NCIcomplex",
+                                                    "NCIother", "TWI"))) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  dplyr::select(-outer_width, -inner_width, -point_est) %>% 
+  dplyr::select(complex, parameter, descriptor, ll, l, m, h, hh) %>% 
+  ggplot(aes(x = complex, xend = complex, col = complex, fill = complex)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ descriptor, labeller = label_parsed, scales = "free_y") +
+  ylab("") + xlab("Species\ncomplex") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none") +
+  theme(axis.text.y=element_blank(),
+        axis.ticks.y=element_blank())
+g2 <-preds %>% 
+  left_join(group_by(data, Complex) %>% 
+              summarise(Yo = n()/nrow(.))) %>% 
+  ggplot(aes(x = value, col = Complex)) +
+  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+  geom_line(aes(y = Y)) +
+  geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
+  facet_wrap(~ variable, nrow = 1, scales = "free") + 
+  xlab("") + ylab("Species complex relative abundance") +
+  scale_y_sqrt() +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text.x = element_blank())
+cowplot::plot_grid(g1, g2, nrow = 2, rel_heights = c(1,2), 
+                   labels = LETTERS[1:2], label_x = 0.1)
 ```
 
 # Discussion

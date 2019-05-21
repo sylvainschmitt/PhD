@@ -1,0 +1,138 @@
+---
+title: "A01a: Single taxon model"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+```
+
+```{r data}
+n <- 100
+data <- list(
+  no = data.frame(Environment = seq(0, 1, length.out = 100),
+                  Presence = c(rep(0:1, 50))),
+  intermediate = data.frame(Environment = seq(0, 1, length.out = n),
+                            Presence = c(rep(0, 20), 
+                                         rep(0:1,10),
+                                         rep(1,20),
+                                         rep(0:1,10),
+                                         rep(0,20))),
+  limit = data.frame(Environment = seq(0, 1, length.out = n), 
+                     Presence = c(rep(0,30), rep(0:1,20), rep(1,30)))
+)
+mdata <- lapply(data, function(x) list(N = nrow(x),
+                                       Presence = x$Presence,
+                                       Environment = x$Environment))
+```
+
+```{r fits}
+# ModelB0 <- stan_model("./distribution_models/Bernoullis/B0.stan")
+# fitsB0 <- lapply(mdata, function(x) sampling(ModelB0, chains = 2, data = x))
+# names(fitsB0) <- names(mdata)
+# ModelBalpha <- stan_model("./distribution_models/Bernoullis/Balpha.stan")
+# fitsBalpha <- lapply(mdata, function(x) sampling(ModelBalpha, chains = 2, data = x))
+# names(fitsBalpha) <- names(mdata)
+# ModelBalpha2 <- stan_model("./distribution_models/Bernoullis/Balpha2.stan")
+# fitsBalpha2 <- lapply(mdata, function(x) sampling(ModelBalpha2, chains = 2, data = x))
+# names(fitsBalpha2) <- names(mdata)
+# ModelBbeta <- stan_model("./distribution_models/Bernoullis/Bbeta.stan")
+# fitsBbeta <- lapply(mdata, function(x) sampling(ModelBbeta, chains = 2, data = x))
+# names(fitsBbeta) <- names(mdata)
+# ModelBbeta2 <- stan_model("./distribution_models/Bernoullis/Bbeta2.stan")
+# fitsBbeta2 <- lapply(mdata, function(x) sampling(ModelBbeta2, chains = 2, data = x))
+# names(fitsBbeta2) <- names(mdata)
+# ModelBbeta3  <- stan_model("./distribution_models/Bernoullis/Bbeta3.stan")
+# fitsBbeta3 <- lapply(mdata, function(x) sampling(ModelBbeta3, chains = 2, data = x))
+# names(fitsBbeta3) <- names(mdata)
+# fits <- list(B0 = fitsB0, Balpha = fitsBalpha, Balpha2 = fitsBalpha2,
+#              Bbeta = fitsBbeta, Bbeta2 = fitsBbeta2, Bbeta3 = fitsBbeta3)
+# save(fits, file = "./distribution_save/SingleModel.Rdata")
+load("./distribution_save/SingleModel.Rdata")
+```
+
+# Introduction
+
+The aim of this document is to find the best general form of model to fit a distribution model. Especially we are seeking for a model that can deal with three specific cases :
+
+* The environmental variable has no effect
+* The niche optimum is a intermediate value of the environmental variable range
+* The niche optimum is a limit of the environmental variable range
+
+# Models
+
+We used Bernoulli distribution to model species complex probability of presence. $B_0$ is the null model estimating a single theta along the whole environmental gradient. Thus $B_0$ cannot include any environmental effect. $B_{\alpha}$ is a Bernoulli logistic regression estimating a sigmoidal increasing or decreasing $\alpha$ along the whole environmental gradient in addition to the intercept $\alpha_0$. $B_{\alpha, \alpha_2}$ is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter. $B_{\alpha, \beta}$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}2$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}3$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
+
+```{r ModelsTable, render="pandoc"}
+data.frame(
+  Name = c("$B_0$", "$B_{\\alpha}$", "$B_{\\alpha, \\alpha_2}$", "$B_{\\alpha, \\beta}$",
+           "$B_{\\alpha, \\beta}2$", "$B_{\\alpha, \\beta}3$"),
+  Formula = c("$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*Environment))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*Environment+\\alpha_2*Environment^2))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*Environment+Environment^{\\beta}))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+\\alpha*(Environment+Environment^{\\beta})))$",
+              "$Presence \\sim \\mathcal{Bernoulli}(logit^{-1}(\\alpha_0+Environment^{\\alpha}+Environment^{\\beta}))$")  
+) %>% 
+  kable(caption = "Models summary.",
+        format = "html", escape = F) %>% 
+  kable_styling("striped", full_width = F) %>% 
+  collapse_rows(1)
+```
+
+# Results
+
+$B_{\alpha}$ is responding well to the optimum in the limit of the environmental range and to no effect from the environmental variable. But $B_{\alpha}$ can't detect ecological optimum in the middle of the ecological range, besides it's the most commonly used model ! $B_{\alpha, \alpha_2}$ is giving the expected result in every case. $B_{\alpha, \beta}$, $B_{\alpha, \beta}2$, and $B_{\alpha, \beta}3$ are not dealing well with the intermediate niche optimum case. 
+
+```{r Predictions, fig.cap="Predictions."}
+lapply(names(fits), function(model){
+  lapply(as.list(names(data)), function(type)
+    cbind(type = type, data[[type]],
+          mu = apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, mean),
+          t(apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, 
+                  quantile, probs = c(0.05, 0.95))))) %>% 
+    bind_rows() %>% 
+    mutate(model = model)
+}) %>% bind_rows() %>% 
+  ggplot(aes(x = Environment)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  geom_point(aes(y = mu)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  facet_grid(model ~ type, scales = "free")
+```
+
+# Discussion
+
+In conclusion, $B_{\alpha, \alpha_2}$ is the best model in terms of convergence, likelihood, number of parameters, and prediction quality. Consequently we will retain $B_{\alpha, \alpha_2}$ to model species complex against the whole forest. We now need to develop a multinomial Dirichlet model to model joint niches of several species within complexes. We will additionnally check theoritically the behavior of $B_{\alpha, \alpha_2}$ in case of unweighted sampling in another document.

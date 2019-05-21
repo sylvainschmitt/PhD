@@ -1,0 +1,103 @@
+---
+title: "A01b: Single taxon model weight"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+```
+
+```{r data}
+absence <- data.frame(Environment = seq(0, 1, length.out = 1000), Presence = 0)
+data <- list(
+  no = rbind(absence, 
+      data.frame(Environment = sample(absence$Environment, 100), Presence = 1)),
+  intermediate = rbind(absence, 
+      data.frame(Environment = sample(absence$Environment[400:600], 100), Presence = 1)),
+  limit = rbind(absence, 
+      data.frame(Environment = sample(absence$Environment[800:1000], 100), Presence = 1))
+)
+mdata <- lapply(data, function(x) list(N = nrow(x),
+                                       Presence = x$Presence,
+                                       Environment = x$Environment,
+                                       weights = ifelse(x$Presence == 0,
+                                                        sum(x$Presence)/length(x$Presence),
+                                                        1-sum(x$Presence)/length(x$Presence))))
+```
+
+```{r fits}
+# unweighted <- stan_model("./distribution_models/Bernoullis/Balpha2.stan")
+# fitsUnweighted <- lapply(mdata, function(x) sampling(unweighted, chains = 2, data = x))
+# names(fitsUnweighted) <- names(mdata)
+# weighted <- stan_model("./distribution_models/Bernoullis/Balpha2weighted.stan")
+# fitsWeighted <- lapply(mdata, function(x) sampling(weighted, chains = 2, data = x))
+# names(fitsWeighted) <- names(mdata)
+# fits <- list(unweighted = fitsUnweighted, weighted = fitsWeighted)
+# save(fits, file = "./distribution_save/SingleModelWeight.Rdata")
+load("./distribution_save/SingleModelWeight.Rdata")
+```
+
+# Introduction
+
+The aim of this document is to find the best practice to deal with unbalance sampling between absences and presences (*e.g.* thousand absences observations against hundred presences).
+
+# Models
+
+We used the model $B_{\alpha, \alpha_2}$ is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter:
+$$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0+\alpha*Environment+\alpha_2*Environment^2))$$
+with unweigthed observations or with absences weight equal to 9% and presence wieght equalt to 91%.
+
+# Results
+
+The unweighted performed better with a better assessment of uncertainty. Both model are predicting species relative abundance and not species habitat suitability.
+
+```{r Predictions, fig.cap="Predictions."}
+lapply(names(fits), function(model){
+  lapply(as.list(names(data)), function(type)
+    cbind(type = type, data[[type]],
+          mu = apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, mean),
+          t(apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, 
+                  quantile, probs = c(0.05, 0.95))))) %>% 
+    bind_rows() %>% 
+    mutate(model = model)
+}) %>% bind_rows() %>% 
+  ggplot(aes(x = Environment)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  geom_point(aes(y = mu)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  facet_grid(model ~ type, scales = "free")
+```
+
+# Discussion
+
+We thus kept the unweighted model for further analysis keeping in mind that our model will predict species complex relative abundance depending on the environment gradient and not habitat suitability.

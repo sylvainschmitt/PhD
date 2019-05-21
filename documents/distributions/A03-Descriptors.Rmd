@@ -1,5 +1,5 @@
 ---
-title: "A02: Niche descriptors"
+title: "A03: Niche descriptors"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
@@ -129,9 +129,9 @@ Competition <- Competition %>%
   left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
   group_by(idTree) %>% 
   mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-  summarise(NCI = sum(DBHj^2*exp(-0.25*dij)),
-            NCIgenus = sum(DBHj^2*exp(-0.25*dij)*as.numeric(Genus == Genusj)),
-            NCIspecies = sum(DBHj^2*exp(-0.25*dij)*as.numeric(Species == Speciesj)))
+  summarise(NCI = log(sum(DBHj^2*exp(-0.25*dij))+1),
+            NCIgenus = log(sum(DBHj^2*exp(-0.25*dij)*as.numeric(Genus == Genusj))+1),
+            NCIspecies = log(sum(DBHj^2*exp(-0.25*dij)*as.numeric(Species == Speciesj))+1))
 ```
 
 ```{r complexes}
@@ -173,27 +173,11 @@ We selected descriptors of species distribution by studying descriptors co-varia
 
 Descriptors co-variation has been investigated tow-by-two by correlations and together by principal component analysis. Co-variations have been investigated together and separately for biotic and abiotic descriptors.
 
-**Details about descriptors.**
-
 # Results
-
-## NCI
-
-```{r}
-data %>% 
-  dplyr::select(Complex, Species, NCI, NCIgenus, NCIspecies) %>% 
-  mutate(NCI = NCI-NCIspecies) %>% 
-  reshape2::melt(id.vars = c("Complex", "Species")) %>% 
-  ggplot(aes(value, col = Species, fill = Species)) + 
-  geom_histogram(position = "dodge") +
-  facet_grid(Complex ~ variable, scales = "free") +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none")
-```
 
 ## Correlations
 
-Globally, topographic variables derived from the digital elevation model showed high level of co-variation (correlation between 0.57 and 0.9) at the exception of curvature. Regarding biotic descriptors digital canopy model and basal area showed a non negligible correlation of 0.34 and basal area for genus and species were correlated to 0.74.
+Globally, topographic variables derived from the digital elevation model showed high level of co-variation (correlation between 0.57 and 0.9) at the exception of curvature. Regarding biotic descriptors digital canopy model and neighbor crowding index showed a non negligible correlation of 0.39 and neighbor crowding index for genus and species were correlated to 0.76.
 
 ```{r correlations}
 data %>% 
@@ -237,6 +221,6 @@ fviz_pca_var(princomp(~ DEM + RelativeElevation +
 
 # Conclusion
 
-We thus selected three little correlated variables ($r < 0.13$) to represent species biotic and abiotic environment: (i) topographic wetness index (TWI) representing  water accumulation areas, crucial to tropical ecosystems [@ferry2010higher], (ii) basal area (BA) representing competition and (iii) congeneric basal area (BAgenus) representing biotic interactions between individuals from the same genus.
+We thus selected three little correlated variables ($r < 0.13$) to represent species biotic and abiotic environment: (i) topographic wetness index (TWI) representing  water accumulation areas, crucial to tropical ecosystems [@ferry2010higher], (ii) neighbor crowding index of heterospecific ($NCI_{hetero}$) representing hetersopecific interaction and (iii) neighbor crowding index of conspecific ($NCI_{con}$) representing conspecific interaction
 
 # References

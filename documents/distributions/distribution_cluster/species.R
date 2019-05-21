@@ -6,10 +6,10 @@ library(parallel)
 library(tidyverse)
 library(rstan)
 library(bayesplot)
-options(mc.cores = parallel::detectCores())
+cores <- 3
+options(mc.cores = cores)
 rstan_options(auto_write = T)
-path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
-cores <- 6
+path <- "../../../data/Paracou/"
 
 #### Data ####
 
@@ -22,19 +22,19 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 
   collect()
-load("./distribution_save/env.Rdata")
-load("./distribution_save/Competition.Rdata")
+load("../distribution_save/env.Rdata")
+load("vdistribution_save/Competition.Rdata")
 Competition <- Competition %>% 
   mutate(dij = ifelse(dij <1, 1, dij)) %>% 
   left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
   mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
   group_by(idTree) %>% 
-  summarise(NCIother = sum(DBHj^2*exp(-0.25*dij)*abs(strata-1)),
-            NCIspecies = sum(DBHj^2*exp(-0.25*dij)*strata))
+  summarise(NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
+            NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1))
 Complexes <- bind_rows(
-  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
+  data.frame(Complex = "Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
-  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
+  data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
                          "wachenheimii", "grandiflora_form2")),
   data.frame(Complex = "Licania", Genus = "Licania",
@@ -54,7 +54,7 @@ data <- trees %>%
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Species) %>% 
-  filter(n() > 10) %>% 
+  filter(n() > 10) %>%
   ungroup()
 
 #### Model Data ####
@@ -68,7 +68,7 @@ mdata <- lapply(complexes, function(complex) {
        K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, NCIother, NCIspecies) %>%
+       X = dplyr::select(data, TWI, NCIhetero, NCIcon) %>%
          mutate_all(funs(scale)) %>%
          as.matrix())
 })
@@ -77,7 +77,7 @@ names(mdata) <- complexes
 #### Sampling ####
 
 cat("#### Sampling ####\n\n")
-Model <- stan_model("A02-JointModel.stan")
+Model <- stan_model("../distribution_models/JointModel.stan")
 fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 names(fits) <- complexes
-save(fits, file = "./distribution_save/species.Rdata")
+save(fits, file = "../distribution_save/species.Rdata")

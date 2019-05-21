@@ -57,6 +57,28 @@ rm(individuals)
 
 # Results
 
+## MDS
+
+```{r}
+data <- trees %>% 
+  dplyr::select(SpeciesLong, TrunkForm, BarkColor, BarkRuggedness, BarkAspect, Lenticels, BladeForm,
+                LeafConsistency, LeafBase, LeafMargin, HyperAcuminated, BentPrincipalN) %>% 
+  na.omit()
+X <- model.matrix(~ TrunkForm + BarkColor + BarkRuggedness + BarkAspect + Lenticels +
+               BladeForm + LeafConsistency + LeafBase + LeafMargin + 
+               HyperAcuminated + BentPrincipalN, data = data[-1])
+pca <- princomp(X[,-1], cor = T)
+library(factoextra)
+g <- fviz_pca_ind(pca, label="none", habillage=data$SpeciesLong,
+             addEllipses=TRUE, ellipse.level=0.95) + 
+     theme_minimal()
+g <- fviz_pca_var(pca, geom = c("point", "text"), alpha.var="contrib") +
+   theme_minimal()
+fviz_pca_biplot(pca, habillage=data$SpeciesLong,
+             addEllipses=TRUE, ellipse.level=0.95)
+```
+
+
 ## Morphology distribution by species
 
 ```{r MorphoSpeciesN}
