@@ -165,13 +165,10 @@ names(mdata) <- complexes
 ```
 
 ```{r fit}
-Model <- stan_model("./distribution_models/JointModel.stan")
-lapply(names(mdata), function(complex) {
-  fit <- sampling(Model, chains = 2, data = mdata[[complex]])  
-  save(fit, file = paste0("./distribution_save/species_", complex,  ".Rdata"))
-})
-names(fits) <- complexes
-save(fits, file = "./distribution_save/species.Rdata")
+# Model <- stan_model("./distribution_models/JointModel.stan")
+# fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
+# names(fits) <- complexes
+# save(fits, file = "./distribution_save/species.Rdata")
 load("./distribution_save/species.Rdata")
 pars <- c("alpha", "beta", "gamma")
 species <- lapply(mdata, function(data) 
@@ -237,7 +234,7 @@ lapply(fits, function(fit)
   mutate(descriptor = substr(index, 2, 2)) %>% 
   dplyr::select(complex, term, SpeciesLong, descriptor, estimate) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIspecies")) %>% 
+                                    `2` = "$NCI_{hetero}$", `3` = "$NCI_{con}$")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$")) %>%
@@ -262,7 +259,7 @@ lapply(lapply(fits, as.array, pars = "beta"),
   mutate(complex = gsub("E. ", "", complex)) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIspecies")) %>% 
+                                    `2` = "NCIhetero", `3` = "NCIcon")) %>% 
   dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
   filter(parameter != "alpha") %>% 
   mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
@@ -295,7 +292,7 @@ lapply(lapply(fits, as.array, pars = "gamma"),
   mutate(complex = gsub("E. ", "", complex)) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIspecies")) %>% 
+                                    `2` = "NCIhetero", `3` = "NCIcon")) %>% 
   dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
   filter(parameter != "alpha") %>% 
   mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
@@ -372,7 +369,7 @@ preds <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "BA",
+        variable = "NCIhetero",
         value = BA,
         Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Yba[sp,,], 2, mean),
@@ -383,7 +380,7 @@ preds <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "BAgenus",
+        variable = "NCIcon",
         value = BAgenus,
         Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ybagenus[sp,,], 2, mean),
@@ -391,19 +388,6 @@ preds <- lapply(complexes, function(complex){
         Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
       bind_rows())
 }) %>% bind_rows()
-preds %>% 
-  group_by(complex) %>% 
-  do(g = ggplot(data = ., aes(x = value, col = species)) + 
-       geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
-       geom_line(aes(y = Y), lwd = 1.3) +
-       facet_grid(complex ~ variable, scales = "free_x") +
-       guides(col = guide_legend(nrow=2)) +
-       theme(legend.position = "bottom") +
-       scale_y_sqrt()) %>% 
-  gridExtra::grid.arrange(grobs = .$g)
-```
-
-```{r pred1, fig.cap="Predictions."}
 preds %>% 
   group_by(complex) %>% 
   left_join(data %>% 
@@ -422,39 +406,6 @@ preds %>%
        theme(legend.position = "bottom") +
        scale_y_sqrt()) %>% 
   gridExtra::grid.arrange(grobs = .$g)
-```
-
-```{r pred2, fig.cap="Predictions."}
-preds %>% 
-  group_by(complex) %>% 
-  left_join(data %>% 
-              group_by(Complex) %>% 
-              mutate(N_complex = n()) %>% 
-              group_by(Complex, N_complex, Genus, Species) %>% 
-              summarise(N_species = n()) %>% 
-              mutate(Yo = N_species / N_complex),
-            by = c("complex" = "Complex", "species" = "Species")) %>% 
-  do(g = ggplot(data = ., aes(x = value, col = species)) + 
-       geom_ribbon(aes(ymin = (Y5)/Yo, ymax = (Y95)/Yo), alpha = 0.2) +
-       geom_line(aes(y = (Y)/Yo), lwd = 1.3) +
-       # geom_hline(aes(yintercept = RelAbund, col = species), linetype = "dashed") +
-       facet_grid(complex ~ variable, scales = "free_x") +
-       guides(col = guide_legend(nrow=2)) +
-       theme(legend.position = "bottom")) %>% 
-       # scale_y_sqrt()) %>% 
-  gridExtra::grid.arrange(grobs = .$g)
-```
-
-```{r sensitivity, fig.cap="Model sensitivity to co-variables."}
-preds %>% 
-  mutate(Delta = sqrt((Yp-Y)^2)) %>% 
-  mutate(SpeciesLong = paste(substr(complex, 1, 1), species)) %>% 
-  ggplot(aes(x = SpeciesLong, y = Delta, fill = variable)) +
-  geom_boxplot() +
-  coord_flip() +
-  ylab("Delta prediction") +
-  xlab("") +
-  scale_y_sqrt()
 ```
 
 # Discussion

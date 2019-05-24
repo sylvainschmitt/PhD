@@ -1,13 +1,13 @@
 ---
 title: Pervasive local-scale species niche differentiation within tropical tree species complexes (temporary)
-author: Sylvain Schmitt$^{*,1}$, Niklas Tysklind$^2$, Geraldine Derroire$^2$, Myriam Heuertz$^1$, Bruno Herault$^{3,4}$
+author: Sylvain Schmitt$^{*,1}$, Niklas Tysklind$^2$, Géraldine Derroire$^2$, Myriam Heuertz$^1$, Bruno Herault$^{3,4}$
 date: '`r Sys.Date()`'
 output:
+  bookdown::word_document2: default
   bookdown::html_document2:
     number_sections: false
     toc: true
     toc_float: yes
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -64,14 +64,14 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(DBH = CircCorr/pi) %>% 
   collect()
 load("./distribution_save/env.Rdata")
+```
+
+```{r predComplex}
 load("./distribution_save/Competition.Rdata")
 data <- trees %>% 
   left_join(env) %>% 
   left_join(Complexes) %>% 
   filter(!is.na(Plot))
-```
-
-```{r predComplex}
 complexes <- unique(Complexes$Complex)
 data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex) {
@@ -140,21 +140,39 @@ predComplex <- lapply(names(fits), function(complex){
 }) %>% bind_rows()
 ```
 
-```{r predSpecies, eval=FALSE}
-mdata <- lapply(unique(complexes$Complex), function(complex){
+```{r predSpecies}
+load("./distribution_save/Competition.Rdata")
+Competition <- Competition %>% 
+  mutate(dij = ifelse(dij <1, 1, dij)) %>% 
+  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
+  mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
+  group_by(idTree) %>% 
+  summarise(NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
+            NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1))
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(Complexes) %>% 
+  left_join(Competition) %>% 
+  filter(!is.na(Plot)) %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Complex, Species) %>% 
+  filter(n() > 10) %>%
+  ungroup()
+complexes <- unique(Complexes$Complex)
+mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
        K = 3,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, BAother, BAgenus) %>%
+       X = dplyr::select(data, TWI, NCIhetero, NCIcon) %>%
          mutate_all(funs(scale)) %>%
-         as.matrix())})
-names(mdata) <- unique(complexes$Complex)
+         as.matrix())
+})
+names(mdata) <- complexes
 load("./distribution_save/species.Rdata")
-names(fits)[1:2] <- c("Chartacea", "Parvifolia")
-predSpecies <- lapply(unique(complexes$Complex), function(complex){
+predSpecies <- lapply(complexes, function(complex){
 
   N <- 25
   TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
@@ -184,6 +202,10 @@ predSpecies <- lapply(unique(complexes$Complex), function(complex){
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
     ), simplify = F), along = 3)
+  Yba <- abind::abind(sapply(1:length(TWI), function(i) 
+    sapply(1: nrow(alpha), function(n)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*BA[i] + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*mean(BAgenus)^2)
+    ), simplify = F), along = 3)
   Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
       tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
@@ -192,20 +214,33 @@ predSpecies <- lapply(unique(complexes$Complex), function(complex){
   bind_rows(
     lapply(1:S, function(sp)
       data.frame(
-        Complex = complex,
-        Species = colnames(mdata[[complex]]$Y)[sp],
+        complex = complex,
+        species = colnames(mdata[[complex]]$Y)[sp],
         variable = "TWI",
         value = TWI,
+        Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ytwi[sp,,], 2, mean),
         Y5 = apply(Ytwi[sp,,], 2, quantile, probs = 0.05),
         Y95 = apply(Ytwi[sp,,], 2, quantile, probs = 0.95))) %>% 
       bind_rows(),
     lapply(1:S, function(sp)
       data.frame(
-        Complex = complex,
-        Species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "BAgenus",
+        complex = complex,
+        species = colnames(mdata[[complex]]$Y)[sp],
+        variable = "NCIhetero",
+        value = BA,
+        Yp = apply(Yp[sp,,], 2, mean),
+        Y = apply(Yba[sp,,], 2, mean),
+        Y5 = apply(Yba[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Yba[sp,,], 2, quantile, probs = 0.95))) %>% 
+      bind_rows(),
+    lapply(1:S, function(sp)
+      data.frame(
+        complex = complex,
+        species = colnames(mdata[[complex]]$Y)[sp],
+        variable = "NCIcon",
         value = BAgenus,
+        Yp = apply(Yp[sp,,], 2, mean),
         Y = apply(Ybagenus[sp,,], 2, mean),
         Y5 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.05),
         Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
@@ -250,11 +285,11 @@ The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which ha
 
 ## Species complexes
 
-Species complex were defined based on evidence for low phylogenetic resolution or plastid DNA sharing in the clade [@baraloto_using_2012-1; @Gonzalez2009]: *Eschweilera* with clades Parvifolia and Chartacea (Lecythidaceae; Chave *et al*, unpublished; Heuertz *et al*. unpublished); *Licania* [Chrysobalanaceae; @Bardon2016]; *Iryanthera* (Myristicaceae); *Symphonia* (Clusiaceae); *Talisia* (Sapindaceae). We further removed species with less than 10 individuals in Paracou in 2015, resulting in 6 species complexes including 2 to 9 species (Table \@ref(tab:ComplexTab), see supplementary material S1 [A04-Complexes](A04-Complexes.html)).
+Species complex were defined based on evidence for low phylogenetic resolution or plastid DNA sharing in the clade [@baraloto_using_2012-1; @Gonzalez2009]: *Eschweilera* with clades Parvifolia and Chartacea (Lecythidaceae; Chave *et al*, unpublished; Heuertz *et al*. unpublished); *Licania* [Chrysobalanaceae; @Bardon2016]; *Iryanthera* (Myristicaceae); *Symphonia* (Clusiaceae); *Talisia* (Sapindaceae). We further removed species with less than 10 individuals in Paracou in 2015, resulting in 6 species complexes including 2 to 9 species (Table \@ref(tab:ComplexTab)).
 
 ## Environmental variables
 
-Three little correlated (Pearson's r < 0.13, see supplementary material S2 [A03-Descriptors](A03-Descriptors.html)) environmental descriptors were chosen to depict species and species complexes distribution. Topographic wetness index ($TWI$) was selected between various abiotic descriptors available and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
+Three little correlated (Pearson's r < 0.13, see supplementary material S1) environmental descriptors were chosen to depict species and species complexes distribution. Topographic wetness index ($TWI$) was selected between various abiotic descriptors available and highlighted water accumulation areas, which is crucial information at local scale when it comes to tropical ecosystems [@ferry2010higher].
 
 A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic interactions through tree neighborhood, implying that other biotic effects, such as herbivory and pathogen effects, were not directly taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
 $$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\frac{1}{4}\delta_{i,j}}$$
@@ -267,7 +302,7 @@ Descriptors used were derived from field censuses ($NCI_{other}$ and $NCI_{genus
 
 ### Complexes distribution
 
-Species complex distribution was infered by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Species complex presence $Presence$ was infered with a logistic regression following a Bernoulli distribution (best model form tested, see document [A01-SingleModel](A01-SingleModel.html)):
+Species complex distribution was infered by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Species complex presence $Presence$ was infered with a logistic regression following a Bernoulli distribution (best model form tested, see , see supplementary material S2 and S3):
 $$Presence_{species~complex} \sim Bernoulli[logit^{-1}(\alpha + \beta*X+\gamma*X^2)]$$
 were $X$ is the matrix of environmental descriptors, $\alpha$ is the intercept, $\beta$ is a vector representing the slope and $\gamma$ is a vector representing the quadratic form of environment variable effects.
 
@@ -283,23 +318,15 @@ Environmental descriptors were all scaled for the model inference, in order to e
 
 The topographic wetness index ($TWI$) and the neighbor crowding index ($NCI$) had weak effects on relative abundance of species complex (Fig. \@ref(fig:ComplexesDistribution)). Nevertheless, all relative abundances of species complexes increased with $NCI_{complex}$ (except for *Talisia*). And increased value of $TWI$ resulted in a decreased relative abundance of *Licania* but increased relative abundances of *Symphonia* and *Iryanthera*.
 
-<!-- On the other hand, the topographic wetness index ($TWI$) strongly influenced species distribution within complexes, with a gradient of response from positive to negative effect within each complex (Fig. \@ref(fig:betaTWI)). For instance, *S. globulifera*, *E. coriacea*, and *I. hostmanii* habitat suitability increased with water accumulation when it decreased for *S. sp1*, *E. sagotiana*, and *I. sagotiana* within *Symphonia*, *Parvifolia* and *Iryanthera* complexes respectively (Fig. \@ref(fig:SpeciesDistribution)). Still, the $TWI$ influence was low for *Chartacea* and *Talisia* complexes. -->
+On the other hand, the topographic wetness index ($TWI$) strongly influenced species distribution within complexes, with a gradient of response from positive to negative effect within each complex (Fig. \@ref(fig:betaTWI)). For instance, *S. globulifera*, *E. coriacea*, and *I. hostmanii* species relative abundance increased with water accumulation when it decreased for *S. sp1*, *E. sagotiana*, and *I. sagotiana* within *Symphonia*, *Parvifolia* and *Iryanthera* complexes respectively (Fig. \@ref(fig:SpeciesDistribution)). Still, the $TWI$ influence was low for *Chartacea* and *Talisia* complexes.
 
-<!-- Finally, $BA_{other}$ had no effect on most of species within complexes (results unshown see supplementary material S5 [A06-SpeciesDistribution](A06-SpeciesDistribution.html)). But congeneric interactions ($BA_{genus}$) had a significant effect on species from *Parvifolia*, *Symphonia* and *Talisia* with a change of dominance within the complex with increasing congeneric interactions (*E. sagotiana* and *E. decolorans* replacing *E. coriacea* and *E. wachenheimii*, *S. globulifera* replacing *S. sp1*, and *T. praelata* replacing *T. hexaphylla* within *Parvifolia*, *Symphonia* and *Talisia* complexes respectively). -->
+Finally, $NCI_{hetero}$ and $NCI_{con}$ had no or weak effects on species relative abundance within species complexes. Still conspecific interactions ($NCI_{con}$) had an effect on species from *Parvifolia* and *Symphonia* complexes with a change of dominance within the complex with increasing congeneric interactions (*E. sagotiana* and *E. decolorans* replacing *E. coriacea* and *E. wachenheimii*, *S. globulifera* replacing *S. sp1* within *Parvifolia* and  *Symphonia* complexes respectively). And heterospecific interactions ($NCI_{hetero}$) had an effect on species from *Symphonia* complexe with a change of dominance within the complex with increasing heterospecific interactions (*S. sp1* replacing *S. globulifera*).
 
 # Discussion
 
 > I have to do more bibliography and write the intoduction but I think the take home message will be something like:
 
 > Species complexes of tropical tree are widely spread across habitats at local-scale, but their species show pervasive niche differentiation mainly with water accumulation and also with congeneric interactions.
-
-# Supplementary materials 
-
-* Supplementary material S1 [A04-Complexes](A04-Complexes.html)
-* Supplementary material S2 [A03-Descriptors](A03-Descriptors.html)
-* Supplementary material S3 [A02-JointModel](A01-JointModel.html)
-* Supplementary material S4 [A05-ComplexesDistribution](A05-ComplexesDistribution.html)
-* Supplementary material S5 [A06-SpeciesDistribution](A06-SpeciesDistribution.html)
 
 # Acknowledgements
 
@@ -324,9 +351,9 @@ __Table \@ref(tab:ComplexTab)__ Identified species complexes with species includ
 
 __Figure \@ref(fig:ComplexesDistribution)__ Relative abundance of species complexes. Subplot **A** represent $\beta$ parameter values for each descriptor and species complex, with the circle representing the mean value of the parameter posterior, thick lines the 50% confidence interval and thin lines the 95% confidence interval. Subplot **B**, represent species complex predicted relative abundance, with dashed line indicating observed relative abundance of species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.
 
-__Figure \@ref(fig:betaTWI)__ TWI effect on species  distribution within species complexes. $\beta_{TWI}$ posterior is represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).
+__Figure \@ref(fig:betaTWI)__ TWI and NCI heterospecific and conspecific effects on species relative distribution within species complexes. $\beta_{TWI}$, $\beta_{NCIhetero}$, $\beta_{TWIcon}$ posterior are represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).
 
-__Figure \@ref(fig:SpeciesDistribution)__ Distribution of species wihtin species complexes.
+__Figure \@ref(fig:SpeciesDistribution)__ Relative abundance of species wihtin species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.
 
 \newpage 
 
@@ -334,7 +361,7 @@ __Figure \@ref(fig:SpeciesDistribution)__ Distribution of species wihtin species
 
 ```{r ComplexTab}
 trees %>% 
-  left_join(complexes, by = c("Genus", "Species")) %>% 
+  left_join(Complexes, by = c("Genus", "Species")) %>% 
   mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Complex, Genus, Species) %>% 
@@ -390,9 +417,8 @@ cowplot::plot_grid(g1, g2, nrow = 2, rel_heights = c(1,2),
                    labels = LETTERS[1:2], label_x = 0.1)
 ```
 
-```{r betaTWI, fig.cap="TWI effect on species  distribution within species complexes. $\\beta_{TWI}$ posterior is represented for each species complex and species with mean (circle), 50\\% credibility interval (thick segment) and 95\\% confidence interval (thin segment).", eval=FALSE} 
+```{r betaTWI, fig.cap="TWI and NCI heterospecific and conspecific effects on species relative distribution within species complexes. $\\beta_{TWI}$, $\\beta_{NCIhetero}$, $\\beta_{TWIcon}$ posterior are represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).", fig.height=10} 
 species <- data %>%
-  filter(Complex != "no") %>% 
   dplyr::select(Complex, Genus, Species) %>% 
   unique() %>% 
   mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>% 
@@ -411,9 +437,7 @@ lapply(fits, function(fit)
   left_join(species) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "BA", `3` = "BAgenus")) %>% 
-    filter(descriptor == "TWI") %>% 
-  filter(parameter == "beta") %>%
+                                    `2` = "NCIhetero", `3` = "NCIcon")) %>% 
   dplyr::select(Complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
   mutate(parameter = ifelse(parameter != "alpha",
                             paste0(parameter, "[", descriptor, "]"),
@@ -435,18 +459,26 @@ lapply(fits, function(fit)
   scale_color_discrete(guide = "none")
 ```
 
-```{r SpeciesDistribution, fig.cap="Distribution of species wihtin species complexes.", eval=FALSE, fig.height=10}
+```{r SpeciesDistribution, fig.cap="Relative abundance of species wihtin species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.", fig.height=10}
 predSpecies %>%
-  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>%
-  left_join(species) %>% 
-  group_by(Complex) %>% 
-  do(g = ggplot(data = ., aes(x = value, col = SpeciesLong)) + 
+    group_by(complex) %>% 
+  left_join(data %>% 
+              group_by(Complex) %>% 
+              mutate(N_complex = n()) %>% 
+              group_by(Complex, N_complex, Genus, Species) %>% 
+              summarise(N_species = n()) %>% 
+              mutate(RelAbund = N_species / N_complex),
+            by = c("complex" = "Complex", "species" = "Species")) %>% 
+  mutate(species = ifelse(species == "grandiflora_form2", "grandiflora", species)) %>%
+  mutate(Species = paste0(substr(Genus, 1,1), ". ", species)) %>% 
+  do(g = ggplot(data = ., aes(x = value, col = Species)) + 
        geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
        geom_line(aes(y = Y), lwd = 1.3) +
-       facet_grid(Complex ~ variable, scales = "free_x") +
+       geom_hline(aes(yintercept = RelAbund, col = Species), linetype = "dashed") +
+       facet_grid(complex ~ variable, scales = "free_x") +
        guides(col = guide_legend(nrow=3)) +
-       scale_color_discrete("") +
        theme(legend.position = "bottom") +
+       ylab("Species relative abundance") + xlab("Standardized value") +
        scale_y_sqrt()) %>% 
   gridExtra::grid.arrange(grobs = .$g)
 ```

@@ -1,6 +1,6 @@
 ---
 title: Supplementary Materials
-author: Sylvain Schmitt, Bruno Herault, Emilie Ducouret, Anne Baranger, Niklas Tysklind,  Myriam Heuertz, Eric Marcon, Saint Omer Cazal, Geraldine Derroire
+author: Sylvain Schmitt, Niklas Tysklind, Géraldine Derroire, Myriam Heuertz, Bruno Herault
 date: '`r Sys.Date()`'
 output:
   bookdown::pdf_document2:
@@ -47,308 +47,111 @@ opts_chunk$set(echo = F, message = F, warning = F,
 path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 ```
 
-```{r data}
-load("./functional_save/Individuals.Rdata")
-Individuals0 <- Individuals
-load("./functional_save/CompetitionMatrix.Rdata")
-sdDBH <- sd(Individuals$DBH)
-Individuals <- Individuals %>% 
-  rename(LMA = invSLA) %>% 
-  group_by(Species) %>% 
-  filter(n() > 20) %>% 
-  ungroup() %>% 
-  left_join(Competition %>% 
-              group_by(idTree) %>% 
-              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
-  mutate(NCI = log(NCI)) %>% 
-  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
-            funs(./sd(., na.rm = T)))
-```
-
-```{r model}
-load("./functional_save/InteractionReduced.Rdata")
-traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
-complexes <- c("Symphonia", "Eschweilera")
-models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
-species <- lapply(models, function(model){
-  trait <- strsplit(model, "-")[[1]][2]
-  complex <- strsplit(model, "-")[[1]][1]
-  Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex) %>% 
-    mutate(species = as.numeric(as.factor(Species))) %>% 
-    mutate(SpeciesLong = paste(substr(complex, 1, 1), Species)) %>% 
-    select(Genus, Species, SpeciesLong, species) %>% 
-    unique()
-}) %>% bind_rows() %>% 
-  unique() %>% 
-  mutate(complex = Genus)
-S_sqrt_trans <- function() scales::trans_new("S_sqrt",
-                                             function(x) sign(x)*sqrt(abs(x)),
-                                             function(x) x^2*sign(x))
-```
-
-```{r predicitons}
-traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
-complexes <- c("Symphonia", "Eschweilera")
-models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
-preds <- lapply(models, function(model){
-  trait <- strsplit(model, "-")[[1]][2]
-  complex <- strsplit(model, "-")[[1]][1]
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex)
-  
-  DBH <- data_trait$DBH
-  TWI <- data_trait$TWI
-  NCI <- data_trait$NCI
-  species <- as.numeric(as.factor(data_trait$Species))
-  
-  alpha <- as.matrix(fits[[model]], pars = "alpha")
-  betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
-  betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
-  betaNCI <- as.matrix(fits[[model]], pars = "betaNCI")
-  
-  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ynci <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  
-  data.frame(
-    Model = model,
-    Trait = trait,
-    Complex = complex,
-    DBH = data_trait$DBH, 
-    TWI = data_trait$TWI, 
-    NCI = NCI,
-    Genus = data_trait$Genus,
-    Species = data_trait$Species,
-    Y = unlist(data_trait[trait]),
-    Yp = apply(Yp, 2, mean),
-    Yp5 = apply(Yp, 2, quantile, probs = 0.05),
-    Yp95 = apply(Yp, 2, quantile, probs = 0.95),
-    Yalpha = apply(Yalpha, 2, mean),
-    Yalpha5 = apply(Yalpha, 2, quantile, probs = 0.05),
-    Yalpha95 = apply(Yalpha, 2, quantile, probs = 0.95),
-    Ydbh = apply(Ydbh, 2, mean),
-    Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
-    Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
-    Ytwi = apply(Ytwi, 2, mean),
-    Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
-    Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
-    Ynci = apply(Ynci, 2, mean),
-    Ynci5 = apply(Ynci, 2, quantile, probs = 0.05),
-    Ynci95 = apply(Ynci, 2, quantile, probs = 0.95)
-  )}) %>% bind_rows()
-```
-
-<!-- SUPPLEMENTARY MATERIALS -->
-
-```{r disturbance}
-Individuals %>% 
-  filter(Genus == "Symphonia") %>% 
-  mutate(disturbed = ifelse(Plot %in% c(2:5, 7:10, 12), 1, 0)) %>% 
-  select(SLA, LDMC, LT, LA, CC, disturbed) %>% 
-  reshape2::melt(id.vars = "disturbed",
-                 variable.name = "trait") %>% 
-  group_by(trait) %>% 
-  do(student = t.test(value ~ disturbed, data = .)) %>% 
-  broom::tidy(student) %>% 
-  select(trait, estimate1, estimate2, statistic, p.value) %>% 
-  kable(col.names = c("Trait", "Disturbed", "Undisturbed", "Student's T", "p-value"), 
-        caption = "Disturbed plot effect on functional traits. Table representing the disturbed plot effect on functional traits have been investigated by Student's T-test, with investigated trait, disturbed plot mean value, undisturbed plot mean value, Student's T value, and associated p-value.",
-        digits = 3, format = "pandoc", escape = F) %>% 
-  kable_styling(full_width = F)
-```
-
-```{r dawkins, fig.cap='Diameter at breast height (DBH) and Dawkins index correlation. Box colors indicates the Dawkins index. DBH and Dawkins index correlation has been investigated by Anova. **** indicates a $p-value < 0.0001$. Letters indicate post-hoc groups investigated by Tukey Honest Significant Differences.'}
-tHSD <- multcompView::multcompLetters((mutate(Individuals, Dawkins = substr(Dawkins, 1, 1)) %>% 
-                                 aov(DBH ~ Dawkins, .) %>% 
-                                 TukeyHSD(., ordered = F, conf.level = 0.95) %>% 
-                                 .$Dawkins)[,4])$Letters %>% 
-  data.frame(Dawkins = names(.), group = .)
-Individuals %>% 
-  dplyr::select(Dawkins, DBH) %>% 
-  drop_na(Dawkins) %>% 
-  mutate(Dawkins = substr(Dawkins, 1, 1)) %>% 
-  left_join(tHSD) %>% 
-  group_by(Dawkins) %>% 
-  mutate(ymax = max(DBH)) %>% 
-  ggplot(aes(Dawkins, DBH*sdDBH, fill = Dawkins, label = group)) + 
-  geom_boxplot() + 
-  geom_text(aes(y = (ymax+1)*sdDBH)) +
-  ggpubr::stat_compare_means(method = "anova", aes(label = paste0("Anova", ..p.signif..))) +
-  theme(axis.title.x=element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank()) +
-  ylab("Diameter at breast hiaght (dbh, cm)")
-```
-
-```{r DBH, fig.cap='Diameter at breast height (DBH) distribution between sampled indivduals and other *Symphonia* and *Eschweilera* individuals of Paracou.'}
-src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(Genus %in% c("Lecythis", "Eschweilera") & 
-           Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
-           Genus %in% c("Lecythis", "Eschweilera") & 
-           Plot == 16 & CensusYear == 2015 |
-           Genus == "Symphonia" & CensusYear == 2015) %>%
+```{r trees}
+d <- 20
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>%
+  filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 
   collect() %>% 
-  mutate(Sample = as.numeric(idTree %in% Individuals$idTree)) %>% 
-  mutate(Sample = recode_factor(Sample, 
-                              `0` = "Others Symphonia and Eschweilera",
-                              `1` = "Sampled individuals")) %>% 
-  ggplot(aes(DBH)) +
-  geom_histogram(position = "dodge") +
-  facet_wrap(~ Sample, scale = "free", nrow = 2) +
-  xlab("Diameter at breast hiaght (dbh, cm)")
+  filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d)
+load("./distribution_save/env.Rdata")
+load("./distribution_save/Competition.Rdata")
+Competition <- Competition %>% 
+  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
+  group_by(idTree) %>% 
+  mutate(dij = ifelse(dij <1, 1, dij)) %>% 
+  summarise(NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*(1-as.numeric(Species == Speciesj)))+1),
+            NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*as.numeric(Species == Speciesj))+1))
+complexes <- bind_rows(
+  data.frame(Complex = "Chartacea", Genus = "Eschweilera",
+             Species = c("simiorum", "congestiflora")),
+  data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("hexaphylla", "praealta", "simaboides")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1")))
+data <- trees %>% 
+  left_join(env) %>% 
+  left_join(complexes) %>% 
+  left_join(Competition) %>% 
+  filter(!is.na(Plot))
 ```
 
-```{r abiotic, fig.cap='Principal Component Analysis (PCA) of abiotic topographic variables. All variables, slope, curvature, aspect, topgraphic rudgeness index (TRI), and topgraphic wetness index (TWI) are derived from the digital evlevation model (DEM) obtaine through LiDAR campaign in 2015.', fig.width=12, fig.height=12}
-factoextra::fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature +
-                          Aspect + TRI + TWI, Individuals, cor = T),
-               axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```{r correlations, fig.cap="Correlation of abiotic topographic variables and neighbor crowding indexes (NCI). All variables, relative elevation (RelEl), slope, curvature (Curv), aspect, topgraphic rudgeness index (TRI), and topgraphic wetness index (TWI) are derived from the digital evlevation model (DEM) obtaine through LiDAR campaign in 2015, the digital canopy model (DCM) has been obtained in the same campaign, and neighbor crowding index (NCI) of heterospecific (NCIh) or conspecific (NCIc) are derived from Paracou census campaign of 2015."}
+data %>% 
+  dplyr::select(DEM, RelativeElevation, Slope, Curvature, TRI, TWI,
+                MNC, NCIhetero, NCIcon) %>% 
+  rename(DCM = MNC, NCIh = NCIhetero, NCIc = NCIcon, 
+         RelEl = RelativeElevation, Curv = Curvature) %>% 
+  na.omit() %>% 
+  cor(.) %>% 
+  corrplot::corrplot.mixed()
 ```
 
-```{r additiveModel}
-load("./functional_save/InteractionReduced.Rdata")
-models <- list(Interaction = fits)
-load("./functional_save/Additive.Rdata")
-models$Additive <- fits
-lapply(models, function(model)
-  lapply(model, function(trait)
-    broom::tidyMCMC(trait, pars = "lp__", droppars = NULL, rhat = T)
-  ) %>% bind_rows(.id = "Model")) %>% 
-  bind_rows(.id = "Form") %>% 
-  separate(Model, c("Genus", "Trait"), "-") %>% 
-  mutate(Trait = recode_factor(Trait, 
-                               LMA = "$LMA$",
-                               LDMC = "$LDMC$", 
-                               LT = "$LT$", 
-                               invLA = "$\\frac{1}{LA}$",
-                               CC = "$CC$")) %>% 
-  reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
-  mutate(Difference = Additive - Interaction) %>%
-  kable(caption = "Log-likelihood for full model form (additive vs interaction).", digits = 3, format = "pandoc", escape = F) %>% 
+```{r ModelsTable, render="pandoc"}
+data.frame(
+  Name = c("$B_0$", "$B_{\\alpha}$", "$B_{\\alpha, \\alpha_2}$", "$B_{\\alpha, \\beta}$",
+           "$B_{\\alpha, \\beta}2$", "$B_{\\alpha, \\beta}3$"),
+  Formula = c("$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment+\\alpha_2*Environment^2))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment+Environment^{\\beta}))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*(Environment+Environment^{\\beta})))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+Environment^{\\alpha}+Environment^{\\beta}))$")  
+) %>% 
+  kable(caption = "Model tested for species complex distribution.", format = "pandoc", escape = F) %>% 
   kable_styling(full_width = F)
 ```
 
-```{r ontogenyModel}
-load("./functional_save/DBH.Rdata")
-models <- list(michaelis = fits)
-load("./functional_save/DBHlin.Rdata")
-models$linear <- fits
-lapply(models, function(model)
-  lapply(model, function(trait)
-    broom::tidyMCMC(trait, pars = "lp__", droppars = NULL, rhat = T)
-  ) %>% bind_rows(.id = "Model")) %>% 
-  bind_rows(.id = "Form") %>% 
-  separate(Model, c("Genus", "Trait"), "-") %>% 
-  mutate(Trait = recode_factor(Trait, 
-                               LMA = "$LMA$",
-                               LDMC = "$LDMC$", 
-                               LT = "$LT$", 
-                               invLA = "$\\frac{1}{LA}$",
-                               CC = "$CC$")) %>% 
-  mutate(Form = recode_factor(Form, 
-                              linear = "Linear",
-                              michaelis = "Michaelis Menten")) %>% 
-  reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
-  mutate(Difference = Linear - `Michaelis Menten`) %>% 
-  kable(caption = "Log-likelihood for ontogenic model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
-  kable_styling(full_width = F)
-```
-
-```{r varcomp, fig.cap="Variance decomposition between ecological levels."}
-traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
-  googlesheets::gs_read("AllTraits") %>%
-  mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
-  mutate(Genus = "Symphonia") %>%
-  rename(Species = Morphotype) %>%
-  mutate(Species = ifelse(Species == "Indet.",
-                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
-                                     "sp.1" =  "S")], Species))
-traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
-  googlesheets::gs_read("AllTraits") %>%
-  filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
-  filter(!(Species %in% c("congestiflora","simiorum","persistens")))
-traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
-  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
-  group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
-           SpeciesLong, Bark, Dawkins)
-traits %>% 
-  mutate(LMA = (1/SLA)*10^4) %>% 
-  group_by(Species) %>% 
-  filter(n() > 10) %>% 
-  filter(CC > 0) %>% # CC have an issue for lme
-  select(Plot, Genus, Species, idTree, Leaf,
-         LMA, LDMC, LT, LA, CC) %>% 
-  reshape2::melt(id.vars = c("Plot", "Genus", "Species", "idTree", "Leaf"), 
-                 variable.name = "Trait") %>% 
-  na.omit() %>% 
-  group_by(Trait) %>% 
-  do(varcomp = as.vector(ape::varcomp(nlme::lme(log(value) ~ Plot,
-                            random=~1|Genus/Species/idTree/Leaf, 
-                            data = ., na.action = na.omit), 1))) %>% 
-  broom::tidy(varcomp) %>% 
-  rename(Variance = x) %>% 
-  mutate(Component = c("Genus", "Species", "Tree", "Leaf", "Residual")) %>% 
-  ggplot(aes(Trait, Variance, label = round(Variance*100), 
-             fill = factor(Component, levels = c("Genus", "Species", 
-                                                 "Tree", "Leaf", "Residual")))) +
-  geom_bar(stat = "identity") +
-  scale_fill_brewer("Component", palette = "Accent") +
-  geom_text(position = position_stack(vjust = 0.5))
-```
-
-```{r bootstrap, fig.cap="Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm."}
-t <- Individuals0 %>% 
-  mutate(LMA = (1/SLA)*10^4) %>% 
-  group_by(Species) %>% 
-  filter(n() > 10) %>% 
-  filter(DBH*sdDBH > 30) %>%
-  select(Genus, Species, LMA, LDMC, LT, LA, CC) %>% 
-  reshape2::melt(id.vars = c("Genus", "Species"), variable.name = "Trait") %>% 
-  na.omit() %>% 
-  group_by(Genus, Species, Trait, value) %>% 
-  expand(n = 2:10) %>% 
-  group_by(Genus, Species, Trait, n) %>% 
-  do(cv = sd(apply(replicate(1000, sample(.$value, .$n)), 2, mean))/mean(.$value)*100) %>% 
-  broom::tidy(cv) %>% 
-  rename(cv = x)
-ggplot(t, aes(as.factor(n), cv, fill = Trait)) +
-  geom_boxplot() +
-  stat_summary(fun.y=mean, geom="line", aes(group=1)) +
-  facet_grid(~ Trait) +
-  scale_fill_discrete(guide = "none") +
-  xlab("Number of tree sampled") +
-  ylab("Coefficient of variation (%).") +
-  scale_y_sqrt()
-```
-
-```{r Intercept, fig.cap="Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
-lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit,
-                               pars = "alpha"))) %>% 
-  bind_rows(.id = "model") %>% 
-  separate(model, c("complex", "trait"), "-") %>%
-  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-  mutate(species = as.numeric(species)) %>% 
-  left_join(species) %>% 
-  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
-  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
-             xend = datatools::reorder_within(SpeciesLong, m, trait),
-             color = SpeciesLong, fill = SpeciesLong)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  datatools::scale_x_reordered() +
-  facet_grid(trait ~ ., labeller = label_parsed, scales = "free_y") +
-  xaxis_title(F) +
-  ylab(expression(alpha)) +
-  scale_y_continuous(trans="S_sqrt") +
-  scale_color_brewer("", palette = "Set1", guide = "none") +
-  scale_fill_brewer("", palette = "Set1", guide = "none")
+```{r Predictions, fig.cap="Habitat suitability of single taxa model for every model form and three theoric species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is a intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range."}
+n <- 100
+data <- list(
+  no = data.frame(Environment = seq(0, 1, length.out = 100),
+                  Presence = c(rep(0:1, 50))),
+  intermediate = data.frame(Environment = seq(0, 1, length.out = n),
+                            Presence = c(rep(0, 20), 
+                                         rep(0:1,10),
+                                         rep(1,20),
+                                         rep(0:1,10),
+                                         rep(0,20))),
+  limit = data.frame(Environment = seq(0, 1, length.out = n), 
+                     Presence = c(rep(0,30), rep(0:1,20), rep(1,30)))
+)
+mdata <- lapply(data, function(x) list(N = nrow(x),
+                                       Presence = x$Presence,
+                                       Environment = x$Environment))
+load("./distribution_save/SingleModel.Rdata")
+preds <- lapply(names(fits), function(model){
+  lapply(as.list(names(data)), function(type)
+    cbind(type = type, data[[type]],
+          mu = apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, mean),
+          t(apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, 
+                  quantile, probs = c(0.05, 0.95))))) %>% 
+    bind_rows() %>% 
+    mutate(model = model)
+}) %>% bind_rows()
+preds %>% 
+  mutate(model = recode_factor(model, B0 = "B[0]", Balpha = "B[alpha]",
+                               Balpha2 = "B[alpha][.][alpha][2]",
+                               Bbeta = "B[alpha][.][beta]",
+                               Bbeta2 = "B[alpha][.][beta][2]",
+                               Bbeta3 = "B[alpha][.][beta][3]")) %>% 
+  ggplot(aes(x = Environment)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  geom_point(aes(y = mu)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  facet_grid(model ~ type, scales = "free", labeller = label_parsed) +
+  ylab("Habitat suitabtility") + scale_color_discrete("Presence")
 ```

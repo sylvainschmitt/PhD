@@ -1,0 +1,73 @@
+```{r setup_neutral, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+```
+
+# Extraction protocol
+
+*adapted From K. Budde, March 18 and Doyle & Doyle, Phtyochem. Bull. 19:1-15 (1987).*
+
+The protocol is given per sample with the corresponding volume for a plate of 96 samples in bracket.
+
+## Material preparation
+
+* 400 $\mu L$ of __2X CTAB__ buffer (40 mL per plate)
+
+```{r}
+data.frame(
+  Component = c("1M Tris-HCl pH 8.0", "5M NaCl", "20mM EDTA", "CTAB", "PVP-40", "$H_2Omili_Q$"),
+  V = c("25 mL", "70 mL", "10 mL", "5 g", "5 g", "until 250 mL")
+) %>% 
+kable(col.names = c("Component", "Volume for 250 mL"))
+```
+
+* 1.6 $\mu L$ of __beta-mecaptoethanol__ (160 $\mu L$ per plate)
+* 600 = 576:24 $\mu L$ of __SEVAG__ 24:1 chloroform : isoamyl alcohol (60 = 57.6:2.4 mL per plate)
+* 150 $\mu L$ of __NaCl 5M__ (15 mL per plate)
+* 300 $\mu L$ of __Isopropanol__ (30 mL per plate)
+* 400 $\mu L$ of __76% ethanol__ (40 mL per plate)
+* 500 $\mu L$ of __76% ethanol__ (50 mL per plate)
+* 50 $\mu L$ of __TE__ buffer (5 mL per plate)
+
+```{r}
+data.frame(
+  Component = c("1M Tris-HCl pH 8.0", "20mM EDTA", "$H_2Omili_Q$"),
+  V = c("500 $\\mu L$", "100 $\\mu L$", "until 50 mL")
+) %>% 
+kable(col.names = c("Component", "Volume for 50 mL"))
+```
+
+
+## Grinding
+
+1. Freeze samples at $-80^\circ C$ in liquid nitrogen
+2. Grind samples using Genogrinder with **45 seconds** at **1250 rpm**
+3. Cool samples in liquid nitrogen to avoid heat damage
+4. Repeat grinding (step 2 & 3) three to four times
+
+## Day 1
+
+1. Prepare **2X CTAB** buffer by adding **beta-mecaptoethanol** (1.6 $\mu L$:400 $\mu L$, 320 $\mu L$:80 mL for 2 plates) & **preheat at $65^\circ C$**
+1. **LYSIS,** add 400 $\mu L$ of prepared **2X CTAB buffer** to each samples, vortex and incubate at $65^\circ C$ for 60 minutes shaking every 15-20 minutes
+1. Take out plates from water bath and cool down on ice during 10-20 minutes
+1. **CHLOROFORM EXTRACTION,** add 300 $\mu L$ of **SEVAG**, mix gently under the fume hood, extract for 20 minutes by rocking on an orbital shaker
+1. Spin **10 minutes** at **6200 rpm**
+1. **Transfer** aqueous **top phase** containing DNA to a new plate
+1. Repeat chloroform extraction (step 4 to 6)
+1. Add 150 $\mu L$ of **NaCl 5M** to each sample to avoid polysaccharides precipitation
+1. **PRECIPITATION,** add 300 $\mu L$ of $-20^\circ C$ **isopropanol** to each tube, mix gently, leave overnight (can be longer) at  $-20^\circ C$
+
+## Day 2
+
+1. Leave samples 1 hour (10 minutes if two nights) at  $-80^\circ C$
+1. **WASH-UP 1,** spin **30 minutes** at **6200 rpm** and $-4^\circ C$ to collect precipitate, poor off liquid (**avoid losing pellet !!**), add 400 $\mu L$ of **ice-cold  76% ethanol**, shake well to dislodge pellet
+1. **WASH-UP 1,** spin **30 minutes** at **6200 rpm** and $-4^\circ C$ to collect precipitate, poor off liquid (**avoid losing pellet !!**), add 400 $\mu L$ of **ice-cold  95% ethanol**, shake well to dislodge pellet
+1. Spin **30 minutes** at **6200 rpm**, poor off liquid (**avoid losing pellet !!**), drain upside down for 5-10 minutes to evaporate alcohol
+*1. If some ethanol is still left, do an extra spin and pipette carefully, vacuum or heating centrifuge can be used too.*
+1. Resuspend DNA in in 50 $\mu L$ of **TE buffer**, let the pellet dissolve on a shaker during an hour at room temperature
