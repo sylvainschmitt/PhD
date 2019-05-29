@@ -254,7 +254,7 @@ lapply(models, function(model)
                               michaelis = "Michaelis Menten")) %>% 
   reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
   mutate(Difference = Linear - `Michaelis Menten`) %>% 
-  kable(caption = "Log-likelihood for ontogenic model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
+  kable(caption = "Log-likelihood for diameter model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
   kable_styling(full_width = F)
 ```
 
@@ -323,32 +323,4 @@ ggplot(t, aes(as.factor(n), cv, fill = Trait)) +
   xlab("Number of tree sampled") +
   ylab("Coefficient of variation (%).") +
   scale_y_sqrt()
-```
-
-```{r Intercept, fig.cap="Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
-lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit,
-                               pars = "alpha"))) %>% 
-  bind_rows(.id = "model") %>% 
-  separate(model, c("complex", "trait"), "-") %>%
-  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-  mutate(species = as.numeric(species)) %>% 
-  left_join(species) %>% 
-  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
-  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
-             xend = datatools::reorder_within(SpeciesLong, m, trait),
-             color = SpeciesLong, fill = SpeciesLong)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  datatools::scale_x_reordered() +
-  facet_grid(trait ~ ., labeller = label_parsed, scales = "free_y") +
-  xaxis_title(F) +
-  ylab(expression(alpha)) +
-  scale_y_continuous(trans="S_sqrt") +
-  scale_color_brewer("", palette = "Set1", guide = "none") +
-  scale_fill_brewer("", palette = "Set1", guide = "none")
 ```

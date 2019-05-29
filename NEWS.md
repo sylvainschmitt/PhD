@@ -1,3 +1,7 @@
+# PhD 0.1.9127
+* functional: v2 submitted to all coauthor
+* parvicapture: extractions
+
 # PhD 0.1.9126
 * growth: test & cluster
 

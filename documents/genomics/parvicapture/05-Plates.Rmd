@@ -1,0 +1,56 @@
+```{r setup_plates, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/"
+```
+
+# Plates
+
+## Extraction
+
+### Extraction NanoDrop
+
+NanoDrop evaluated $2 \mu L$ of samples DNA concentration (figure \@ref(fig:nanodrop)). But NanoDrop is known to be inaccurate, especially under 25 $ng.\mu L^{-1}$.
+
+```{r nanodrop, fig.cap="Samples concentration"}
+nanodrop <- lapply(list.files(file.path(path, "NanoDrop"), 
+                  full.names = T), read.delim2) %>% 
+  bind_rows(.id = "Plate_extraction") %>% 
+  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
+  dplyr::rename(Position_extraction = Well,
+                concentration = Conc.) %>% 
+  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
+  select(Plate_extraction, Position_extraction, concentration)
+nanodrop %>% 
+  ggplot(aes(concentration, fill = concentration < 12.505)) + 
+  geom_histogram() +
+  scale_x_log10() +
+   ggtitle(paste("N =", nrow(filter(nanodrop, concentration < 12.505))))
+```
+
+```{r extraction2}
+extraction <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction")
+nanodrop %>% 
+  top_n(42, dplyr::desc(concentration)) %>% 
+  left_join(extraction) %>% 
+  mutate(IdParacou = paste(paste0("P", Plot), SubPlot, TreeFieldNum, sep = "-")) %>% 
+  select(Plate_extraction, Position_extraction, IdGenetic, IdParacou) %>% 
+  mutate(Plate_extraction2 = 5) %>% 
+  mutate(Position_extraction2 = as.vector(sapply(7:12, function(col) paste0(col, LETTERS[1:8])))[-c(1:6)]) %>% 
+  kable(caption = "Extraction repeat") %>% 
+  kable_styling(full_width = F)
+```
+
