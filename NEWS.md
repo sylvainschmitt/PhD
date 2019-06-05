@@ -1,3 +1,8 @@
+# PhD 0.1.9128
+* parvicapture: post-extraction (extraction repetitions & tests)
+* distribution: growth
+* functional: SupMat typo
+
 # PhD 0.1.9127
 * functional: v2 submitted to all coauthor
 * parvicapture: extractions

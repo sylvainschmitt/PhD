@@ -1,0 +1,107 @@
+```{r setup_plates, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/"
+```
+
+```{r data}
+nanodrop <- lapply(list.files(file.path(path, "NanoDrop"), 
+                  full.names = T), read.delim2) %>% 
+  bind_rows(.id = "Plate_extraction") %>% 
+  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
+  dplyr::rename(Position_extraction = Well,
+                concentration = Conc.) %>% 
+  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
+  select(Plate_extraction, Position_extraction, concentration)
+extraction <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction")
+```
+
+# Extraction
+
+After extraction, we prepared plates for library preparation. We proceed as follow :
+
+1. __Dosage__: plate has been dosed with NanoDrop including sample repeats
+2. __Reorganization__: sample repeats have been used to replace original sample if they included more DNA
+3. __Fragments size assesment__: plates 1 & 5 have been used to test fragment sizes with electrophoresis
+4. __Fragmentation & Size selection test__: as sample were dirty, we tried fragmentation and size selection with raw dirty samples in order to see if we obtained clean DNA sample
+
+## Dosage
+
+NanoDrop was used to assess DNA concentration with $2 \mu L$ of samples (figure \@ref(fig:nanodrop)).
+
+```{r nanodrop, fig.cap="Samples concentration."}
+nanodrop %>% 
+  mutate(row = substr(Position_extraction, 1, 1)) %>% 
+  mutate(col = substr(Position_extraction, 2, 3)) %>% 
+  group_by(Plate_extraction) %>% 
+  ggplot(aes(y = factor(row, levels = rev(LETTERS[1:8])),
+             x = factor(col, levels = 1:12))) + 
+  geom_point(aes(col = log(concentration)), size = 4) +
+  geom_text(aes(label = round(concentration)), 
+            col = "white", size = 2.5) +
+  facet_wrap(~ Plate_extraction, ncol = 2) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+## Reorganization
+
+Over 42 repeated extractions, 36 had a better result (around 10 folds better). And samples that were not better extracted had a mean of 10 $ng. \mu L^{-1}$. We replaced succesfull repeat original by their repeated extractions and get rid of the others.
+
+```{r repeats, eval=F}
+success <- extraction %>% 
+  left_join(nanodrop) %>% 
+  group_by(IdGenetic) %>% 
+  filter(n() > 1) %>% 
+  ungroup() %>% 
+  reshape2::dcast(IdGenetic ~ Repeat, value.var = "concentration") %>% 
+  filter(`0` < `1`) %>% 
+  select(IdGenetic) %>% 
+  unlist()
+extraction %>% 
+  filter(IdGenetic %in% success) %>% 
+  mutate(Position = paste0("P", Plate_extraction, "_", Position_extraction)) %>% 
+  mutate(Repeat = ifelse(Repeat == 1, "Repeat", "Origin")) %>% 
+  reshape2::dcast(IdGenetic ~ Repeat, value.var = "Position") %>% 
+  select(IdGenetic, Repeat, Origin) %>% 
+  kable(col.names = c("Id", "Repeat position", "Origin position (destination)"), 
+        caption = "Succesfull repeats.")
+```
+
+
+## Fragments size assesment
+
+Plates 1 & 5 have been used to test fragment sizes with electrophoresis.
+
+## Fragmentation & Size selection test
+
+We tried fragmentation and size selection with raw dirty samples in order to see if we obtained clean DNA sample coorectly fragmented. More specifically, we prepared three repeats of 6.5 $\mu L$ with 100 $ng$ of ID1 (X $\mu L$) and ID2 (X $\mu L$) samples. We prepared all samples with 1.75 $\mu L$ of reaction buffer and 0.5 $\mu L$ of enzyme (XX for first replicates, XX for second and none for the thirs as control). All samples where thermocycled with 13'@37 $^\circ C$, 30'@65 $^\circ C$, and Hold@-4 $^\circ C$. Then samples with enzyme were size selected: (i) adding 10 $\mu L$ of TE1X, (ii) adding 0.28X of beads and keeping liquid, (iv) adding 0.14X of beads, (v) washing two time beads with 80% ethanol, and (vi) resupending beads in 12 $\mu L$ of hot TE 1X before liquid transfer. Finally samples fragment sizes was assessed through electrophoresis and concentration with NanoDrop and Qubit (Table \@ref(tab:test)).
+
+```{r test}
+data.frame(
+  IdGenetic = rep(c("Id1", "Id2"), each = 3),
+  Enz = rep(c("Enz1", "Enz2", "No"), 2),
+  Thermocycle = "3'@37 $^\\circ C$, 30'@65 $^\\circ C$, and Hold@-4 $^\\circ C$",
+  SizeSelect = rep(c(T, T, F), 2),
+  FrgtSize = NA,
+  Cnanodrop = NA,
+  Cquibit = NA
+) %>% 
+   kable(col.names = c("Id", "Enzyme", "Thermocycle", "Size selection", "Fragments size",
+                       "Concentration NanoDrop", "Concentration Qubit"), 
+        caption = "Fragmentation & Size selection test")
+```
+

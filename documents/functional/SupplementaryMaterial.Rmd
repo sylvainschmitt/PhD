@@ -195,7 +195,7 @@ src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect() %>% 
   mutate(Sample = as.numeric(idTree %in% Individuals$idTree)) %>% 
   mutate(Sample = recode_factor(Sample, 
-                              `0` = "Others Symphonia and Eschweilera",
+                              `0` = "Other Symphonia and Eschweilera",
                               `1` = "Sampled individuals")) %>% 
   ggplot(aes(DBH)) +
   geom_histogram(position = "dodge") +

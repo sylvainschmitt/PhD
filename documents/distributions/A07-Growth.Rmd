@@ -93,7 +93,6 @@ data <- trees %>%
   left_join(Competition) %>% 
   filter(!is.na(Plot)) %>% 
   filter(!is.na(Complex)) %>% 
-  filter(Plot %in% 1) %>% # for test purposes
   group_by(Complex, Species) %>% 
   filter(n() > 10) %>%
   ungroup() %>% 
@@ -115,11 +114,11 @@ $$log(AGR+1) \sim \mathcal{N}(AGRmax_{ind}.e^{(-\frac12.\frac{log(\frac{dbh}{Dop
 ```{r mdata}
 paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
+  collect() %>% 
   filter(idTree %in% data$idTree) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
-  collect() %>% 
   mutate(ddbh = dbh - lag(dbh), 
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
@@ -190,11 +189,11 @@ $$log(AGR+1) \sim \mathcal{N}(AGRmax.e^{(-\frac12*\frac{log(\frac{dbh}{Dopt})}{K
 ```{r mdataSp}
 paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
+  collect() %>% 
   filter(idTree %in% data$idTree) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
-  collect() %>% 
   mutate(ddbh = dbh - lag(dbh), 
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
@@ -225,14 +224,13 @@ left_join(paracou, data) %>%
   geom_line(aes(y = AGRpred))
 ```
 
-$$Vigor =  (AGR - \hat{AGR}) \sim \mathcal{N} (\alpha+\beta .log(suitability),\sigma)  $$
+$$Vigor =  \frac{\int AGR - \int \hat{AGR}{n} \sim \mathcal{N} (\alpha+\beta .log(suitability),\sigma)  $$
 
 ```{r Sp}
 paracou %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
-  mutate(Vigor = agr - AGRpred) %>% 
   group_by(idTree) %>% 
-  summarise(Vigor = mean(Vigor)) %>% 
+  summarise(Vigor = (sum(agr)-sum(AGRpred))/n()) %>% 
   left_join(data) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   ggplot(aes(logSuitability, Vigor)) +
@@ -244,9 +242,8 @@ paracou %>%
 ```{r SpLm}
 paracou %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
-  mutate(Vigor = agr - AGRpred) %>% 
   group_by(idTree) %>% 
-  summarise(Vigor = mean(Vigor)) %>% 
+  summarise(Vigor = (sum(agr)-sum(AGRpred))/n()) %>% 
   left_join(data) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   group_by(SpeciesLong) %>% 
@@ -261,11 +258,11 @@ paracou %>%
 ```{r mdataDist}
 paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
+  collect() %>% 
   filter(idTree %in% data$idTree) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
-  collect() %>% 
   mutate(ddbh = dbh - lag(dbh), 
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
@@ -274,19 +271,23 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 ```
 
 ```{r fitDist}
-# Model <- stan_model("./distribution_models/Growth/growthDist.stan")
-# fit <- sampling(Model, chains = 2, save_warmup = F,
-#                 data = list(N = nrow(paracou),
-#                             AGR = paracou$agr,
-#                             dbh = paracou$dbh,
-#                             suitability = paracou$logSuitability,
-#                             S = length(unique(paracou$Species)),
-#                             sp = as.numeric(as.factor(paracou$Species))
-#                 ))
-# save(fit, file = "./distribution_save/growthDist.Rdata")
+Model <- stan_model("./distribution_models/Growth/growthDist.stan")
+fit <- sampling(Model, chains = 2, save_warmup = F,
+                data = list(N = nrow(paracou),
+                            AGR = paracou$agr,
+                            dbh = paracou$dbh,
+                            suitability = paracou$logSuitability,
+                            S = length(unique(paracou$Species)),
+                            sp = as.numeric(as.factor(paracou$Species))
+                ))
+save(fit, file = "./distribution_save/growthDist.Rdata")
 load("./distribution_save/growthDist.Rdata")
 ```
 
 ```{r posteriorDist}
-bayesplot::mcmc_areas(as.array(fit, pars = c("gSuitability")))
+bayesplot::mcmc_areas(as.array(fit, pars = c("Niche")))
+```
+
+```{r DistSummary}
+fit
 ```
