@@ -1,0 +1,498 @@
+---
+title: "A08 : Interaction Model conspecific"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::word_document2: default
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r data, eval=T}
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
+load("./functional_save/CompetitionMatrix.Rdata")
+sdDBH <- sd(Individuals$DBH)
+Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
+  group_by(Species) %>% 
+  filter(n() > 20) %>% 
+  ungroup() %>% 
+  left_join(left_join(Competition, 
+                      src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+                        tbl("Paracou") %>% 
+                        dplyr::select(idTree, Genus, Species) %>% 
+                        collect() %>% 
+                        unique() %>% 
+                        rename(idTreej = idTree, Genusj = Genus, Speciesj = Species))) %>% 
+  group_by(idTree) %>% 
+  summarise(NCIcon = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)*as.numeric(Species == Speciesj)),
+            NCIhetero = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)*as.numeric(Species != Speciesj)),
+            LMA = mean(LMA), LDMC = mean(LDMC), LT = mean(LT), TWI = mean(TWI),
+            invLA = mean(invLA), CC = mean(CC), DBH = mean(DBH), Species = unique(Species), Genus = unique(Genus)) %>%
+  mutate(NCIcon = log(NCIcon+1), NCIhetero = log(NCIhetero+1)) %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCIcon", "NCIhetero"),
+            funs(./sd(., na.rm = T)))
+```
+
+```{r mdata}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+mdata <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex)
+  list(N = nrow(data_trait),
+       S = length(unique(data_trait$Species)),
+       Trait = unlist(data_trait[trait]),
+       DBH = data_trait$DBH,
+       TWI = data_trait$TWI,
+       NCIcon = data_trait$NCIcon,
+       NCIhetero = data_trait$NCIhetero,
+       species = as.numeric(as.factor(data_trait$Species)))
+  })
+names(mdata) <- models
+```
+
+```{r fits}
+# fits <- lapply(mdata, function(x)
+#   sampling(Model, chains = 2, data = x, save_warmup = F))
+# names(fits) <- models
+# save(fits, file = "./functional_save/InteractionConspecific.Rdata")
+load("./functional_save/InteractionConspecific.Rdata")
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+```
+
+```{r species}
+species <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex) %>% 
+    mutate(species = as.numeric(as.factor(Species))) %>% 
+    mutate(SpeciesLong = paste(substr(complex, 1, 1), Species)) %>% 
+    select(Genus, Species, SpeciesLong, species) %>% 
+    unique()
+}) %>% bind_rows() %>% 
+  unique() %>% 
+  mutate(complex = Genus)
+```
+
+```{r predicitons}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+preds <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex)
+  
+  DBH <- data_trait$DBH
+  TWI <- data_trait$TWI
+  NCIcon <- data_trait$NCIcon
+  NCIhetero <- data_trait$NCIhetero
+  species <- as.numeric(as.factor(data_trait$Species))
+  
+  alpha <- as.matrix(fits[[model]], pars = "alpha")
+  betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
+  betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
+  betaNCIcon <- as.matrix(fits[[model]], pars = "betaNCIcon")
+  betaNCIhetero <- as.matrix(fits[[model]], pars = "betaNCIhetero")
+  
+  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCIcon[n,species] * NCIcon +  betaNCIhetero[n,species] * NCIhetero) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCIcon[n,species] * mean(NCIcon) +  betaNCIhetero[n,species] * mean(NCIhetero)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCIcon[n,species] * mean(NCIcon) +  betaNCIhetero[n,species] * mean(NCIhetero)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCIcon[n,species] * mean(NCIcon) +  betaNCIhetero[n,species] * mean(NCIhetero)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Yncicon <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCIcon[n,species] * NCIcon +  betaNCIhetero[n,species] * mean(NCIhetero)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Yncihetero <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCIcon[n,species] * mean(NCIcon) +  betaNCIhetero[n,species] * NCIhetero) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  
+  data.frame(
+    Model = model,
+    Trait = trait,
+    Complex = complex,
+    DBH = data_trait$DBH, 
+    TWI = data_trait$TWI, 
+    NCIcon = NCIcon,
+    NCIhetero = NCIhetero,
+    Genus = data_trait$Genus,
+    Species = data_trait$Species,
+    Y = unlist(data_trait[trait]),
+    Yp = apply(Yp, 2, mean),
+    Yp5 = apply(Yp, 2, quantile, probs = 0.05),
+    Yp95 = apply(Yp, 2, quantile, probs = 0.95),
+    Yalpha = apply(Yalpha, 2, mean),
+    Yalpha5 = apply(Yalpha, 2, quantile, probs = 0.05),
+    Yalpha95 = apply(Yalpha, 2, quantile, probs = 0.95),
+    Ydbh = apply(Ydbh, 2, mean),
+    Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
+    Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
+    Ytwi = apply(Ytwi, 2, mean),
+    Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
+    Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
+    Yncicon = apply(Yncicon, 2, mean),
+    Yncicon5 = apply(Yncicon, 2, quantile, probs = 0.05),
+    Yncicon95 = apply(Yncicon, 2, quantile, probs = 0.95),
+    Yncihetero = apply(Yncihetero, 2, mean),
+    Yncihetero5 = apply(Yncihetero, 2, quantile, probs = 0.05),
+    Yncihetero95 = apply(Yncihetero, 2, quantile, probs = 0.95)
+  )}) %>% bind_rows()
+```
+
+# Introduction {-}
+
+# Material and Methods
+
+# Results
+
+## Summary
+
+```{r summarySpecies}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", "betaTWI",
+                                "betaNCIcon", "betaNCIhetero", "sigma", "lp__"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>% 
+  mutate(species = gsub("([[:alpha:]])", "", term)) %>% 
+  select(complex, trait, term, species, estimate, std.error, rhat) %>% 
+  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
+  mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = recode_factor(term, 
+                              alpha = "$\\alpha$",
+                              betaDBH = "$\\beta_{DBH}$", 
+                              betaTWI = "$\\beta_{TWI}$", 
+                              betaNCIcon = "$\\beta_{NCIcon}$",
+                              betaNCIhetero = "$\\beta_{NCIhetero}$",
+                              sigma = "$\\sigma^2$",
+                              lp = "log-likelihood")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              LMA = "$LMA$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  reshape2::dcast(complex + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Species = SpeciesLong) %>% 
+  kable(caption = "Model parameters for each species with reduced traits and descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:2)
+```
+
+## Intercept
+
+```{r speciesIntercept, fig.cap="Model species effect for Intercept."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "alpha"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+  mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+  facet_grid(trait ~ ., labeller = label_parsed, scales = "free_y") +
+  xaxis_title(F) +
+  ylab(expression(alpha)) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_brewer("", palette = "Set1", guide = "none") +
+  scale_fill_brewer("", palette = "Set1", guide = "none")
+```
+
+## DBH
+
+```{r speciesDBH, fig.cap="Model species effect for $DBH_{90}$."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaDBH"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+   mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free_y") +
+  ylab(expression(DBH[90]~(cm))) +
+  scale_y_log10() +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+```{r speciesDBH2, fig.cap="Model species effect for DBH."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(DBH*sdDBH, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ydbh5, ymax = Ydbh95), alpha = 0.2) +
+  geom_line(aes(y = Ydbh)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed) +
+  scale_y_log10()
+```
+
+## TWI
+
+```{r speciesTWI, fig.cap="Model species effect for TWI."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaTWI"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+    mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+              scales = "free_y") +
+  datatools::scale_x_reordered() +
+  xaxis_title(F) +
+  ylab(expression(beta[TWI])) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none") +
+  ylim(-0.5, 0.5)
+```
+
+```{r speciesTWI2, fig.cap="Model species effect for DBH."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(TWI, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ytwi5, ymax = Ytwi95), alpha = 0.2) +
+  geom_line(aes(y = Ytwi)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed)
+```
+
+## NCIcon
+
+```{r speciesNCIcon, fig.cap="Model species effect for NCIcon."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaNCIcon"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+    mutate(species = as.numeric(species)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>%
+  left_join(species) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+    facet_grid(trait ~ Genus, labeller = label_parsed, 
+              scales = "free") +
+  xaxis_title(F) +
+  ylab(expression(beta[NCI])) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none") +
+  ylim(-0.5, 0.5)
+```
+
+```{r speciesNCIcon2, fig.cap="Model species effect for NCIcon."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(NCIcon, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Yncicon5, ymax = Yncicon95), alpha = 0.2) +
+  geom_line(aes(y = Yncicon)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed)
+```
+
+## NCIhetero
+
+```{r speciesNCIhetero, fig.cap="Model species effect for NCIhetero"}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaNCIhetero"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-") %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+    mutate(species = as.numeric(species)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>%
+  left_join(species) %>% 
+  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+             xend = datatools::reorder_within(SpeciesLong, m, trait),
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = 0, color = "gray90", size = 1) +
+  geom_hline(yintercept = c(-0.25, 0.25), 
+             color = "gray90", size = 0.5, lty = "dashed") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  datatools::scale_x_reordered() +
+    facet_grid(trait ~ Genus, labeller = label_parsed, 
+              scales = "free") +
+  xaxis_title(F) +
+  ylab(expression(beta[NCI])) +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none") +
+  ylim(-0.5, 0.5)
+```
+
+```{r speciesNCIhetero2, fig.cap="Model species effect for NCIhetero."}
+preds %>% 
+  mutate(Trait = recode_factor(Trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(NCIcon, col = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Yncihetero5, ymax = Yncihetero95), alpha = 0.2) +
+  geom_line(aes(y = Yncihetero)) +
+  facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed)
+```
+
+# Discussion
+
+# Supplementary materials
+
+## S1: Model
+
+We explained leaf trait $Trait$ variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels (species complex $C$ and species $S$) with a linear mixed model including interaction between ontogeny and environment (more likely than an additive form without interactions, see analysis [A07-Additive](A07-Additive.html)). We obtained the following model (see [Material and Methods] for more detail on the model form):
+
+\begin{equation}
+  T_{s,i} \sim \mathcal{N}(\frac{DBH_i}{{\beta_{DBH}}_{s} + DBH_i} \times (\alpha_{s} + {\beta_{TWI}}_{s}.TWI_i + {\beta_{Comp}}_{s}.\sum_{j=1}^{J} DBH_j^{2} . e^{-{\alpha_{NCI}}.\delta_{i,j}}), \sigma)  
+\end{equation} 
+
+Resulting in the following `stan` code with selected priors:
+
+```{stan , eval=F, output.var="Model", echo=T, cache = F}
+data {
+  int<lower=1>  N ; // # of observations
+  int<lower=1> S ; // # species
+  vector[N] Trait ; // Trait
+  vector[N] DBH ; // Diameter at Breast Height
+  vector[N] TWI ; // Topographic Wetness Index
+  vector[N] NCIcon ; // DBH neighbor
+  vector[N] NCIhetero ; // DBH neighbor
+  int<lower=1, upper=S> species[N] ; // species index
+}
+parameters {
+  vector [S] alpha ; // Intercept
+  vector<lower=0> [S]  betaDBH ; // DBH half-load
+  vector[S] betaTWI ; // TWI slope
+  vector[S] betaNCIcon ; // Competition slope
+  vector[S] betaNCIhetero ; // Competition slope
+  real<lower=0> sigma ; // Variance
+}
+model {
+  alpha ~ normal(0, 10^6) ; // Priors
+  betaDBH ~ normal(0,1) ;
+  betaTWI ~ normal(0,1) ;
+  betaNCIcon ~ normal(0,1) ;
+  betaNCIhetero ~ normal(0,1) ;
+  sigma ~ cauchy(0, 5) ;
+  Trait ~ normal((alpha[species] + betaTWI[species] .* TWI +  betaNCIcon[species] .* NCIcon +  betaNCIhetero[species] .* NCIhetero) .* (DBH ./ (betaDBH[species] + DBH)), sigma) ; // Likelihood
+}
+```
+
+# References

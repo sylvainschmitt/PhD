@@ -143,23 +143,6 @@ preds <- lapply(models, function(model){
 
 <!-- SUPPLEMENTARY MATERIALS -->
 
-```{r disturbance}
-Individuals %>% 
-  filter(Genus == "Symphonia") %>% 
-  mutate(disturbed = ifelse(Plot %in% c(2:5, 7:10, 12), 1, 0)) %>% 
-  select(SLA, LDMC, LT, LA, CC, disturbed) %>% 
-  reshape2::melt(id.vars = "disturbed",
-                 variable.name = "trait") %>% 
-  group_by(trait) %>% 
-  do(student = t.test(value ~ disturbed, data = .)) %>% 
-  broom::tidy(student) %>% 
-  select(trait, estimate1, estimate2, statistic, p.value) %>% 
-  kable(col.names = c("Trait", "Disturbed", "Undisturbed", "Student's T", "p-value"), 
-        caption = "Disturbed plot effect on functional traits. Table representing the disturbed plot effect on functional traits have been investigated by Student's T-test, with investigated trait, disturbed plot mean value, undisturbed plot mean value, Student's T value, and associated p-value.",
-        digits = 3, format = "pandoc", escape = F) %>% 
-  kable_styling(full_width = F)
-```
-
 ```{r dawkins, fig.cap='Diameter at breast height (DBH) and Dawkins index correlation. Box colors indicates the Dawkins index. DBH and Dawkins index correlation has been investigated by Anova. **** indicates a $p-value < 0.0001$. Letters indicate post-hoc groups investigated by Tukey Honest Significant Differences.'}
 tHSD <- multcompView::multcompLetters((mutate(Individuals, Dawkins = substr(Dawkins, 1, 1)) %>% 
                                  aov(DBH ~ Dawkins, .) %>% 
@@ -258,7 +241,7 @@ lapply(models, function(model)
   kable_styling(full_width = F)
 ```
 
-```{r varcomp, fig.cap="Variance decomposition between ecological levels."}
+```{r varcomp, fig.cap="Variance decomposition between ecological levels.", eval=F}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
   googlesheets::gs_read("AllTraits") %>%
   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
@@ -300,7 +283,7 @@ traits %>%
   geom_text(position = position_stack(vjust = 0.5))
 ```
 
-```{r bootstrap, fig.cap="Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm."}
+```{r bootstrap, fig.cap="Coefficient of variation of mean estimation depending on the number of individuals sampled of DBH > 30 cm.", eval=F}
 t <- Individuals0 %>% 
   mutate(LMA = (1/SLA)*10^4) %>% 
   group_by(Species) %>% 

@@ -1,0 +1,139 @@
+```{r setup_plates, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/"
+```
+
+```{r data}
+nanodrop <- lapply(list.files(file.path(path, "NanoDrop", "Extraction"), 
+                  full.names = T), read.delim2) %>% 
+  bind_rows(.id = "Plate_extraction") %>% 
+  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
+  dplyr::rename(Position_extraction = Well,
+                concentration = Conc.) %>% 
+  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
+  select(Plate_extraction, Position_extraction, concentration)
+extraction <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction")
+```
+
+# Extraction
+
+After extraction, we prepared plates for library preparation. We proceed as follow :
+
+1. __Dosage__: plate has been dosed with NanoDrop including sample repeats
+1. __Reorganization__: sample repeats have been used to replace original sample if they included more DNA
+1. __Fragments size assesment__: plates 1 & 5 have been used to test fragment sizes with electrophoresis
+1. __Purification__: due too degraded DNA and undesired product as phenol, we puridied all samples
+1. __Dosage__: purification resulting in variable concentration not linear with input, we dosed again all samples by NanoDrop and adjusted the estimate by Qubit as concentration were low
+1. __Concentration__: concentration being low, we concentrated samples by SpeedVac to a minimum of 20 $ng. \mu L ^{-1}$
+1. __Library test__: we tested library preparation on 2 samples
+1. __Normalization__: we normalized library plates to an input of ca  100 $ng$ in 6 $\mu L$
+
+## Dosage
+
+NanoDrop was used to assess DNA concentration with $2 \mu L$ of samples (figure \@ref(fig:nanodrop)).
+
+```{r nanodrop, fig.cap="Samples concentration."}
+nanodrop %>% 
+  mutate(row = substr(Position_extraction, 1, 1)) %>% 
+  mutate(col = substr(Position_extraction, 2, 3)) %>% 
+  group_by(Plate_extraction) %>% 
+  ggplot(aes(y = factor(row, levels = rev(LETTERS[1:8])),
+             x = factor(col, levels = 1:12))) + 
+  geom_point(aes(col = log(concentration)), size = 4) +
+  geom_text(aes(label = round(concentration)), 
+            col = "white", size = 2.5) +
+  facet_wrap(~ Plate_extraction, ncol = 2) +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+## Reorganization
+
+Over 42 repeated extractions, 36 had a better result (around 10 folds better). And samples that were not better extracted had a mean of 10 $ng. \mu L^{-1}$. We replaced succesfull repeat original by their repeated extractions and get rid of the others.
+
+```{r repeats, eval=F}
+success <- extraction %>% 
+  left_join(nanodrop) %>% 
+  group_by(IdGenetic) %>% 
+  filter(n() > 1) %>% 
+  ungroup() %>% 
+  reshape2::dcast(IdGenetic ~ Repeat, value.var = "concentration") %>% 
+  filter(`0` < `1`) %>% 
+  select(IdGenetic) %>% 
+  unlist()
+extraction %>% 
+  filter(IdGenetic %in% success) %>% 
+  mutate(Position = paste0("P", Plate_extraction, "_", Position_extraction)) %>% 
+  mutate(Repeat = ifelse(Repeat == 1, "Repeat", "Origin")) %>% 
+  reshape2::dcast(IdGenetic ~ Repeat, value.var = "Position") %>% 
+  select(IdGenetic, Repeat, Origin) %>% 
+  kable(col.names = c("Id", "Repeat position", "Origin position (destination)"), 
+        caption = "Succesfull repeats.")
+```
+
+
+## Fragments size assesment
+
+Plates 1 & 5 have been used to test fragment sizes with electrophoresis. They globally had both high size DNA (band with high width) and degraded DNA (smir), see [electrophoresis presentation](https://drive.google.com/open?id=12MUcfVZ6PvAA3HxVi7g7Tkr-qUIv2E1jk5Edf45Ij7k).
+
+## Purification
+
+Due too degraded DNA and undesired product as phenol, we puridied all samples. We purified the 4.5 plates with PGTB Beads batch L at 1.8X.
+
+```{r purification, fig.cap="Relation between samples concentration dosed by NanoDrop before and after purification for plate P1."}
+purification <- lapply(list.files(file.path(path, "NanoDrop", "Purification"), 
+                  full.names = T), read.delim2) %>% 
+  bind_rows() %>% 
+  mutate(Plate_extraction = 1) %>% 
+  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
+  dplyr::rename(Position_extraction = Well,
+                Concentration_Purified = Conc.) %>% 
+  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
+  select(Plate_extraction, Position_extraction, Concentration_Purified)
+model <- lm(Concentration_Purified ~ concentration, data = extraction %>% 
+     left_join(nanodrop) %>% 
+     left_join(purification) %>% 
+       filter(Concentration_Purified < 1000))
+extraction %>% 
+  left_join(nanodrop) %>% 
+  left_join(purification) %>% 
+  filter(Concentration_Purified < 1000) %>% 
+  ggplot(aes(concentration, Concentration_Purified, 
+             col = Species, group = NA)) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_smooth(method = "lm") +
+  ggtitle(paste("Concentration purified =", round(model$coefficients[1]), "+", 
+                round(model$coefficients[2], 2), "* Concentration +/-", round(mean(abs(model$residuals))))) 
+```
+
+## Dosage
+
+Purification resulting in variable concentration not linear with input (Figure \@ref(fig:purification)), we dosed again all samples by NanoDrop and adjusted the estimate by Qubit as concentration were low (Figure ).
+
+## Concentration
+
+Concentration being low, we concentrated samples by SpeedVac to a minimum of 20 $ng. \mu L ^{-1}$. It means X time reduction (from 39 $\mu L$ to XX $\mu L$).
+
+## Library test
+
+We tested library preparation on 2 samples...
+
+## Normalization
+
+We normalized library plates to an input of ca  100 $ng$ in 6 $\mu L$...

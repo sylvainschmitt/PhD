@@ -1,3 +1,7 @@
+# PhD 0.1.9129
+* parvicapture: baits & extraction result, and libraries & capture planning
+* functional: growth exploration
+
 # PhD 0.1.9128
 * parvicapture: post-extraction (extraction repetitions & tests)
 * distribution: growth

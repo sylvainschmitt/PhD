@@ -1,0 +1,111 @@
+```{r setup_libraries, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+# Libraries protocol
+
+The protocol is given per sample with the corresponding volume for a plate of 96 samples in bracket.
+
+## Material preparation
+
+* **0.5 $\mu L$ of 10mM TrisHCL + 10 mM NaCl** (48 $\mu L$ per plate)
+* **46.875 $\mu L$ of 0.1X TE buffer** (2 136.875 $\mu L$ per plate) = 4.7 $\mu L$ of TE buffer (213.7 $\mu L$ per plate) + 42.3  $\mu L$ of water (1 923.3 $\mu L$ per plate)
+* **400 $\mu L$ of fresh 80% Ethanol** (38 400  $\mu L$ per plate)
+
+## Fragmentation
+
+1. Prepare **6.5 $\mu L$ of samples** with *ca* **100 $ng$ of DNA** (see previous chapter)
+2. **On ice**, pipette up and down **ULTRA II FS Reaction Buffer** 10X, vortex 5" and spin
+3. **On ice**, vortex 5" **Ultra II FS Enzyme Mix** and spin
+4. **On ice**, premix **0.5  $\mu L$ of Ultra II FS Enzyme Mix** (48 $\mu L$ per plate) with **1.75 $\mu L$ of Ultra II FS Reaction Buffer** (168 $\mu L$ per plate), vortex and spin
+5. **On ice**, add **2.25  $\mu L$ of premix** to each sample, vortex 5" and spin:
+
+```{r}
+data.frame(
+  Component = c("DNA", "Ultra II FS Enzyme Mix", "Ultra II FS Reaction Buffer", "Total"),
+  V = c("6.5 $\\mu L$", "0.5 $\\mu L$", "1.75 $\\mu L$", "8.75 $\\mu L$"),
+  Vplate = c("", "48 $\\mu L$", "168 $\\mu L$", "")
+) %>% 
+kable(col.names = c("Component", "Volume per library", "Volume per plate"))
+```
+
+6. Thermocycle with following programs depending on electrophoresis quality:
+    * Good: 13'@37°C, 30'@65°C, Hold@-4°C
+    * Medium: 9'@37°C, 30'@65°C, Hold@-4°C
+    * __Bad: 1'@37°C, 30'@65°C, Hold@-4°C (To be used with our samples)__
+7. *Optionally, put the **NEBNext adaptor for Illumina** out of the freezer (long to melt)*
+8. *Optionally, samples can be stored overnight at $-20^\circ$*
+
+## Adaptor ligation
+
+1. **On ice**, prepare diluted adaptor (1:5) with **0.125 $\mu L$ of NEBNext adaptor for Illumina** (12 $\mu L$ per plate) diluted into **0.5 $\mu L$ of 10mM TrisHCL + 10 mM NaCl** (48 $\mu L$ per plate)
+2. **On ice**, premix **7.5  $\mu L$ of NEBNext Ultra II Ligation Master Mix** (720 $\mu L$ per plate) with **0.25 $\mu L$ of NEBNext ligation enhancer** (24 $\mu L$ per plate), vortex and spin
+3. **On ice**, add **0.625 $\mu L$ of diluted adaptor** and **7.75 $\mu L$ of premix** to samples, mix and spin:
+
+```{r}
+data.frame(
+  Component = c("DNA", "NEBNext Ultra II Ligation Master Mix", 
+                "NEBNext ligation enhancer", "diluted NEBNext adaptor (1:5)", "Total"),
+  V = c("8.75 $\\mu L$", "7.5 $\\mu L$", "0.25 $\\mu L$", "0.625 $\\mu L$", "17.25 $\\mu L$"),
+  Vplate = c("", "720 $\\mu L$", "24 $\\mu L$", "50 $\\mu L$", "")
+) %>% 
+kable(col.names = c("Component", "Volume per library", "Volume per plate"))
+```
+
+4. Incubate 15'@20°C with **lid open**
+5. **On ice**, add **0.75 $\mu L$ of USER Enzyme** (72 $\mu L$ per plate) to samples, mix and spin
+6. Incubate 15'@37°C with lid hot (>47°C)
+7. *Optionally, samples can be stored overnight at $-20^\circ$*
+
+## Purification
+
+1. Bring the sample volume from **17.125 $\mu L$** to **27.125 $\mu L$** adding **10 $\mu L$ of 0.1X TE buffer** (1 716 $\mu L$ per plate)
+1. Vortex **PGTB beads** at room temperature
+1. Add **27.2 $\mu L$ (~1X) of beads** (2 611 $\mu L$ per plate), mix, vortex 5" keeping beads, spin, place on magnet, wait 5', and remove supernatant (~ 63 $\mu L$ per sample)
+1. Add **100 $\mu L$ of fresh 80% Ethanol** (9 600 $\mu L$ per plate), wait 30' remove supernatant
+1. Repeat, add **100 $\mu L$ of fresh 80% Ethanol** (9 600 $\mu L$ per plate), wait 30" remove supernatant
+1. Air dry beads 3' on magnet
+1. Remove magnet, elute into **12 $\mu L$ of hot 0.1X TE** (2 112 $\mu L$ per plate) (~40°C), mix, incubate 2', and spin
+1. Place on magnet, wait 5', transfer **10 $\mu L$ of supernatant** to a new plate
+1. *Optionally, samples can be stored overnight at $-20^\circ$*
+
+## Enrichment and purification
+
+*protocol given for delivered oligos at $100mM$, not NEBNext tag at $10mM$*
+
+1. Prepare diluted index (1:10) with **0.32 $\mu L$ of Index Primer i5 and i7** diluted in **2.88 $\mu L$ of mQ $H_2O$** (3.84 $\mu L$ of i5 per row and 2.56 $\mu L$ of i7 per column)
+2. Add reaction buffer and index to samples, mix and spin :
+
+```{r}
+data.frame(
+  Component = c("sample", "NEBNext Ultra II Q5 Master Mix", 
+                "diluted Index Primer i5 (1:10)", "diluted Index Primer i7 (1:10)", "Total"),
+  V = c("10 $\\mu L$", "16.6 $\\mu L$", "3.2 $\\mu L$", "3.2 $\\mu L$", "33 $\\mu L$"),
+  Vplate = c("", "1593.6 $\\mu L$", "38.4 $\\mu L$", "38.4 $\\mu L$", "")
+) %>% 
+kable(col.names = c("Component", "Volume per library", "Volume per plate/row/column"))
+```
+
+3. Thermocycle with following program
+    * 30"@98°C
+    * 8 cycles of 10"@98°C and 75"@65°C __(To be adjusted in test)__
+    * 5'@65°C
+    * Hold@4°C
+6. Vortex **PGTB beads** at room temperature
+7. Add **38.4 $\mu L$ (~1X) of beads** (3 686 $\mu L$ per plate), mix, vortex 5" keeping beads, spin, place on magnet, wait 5', and remove supernatant (~ 63 $\mu L$ per sample)
+8. Add **100 $\mu L$ of fresh 80% Ethanol** (9 600 $\mu L$ per plate), wait 30' remove supernatant
+9. Repeat, add **100 $\mu L$ of fresh 80% Ethanol** (9 600 $\mu L$ per plate), wait 30" remove supernatant
+10. Air dry beads 3' on magnet
+11. Remove magnet, elute into **22 $\mu L$ of hot 0.1X TE** (2 112 $\mu L$ per plate) (~40°C), mix, incubate 2', and spin
+12. Place on magnet, wait 5', transfer **22 $\mu L$ of supernatant** to a new plate and store at $-20^\circ$
