@@ -1,5 +1,5 @@
 ---
-title: "A09 : Traits and growth"
+title: "A09 : TWI and growth"
 date: '`r Sys.Date()`'
 author: Sylvain Schmitt
 output:
@@ -22,7 +22,7 @@ link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -73,9 +73,21 @@ Individuals <- Individuals %>%
   mutate_at(vars("TWI"), funs(./sd(., na.rm = T)))
 ```
 
-## Individual growth
+# Introduction
 
-```{stan stanModel, output.var="Model", echo=T, eval=F, cache=F}
+The aim of this analysis is to quickly explore the potential role of TWI in tree growth. For that we used three different methods:
+
+1. We fitted a growth potential $AGRmax_{ind}$ for every individual that we tried to explain by TWI (**Individual growth paragraph**)
+1. We computed a vigor index for every individual based on the difference between species mean predicted growth and individual observed growth (**Individual vigor paragraph**)
+1. We integrated TWI in the growth model as a new reductor (**Traits in model paragraph**)
+
+# Individual growth
+
+We used the following model adapted from @Herault2011:
+$$log(AGR+1) \sim \mathcal{N}(AGRmax_{individual}.e^{-\frac12 .[\frac{log(\frac{dbh}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
+We obtained reasonable predicitons for individual growth (Fig. \@ref(fig:predicitonIndividualGrowth)), besides due to different sampling depth between individuals the model can be really uncertain for lot of individuals. Globally TWI was not related to individual growth (Fig. \@ref(fig:TWIRelationIndividualGrowth) and Tab. \@ref(tab:TWILmIndividualGrowth)).
+
+```{stan modelIndividual, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -106,8 +118,8 @@ generated quantities {
 }
 ```
 
-```{r mdata}
-paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+```{r fits}
+data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(idTree %in% local(Individuals$idTree)) %>%
   mutate(dbh = CircCorr/pi) %>% 
@@ -119,10 +131,6 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   filter(ddbh > 0) %>% 
   mutate(agr = ddbh/dt) %>% 
   ungroup()
-```
-
-```{r fits}
-data <- paracou
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(data),
 #                             AGR = data$agr,
@@ -144,7 +152,7 @@ data <- paracou
 load("./functional_save/growth.Rdata")
 ```
 
-```{r prediciton}
+```{r predicitonIndividualGrowth, fig.cap="Model predictions for individual growth."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -153,7 +161,7 @@ data %>%
   geom_line(aes(y = AGRpred))
 ```
 
-```{r trait}
+```{r TWIRelationIndividualGrowth, fig.cap="Individual growth - TWI relation."}
 data %>% 
   mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
   left_join(Individuals) %>% 
@@ -165,7 +173,7 @@ data %>%
   geom_smooth(method = "lm")
 ```
 
-```{r traitLm}
+```{r TWILmIndividualGrowth}
 data %>% 
   mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
   left_join(Individuals) %>% 
@@ -176,12 +184,19 @@ data %>%
   group_by(SpeciesLong) %>% 
   do(lm = lm(AGRmaxind ~ TWI, data = .)) %>% 
   broom::tidy(lm) %>% 
-  kable(digits = 3)
+  filter(p.value < 0.05) %>% 
+  kable(digits = 3, caption = "Significative coefficients for the model AGRmaxind ~ TWI for every species.")
 ```
 
-## Individual vigor
+# Individual vigor
 
-```{stan stanModelSp, output.var="Model", echo=T, eval=F, cache=F}
+We used the following model adapted from @Herault2011:
+$$log(AGR+1) \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
+And computed the following vigor index:
+$$Vigor_{individual}=\frac{\int _{t0_{individual}} ^{tend_{individual}} AGRobserved_{individual}}{\int _{t0_{individual}} ^{tend_{individual}} AGRpredicted_{individual}}$$
+We obtained reasonable predicitons for species growth (Fig. \@ref(fig:predicitonVigor)). Globally TWI was not related to individual vigor (Fig. \@ref(fig:TWIRelationVigor) and Tab. \@ref(tab:TWILmVigor)).
+
+```{stan modelSp, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -206,8 +221,19 @@ generated quantities {
 }
 ```
 
-```{r fitsSp}
-data <- paracou
+```{r fitSp}
+data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(idTree %in% local(Individuals$idTree)) %>%
+  mutate(dbh = CircCorr/pi) %>% 
+  group_by(idTree) %>% 
+  arrange(idTree, CensusYear) %>% 
+  collect() %>% 
+  mutate(ddbh = dbh - lag(dbh), 
+         dt = CensusYear - lag(CensusYear)) %>% 
+  filter(ddbh > 0) %>% 
+  mutate(agr = ddbh/dt) %>% 
+  ungroup()
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(data),
 #                             AGR = data$agr,
@@ -219,7 +245,7 @@ data <- paracou
 load("./functional_save/growthsp.Rdata")
 ```
 
-```{r predicitonSp}
+```{r predicitonVigor, fig.cap="Model predictions for species growth."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -228,11 +254,10 @@ data %>%
   geom_line(aes(y = AGRpred))
 ```
 
-$$Vigor =  \frac{\int AGR - \int \hat{AGR}{n} \sim \mathcal{N} (\alpha+\beta .log(suitability),\sigma)$$
-
-```{r traitSp}
-paracou %>% 
-  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+```{r TWIRelationVigor, fig.cap="Individual vigor - TWI relation."}
+data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>%
   group_by(idTree) %>% 
   summarise(Vigor = (sum(agr)-sum(AGRpred))/n()) %>% 
   left_join(Individuals) %>% 
@@ -245,9 +270,10 @@ paracou %>%
   geom_smooth(method = "lm")
 ```
 
-```{r traitSpLm}
-paracou %>% 
-  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+```{r TWILmVigor}
+data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>%
   group_by(idTree) %>% 
   summarise(Vigor = (sum(agr)-sum(AGRpred))/n()) %>% 
   left_join(Individuals) %>% 
@@ -258,12 +284,17 @@ paracou %>%
   group_by(SpeciesLong) %>% 
   do(lm = lm(Vigor ~ TWI, data = .)) %>% 
   broom::tidy(lm) %>% 
-  kable(digits = 3)
+  filter(p.value < 0.05) %>% 
+  kable(digits = 3, caption = "Significative coefficients for the model Vigor ~ TWI for every species.")
 ```
 
-## Traits in model
+# TWI in model
 
-```{stan stanModelTraits, output.var="Model", echo=T, eval=F, cache=F}
+We used the following model adapted from @Herault2011:
+$$log(AGR+1) \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh}{Dopt_{species}})}{Ks_{species}}]^2}.e^{-\beta_{TWI}.TWI}, \sigma)$$
+We obtained reasonable predicitons for species growth (Fig. \@ref(fig:predicitonTraits)). Globally TWI did not seem to have an effect on individual growth, except for *S. globulifera* (Fig. \@ref(fig:TWIPosteriors)).
+
+```{stan modelTWI, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -281,12 +312,17 @@ parameters {
 }
 model {
   for(n in 1:N)
-    log(AGR[n]+1) ~ normal(AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2))*exp(-0.5*TWI[sp[n]]*twi[n]), sigma) ;
+    log(AGR[n]+1) ~ normal(AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2))*exp(-TWI[sp[n]]*twi[n]), sigma) ;
+}
+generated quantities {
+  vector<lower=0>[N] AGRpred ;
+  for(n in 1:N)
+    AGRpred[n] = AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2))*exp(-TWI[sp[n]]*twi[n]) ;
 }
 ```
 
-```{r mdataTraits}
-paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+```{r fitTWI}
+data <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(idTree %in% local(Individuals$idTree)) %>%
   mutate(dbh = CircCorr/pi) %>% 
@@ -297,13 +333,9 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
   mutate(agr = ddbh/dt) %>% 
-  left_join(Individuals)
-```
-
-```{r fitTraits}
-data <- paracou %>% 
+  left_join(Individuals) %>% 
   ungroup() %>% 
-  select(agr, dbh, TWI, Species) %>% 
+  select(idTree, Genus, agr, dbh, TWI, Species) %>% 
   mutate_at(vars("TWI"), scale) %>% 
   mutate_at(vars("TWI"), as.vector) %>% 
   na.omit()
@@ -315,14 +347,25 @@ data <- paracou %>%
 #                             S = length(unique(data$Species)),
 #                             sp = as.numeric(as.factor(data$Species))
 #                 ))
-# save(fit, file = "./functional_save/growthTraits.Rdata")
-load("./functional_save/growthTraits.Rdata")
+# save(fit, file = "./functional_save/growthTWI.Rdata")
+load("./functional_save/growthTWI.Rdata")
 ```
 
-```{r}
-bayesplot::mcmc_intervals(as.array(fit, par = "TWI")) +
-  scale_y_discrete(labels = levels(as.factor(Individuals$Species)))
+```{r predicitonTraits, fig.cap="Model predictions for TWI growth."}
+data %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  ggplot(aes(x = dbh, col = Species, group = idTree)) + 
+  geom_point(aes(y = log(agr+1)), alpha = 0.1) + 
+  geom_line(aes(y = AGRpred))
 ```
 
+```{r TWIPosteriors, fig.cap="Model posteriors for TWI effect on growth."}
+bayesplot::mcmc_areas(as.array(fit, pars = c("TWI")))
+```
 
+# Conclusion
 
+This was a rapide test. But at the exception of *Symphonia* species in method 3, all methods seem to indicant no link between TWI and individual growth. Method 3 only suggest a positive effect of TWI on individual growth for *Symphonia* species.
+
+# References

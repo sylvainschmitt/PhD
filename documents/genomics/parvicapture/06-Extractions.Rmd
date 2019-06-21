@@ -27,6 +27,16 @@ nanodrop <- lapply(list.files(file.path(path, "NanoDrop", "Extraction"),
   select(Plate_extraction, Position_extraction, concentration)
 extraction <- googlesheets::gs_title("Parvicapture") %>% 
   googlesheets::gs_read("Extraction")
+purification <- lapply(list.files(file.path(path, "NanoDrop", "Purification"), 
+                  full.names = T), read.delim2) %>% 
+  bind_rows(.id = "Plate_extraction") %>% 
+  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
+  dplyr::rename(Position_extraction = Well,
+                Concentration_Purified = Conc.) %>% 
+  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
+  select(Plate_extraction, Position_extraction, Concentration_Purified)
+qubit <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Qubit")
 ```
 
 # Extraction
@@ -95,23 +105,16 @@ Plates 1 & 5 have been used to test fragment sizes with electrophoresis. They gl
 Due too degraded DNA and undesired product as phenol, we puridied all samples. We purified the 4.5 plates with PGTB Beads batch L at 1.8X.
 
 ```{r purification, fig.cap="Relation between samples concentration dosed by NanoDrop before and after purification for plate P1."}
-purification <- lapply(list.files(file.path(path, "NanoDrop", "Purification"), 
-                  full.names = T), read.delim2) %>% 
-  bind_rows() %>% 
-  mutate(Plate_extraction = 1) %>% 
-  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
-  dplyr::rename(Position_extraction = Well,
-                Concentration_Purified = Conc.) %>% 
-  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
-  select(Plate_extraction, Position_extraction, Concentration_Purified)
 model <- lm(Concentration_Purified ~ concentration, data = extraction %>% 
      left_join(nanodrop) %>% 
      left_join(purification) %>% 
-       filter(Concentration_Purified < 1000))
+       filter(Concentration_Purified < 1000) %>% 
+       filter(Concentration_Purified > 1))
 extraction %>% 
   left_join(nanodrop) %>% 
   left_join(purification) %>% 
   filter(Concentration_Purified < 1000) %>% 
+  filter(Concentration_Purified > 1) %>% 
   ggplot(aes(concentration, Concentration_Purified, 
              col = Species, group = NA)) +
   geom_point() +
@@ -124,7 +127,41 @@ extraction %>%
 
 ## Dosage
 
-Purification resulting in variable concentration not linear with input (Figure \@ref(fig:purification)), we dosed again all samples by NanoDrop and adjusted the estimate by Qubit as concentration were low (Figure ).
+Purification resulting in variable concentration not linear with input (Figure \@ref(fig:purification)), we dosed again all samples by NanoDrop and adjusted the estimate by Qubit as concentration were low (Figure \@ref(fig:extractionQubit)).
+
+```{r extractionQubit, fig.cap="Samples concentration after purification. Concentration was assessed by NanoDrop and ajusted by Qubit with the relation in the subplot."}
+model <- lm(Concentration_Qubit ~ Concentration_Purified, data = extraction %>% 
+              left_join(nanodrop) %>% 
+              left_join(purification) %>% 
+              left_join(qubit) %>% 
+              filter(!is.na(Concentration_Qubit)))
+p1 <- extraction %>% 
+  left_join(nanodrop) %>% 
+  left_join(purification) %>% 
+  left_join(qubit) %>% 
+  filter(!is.na(Concentration_Qubit)) %>% 
+  ggplot(aes(Concentration_Purified, Concentration_Qubit, col = Species, group = NA)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  scale_color_discrete(guide = "none") +
+  scale_x_log10() +
+  xlab("Concentration NanoDrop") +
+  ylab("Concentration Qubit")
+data <- extraction %>% 
+  left_join(nanodrop) %>% 
+  left_join(purification) %>% 
+  left_join(qubit) %>% 
+  mutate(Concentration_est = model$coefficients[1] + model$coefficients[2]*Concentration_Purified)
+ggplot(data, aes(Concentration_est, fill = Species)) +
+  geom_histogram(position = "dodge") +
+  scale_x_log10() +
+  xlab("Concentration estimated") +
+  ggtitle(paste(nrow(filter(data, Concentration_est > 25)), "samples > 25 ng/uL"),
+          paste("Concentration estimated =", round(model$coefficients[1]), "+", 
+                round(model$coefficients[2], 2), "* Concentration NanoDrop +/-", round(mean(abs(model$residuals))))) +
+  annotation_custom(grob = ggplotGrob(p1), xmin = 1.8, xmax = 2.47, ymin = 10, ymax = 90)
+```
+
 
 ## Concentration
 

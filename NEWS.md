@@ -1,3 +1,6 @@
+# PhD 0.1.9130
+* functional: growth exploration: growth, TWI, suitability
+
 # PhD 0.1.9129
 * parvicapture: baits & extraction result, and libraries & capture planning
 * functional: growth exploration

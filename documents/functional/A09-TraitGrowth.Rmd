@@ -22,7 +22,7 @@ link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
-#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
 library(kableExtra)
@@ -81,9 +81,23 @@ Individuals <- Individuals %>%
             funs(./sd(., na.rm = T)))
 ```
 
-## Individual growth
+# Introduction
 
-```{stan stanModel, output.var="Model", echo=T, eval=F}
+> Changes following Geraldine remark about the temporality of functional traits value, *i.e.* the value we observe is valid only for 2015 as traits evolve with DBH.
+
+The aim of this analysis is to quickly explore the potential role of individual leaf functional traits in tree growth. For that we used three different methods:
+
+1. We fitted a growth potential $AGRmax_{ind}$ for every individual that we tried to explain AGR predicted in 2015 by each functional trait (**Individual growth paragraph**)
+1. We computed a vigor index for every individual based on the difference between species mean predicted growth and individual observed growth in 2015 (**Individual vigor paragraph**)
+1. We integrated traits in the growth model as a new reductor of 2015 individual annual growth rate (**Traits in model paragraph**)
+
+# Individual growth
+
+We used the following model adapted from @Herault2011:
+$$log[AGR(t)+1] \sim \mathcal{N}(AGRmax_{individual}.e^{-\frac12 .[\frac{log(\frac{dbh(t)}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
+We obtained reasonable predicitons for individual growth (\@ref(fig:predicitonIndividualGrowth)), besides due to different sampling depth between individuals the model can be really uncertain for lot of individuals. Globally traits did not seem to be related to individual growth in 2015, except for a weak and significative negative effect of SLA on *E. sagotiana* individual growth and a weak and significative positive effect of LA  on *E. sagotiana* and  *S. sp.1* individual growth (\@ref(fig:traitRelationIndividualGrowth) and \@ref(tab:traitLmIndividualGrowth)).
+
+```{stan modelIndividualGrowth, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -114,10 +128,10 @@ generated quantities {
 }
 ```
 
-```{r mdata}
-paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+```{r fitIndividualGrowth}
+data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
-  filter(idTree %in% Individuals$idTree) %>%
+  filter(idTree %in% local(Individuals$idTree)) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
@@ -125,12 +139,8 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(ddbh = dbh - lag(dbh), 
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
-  mutate(agr = ddbh/dt)
-```
-
-```{r fits}
-# data <- sample_n(ungroup(paracou), 1000)
-data <- ungroup(paracou)
+  mutate(agr = ddbh/dt) %>% 
+  ungroup()
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(data),
 #                             AGR = data$agr,
@@ -152,54 +162,60 @@ data <- ungroup(paracou)
 load("./functional_save/growth.Rdata")
 ```
 
-```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
-check_divergences(fit)
-# mcmc_trace(as.array(fit), facet_args = list(labeller = label_parsed))
-```
-
-```{r prediciton}
+```{r predicitonIndividualGrowth, fig.cap="Model predictions for individual growth with predicted growth in 2015 in black."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
   ggplot(aes(x = dbh, col = SpeciesLong, group = idTree)) + 
   geom_point(aes(y = log(agr+1))) + 
-  geom_line(aes(y = AGRpred))
+  geom_line(aes(y = AGRpred)) +
+  geom_point(aes(y = AGRpred, alpha = CensusYear == 2015), col = "black")
 ```
 
-```{r trait}
+```{r traitRelationIndividualGrowth, fig.cap="Individual growth redicted in 2015 - trait relation."}
 data %>% 
-  mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  filter(CensusYear == 2015) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, AGRmaxind, SLA, LDMC, LT, LA, CC) %>% 
+  select(Genus, Species, idTree, AGRpred, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
   unique() %>% 
-  reshape2::melt(id.vars = c("Genus", "Species", "idTree", "AGRmaxind"),
+  reshape2::melt(id.vars = c("Genus", "Species", "idTree", "AGRpred"),
                  variable.name = "Trait") %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
-  ggplot(aes(value, AGRmaxind)) +
+  ggplot(aes(value, AGRpred)) +
   geom_point() +
   geom_smooth(method = "lm") +
   facet_grid(SpeciesLong ~ Trait, scales = "free")
 ```
 
-```{r traitLm}
+```{r traitLmIndividualGrowth}
 data %>% 
-  mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  filter(CensusYear == 2015) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, AGRmaxind, SLA, LDMC, LT, LA, CC) %>% 
+  select(Genus, Species, idTree, AGRpred, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
   unique() %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   group_by(SpeciesLong) %>% 
-  do(lm = lm(AGRmaxind ~ SLA + LDMC + LT + LA + CC, data = .)) %>% 
-  broom::tidy(lm) %>% 
-  filter(p.value < 0.05) %>% 
-  kable(digits = 3)
+  do(lm = lm(AGRpred ~ SLA + LDMC + LT + LA + CC, data = .)) %>% 
+  broom::tidy(lm) %>%
+    filter(p.value < 0.05) %>% 
+  kable(digits = 3, caption = "Significative coefficients for the model AGRpred ~ SLA + LDMC + LT + LA + CC for every species in 2015.")
 ```
 
-## Individual vigor
+# Individual vigor
 
-```{stan stanModelSp, output.var="Model", echo=T, eval=F}
+We used the following model adapted from @Herault2011:
+$$log[AGR(t)+1] \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh(t)}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
+And computed the following vigor index:
+$$Vigor_{individual}=\frac{AGRobserved_{individual}(t=2015)}{AGRpredicted_{individual}(t=2015)}$$
+We obtained reasonable predicitons for species growth (\@ref(fig:predicitonVigor)). Globally traits did not seem to be related to individual vigor, except for a weak and significative negative effect of LDMC on *E. decolorans* individual vigor and a weak and significative positive effect of LA  on *S. sp1* individual vigor (\@ref(fig:traitRelationVigor) and \@ref(tab:traitLmVigor)).
+
+```{stan modelVigor, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -224,23 +240,19 @@ generated quantities {
 }
 ```
 
-```{r mdataSp}
-paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(idTree %in% Individuals$idTree) %>%
-  mutate(dbh = CircCorr/pi) %>% 
-  group_by(idTree) %>% 
-  arrange(idTree, CensusYear) %>% 
-  collect() %>% 
-  mutate(ddbh = dbh - lag(dbh), 
-         dt = CensusYear - lag(CensusYear)) %>% 
-  filter(ddbh > 0) %>% 
-  mutate(agr = ddbh/dt)
-```
-
-```{r fitsSp}
-# data <- sample_n(ungroup(paracou), 1000)
-data <- ungroup(paracou)
+```{r fitVigor}
+  data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+    tbl("Paracou") %>%
+    filter(idTree %in% local(Individuals$idTree)) %>%
+    mutate(dbh = CircCorr/pi) %>% 
+    group_by(idTree) %>% 
+    arrange(idTree, CensusYear) %>% 
+    collect() %>% 
+    mutate(ddbh = dbh - lag(dbh), 
+           dt = CensusYear - lag(CensusYear)) %>% 
+    filter(ddbh > 0) %>% 
+    mutate(agr = ddbh/dt) %>% 
+    ungroup()
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(data),
 #                             AGR = data$agr,
@@ -252,7 +264,7 @@ data <- ungroup(paracou)
 load("./functional_save/growthsp.Rdata")
 ```
 
-```{r predicitonSp}
+```{r predicitonVigor, fig.cap="Model predictions for species growth."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -261,12 +273,12 @@ data %>%
   geom_line(aes(y = AGRpred))
 ```
 
-```{r traitSp}
+```{r traitRelationVigor, fig.cap="Individual vigor in 2015 - trait relation."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
-  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>%
   filter(CensusYear == 2015) %>% 
-  mutate(Vigor = agr - AGRpred) %>% 
+  mutate(Vigor = agr-AGRpred) %>% 
   left_join(Individuals) %>% 
   select(Genus, Species, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
@@ -280,12 +292,12 @@ data %>%
   facet_grid(SpeciesLong ~ Trait, scales = "free")
 ```
 
-```{r traitSpLm}
+```{r traitLmVigor}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
-  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>%
   filter(CensusYear == 2015) %>% 
-  mutate(Vigor = agr - AGRpred) %>% 
+  mutate(Vigor = agr-AGRpred) %>% 
   left_join(Individuals) %>% 
   select(Genus, Species, SpeciesLong, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
@@ -294,12 +306,16 @@ data %>%
   do(lm = lm(Vigor ~ SLA + LDMC + LT + LA + CC, data = .)) %>% 
   broom::tidy(lm) %>% 
   filter(p.value < 0.05) %>% 
-  kable(digits = 3)
+  kable(digits = 3, caption = "Significative coefficients for the model Vigor ~ SLA + LDMC + LT + LA + CC for every species in 2015.")
 ```
 
-## Traits in model
+# Traits in model
 
-```{stan stanModelTraits, output.var="Model", echo=T, eval=F}
+We used the following model adapted from @Herault2011:
+$$log[AGR(t)+1] \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh(t)}{Dopt_{species}})}{Ks_{species}}]^2}.e^{-\beta_{Trait}.Trait}, \sigma)$$
+We first made a test with one trait, SLA. We obtained reasonable predicitons for species growth (Fig. \@ref(fig:predicitonTraits)). Globally SLA had a very weak and not significant negative effect on individual growth (Fig. \@ref(fig:traitsPosteriors)).
+
+```{stan modelTraits, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -313,26 +329,31 @@ data {
   int<lower=0> sp[N] ; // species vector
 }
 parameters {
-  vector<lower=0.1>[S] g0 ; // species potential growth
-  vector[S] gSLA ; 
-  vector[S] gLDMC ; 
-  vector[S] gLT ; 
-  vector[S] gLA ; 
-  vector[S] gCC ; 
+  vector<lower=0.1,upper=10>[S] AGRmax ; // species potential growth
   vector<lower=0,upper=200>[S] Dopt ; // optimal diameter
   vector<lower=0.1,upper=10>[S] Ks ; // kurtosis
+  vector[S] betaSLA ; 
+//  vector[S] betaLDMC ; 
+//  vector[S] betaLT ; 
+//  vector[S] betaLA ; 
+//  vector[S] betaCC ; 
   real<lower=0,upper=10> sigma ;
 }
 model {
   for(n in 1:N)
-    log(AGR[n]+1) ~ normal((g0[sp[n]] + gSLA[sp[n]] + gLDMC[sp[n]] + gLT[sp[n]] + gLA[sp[n]] + gCC[sp[n]] )*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2)), sigma) ;
+    log(AGR[n]+1) ~ normal(AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2))*exp(-betaSLA[sp[n]]*SLA[n]), sigma) ;
+}
+generated quantities {
+  vector<lower=0>[N] AGRpred ;
+  for(n in 1:N)
+    AGRpred[n] = AGRmax[sp[n]]*exp(-0.5*pow(log(dbh[n]/Dopt[sp[n]])/Ks[sp[n]], 2))*exp(-betaSLA[sp[n]]*SLA[n]) ;
 }
 ```
 
-```{r mdataTraits}
-paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+```{r fitTraits}
+data <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
-  filter(idTree %in% Individuals$idTree) %>%
+  filter(idTree %in% local(Individuals$idTree)) %>%
   mutate(dbh = CircCorr/pi) %>% 
   group_by(idTree) %>% 
   arrange(idTree, CensusYear) %>% 
@@ -341,17 +362,10 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
   mutate(agr = ddbh/dt) %>% 
-  left_join(Individuals)
-```
-
-```{r fitTraits}
-data <- paracou %>% 
-  ungroup() %>% 
+  filter(CensusYear == 2015) %>%
+  left_join(mutate_at(Individuals, vars("SLA", "LDMC", "LT", "LA", "CC"), funs(as.vector(base::scale(., center = F))))) %>% 
   select(agr, dbh, SLA, LDMC, LT, LA, CC, Species) %>% 
-  mutate_at(vars("SLA", "LDMC", "LT", "LA", "CC"), scale) %>% 
-  mutate_at(vars("SLA", "LDMC", "LT", "LA", "CC"), as.vector) %>% 
-  na.omit() %>% 
-  sample_n(1000)
+  na.omit()
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(data),
 #                             AGR = data$agr,
@@ -365,12 +379,24 @@ data <- paracou %>%
 #                             sp = as.numeric(as.factor(data$Species))
 #                 ))
 # save(fit, file = "./functional_save/growthTraits.Rdata")
-load("./functional_save/growthTraits.Rdata")
+load("./functional_save/growthTraits.Rdata") 
 ```
 
-```{r}
-bayesplot::mcmc_areas(as.array(fit, pars = c("g0", "gSLA", "gLDMC", "gLT", "gCC", "gLA")))
+```{r predicitonTraits, fig.cap="Model predictions for traits growth."}
+data %>% 
+  ungroup() %>% 
+  mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
+  ggplot(aes(x = dbh, col = Species)) + 
+  geom_point(aes(y = log(agr+1), size = SLA), alpha = 0.1) + 
+  geom_line(aes(y = AGRpred))
 ```
 
+```{r traitsPosteriors, fig.cap="Model posteriors for traits effect on growth."}
+bayesplot::mcmc_areas(as.array(fit, pars = c("betaSLA")))
+```
 
+# Conclusion
 
+This was a rapide test. But as a first conclusion whereas methods 1 and 2 (individual growth and individual vigor) did not seem to indicate significant effect of traits on individual growth, including SLA as a reductor in the growth model question about an eventual negative effect of increased acquisition through increased SLA in individual growth in 2015, besides it seems globally null. We may test other traits in future analysis.
+
+# References
