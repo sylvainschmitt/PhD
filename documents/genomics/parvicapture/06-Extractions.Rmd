@@ -159,17 +159,26 @@ ggplot(data, aes(Concentration_est, fill = Species)) +
   ggtitle(paste(nrow(filter(data, Concentration_est > 25)), "samples > 25 ng/uL"),
           paste("Concentration estimated =", round(model$coefficients[1]), "+", 
                 round(model$coefficients[2], 2), "* Concentration NanoDrop +/-", round(mean(abs(model$residuals))))) +
+  geom_vline(xintercept = 48, col = "red", linetype = "dashed") +
   annotation_custom(grob = ggplotGrob(p1), xmin = 1.8, xmax = 2.47, ymin = 10, ymax = 90)
 ```
 
-
 ## Concentration
 
-Concentration being low, we concentrated samples by SpeedVac to a minimum of 20 $ng. \mu L ^{-1}$. It means X time reduction (from 39 $\mu L$ to XX $\mu L$).
+Concentration being low, we concentrated samples by SpeedVac to a minimum of 25 $ng. \mu L ^{-1}$. It means 4 time reduction (from 39 $\mu L$ to 10 $\mu L$).
 
 ## Library test
 
-We tested library preparation on 2 samples...
+We tested library preparation on 2 samples with 1 $\mu L$ input:
+
+```{r libTestIV}
+data %>% 
+  mutate(Concentration_est = Concentration_est*4) %>% 
+  top_n(2, Concentration_est) %>% 
+  select(IdGenetic, Plate_extraction, Position_extraction, Genus, Species, Concentration_est) %>% 
+   kable(col.names = c("Id", "Plate", "Position", "Genus", "Species", "Estimated concentration"), 
+        caption = "Samples used for tests.")
+```
 
 ## Normalization
 

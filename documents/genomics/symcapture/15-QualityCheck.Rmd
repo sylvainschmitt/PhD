@@ -1,0 +1,168 @@
+```{r setup_QC, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+```{r QC}
+```
+
+# Quality Check
+
+We received demultiplexed libraries from sequencing. We will then check sequences quality combining already produced fastqc and compare them with originally furnished (i) baits, (ii) targets, and (iii) references:
+
+1. __Multi Quality Check__: we used `multiqc` to combined `fastqc` iutputs for every library (1002 for forward and reverse individuals) and chech sequences, counts, quality and GC content
+1. __Trimming__:
+1. __Targets mapping__: we mapped every libraries on targets to check of-targets sequences
+1. __Reference mapping__: we mapped every libraries on hybrid reference to check of-reference sequences, and assess *de novo* usefulness
+
+## Multi Quality Check
+
+We used `multiqc` to combined `fastqc` iutputs for every library (1002 for forward and reverse individuals) and chech sequences, counts, quality and GC content.
+
+```{bash multiqc, eval=F, echo=T}
+cd ~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/quality
+multiqc fastqc
+mkdir multiqc
+mv multiqc_data/ multiqc_report.html L1.fastqc.tar.gz L2.fastqc.tar.gz multiqc
+```
+
+### Counts
+
+We have a big heterogeneity of sapmle representativity (215 000 folds), but 85% of samples have more than 66 6667 sequences (ca 1M targets / 150 bp * 10X). Moreover duplicated sequences are obviously more present in overrepresentated individuals, probably more linked to PCR biased than sequencing issues.
+
+```{r seqcounts, fig.cap="Sequence counts."}
+read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
+  ggplot(aes(reorder(Sample, `Total Sequences (millions)`), `Total Sequences (millions)`, fill = `% Duplicate Reads`)) + 
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_y_sqrt() +
+  theme(axis.text.y = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.line.y =element_blank(), 
+        axis.ticks.y = element_blank()) +
+  ylab("Total sequences (millions)") + scale_fill_continuous("Duplicated\nreads\npercentage")
+```
+
+### Quality
+
+Sequences quality are very good as the Phred score is above 25 for every bases on all positions across all sequences !
+
+```{r phred, fig.cap="Phred score."}
+knitr::include_graphics("../../../data/Symphonia_Paracou/Sequences/quality/multiqc/plots/phred.png")
+```
+
+### GC content
+
+The mean GC content is 41.5 and only few sequences have non expected global content or content across the sequence.
+
+```{r gc, fig.cap="GC content across sequences."}
+read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
+  ggplot(aes(`Average % GC Content`)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 41.56587, col = "red", linetype = "dashed") +
+  xlab("Average GC content percentage")
+```
+
+```{r gcwithin, fig.cap="GC content within sequences."}
+knitr::include_graphics("../../../data/Symphonia_Paracou/Sequences/quality/multiqc/plots/GC.png")
+```
+
+## Trimming
+
+We listed all libraries in a txt files and trimmed all libraries with `trimmomatic` in pair end (`PE`) into paired and unpaired compressed fastq files (`fq.gz`). We trimmed the adaptor (`ILLUMINACLIP`) of our protocol (`TruSeq3-PE`) with a seed mismatches of 2 (mismatched count allowed), a threshold for clipping palindrome of 30 (authorized match for ligated adapters), a threshold for simple clip of 10 (match between adapter and sequence), a minimum adaptor length of 2, and keeping both reads each time (`keepBothReads`). We trimmed sequences on phred score with a minimum of 15 in sliding window of 4 (`SLIDINGWINDOW:4:15`) without trimming the beginning (`LEADING:X`) or the end (`TRAILING:X`).
+
+```{r librariesList, eval=F, echo=T}
+data.frame(libraries = list.files(file.path(path, "Sequences", "raw"))) %>% 
+  mutate(libraries = gsub("_R[12].fastq.gz", "", libraries)) %>% 
+  unique() %>% 
+  write_tsv(path = file.path(path, "Sequences", "libraries.txt"), col_names = F)
+```
+
+```{bash trimming, eval=F, echo=T}
+cd /home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences
+for library in $(cat libraries.txt)
+do
+  trimmomatic PE \
+    raw/"$library"_R1.fastq.gz raw/"$library"_R2.fastq.gz \
+    trimmed/paired/"$library"_R1_paired.fq.gz trimmed/unpaired/"$library"_R1_unpaired.fq.gz \
+    trimmed/paired/"$library"_R2_paired.fq.gz trimmed/unpaired/"$library"_R2_unpaired.fq.gz \
+    ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads \
+    SLIDINGWINDOW:4:15
+done
+```
+
+```{bash trimmingGenologin, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J trimming
+#SBATCH -o trimming_output.out
+#SBATCH -e trimming_error.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+module load bioinfo/Trimmomatic-0.36
+for library in $(cat libraries.txt)
+do
+  java -jar $TRIM_HOME/trimmomatic.jar PE \
+    raw/"$library"_R1.fastq.gz raw/"$library"_R2.fastq.gz \
+    trimmed/paired/"$library"_R1_paired.fq.gz trimmed/unpaired/"$library"_R1_unpaired.fq.gz \
+    trimmed/paired/"$library"_R2_paired.fq.gz trimmed/unpaired/"$library"_R2_unpaired.fq.gz \
+    ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads \
+    SLIDINGWINDOW:4:15
+done
+```
+
+## Targets mapping
+
+We mapped every libraries on targets to check of-targets sequences.
+
+```{bash targetsMapping, eval=F, echo=T}
+cd /home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences
+targets=../Baits/files-Symphonia/target-sequences.fas
+bwa index $targets
+for library in $(cat libraries_mapping.txt)
+do
+  rg="@RG\tID:${library}\tSM:${library}\tPL:HiSeq4K"
+  bwa mem -M -R "${rg}" $targets trimmed/paired/"$library"_R1_paired.fq.gz > targetsMapping/sam/"${library}.sam"
+  java -Xmx4g -jar ~/Tools/picard/picard.jar SortSam I=targetsMapping/sam/"${library}.sam" O=targetsMapping/bam/"${library}".bam SORT_ORDER=coordinate
+  java -Xmx4g -jar ~/Tools/picard/picard.jar BuildBamIndex I=targetsMapping/bam/"${library}".bam O=targetsMapping/bam/"${filename}".bai
+  bedtools bamtobed -i =targetsMapping/bam/"${library}".bam > targetsMapping/bed/"${library}".bed
+  bedtools merge -i targetsMapping/bed/"${library}".bed > targetsMapping/merged_bed/"${library}".bed
+done
+# cat bed/* | sort -k 1,1 -k2,2n >  all.nonunique.bed
+# bedtools merge -i all.nonunique.bed -c 1 -o count > all.merged.bed
+```
+
+## Reference mapping
+
+We mapped every libraries on hybrid reference to check of-reference sequences, and assess *de novo* usefulness.
+
+```{bash referenceMapping, eval=F, echo=T}
+cd /home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences
+cat ../../Symphonia_Genomic/neutral.targets.20180717.fasta ../../Symphonia_Genomic/functional.targets.20180717.fasta > referenceMapping/reference.fasta 
+reference=referenceMapping/reference.fasta 
+bwa index $reference
+for library in $(cat libraries_mapping.txt)
+do
+  rg="@RG\tID:${library}\tSM:${library}\tPL:HiSeq4K"
+  bwa mem -M -R "${rg}" $reference trimmed/paired/"$library"_R1_paired.fq.gz > referenceMapping/sam/"${library}.sam"
+  java -Xmx4g -jar ~/Tools/picard/picard.jar SortSam I=referenceMapping/sam/"${library}.sam" O=referenceMapping/bam/"${library}".bam SORT_ORDER=coordinate
+  java -Xmx4g -jar ~/Tools/picard/picard.jar BuildBamIndex I=referenceMapping/bam/"${library}".bam O=referenceMapping/bam/"${filename}".bai
+  bedtools bamtobed -i =referenceMapping/bam/"${library}".bam > referenceMapping/bed/"${library}".bed
+  bedtools merge -i referenceMapping/bed/"${library}".bed > referenceMapping/merged_bed/"${library}".bed
+done
+# cat bed/* | sort -k 1,1 -k2,2n >  all.nonunique.bed
+# bedtools merge -i all.nonunique.bed -c 1 -o count > all.merged.bed
+```

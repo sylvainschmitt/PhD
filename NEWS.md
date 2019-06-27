@@ -1,3 +1,6 @@
+# PhD 0.1.9131
+* symcapture: seq delivery QualityCheck: QC, trimming, mapping
+
 # PhD 0.1.9130
 * functional: growth exploration: growth, TWI, suitability
 
