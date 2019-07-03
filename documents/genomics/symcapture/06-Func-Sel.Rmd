@@ -74,7 +74,7 @@ blat $scf $orf alignment.psl
 ```
 
 ```{r blatResORF}
-alignment <- read_tsv(file.path(path, "functional_selection2", "alignment.psl"), skip = 4, 
+alignment <- read_tsv(file.path(path, "functional_selection2", "alignment.psl"), skip = 5, 
          col_names = c("matches", "misMatches", "repMatches", "nCount", 
                        "qNumInsert", "qBaseInsert",
                        "tNumInsert", "tBaseInsert", "strand", 
@@ -215,13 +215,13 @@ de <- read_delim(file.path(path, "Niklas_transcripts", "edgeR",
   select(gene, deg) %>% 
   unique()
 de %>% 
-  count(gene, deg) %>% 
+  dplyr::count(gene, deg) %>% 
   tidyr::spread(deg, n, fill=0) %>% 
   mutate(NE, NE = recode(NE, "1"="Not enriched")) %>% 
   mutate(Eglo, Eglo = recode(Eglo, "1"="Globulifera enriched")) %>% 
   mutate(Esp, Esp = recode(Esp, "1"="Sp1 enriched")) %>% 
   mutate(deg = paste(NE, Esp, Eglo, sep = "-")) %>% 
-  count(deg) %>% 
+  dplyr::count(deg) %>% 
   select(deg, n) %>% 
   sunburstR::sunburst(count = T)
 ```

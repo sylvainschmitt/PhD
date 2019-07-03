@@ -59,7 +59,7 @@ quantit <- read_csv(file.path(path, "QuantIt",
                                 rep(c(0, 5, 10, 20, 40, 60)*19/20, each = 2), concentration))
 ```
 
-```{stan quantitModel, output.var="quantitModel", echo=F, eval=F}
+```{stan quantitModel, output.var="quantitModel", echo=F, eval=F, cache=F}
   data {
     int N ;
     real fluorescence[N] ;
@@ -114,7 +114,7 @@ qbit <- data.frame(
             by = c("plate" = "plate", "row" = "row_plate", "col" = "col_plate"))
 ```
 
-```{stan qbitModelRes, output.var="qbitModel", echo=F, eval=F}
+```{stan qbitModelRes, output.var="qbitModel", echo=F, eval=F, cache=F}
   data {
     int N ;
     real quantit[N] ;

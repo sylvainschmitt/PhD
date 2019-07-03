@@ -5,9 +5,8 @@ library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
-library(rstan)
-options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = T)
+library(Biostrings)
+library(GenomicAlignments)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -16,16 +15,27 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
 ```{r QC}
+quality <- read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
+  mutate(Library = gsub("_001", "", Sample)) %>% 
+  mutate(SequencesRaw = `Total Sequences (millions)`*10^6)
+unpaired <- read_delim(file.path(path, "Sequences", "trimmed", "unpaired_stat.txt"),
+           delim = " ", col_names = c("Library", "SequencesUnpaired")) %>% 
+  mutate(Library = gsub("_unpaired.fq.gz", "", Library)) %>% 
+  mutate(SequencesUnpaired = as.numeric(SequencesUnpaired))
+paired <- read_delim(file.path(path, "Sequences", "trimmed", "paired_stat.txt"),
+           delim = " ", col_names = c("Library", "SequencesPaired")) %>%
+    mutate(Library = gsub("_paired.fq.gz", "", Library)) %>% 
+  mutate(SequencesPaired = as.numeric(SequencesPaired))
 ```
 
 # Quality Check
 
 We received demultiplexed libraries from sequencing. We will then check sequences quality combining already produced fastqc and compare them with originally furnished (i) baits, (ii) targets, and (iii) references:
 
-1. __Multi Quality Check__: we used `multiqc` to combined `fastqc` iutputs for every library (1002 for forward and reverse individuals) and chech sequences, counts, quality and GC content
-1. __Trimming__:
-1. __Targets mapping__: we mapped every libraries on targets to check of-targets sequences
-1. __Reference mapping__: we mapped every libraries on hybrid reference to check of-reference sequences, and assess *de novo* usefulness
+1. __Multi Quality Check__: we used `multiqc` to combined `fastqc` iuputs for every library (1002 for forward and reverse individuals) and check sequences, counts, quality and GC content
+1. __Trimming__: we trimmed sequences removing bad quality and adaptors sequences
+1. __Targets mapping__: we mapped 10 libraries on targets to check of-targets sequences
+1. __Reference mapping__: we mapped 10 libraries on hybrid reference to check of-reference sequences, and assess *de novo* usefulness
 
 ## Multi Quality Check
 
@@ -43,7 +53,7 @@ mv multiqc_data/ multiqc_report.html L1.fastqc.tar.gz L2.fastqc.tar.gz multiqc
 We have a big heterogeneity of sapmle representativity (215 000 folds), but 85% of samples have more than 66 6667 sequences (ca 1M targets / 150 bp * 10X). Moreover duplicated sequences are obviously more present in overrepresentated individuals, probably more linked to PCR biased than sequencing issues.
 
 ```{r seqcounts, fig.cap="Sequence counts."}
-read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
+quality %>% 
   ggplot(aes(reorder(Sample, `Total Sequences (millions)`), `Total Sequences (millions)`, fill = `% Duplicate Reads`)) + 
   geom_bar(stat = "identity") +
   coord_flip() +
@@ -68,7 +78,7 @@ knitr::include_graphics("../../../data/Symphonia_Paracou/Sequences/quality/multi
 The mean GC content is 41.5 and only few sequences have non expected global content or content across the sequence.
 
 ```{r gc, fig.cap="GC content across sequences."}
-read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
+quality %>% 
   ggplot(aes(`Average % GC Content`)) + 
   geom_histogram() +
   geom_vline(xintercept = 41.56587, col = "red", linetype = "dashed") +
@@ -81,7 +91,7 @@ knitr::include_graphics("../../../data/Symphonia_Paracou/Sequences/quality/multi
 
 ## Trimming
 
-We listed all libraries in a txt files and trimmed all libraries with `trimmomatic` in pair end (`PE`) into paired and unpaired compressed fastq files (`fq.gz`). We trimmed the adaptor (`ILLUMINACLIP`) of our protocol (`TruSeq3-PE`) with a seed mismatches of 2 (mismatched count allowed), a threshold for clipping palindrome of 30 (authorized match for ligated adapters), a threshold for simple clip of 10 (match between adapter and sequence), a minimum adaptor length of 2, and keeping both reads each time (`keepBothReads`). We trimmed sequences on phred score with a minimum of 15 in sliding window of 4 (`SLIDINGWINDOW:4:15`) without trimming the beginning (`LEADING:X`) or the end (`TRAILING:X`).
+We listed all libraries in a txt files and trimmed all libraries with `trimmomatic` in pair end (`PE`) into paired and unpaired compressed fastq files (`fq.gz`). We trimmed the adaptor (`ILLUMINACLIP`) of our protocol (`TruSeq3-PE`) with a seed mismatches of 2 (mismatched count allowed), a threshold for clipping palindrome of 30 (authorized match for ligated adapters), a threshold for simple clip of 10 (match between adapter and sequence), a minimum adaptor length of 2, and keeping both reads each time (`keepBothReads`). We trimmed sequences on phred score with a minimum of 15 in sliding window of 4 (`SLIDINGWINDOW:4:15`) without trimming the beginning (`LEADING:X`) or the end (`TRAILING:X`). Without surprise due to the high quality check of sequencing, trimming resulted in 99.91% of paired trimmed reads compared to raw reads (\@ref(fig:trimmingStat)). Thus the main issue of our dataset for now is more the representativity of sequences mor than their quality.
 
 ```{r librariesList, eval=F, echo=T}
 data.frame(libraries = list.files(file.path(path, "Sequences", "raw"))) %>% 
@@ -90,20 +100,13 @@ data.frame(libraries = list.files(file.path(path, "Sequences", "raw"))) %>%
   write_tsv(path = file.path(path, "Sequences", "libraries.txt"), col_names = F)
 ```
 
-```{bash trimming, eval=F, echo=T}
-cd /home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences
-for library in $(cat libraries.txt)
-do
-  trimmomatic PE \
-    raw/"$library"_R1.fastq.gz raw/"$library"_R2.fastq.gz \
-    trimmed/paired/"$library"_R1_paired.fq.gz trimmed/unpaired/"$library"_R1_unpaired.fq.gz \
-    trimmed/paired/"$library"_R2_paired.fq.gz trimmed/unpaired/"$library"_R2_unpaired.fq.gz \
-    ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads \
-    SLIDINGWINDOW:4:15
-done
+```{r librariesMappingList, eval=F, echo=T}
+read_tsv(file.path(path, "Sequences", "libraries.txt"), col_names = "Library") %>% 
+  sample_n(10) %>% 
+  write_tsv(path = file.path(path, "Sequences", "libraries_mapping.txt"), col_names = F)
 ```
 
-```{bash trimmingGenologin, eval=F, echo=T}
+```{bash trimming, eval=F, echo=T}
 #!/bin/bash
 #SBATCH --time=36:00:00
 #SBATCH -J trimming
@@ -122,47 +125,237 @@ do
     ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:2:keepBothReads \
     SLIDINGWINDOW:4:15
 done
+cat trimmed/paired_stat.txt
+for file in $(ls trimmed/paired)
+do
+  zcat trimmed/paired/$file | echo $file"   "$((`wc -l`/4)) >> trimmed/paired_stat.txt
+done
+cat trimmed/unpaired_stat.txt
+for file in $(ls trimmed/unpaired)
+do
+  zcat trimmed/unpaired/$file | echo $file"   "$((`wc -l`/4)) >> trimmed/unpaired_stat.txt
+done
+```
+
+```{r trimmingStat, fig.cap="Trimming results."}
+quality %>% 
+  left_join(paired) %>% 
+  left_join(unpaired) %>% 
+  mutate(R = str_sub(Library,-2,-1)) %>% 
+  mutate(Unpaired = (SequencesUnpaired/SequencesRaw)*100) %>% 
+  mutate(Removed = (1-SequencesPaired/SequencesRaw)*100) %>% 
+  select(Library, R, Removed, Unpaired) %>% 
+  reshape2::melt(id.vars = c("Library", "R")) %>% 
+  ggplot(aes(Library, value, fill = R)) + 
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_y_sqrt() +
+  theme(axis.text.y = element_blank(), 
+        axis.title.y = element_blank(), 
+        axis.line.y =element_blank(), 
+        axis.ticks.y = element_blank()) +
+  facet_wrap(~ variable, scale = "free") +
+  ylab("In percentage of reads after trimming") +
+  scale_fill_discrete("", labels = c("forward", "reverse")) +
+  ggtitle("1 458 137 818 raw sequences", "1 456 900 940 (99.91%) trimmed and paired & 618 291 (0.04%) trimmed unpaired")
 ```
 
 ## Targets mapping
 
-We mapped every libraries on targets to check of-targets sequences.
+We mapped 10 libraries on targets to check of-targets sequences and targets loss. Globally we had a good coverage of targets (median of 90%, \@ref(fig:targetsAlignmentCoverage)) but reads were 70% to 81% of-targets (\@ref(tab:targetsAlignmentReadsMapped)) ! Consequently we could not only use targets as reference for reads mapping.
 
 ```{bash targetsMapping, eval=F, echo=T}
-cd /home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J targetsMapping
+#SBATCH -o targetsMapping_output.out
+#SBATCH -e targetsMapping_error.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+module purge
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/bedtools-2.26.0
+
 targets=../Baits/files-Symphonia/target-sequences.fas
 bwa index $targets
 for library in $(cat libraries_mapping.txt)
 do
   rg="@RG\tID:${library}\tSM:${library}\tPL:HiSeq4K"
-  bwa mem -M -R "${rg}" $targets trimmed/paired/"$library"_R1_paired.fq.gz > targetsMapping/sam/"${library}.sam"
-  java -Xmx4g -jar ~/Tools/picard/picard.jar SortSam I=targetsMapping/sam/"${library}.sam" O=targetsMapping/bam/"${library}".bam SORT_ORDER=coordinate
-  java -Xmx4g -jar ~/Tools/picard/picard.jar BuildBamIndex I=targetsMapping/bam/"${library}".bam O=targetsMapping/bam/"${filename}".bai
+  bwa mem -M -R "${rg}" -t 16 $targets trimmed/paired/"$library"_R1_paired.fq.gz trimmed/paired/"$library"_R2_paired.fq.gz > targetsMapping/sam/"${library}.sam"
+  java -Xmx4g -jar $PICARD SortSam I=targetsMapping/sam/"${library}.sam" O=targetsMapping/bam/"${library}".bam SORT_ORDER=coordinate
+  java -Xmx4g -jar $PICARD BuildBamIndex I=targetsMapping/bam/"${library}".bam O=targetsMapping/bam/"${filename}".bai
+  samtools index targetsMapping/bam/"${library}".bam
   bedtools bamtobed -i =targetsMapping/bam/"${library}".bam > targetsMapping/bed/"${library}".bed
   bedtools merge -i targetsMapping/bed/"${library}".bed > targetsMapping/merged_bed/"${library}".bed
 done
-# cat bed/* | sort -k 1,1 -k2,2n >  all.nonunique.bed
-# bedtools merge -i all.nonunique.bed -c 1 -o count > all.merged.bed
+touch readsMappingStat.txt
+for file in $(ls bam/*.bam)
+do
+  samtools flagstat $file | echo $file"   "$(grep "mapped (") >> readsMappingStat.txt
+done
+```
+
+```{r targetsAlignmentCoverage, fig.cap="Reads alignment coverage on targets. Distribution has been cut at 2000X."}
+# alns <- lapply(list.files(file.path(path, "Sequences", "targetsMapping", "bam"), pattern = ".bam$", full.names = T),
+#               function(file) readGAlignments(file, use.names = T))
+# names(alns) <- list.files(file.path(path, "Sequences", "targetsMapping", "bam"), pattern = ".bam$", full.names = F)
+# alns.cov <- lapply(alns,  function(aln)
+#   lapply(coverage(aln)@listData, function(x) data.frame(length = x@lengths, coverage = x@values)) %>%
+#     bind_rows(.id = "seq") %>%
+#     mutate(type = ifelse(grepl("DN", seq), "Functional", "Neutral")) %>%
+#     group_by(type, coverage) %>%
+#     summarise(N = sum(length)) %>%
+#     ungroup()) %>%
+#   bind_rows(.id = "library") %>%
+#   mutate(library = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$", "", library))
+# save(alns.cov, file = "./symcapture_save/targetsAlignmet.Rdata")
+load("./symcapture_save/targetsAlignmet.Rdata")
+ggplot(alns.cov, aes(coverage, N, fill = library)) +
+  geom_bar(stat = "identity") +
+  scale_y_log10() +
+  scale_x_sqrt() +
+  facet_wrap(~ type, scales = "free", nrow = 2) +
+  xlim(0, 2000) +
+  ggtitle(alns.cov %>% 
+            mutate(match = as.numeric(coverage > 0)) %>%
+            filter(type == "Functional") %>% 
+            group_by(library, match) %>% 
+            summarise(N = sum(N)) %>% 
+            group_by(library) %>% 
+            mutate(Pct = round(N/sum(N)*100, 2)) %>% 
+            filter(match == 1) %>% 
+            ungroup() %>% 
+            summarise(min = min(Pct), mean = median(Pct), max = max(Pct)) %>% 
+            transmute(paste0(min, "% to ", max, "% (median of ", mean, "% , ", round(mean*897/100) ,
+                             " kb) of functional coverage > 0")) %>% 
+            unlist(),
+          alns.cov %>% 
+            mutate(match = as.numeric(coverage > 0)) %>%
+            filter(type == "Neutral") %>% 
+            group_by(library, match) %>% 
+            summarise(N = sum(N)) %>% 
+            group_by(library) %>% 
+            mutate(Pct = round(N/sum(N)*100, 2)) %>% 
+            filter(match == 1) %>% 
+            ungroup() %>% 
+            summarise(min = min(Pct), mean = median(Pct), max = max(Pct)) %>% 
+            transmute(paste0(min, "% to ", max, "% (median of ", mean, "% , ", round(mean*415/100) ,
+                             " kb) of neutral coverage > 0")) %>% 
+            unlist()) 
+```
+
+```{r targetsAlignmentReadsMapped}
+read_delim(file.path(path, "Sequences", "targetsMapping", "readsMappingStat.txt"),
+           delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
+  select(Library, readsMapped, percentage) %>% 
+  mutate(Library = gsub("bam/", "", Library)) %>% 
+  mutate(Library = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$", "", Library)) %>% 
+  mutate(percentage = gsub("(", "", percentage, fixed = T)) %>% 
+  mutate(percentage = gsub("%", "", percentage, fixed = T)) %>% 
+  kable(col.names = c("Library", "Reads mapped", "Percentage of reads mapped"),
+        caption = "Reads mapped on targets statistics.",
+    format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
 ```
 
 ## Reference mapping
 
-We mapped every libraries on hybrid reference to check of-reference sequences, and assess *de novo* usefulness.
+We mapped every libraries on hybrid reference to check of-reference sequences, and assess *de novo* usefulness. Globally we had a low coverage of the reference (median of 19%, \@ref(fig:referenceAlignmentCoverage)) but reads were 79% to 88% on-reference (\@ref(tab:referenceAlignmentReadsMapped)) ! Finally, we had a median of 4Mb covered with 10X on reference, which is 4 times what we designed in probes. Consequently, we won't need *de novo* assembly and will proceed to read mapping for every libraries on the built reference, already partly annotated.
 
 ```{bash referenceMapping, eval=F, echo=T}
-cd /home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences
-cat ../../Symphonia_Genomic/neutral.targets.20180717.fasta ../../Symphonia_Genomic/functional.targets.20180717.fasta > referenceMapping/reference.fasta 
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J referenceMapping
+#SBATCH -o treferenceMapping_output.out
+#SBATCH -e referenceMapping_error.out
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+module purge
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/bedtools-2.26.0
+
+cat ../../Symphonia_Genomic/neutral_selection/merged.fasta > referenceMapping/reference.fasta
 reference=referenceMapping/reference.fasta 
 bwa index $reference
 for library in $(cat libraries_mapping.txt)
 do
   rg="@RG\tID:${library}\tSM:${library}\tPL:HiSeq4K"
-  bwa mem -M -R "${rg}" $reference trimmed/paired/"$library"_R1_paired.fq.gz > referenceMapping/sam/"${library}.sam"
-  java -Xmx4g -jar ~/Tools/picard/picard.jar SortSam I=referenceMapping/sam/"${library}.sam" O=referenceMapping/bam/"${library}".bam SORT_ORDER=coordinate
-  java -Xmx4g -jar ~/Tools/picard/picard.jar BuildBamIndex I=referenceMapping/bam/"${library}".bam O=referenceMapping/bam/"${filename}".bai
+  bwa mem -M -R "${rg}" -t 16 $reference trimmed/paired/"$library"_R1_paired.fq.gz trimmed/paired/"$library"_R2_paired.fq.gz > referenceMapping/sam/"${library}.sam"
+  java -Xmx4g -jar $PICARD SortSam I=referenceMapping/sam/"${library}.sam" O=referenceMapping/bam/"${library}".bam SORT_ORDER=coordinate
+  java -Xmx4g -jar $PICARD BuildBamIndex I=referenceMapping/bam/"${library}".bam O=referenceMapping/bam/"${filename}".bai
+  samtools index targetsMapping/bam/"${library}".bam
   bedtools bamtobed -i =referenceMapping/bam/"${library}".bam > referenceMapping/bed/"${library}".bed
   bedtools merge -i referenceMapping/bed/"${library}".bed > referenceMapping/merged_bed/"${library}".bed
 done
-# cat bed/* | sort -k 1,1 -k2,2n >  all.nonunique.bed
-# bedtools merge -i all.nonunique.bed -c 1 -o count > all.merged.bed
+touch readsMappingStat.txt
+for file in $(ls bam/*.bam)
+do
+  samtools flagstat $file | echo $file"   "$(grep "mapped (") >> readsMappingStat.txt
+done
+```
+
+```{r referenceAlignmentCoverage, fig.cap="Reads alignment coverage on reference. Distribution has been cut at 2000X."}
+# alns <- lapply(list.files(file.path(path, "Sequences", "referenceMapping", "bam"), pattern = ".bam$", full.names = T),
+#               function(file) readGAlignments(file, use.names = T))
+# names(alns) <- list.files(file.path(path, "Sequences", "referenceMapping", "bam"), pattern = ".bam$", full.names = F)
+# alns.cov <- lapply(alns,  function(aln)
+#   lapply(coverage(aln)@listData, function(x) data.frame(length = x@lengths, coverage = x@values)) %>%
+#     bind_rows(.id = "seq") %>%
+#     group_by(coverage) %>%
+#     summarise(N = sum(length)) %>%
+#     ungroup()) %>%
+#   bind_rows(.id = "library") %>%
+#   mutate(library = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$", "", library))
+# save(alns.cov, file = "./symcapture_save/referenceAlignmet.Rdata")
+load("./symcapture_save/referenceAlignmet.Rdata")
+ggplot(alns.cov, aes(coverage, N, fill = library)) +
+  geom_bar(stat = "identity") +
+  scale_y_log10() +
+  scale_x_sqrt() +
+  xlim(0, 2000) +
+  ggtitle(
+    alns.cov %>% 
+      mutate(match = as.numeric(coverage > 0)) %>%
+      group_by(library, match) %>% 
+      summarise(N = sum(N)) %>% 
+      group_by(library) %>% 
+      mutate(Pct = round(N/sum(N)*100, 2)) %>% 
+      filter(match == 1) %>% 
+      ungroup() %>% 
+      summarise(min = min(Pct), mean = median(Pct), max = max(Pct)) %>% 
+      transmute(paste0(min, "% to ", max, "% (median of ", mean, "% , ", round(mean*146.80/100) ," Mb) of coverage > 0")) %>% 
+      unlist(),
+    alns.cov %>% 
+      mutate(match = as.numeric(coverage > 9)) %>%
+      group_by(library, match) %>% 
+      summarise(N = sum(N)) %>% 
+      group_by(library) %>% 
+      mutate(Pct = round(N/sum(N)*100, 2)) %>% 
+      filter(match == 1) %>% 
+      ungroup() %>% 
+      summarise(min = min(Pct), mean = median(Pct), max = max(Pct)) %>% 
+      transmute(paste0(min, "% to ", max, "% (median of ", mean, "% , ", round(mean*146.80/100) ," Mb) of coverage > 9")) %>% 
+      unlist()) 
+```
+
+```{r referenceAlignmentReadsMapped}
+read_delim(file.path(path, "Sequences", "referenceMapping", "readsMappingStat.txt"),
+           delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
+  select(Library, readsMapped, percentage) %>% 
+  mutate(Library = gsub("bam/", "", Library)) %>% 
+  mutate(Library = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$", "", Library)) %>% 
+  mutate(percentage = gsub("(", "", percentage, fixed = T)) %>% 
+  mutate(percentage = gsub("%", "", percentage, fixed = T)) %>% 
+  kable(col.names = c("Library", "Reads mapped", "Percentage of reads mapped"),
+        caption = "Reads mapped on reference statistics.",
+    format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
 ```

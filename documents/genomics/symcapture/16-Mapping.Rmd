@@ -1,0 +1,74 @@
+```{r setup_mapping, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(Biostrings)
+library(GenomicAlignments)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+```{r mapping}
+quality <- read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
+  mutate(Library = gsub("_001", "", Sample)) %>% 
+  mutate(SequencesRaw = `Total Sequences (millions)`*10^6)
+unpaired <- read_delim(file.path(path, "Sequences", "trimmed", "unpaired_stat.txt"),
+           delim = " ", col_names = c("Library", "SequencesUnpaired")) %>% 
+  mutate(Library = gsub("_unpaired.fq.gz", "", Library)) %>% 
+  mutate(SequencesUnpaired = as.numeric(SequencesUnpaired))
+paired <- read_delim(file.path(path, "Sequences", "trimmed", "paired_stat.txt"),
+           delim = " ", col_names = c("Library", "SequencesPaired")) %>%
+    mutate(Library = gsub("_paired.fq.gz", "", Library)) %>% 
+  mutate(SequencesPaired = as.numeric(SequencesPaired))
+```
+
+# Mapping
+
+Bla :
+
+1. __Reads mapping__: 
+
+## Reads mapping
+
+```{bash mappingSH, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J referenceMapping
+#SBATCH -o mapping_output.out
+#SBATCH -e mapping_error.out
+#SBATCH --mem=40G
+#SBATCH --cpus-per-task=20
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+module purge
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/bedtools-2.26.0
+
+cat ../../Symphonia_Genomic/neutral_selection/merged.fasta > referenceMappingAll/reference.fasta
+reference=referenceMappingAll/reference.fasta 
+bwa index $reference
+for library in $(cat libraries.txt)
+do
+  rg="@RG\tID:${library}\tSM:${library}\tPL:HiSeq4K"
+  bwa mem -M -R "${rg}" -t 20 $reference trimmed/paired/"$library"_R1_paired.fq.gz trimmed/paired/"$library"_R2_paired.fq.gz > referenceMappingAll/sam/"${library}.sam"
+  java -Xmx4g -jar $PICARD SortSam I=referenceMappingAll/sam/"${library}.sam" O=referenceMappingAll/bam/"${library}".bam SORT_ORDER=coordinate
+  java -Xmx4g -jar $PICARD BuildBamIndex I=referenceMappingAll/bam/"${library}".bam O=referenceMappingAll/bam/"${filename}".bai
+  samtools index referenceMappingAll/bam/"${library}".bam
+  bedtools bamtobed -i =referenceMappingAll/bam/"${library}".bam > referenceMappingAll/bed/"${library}".bed
+  bedtools merge -i referenceMappingAll/bed/"${library}".bed > referenceMappingAll/merged_bed/"${library}".bed
+done
+touch referenceMappingAll/readsMappingStat.txt
+for file in $(ls referenceMappingAll/bam/*.bam)
+do
+  samtools flagstat referenceMappingAll/bam/$file | echo $file"   "$(grep "mapped (") >> referenceMappingAll/readsMappingStat.txt
+done
+```
+

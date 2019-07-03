@@ -36,7 +36,7 @@ purification <- lapply(list.files(file.path(path, "NanoDrop", "Purification"),
   mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
   select(Plate_extraction, Position_extraction, Concentration_Purified)
 qubit <- googlesheets::gs_title("Parvicapture") %>% 
-  googlesheets::gs_read("Qubit")
+  googlesheets::gs_read("QubitConcentrationP1")
 ```
 
 # Extraction
@@ -50,7 +50,7 @@ After extraction, we prepared plates for library preparation. We proceed as foll
 1. __Dosage__: purification resulting in variable concentration not linear with input, we dosed again all samples by NanoDrop and adjusted the estimate by Qubit as concentration were low
 1. __Concentration__: concentration being low, we concentrated samples by SpeedVac to a minimum of 20 $ng. \mu L ^{-1}$
 1. __Library test__: we tested library preparation on 2 samples
-1. __Normalization__: we normalized library plates to an input of ca  100 $ng$ in 6 $\mu L$
+1. __Volume reduction__: we reduced sample volume to 6 $\mu L$ with SpeedVac in order to use the whole sample DNA for library preparation.
 
 ## Dosage
 
@@ -180,6 +180,6 @@ data %>%
         caption = "Samples used for tests.")
 ```
 
-## Normalization
+## Volume reduction
 
-We normalized library plates to an input of ca  100 $ng$ in 6 $\mu L$...
+We reduced sample volume to 6 $\mu L$ with SpeedVac in order to use the whole sample DNA for library preparation.

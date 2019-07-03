@@ -1,3 +1,7 @@
+# PhD 0.1.9132
+* symcapture: quality check & mapping
+* parvicatpure: lib P1, P2, P5
+
 # PhD 0.1.9131
 * symcapture: seq delivery QualityCheck: QC, trimming, mapping
 
