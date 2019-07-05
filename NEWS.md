@@ -1,4 +1,7 @@
 # PhD 0.1.9133
+* symcapture: mapping stat
+
+# PhD 0.1.9133
 * symcapture: variant call template
 
 # PhD 0.1.9132

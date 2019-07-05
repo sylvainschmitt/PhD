@@ -14,27 +14,17 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
-```{r mapping}
-quality <- read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
-  mutate(Library = gsub("_001", "", Sample)) %>% 
-  mutate(SequencesRaw = `Total Sequences (millions)`*10^6)
-unpaired <- read_delim(file.path(path, "Sequences", "trimmed", "unpaired_stat.txt"),
-           delim = " ", col_names = c("Library", "SequencesUnpaired")) %>% 
-  mutate(Library = gsub("_unpaired.fq.gz", "", Library)) %>% 
-  mutate(SequencesUnpaired = as.numeric(SequencesUnpaired))
-paired <- read_delim(file.path(path, "Sequences", "trimmed", "paired_stat.txt"),
-           delim = " ", col_names = c("Library", "SequencesPaired")) %>%
-    mutate(Library = gsub("_paired.fq.gz", "", Library)) %>% 
-  mutate(SequencesPaired = as.numeric(SequencesPaired))
-```
-
 # Mapping
 
 Bla :
 
-1. __Reads mapping__: 
+1. __Reads mapping__: we mapped every libraries in pair end with `bwa mem` on the hybrid reference from Ivan Scotti et Sana Olson used to built the targets
+1. __Repeats merging__: 41 libraries were repeated, we merged their alignment to increase their information before variant calling
+1. __Reference sequences__: we built bedtools for every alignment in order to list sequences with mathces in the reference to be used to reduce explred reference area in variant calling
 
 ## Reads mapping
+
+We mapped every libraries in pair end with `bwa mem` on the hybrid reference from Ivan Scotti et Sana Olson used to built the targets. We had globally a good mapping with more than 80% of the reads mapped for  98% of the libraries \@ref(fig:mappingStat).
 
 ```{bash mappingSH, eval=F, echo=T}
 #!/bin/bash
@@ -68,7 +58,124 @@ done
 touch referenceMappingAll/readsMappingStat.txt
 for file in $(ls referenceMappingAll/bam/*.bam)
 do
-  samtools flagstat referenceMappingAll/bam/$file | echo $file"   "$(grep "mapped (") >> referenceMappingAll/readsMappingStat.txt
+  samtools flagstat $file | echo $file"   "$(grep "mapped (") >> referenceMappingAll/readsMappingStat.txt
 done
+```
+
+```{r mappingStat, fig.cap="Mapping result"}
+read_delim(file.path(path, "Sequences", "mapping", "mapping_stat.txt"),
+           delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
+  select(Library, readsMapped, percentage) %>% 
+  mutate(Library = gsub("bam/", "", Library)) %>% 
+  mutate(Library = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$", "", Library)) %>% 
+  mutate(percentage = gsub("(", "", percentage, fixed = T)) %>% 
+  mutate(percentage = gsub("%", "", percentage, fixed = T)) %>% 
+  mutate(percentage = as.numeric(percentage)) %>% 
+  mutate(type = ifelse(grepl("P", Library), "Paracou", "Outgroup")) %>% 
+  ggplot(aes(percentage, fill = type)) +
+  geom_histogram() +
+  ggtitle("4 Paracou libraries < 75% coverage (99.2% above)", "10 Paracou libraries < 80% coverage (98% above)")
+```
+
+## Repeats merging
+
+41 libraries were repeated, we merged their alignment to increase their information before variant calling. Meging repeats confirmed the presence of all 430 individuals at the end of the alignment (402 from Paracou, 20 from herbariums, and 8 from BCI, Itubera and La Selva).
+
+```{r repeatedLibraries, eval=F, echo=T}
+read_delim(file.path(path, "Sequences", "libraries.txt"),
+           delim = " ", col_names = c("Library")) %>% 
+  mutate(Sample = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56]", "", Library)) %>% 
+  group_by(Sample) %>% 
+  mutate(N = n()) %>% 
+  filter(N > 1) %>% 
+  select(Sample) %>% 
+  unique() %>% 
+  write_tsv(file.path(path, "Sequences", "duplicated.txt"))
+```
+
+```{bash duplicated, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J duplicated
+#SBATCH -o duplicated_output.out
+#SBATCH -e duplicated_error.out
+#SBATCH --mem=8G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+module purge
+module load bioinfo/samtools-1.4
+
+mv bam bam0
+mkdir bam
+for file in $(ls bam0/*.bam)
+do
+  cp $file bam/$(basename $(echo $file | sed -e 's/_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$/.bam/'))
+done
+for duplicated in $(cat duplicated.txt)
+do
+  rm bam/$duplicated.bam
+  samtools merge bam/$duplicated.bam bam0/$duplicated*.bam
+done
+```
+
+## Reference sequences
+
+We built bedtools for every alignment in order to list sequences with mathces in the reference to be used to reduce explred reference area in variant calling. 99.98% of reference sequences have at least one library matching (\@ref(fig:referenceSequences)). Ceonsequently we will use all sequences from the reference in the variant calling, besides few sequences our libraries are under represented, but they will be removed at the SNP filtering.
+
+```{bash referenceSequencesSH, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J referenceSequences
+#SBATCH -o referenceSequences_output.out
+#SBATCH -e referenceSequences_error.out
+#SBATCH --mem=80G
+#SBATCH --cpus-per-task=40
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+module purge
+module load bioinfo/bedtools-2.26.0
+
+mkdir bed
+N=40 # number of threads
+(
+for file in $(ls bam/*.bam)
+do 
+   ((i=i%N)); ((i++==0)) && wait
+   bedtools bamtobed -i $file > bed/$(basename "${file%.*}").bed
+done
+)
+(
+for file in $(ls bed/*.bed)
+do 
+   ((i=i%N)); ((i++==0)) && wait
+   bedtools merge -i bed/$(basename "${file%.*}").bed > merged.bed/$(basename "${file%.*}").merged.bed
+done
+)
+rm -r bed
+```
+
+```{r referenceSequences, fig.cap="Sequences from reference alignment with reads from library."}
+# bed <- lapply(list.files(file.path(path, "Sequences", "mapping", "merged.bed")), function(bed)
+#   read_tsv(file.path(path, "Sequences", "mapping", "merged.bed", bed),
+#            col_names = c("sequence", "start", "stop")) %>% 
+#     select(sequence) %>% 
+#     unique() %>% 
+#     mutate(library = gsub(".merged.bed", "", bed))) %>% 
+#   bind_rows()
+# save(bed, file = "./symcapture_save/bed.Rdata")
+# load(file = "./symcapture_save/bed.Rdata")
+# ggplot(bed, aes(library, sequence)) +
+#   geom_tile() +
+#   coord_flip() +
+#   theme(axis.text.x = element_blank(), 
+#         axis.line.x =element_blank(), 
+#         axis.ticks.x = element_blank(),
+#         axis.text.y = element_blank(), 
+#         axis.line.y =element_blank(), 
+#         axis.ticks.y = element_blank()) +
+#   ggtitle(paste(length(unique(bed$sequence)), " with a least one library match (99.98%)")) +
+#   ggsave("./symcapture_save/seqAligned.png")
+knitr::include_graphics("./symcapture_save/seqAligned.png")
 ```
 

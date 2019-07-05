@@ -15,17 +15,6 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
 ```{r variant}
-quality <- read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
-  mutate(Library = gsub("_001", "", Sample)) %>% 
-  mutate(SequencesRaw = `Total Sequences (millions)`*10^6)
-unpaired <- read_delim(file.path(path, "Sequences", "trimmed", "unpaired_stat.txt"),
-           delim = " ", col_names = c("Library", "SequencesUnpaired")) %>% 
-  mutate(Library = gsub("_unpaired.fq.gz", "", Library)) %>% 
-  mutate(SequencesUnpaired = as.numeric(SequencesUnpaired))
-paired <- read_delim(file.path(path, "Sequences", "trimmed", "paired_stat.txt"),
-           delim = " ", col_names = c("Library", "SequencesPaired")) %>%
-    mutate(Library = gsub("_paired.fq.gz", "", Library)) %>% 
-  mutate(SequencesPaired = as.numeric(SequencesPaired))
 ```
 
 # Variant call
@@ -43,12 +32,12 @@ Run the `HaplotypeCaller` on each sample's BAM files to create single-sample gVC
 
 ```{bash HaplotypeCaller, eval=F, echo=T}
 #!/bin/bash
-#SBATCH --time=36:00:00
+#SBATCH --time=48:00:00
 #SBATCH -J HaplotypeCaller
 #SBATCH -o HaplotypeCaller_output.out
 #SBATCH -e HaplotypeCaller_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
+#SBATCH --mem=160G
+#SBATCH --cpus-per-task=40
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 module purge
@@ -56,19 +45,16 @@ module load bioinfo/gatk-4.0.0.0
 module load bioinfo/picard-2.14.1
 module load bioinfo/samtools-1.4
 
-bamFolder=referenceMappingAll/bam
-java -Xmx4g -jar $PICARD CreateSequenceDictionary R=referenceMappingAll/reference.fasta O=referenceMappingAll/reference.dict
-samtools faidx referenceMappingAll/reference.fasta
-for file in $(ls referenceMappingAll/bam/*.bam) # bam
-do
-  filename=$(basename "$file")
-  filename="${filename%.*}"
-  gatk --java-options "-Xmx4G" HaplotypeCaller \ 
-    -R referenceMappingAll/reference.fasta \ 
-    -I referenceMappingAll/bam/$file \  
-    -O haplotypeCall/$filename.g.vcf.gz \
-    -ERC GVCF
+# java -Xmx4g -jar $PICARD CreateSequenceDictionary R=reference/reference.fasta O=reference/reference.dict
+# samtools faidx reference/reference.fasta
+N=40 # number of threads
+(
+for file in $(ls mapping/bam/*.bam)
+do 
+   ((i=i%N)); ((i++==0)) && wait
+   gatk --java-options "-Xmx4G" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF & 
 done
+)
 ```
 
 ## Data aggregation
