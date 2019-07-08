@@ -22,9 +22,8 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 We used `GATK` as it has apparently similar performance to other variant callers [@Supernat2018] and was more known by Myriam. For that we used the following pipeline:
 
 1. __Variant calling__ Run the `HaplotypeCaller` on each sample's BAM files to create single-sample gVCFs using the `.g.vcf` extension for the output file.
-1. __Data aggregation__ Aggregate the GVCF files and feed in one GVCF to be genotyped with `GenomicsDBImport` or `CombineGVCFs`
+1. __Data aggregation__ Aggregate the GVCF files and feed in one GVCF with `GenomicsDBImport` to be genotyped
 1. __Joint genotyping__ Run `GenotypeGVCFs` on all of them together to create the raw SNP and indel VCFs that are usually emitted by the callers.
-1. __Variant recalibration__ Resume the classic GATK Best Practices workflow by running `VQSR` on these "regular" VCFs according to GATK usual recommendations.
 
 ## Variant calling
 
@@ -36,8 +35,8 @@ Run the `HaplotypeCaller` on each sample's BAM files to create single-sample gVC
 #SBATCH -J HaplotypeCaller
 #SBATCH -o HaplotypeCaller_output.out
 #SBATCH -e HaplotypeCaller_error.out
-#SBATCH --mem=160G
-#SBATCH --cpus-per-task=40
+#SBATCH --mem=256G
+#SBATCH --cpus-per-task=64
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 module purge
@@ -47,9 +46,9 @@ module load bioinfo/samtools-1.4
 
 # java -Xmx4g -jar $PICARD CreateSequenceDictionary R=reference/reference.fasta O=reference/reference.dict
 # samtools faidx reference/reference.fasta
-N=40 # number of threads
+N=64
 (
-for file in $(ls mapping/bam/*.bam)
+for file in $(ls mapping/bam2/*.bam)
 do 
    ((i=i%N)); ((i++==0)) && wait
    gatk --java-options "-Xmx4G" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF & 
@@ -59,121 +58,67 @@ done
 
 ## Data aggregation
 
-Aggregate the GVCF files and feed in one GVCF to be genotyped with `GenomicsDBImport` or `CombineGVCFs`
+Aggregate the GVCF files and feed in one GVCF with `GenomicsDBImport` to be genotyped. **Beware**, `GATK 4.0.0.0` does not deal with multiple intervals when using `GenomicsDBImport`, so we used `GATK 4.1.2.0`. We may divide the step on several intervals if the operation is too memory-consuming.
 
-```{bash GenomicsDBImport, eval=F, echo=T}
+```{bash combine, eval=F, echo=T}
 #!/bin/bash
 #SBATCH --time=36:00:00
-#SBATCH -J GenomicsDBImport
-#SBATCH -o GenomicsDBImport_output.out
-#SBATCH -e GenomicsDBImport_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
+#SBATCH -J combine
+#SBATCH -o combine_output.out
+#SBATCH -e combine_error.out
+#SBATCH --mem=256G
+#SBATCH --cpus-per-task=64
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 module purge
-module load bioinfo/gatk-4.0.0.0
+module load bioinfo/gatk-4.1.2.0
 
-#make sample map code
-mkdir tmp
-gatk --java-options "-Xmx4g -Xms4g" GenomicsDBImport \
-  --genomicsdb-workspace-path haplotypeDB \
-  - L X \ #mandatory
-  --sample-name-map sample_map \
-  --tmp-dir=tmp \
-  --batch-size 50
-rm -r tmp
+cut reference/reference.fasta.fai -f1 > reference/reference.sequences.list # to be changed by several lists if needed
+# cut ../reference/reference.fasta.fai -f1 | split -l 2600
+touch variantCalling/sample_map.txt
+for file in $(ls variantCalling/gvcf/*.g.vcf.gz)
+do 
+   echo -e $(basename "${file%.*}")"\t"$file >> variantCalling/sample_map.txt
+done
+mkdir variantCalling/tmp
+gatk --java-options "-Xmx256g -Xms256g" GenomicsDBImport \
+  --genomicsdb-workspace-path variantCalling/symcaptureDB \
+  -L reference/reference.sequences.list \
+  --sample-name-map variantCalling/sample_map.txt \
+  --batch-size 64 \
+  --reader-threads 64
+  --tmp-dir=variantCalling/tmp
+rm -r variantCalling/tmp
 ```
 
-```{bash CombineGVCFs, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J CombineGVCFs
-#SBATCH -o CombineGVCFs_output.out
-#SBATCH -e CombineGVCFs_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
-#SBATCH --mail-type=BEGIN,END,FAIL
 
-# slower !
-module purge
-module load bioinfo/gatk-4.0.0.0
-
-# command to be generated automatically
-gatk CombineGVCFs \
- -R referenceMappingAll/reference.fasta \
- --variant sample1.g.vcf.gz \
- --variant sample2.g.vcf.gz \
- -O reference.g.vcf.gz
-```
 
 ## Joint genotyping
 
-Run `GenotypeGVCFs` on all of them together to create the raw SNP and indel VCFs that are usually emitted by the callers.
+Run `GenotypeGVCFs` on all of them together to create the raw SNP and indel VCFs that are usually emitted by the callers. If joint genotyping is too slow, we may divide the step on several intervals list and join vcf after.
 
-```{bash GenotypeGVCFsDB, eval=F, echo=T}
+```{bash genotype, eval=F, echo=T}
 #!/bin/bash
 #SBATCH --time=36:00:00
-#SBATCH -J GenotypeGVCFsDB
-#SBATCH -o GenotypeGVCFsDB_output.out
-#SBATCH -e GenotypeGVCFsDB_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
+#SBATCH -J genotype
+#SBATCH -o genotype_output.out
+#SBATCH -e genotype_error.out
+#SBATCH --mem=256G
+#SBATCH --cpus-per-task=64
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 module purge
-module load bioinfo/gatk-4.0.0.0
+module load bioinfo/gatk-4.1.2.0
 
-mkdir tmp
-gatk --java-options "-Xmx4g" GenotypeGVCFs \
- -R referenceMappingAll/reference.fasta \
- -V gendb://haplotypeDB \
- -O reference.vcf.gz \
- --tmp-dir=tmp
-rm -r tmp
-```
+mkdir variantCalling/tmp
+gatk --java-options "-Xmx256g" GenotypeGVCFs \
+ -R reference/reference.fasta \
+ -V gendb://variantCalling/symcaptureDB \
+ -O variantCalling/symcapture.vcf.gz \
+ --tmp-dir=variantCalling/tmp
+rm -r variantCalling/tmp
 
-```{bash GenotypeGVCFs, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J GenotypeGVCFs
-#SBATCH -o GenotypeGVCFs_output.out
-#SBATCH -e GenotypeGVCFs_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-module purge
-module load bioinfo/gatk-4.0.0.0
-
-gatk --java-options "-Xmx4g" GenotypeGVCFs \
- -R referenceMappingAll/reference.fasta \
- -V reference.g.vcf.gz \
- -O reference.preVQSR.vcf.gz
-```
-
-## Variant recalibration
-
-Resume the classic GATK Best Practices workflow by running `VQSR` on these "regular" VCFs according to GATK usual recommendations.
-
-```{bash VQSR, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J VQSR
-#SBATCH -o VQSR_output.out
-#SBATCH -e VQSRs_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-module purge
-module load bioinfo/gatk-4.0.0.0
-
-mkdir tranches
-gatk ApplyVQSR \
-   -R referenceMappingAll/reference.fasta \
-   -V reference.preVQSR.vcf.gz \
-   -O reference.vcf.gz \
-   --recal-file output.recal \ # missing one step !
-   -mode SNP
+# java -jar picard.jar MergeVcfs \
+#          I=input_variant_files.list \
+#          O=output_variants.vcf.gz
 ```

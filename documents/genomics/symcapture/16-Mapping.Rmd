@@ -14,26 +14,84 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
+```{r, eval=F}
+libraries <- read_delim(file.path(path, "Sequences", "libraries.uniq.txt"),
+           delim = " ", col_names = c("Library"))
+mapped <- read_delim(file.path(path, "Sequences", "mapped.txt"),
+                     delim = " ", col_names = c("Library")) %>% 
+  mutate(Library = gsub("mapping/bam/", "", Library)) %>% 
+  mutate(Library = gsub(".bam", "", Library)) %>% 
+  mutate(mapped = 1)
+libraries %>% 
+  left_join(mapped) %>% 
+  filter(is.na(mapped)) %>% 
+  select(-mapped) %>% 
+  write_delim(file.path(path, "Sequences", "unmapped.txt"),
+              delim = " ", col_names = F)
+```
+
+```{r mapping}
+
+```
+
+
 # Mapping
 
-Bla :
+We proceeded to read mapping for every libraries on the built reference, already partly annotated:
 
-1. __Reads mapping__: we mapped every libraries in pair end with `bwa mem` on the hybrid reference from Ivan Scotti et Sana Olson used to built the targets
 1. __Repeats merging__: 41 libraries were repeated, we merged their alignment to increase their information before variant calling
+1. __Reads mapping__: we mapped every libraries in pair end with `bwa mem` on the hybrid reference from Ivan Scotti et Sana Olson used to built the targets
 1. __Reference sequences__: we built bedtools for every alignment in order to list sequences with mathces in the reference to be used to reduce explred reference area in variant calling
+
+## Repeats merging
+
+41 libraries were repeated, we merged their FASTQ to increase their information before variant calling. Meging repeats confirmed the presence of all 430 individuals at the end of the alignment (402 from Paracou, 20 from herbariums, and 8 from BCI, Itubera and La Selva).
+
+```{bash compression, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=36:00:00
+#SBATCH -J compression
+#SBATCH -o compression_output.out
+#SBATCH -e compression_error.out
+#SBATCH --mem=4G
+#SBATCH --cpus-per-task=1
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+folder=trimmed.paired.joined/
+name=symcapture.trimmed.paired.joined
+
+module purge
+mkdir trimmed.paired
+for file in $(ls paired/*)
+do
+  mv $file trimmed.paired/$(basename $(echo $file | sed -e 's/_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*//'))
+done
+rm -r paired
+cp ../libraries.txt ./
+cat libraries.txt | sed -e 's/_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56]//' | sort | uniq | sed -e 's/-b//' | sort | uniq > libraries.uniq.txt
+mkdir trimmed.paired.joined
+for ind in $(cat libraries.uniq.txt)
+do
+  echo $ind
+  cat trimmed.paired/$ind*_R1_paired.fq.gz > trimmed.paired.joined/"$ind"_R1_paired.fq.gz
+  cat trimmed.paired/$ind*_R2_paired.fq.gz > trimmed.paired.joined/"$ind"_R2_paired.fq.gz
+done
+rm -r trimmed.paired
+tar -zcvf $name.tar.gz $folder
+```
 
 ## Reads mapping
 
-We mapped every libraries in pair end with `bwa mem` on the hybrid reference from Ivan Scotti et Sana Olson used to built the targets. We had globally a good mapping with more than 80% of the reads mapped for  98% of the libraries \@ref(fig:mappingStat).
+We mapped every libraries in pair end with `bwa mem` on the hybrid reference from Ivan Scotti et Sana Olson used to built the targets (parralelizing with 32 alignement with 2 process on 64 cores of 1 node of genologin). We had globally a good mapping with more than 80% of the reads mapped for  98% of the libraries \@ref(fig:mappingStat).
 
 ```{bash mappingSH, eval=F, echo=T}
 #!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J referenceMapping
+#SBATCH --time=48:00:00
+#SBATCH -J mapping
 #SBATCH -o mapping_output.out
 #SBATCH -e mapping_error.out
-#SBATCH --mem=40G
-#SBATCH --cpus-per-task=20
+#SBATCH --mem=160G
+#SBATCH --cpus-per-task=64
 #SBATCH --mail-type=BEGIN,END,FAIL
 
 module purge
@@ -42,24 +100,35 @@ module load bioinfo/picard-2.14.1
 module load bioinfo/samtools-1.4
 module load bioinfo/bedtools-2.26.0
 
-cat ../../Symphonia_Genomic/neutral_selection/merged.fasta > referenceMappingAll/reference.fasta
-reference=referenceMappingAll/reference.fasta 
-bwa index $reference
-for library in $(cat libraries.txt)
-do
-  rg="@RG\tID:${library}\tSM:${library}\tPL:HiSeq4K"
-  bwa mem -M -R "${rg}" -t 20 $reference trimmed/paired/"$library"_R1_paired.fq.gz trimmed/paired/"$library"_R2_paired.fq.gz > referenceMappingAll/sam/"${library}.sam"
-  java -Xmx4g -jar $PICARD SortSam I=referenceMappingAll/sam/"${library}.sam" O=referenceMappingAll/bam/"${library}".bam SORT_ORDER=coordinate
-  java -Xmx4g -jar $PICARD BuildBamIndex I=referenceMappingAll/bam/"${library}".bam O=referenceMappingAll/bam/"${filename}".bai
-  samtools index referenceMappingAll/bam/"${library}".bam
-  bedtools bamtobed -i =referenceMappingAll/bam/"${library}".bam > referenceMappingAll/bed/"${library}".bed
-  bedtools merge -i referenceMappingAll/bed/"${library}".bed > referenceMappingAll/merged_bed/"${library}".bed
+task(){
+	echo MAPPING "$1"
+	bwa mem -M -R "@RG\tID:$1\tSM:$1\tPL:HiSeq4K" \
+   		-t 2 \
+   		reference/reference.fasta \
+   		trimming/trimmed.paired.joined/"$1"_R1_paired.fq.gz \
+   		trimming/trimmed.paired.joined/"$1"_R2_paired.fq.gz \
+   		> mapping/sam/"$1".sam
+   	rm trimming/trimmed.paired.joined/"$1"_R1_paired.fq.gz
+   	rm trimming/trimmed.paired.joined/"$1"_R2_paired.fq.gz
+	java -Xmx4g -jar $PICARD SortSam \
+   		I=mapping/sam/"$1".sam \
+   		O=mapping/bam2/"$1".bam
+   		SORT_ORDER=coordinate
+	rm mapping/sam/"$1".sam
+	samtools index mapping/bam2/"$1".bam
+}
+
+mkdir mapping/sam
+mkdir mapping/bam2
+N=32
+(
+for library in $(cat unmapped.txt)
+do 
+   ((i=i%N)); ((i++==0)) && wait
+   task "$library" &
 done
-touch referenceMappingAll/readsMappingStat.txt
-for file in $(ls referenceMappingAll/bam/*.bam)
-do
-  samtools flagstat $file | echo $file"   "$(grep "mapped (") >> referenceMappingAll/readsMappingStat.txt
-done
+)
+rm -r mapping/sam
 ```
 
 ```{r mappingStat, fig.cap="Mapping result"}
@@ -77,51 +146,9 @@ read_delim(file.path(path, "Sequences", "mapping", "mapping_stat.txt"),
   ggtitle("4 Paracou libraries < 75% coverage (99.2% above)", "10 Paracou libraries < 80% coverage (98% above)")
 ```
 
-## Repeats merging
-
-41 libraries were repeated, we merged their alignment to increase their information before variant calling. Meging repeats confirmed the presence of all 430 individuals at the end of the alignment (402 from Paracou, 20 from herbariums, and 8 from BCI, Itubera and La Selva).
-
-```{r repeatedLibraries, eval=F, echo=T}
-read_delim(file.path(path, "Sequences", "libraries.txt"),
-           delim = " ", col_names = c("Library")) %>% 
-  mutate(Sample = gsub("_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56]", "", Library)) %>% 
-  group_by(Sample) %>% 
-  mutate(N = n()) %>% 
-  filter(N > 1) %>% 
-  select(Sample) %>% 
-  unique() %>% 
-  write_tsv(file.path(path, "Sequences", "duplicated.txt"))
-```
-
-```{bash duplicated, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J duplicated
-#SBATCH -o duplicated_output.out
-#SBATCH -e duplicated_error.out
-#SBATCH --mem=8G
-#SBATCH --cpus-per-task=1
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-module purge
-module load bioinfo/samtools-1.4
-
-mv bam bam0
-mkdir bam
-for file in $(ls bam0/*.bam)
-do
-  cp $file bam/$(basename $(echo $file | sed -e 's/_[[:alpha:]]*-[[:alpha:]]*-[[:alnum:]]*_L00[56].bam$/.bam/'))
-done
-for duplicated in $(cat duplicated.txt)
-do
-  rm bam/$duplicated.bam
-  samtools merge bam/$duplicated.bam bam0/$duplicated*.bam
-done
-```
-
 ## Reference sequences
 
-We built bedtools for every alignment in order to list sequences with mathces in the reference to be used to reduce explred reference area in variant calling. 99.98% of reference sequences have at least one library matching (\@ref(fig:referenceSequences)). Ceonsequently we will use all sequences from the reference in the variant calling, besides few sequences our libraries are under represented, but they will be removed at the SNP filtering.
+We built bedtools for every alignment in order to list sequences with matches in the reference to be used to reduce explred reference area in variant calling. 99.98% of reference sequences have at least one library matching (\@ref(fig:referenceSequences)). Ceonsequently we will use all sequences from the reference in the variant calling, besides few sequences our libraries are under represented, but they will be removed at the SNP filtering.
 
 ```{bash referenceSequencesSH, eval=F, echo=T}
 #!/bin/bash

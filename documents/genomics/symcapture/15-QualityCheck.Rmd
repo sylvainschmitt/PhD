@@ -18,11 +18,11 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 quality <- read_tsv(file.path(path, "Sequences", "quality", "multiqc", "general_stats_table.tsv")) %>% 
   mutate(Library = gsub("_001", "", Sample)) %>% 
   mutate(SequencesRaw = `Total Sequences (millions)`*10^6)
-unpaired <- read_delim(file.path(path, "Sequences", "trimmed", "unpaired_stat.txt"),
+unpaired <- read_delim(file.path(path, "Sequences", "trimming", "unpaired_stat.txt"),
            delim = " ", col_names = c("Library", "SequencesUnpaired")) %>% 
   mutate(Library = gsub("_unpaired.fq.gz", "", Library)) %>% 
   mutate(SequencesUnpaired = as.numeric(SequencesUnpaired))
-paired <- read_delim(file.path(path, "Sequences", "trimmed", "paired_stat.txt"),
+paired <- read_delim(file.path(path, "Sequences", "trimming", "paired_stat.txt"),
            delim = " ", col_names = c("Library", "SequencesPaired")) %>%
     mutate(Library = gsub("_paired.fq.gz", "", Library)) %>% 
   mutate(SequencesPaired = as.numeric(SequencesPaired))
@@ -200,7 +200,7 @@ done
 ```
 
 ```{r targetsAlignmentCoverage, fig.cap="Reads alignment coverage on targets. Distribution has been cut at 2000X."}
-# alns <- lapply(list.files(file.path(path, "Sequences", "targetsMapping", "bam"), pattern = ".bam$", full.names = T),
+# alns <- lapply(list.files(file.path(path, "Sequences", "mapping.test", "targets", "bam"), pattern = ".bam$", full.names = T),
 #               function(file) readGAlignments(file, use.names = T))
 # names(alns) <- list.files(file.path(path, "Sequences", "targetsMapping", "bam"), pattern = ".bam$", full.names = F)
 # alns.cov <- lapply(alns,  function(aln)
@@ -249,7 +249,7 @@ ggplot(alns.cov, aes(coverage, N, fill = library)) +
 ```
 
 ```{r targetsAlignmentReadsMapped}
-read_delim(file.path(path, "Sequences", "targetsMapping", "readsMappingStat.txt"),
+read_delim(file.path(path, "Sequences",  "mapping.test", "targets", "readsMappingStat.txt"),
            delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
   select(Library, readsMapped, percentage) %>% 
   mutate(Library = gsub("bam/", "", Library)) %>% 
@@ -303,7 +303,7 @@ done
 ```
 
 ```{r referenceAlignmentCoverage, fig.cap="Reads alignment coverage on reference. Distribution has been cut at 2000X."}
-# alns <- lapply(list.files(file.path(path, "Sequences", "referenceMapping", "bam"), pattern = ".bam$", full.names = T),
+# alns <- lapply(list.files(file.path(path, "Sequences",  "mapping.test", "reference", "bam"), pattern = ".bam$", full.names = T),
 #               function(file) readGAlignments(file, use.names = T))
 # names(alns) <- list.files(file.path(path, "Sequences", "referenceMapping", "bam"), pattern = ".bam$", full.names = F)
 # alns.cov <- lapply(alns,  function(aln)
@@ -347,7 +347,7 @@ ggplot(alns.cov, aes(coverage, N, fill = library)) +
 ```
 
 ```{r referenceAlignmentReadsMapped}
-read_delim(file.path(path, "Sequences", "referenceMapping", "readsMappingStat.txt"),
+read_delim(file.path(path, "Sequences",  "mapping.test", "reference", "readsMappingStat.txt"),
            delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
   select(Library, readsMapped, percentage) %>% 
   mutate(Library = gsub("bam/", "", Library)) %>% 

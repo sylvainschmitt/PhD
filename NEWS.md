@@ -1,3 +1,6 @@
+# PhD 0.1.9134
+* symcapture: mapping2 after mapping issue, and variant call code test
+
 # PhD 0.1.9133
 * symcapture: mapping stat
 
