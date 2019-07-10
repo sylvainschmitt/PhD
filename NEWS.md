@@ -1,3 +1,7 @@
+# PhD 0.1.9135
+* symcapture: haplotype w sarray, genomicDB & genotyping test & template w sarray, template vcf result analysis
+* distribution: draft discussion 1st paragraph
+
 # PhD 0.1.9134
 * symcapture: mapping2 after mapping issue, and variant call code test
 

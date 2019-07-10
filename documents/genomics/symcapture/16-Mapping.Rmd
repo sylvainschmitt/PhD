@@ -14,27 +14,6 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
-```{r, eval=F}
-libraries <- read_delim(file.path(path, "Sequences", "libraries.uniq.txt"),
-           delim = " ", col_names = c("Library"))
-mapped <- read_delim(file.path(path, "Sequences", "mapped.txt"),
-                     delim = " ", col_names = c("Library")) %>% 
-  mutate(Library = gsub("mapping/bam/", "", Library)) %>% 
-  mutate(Library = gsub(".bam", "", Library)) %>% 
-  mutate(mapped = 1)
-libraries %>% 
-  left_join(mapped) %>% 
-  filter(is.na(mapped)) %>% 
-  select(-mapped) %>% 
-  write_delim(file.path(path, "Sequences", "unmapped.txt"),
-              delim = " ", col_names = F)
-```
-
-```{r mapping}
-
-```
-
-
 # Mapping
 
 We proceeded to read mapping for every libraries on the built reference, already partly annotated:
@@ -132,6 +111,7 @@ rm -r mapping/sam
 ```
 
 ```{r mappingStat, fig.cap="Mapping result"}
+# samtools flagstat referenceMappingAll/bam/$file | echo $file"   "$(grep "mapped (") >> referenceMappingAll/readsMappingStat.txt
 read_delim(file.path(path, "Sequences", "mapping", "mapping_stat.txt"),
            delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
   select(Library, readsMapped, percentage) %>% 

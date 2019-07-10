@@ -5,8 +5,6 @@ library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
-library(Biostrings)
-library(GenomicAlignments)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -15,6 +13,7 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
 ```{r variant}
+
 ```
 
 # Variant call
@@ -27,98 +26,150 @@ We used `GATK` as it has apparently similar performance to other variant callers
 
 ## Variant calling
 
-Run the `HaplotypeCaller` on each sample's BAM files to create single-sample gVCFs using the `.g.vcf` extension for the output file.
+Run the `HaplotypeCaller` on each sample's BAM files to create single-sample gVCFs using the `.g.vcf` extension for the output file.  We used `sarray` which is much powerful than `sbatch` in parralel computing.
 
 ```{bash HaplotypeCaller, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=48:00:00
-#SBATCH -J HaplotypeCaller
-#SBATCH -o HaplotypeCaller_output.out
-#SBATCH -e HaplotypeCaller_error.out
-#SBATCH --mem=256G
-#SBATCH --cpus-per-task=64
-#SBATCH --mail-type=BEGIN,END,FAIL
+# folders
+mkdir variantCalling/gvcf4
 
-module purge
-module load bioinfo/gatk-4.0.0.0
-module load bioinfo/picard-2.14.1
-module load bioinfo/samtools-1.4
+# test
+file=$(ls mapping/bam4/*.bam | head -n 1)
+srun --mem=20G --pty bash
+module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20G" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf4/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF
+exit
+rm variantCalling/gvcf4/*
 
-# java -Xmx4g -jar $PICARD CreateSequenceDictionary R=reference/reference.fasta O=reference/reference.dict
-# samtools faidx reference/reference.fasta
-N=64
-(
-for file in $(ls mapping/bam2/*.bam)
-do 
-   ((i=i%N)); ((i++==0)) && wait
-   gatk --java-options "-Xmx4G" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF & 
-done
-)
+# sarray
+for file in $(ls mapping/bam4/*.bam); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20G\" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf4/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF"; done > haplo4.sh
+mkdir haplo4
+sarray -J haplo4 -o haplo4/%j.out -e haplo4/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL  haplo4.sh
+
+# clean
+rm -r haplo4
+rm -r tmp
 ```
 
 ## Data aggregation
 
-Aggregate the GVCF files and feed in one GVCF with `GenomicsDBImport` to be genotyped. **Beware**, `GATK 4.0.0.0` does not deal with multiple intervals when using `GenomicsDBImport`, so we used `GATK 4.1.2.0`. We may divide the step on several intervals if the operation is too memory-consuming.
+We aggregated the GVCF files and feed in one GVCF database with `GenomicsDBImport` to be genotyped. **Beware**, `GATK 4.0.0.0` does not deal with multiple intervals when using `GenomicsDBImport`, so we used `GATK 4.1.2.0`. We divided the step on several intervals files of a maximum of 1000 sequences computed in parralel to speed up the operation. **NB**, we tested the pipeline with 3 individual haplotypes and 10 intervals of 100 sequences ran in parrallel; and it took 24 minutes. Consequently with 10 fold more sequences per intervals we may increase to 4H, and the effect of 10 fold more individual haplotypes is hard to assess.
 
 ```{bash combine, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J combine
-#SBATCH -o combine_output.out
-#SBATCH -e combine_error.out
-#SBATCH --mem=256G
-#SBATCH --cpus-per-task=64
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-module purge
-module load bioinfo/gatk-4.1.2.0
-
-cut reference/reference.fasta.fai -f1 > reference/reference.sequences.list # to be changed by several lists if needed
-# cut ../reference/reference.fasta.fai -f1 | split -l 2600
-touch variantCalling/sample_map.txt
-for file in $(ls variantCalling/gvcf/*.g.vcf.gz)
+# Sample map
+touch sample_map.txt
+for file in $(ls gvcf.test/*.g.vcf.gz)
 do 
-   echo -e $(basename "${file%.*}")"\t"$file >> variantCalling/sample_map.txt
+   echo -e $(basename "${file%.*}")"\t"$file >> sample_map.txt
 done
-mkdir variantCalling/tmp
-gatk --java-options "-Xmx256g -Xms256g" GenomicsDBImport \
-  --genomicsdb-workspace-path variantCalling/symcaptureDB \
-  -L reference/reference.sequences.list \
-  --sample-name-map variantCalling/sample_map.txt \
-  --batch-size 64 \
-  --reader-threads 64
-  --tmp-dir=variantCalling/tmp
-rm -r variantCalling/tmp
+
+# seq lists
+mkdir reference.sequences.lists
+cut ../reference/reference.fasta.fai -f1 > reference.sequences.lists/reference.sequences.list
+cd reference.sequences.lists
+split -l 1000 -d reference.sequences.list reference.sequences_ --additional-suffix=.list
+rm reference.sequences.list
+ls | wc -l
+cd ..
+
+# folders
+mkdir tmp
+mkdir symcaptureDB
+
+# test
+file=$(ls reference.sequences.lists/ | head -n 1)
+srun --mem=20G --pty bash
+module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20g -Xms20g" GenomicsDBImport --genomicsdb-workspace-path symcaptureDB/"${file%.*}".DB -L reference.sequences.lists/$file --sample-name-map sample_map.txt --batch-size 50 --tmp-dir=tmp
+exit
+rm -r symcaptureDB/*
+rm tmp/*
+
+# sarray
+
+for file in $(ls reference.sequences.lists.test/); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20g -Xms20g\" GenomicsDBImport --genomicsdb-workspace-path symcaptureDB/\"${file%.*}\".DB -L reference.sequences.lists/$file --sample-name-map sample_map.txt --batch-size 50 --tmp-dir=tmp"; done > combine.array.sh
+mkdir combine.array
+sarray -J combine -o combine.array/%j.out -e combine.array/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL combine.array.sh
+
+# clean
+rm -r combine.array
+rm -r tmp
 ```
 
 
 
 ## Joint genotyping
 
-Run `GenotypeGVCFs` on all of them together to create the raw SNP and indel VCFs that are usually emitted by the callers. If joint genotyping is too slow, we may divide the step on several intervals list and join vcf after.
+We joint-genotyped individuals with `GenotypeGVCFs` on all of them together to create the raw SNP and indel VCFs that are usually emitted by the callers. We divided the step on several intervals files of a maximum of 1000 sequences computed in parralel to speed up the operation (similarly to previous step). **NB**, we tested the pipeline with 3 individual haplotypes and 10 intervals of 100 sequences ran in parrallel; and it took 6 minutes. Consequently with 10 fold more sequences per intervals we may increase to 1H, and the effect of 10 fold more individual haplotypes is hard to assess. Then we merged genotypes of all intervals with `GatherVcfs` from `Picard` in one raw VCF to be filtered.
 
 ```{bash genotype, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J genotype
-#SBATCH -o genotype_output.out
-#SBATCH -e genotype_error.out
-#SBATCH --mem=256G
-#SBATCH --cpus-per-task=64
-#SBATCH --mail-type=BEGIN,END,FAIL
+# folders
+mkdir tmp
+mkdir symcapture.vcf.gz
 
-module purge
-module load bioinfo/gatk-4.1.2.0
+# test
+file=$(ls reference.sequences.lists/ | head -n 1)
+srun --mem=20G --pty bash
+module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20g" GenotypeGVCFs -R ../reference/reference.fasta -L reference.sequences.lists/$file -V gendb://symcaptureDB/$file -O symcapture.vcf.gz/"${file%.*}".vcf.gz --tmp-dir=tmp
+exit
+rm tmp/*
+rm symcapture.vcf.gz/*
 
-mkdir variantCalling/tmp
-gatk --java-options "-Xmx256g" GenotypeGVCFs \
- -R reference/reference.fasta \
- -V gendb://variantCalling/symcaptureDB \
- -O variantCalling/symcapture.vcf.gz \
- --tmp-dir=variantCalling/tmp
-rm -r variantCalling/tmp
+# sarray
 
-# java -jar picard.jar MergeVcfs \
-#          I=input_variant_files.list \
-#          O=output_variants.vcf.gz
+for file in $(ls reference.sequences.lists); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20g\" GenotypeGVCFs -R ../reference/reference.fasta -L reference.sequences.lists/$file -V gendb://symcaptureDB/$file -O symcapture.vcf.gz/\"${file%.*}\".vcf.gz --tmp-dir=tmp"; done > genotype.array.sh
+mkdir genotype.array
+sarray -J genotype -o genotype.array/%j.out -e genotype.array/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL genotype.array.sh
+
+# clean
+rm -r genotype.array
+rm -r tmp
+
+# merge
+echo -e '#!/bin/bash\n#SBATCH --time=48:00:00\n#SBATCH -J gather\n#SBATCH -o gather.out\n#SBATCH -e gather.err\n#SBATCH --mem=20G\n#SBATCH --cpus-per-task=1\n#SBATCH --mail-type=BEGIN,END,FAIL\nmodule load bioinfo/picard-2.14.1\njava -Xmx20g -jar $PICARD GatherVcfs \' > gather.sh
+for file in $(ls symcapture.vcf.gz/*.gz)
+do
+	echo -e '\tI='$file' \' >> gather.sh
+done
+echo -e '\tO=symcapture.all.raw.vcf.gz\n' >> gather.sh
 ```
+
+## Result
+
+```{r genomic, eval=F}
+# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/analysis_of_genome.html
+library(vcfR)
+symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.all.raw.vcf.gz"))
+symcapture.gl <- vcfR2genlight(symcapture.vcf)
+library(adegenet)
+ploidy(symcapture.gl) <- 2
+symcapture.diff <- genetic_diff(symcapture.vcf, pops = as.factor(symcapture.gl@ind.names), method = 'nei')
+knitr::kable(head(symcapture.diff[1:13,]))
+reshape2::melt(symcapture.diff[,c(3:8)], varnames=c('Index', 'Sample'), value.name = 'Depth', na.rm=TRUE) %>% 
+ggplot(aes(x = variable, y = Depth)) + 
+  geom_violin(fill="#2ca25f", adjust = 1.2) +
+  xlab("") + ylab("")
+```
+
+
+```{r GBS, eval=F}
+# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/gbs_analysis.html
+library(vcfR)
+symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.all.raw.vcf.gz"))
+symcapture.gl <- vcfR2genlight(symcapture.vcf)
+library(poppr)
+ploidy(symcapture.gl) <- 2
+tree <- aboot(symcapture.gl, tree = "upgma", distance = bitwise.dist, 
+              sample = 100, showtree = F, cutoff = 50, quiet = T)
+library(ape)
+plot.phylo(tree, cex = 0.8, font = 2, adj = 0)
+nodelabels(tree$node.label, adj = c(1.3, -0.5), frame = "n", cex = 0.8,font = 3, xpd = TRUE)
+axis(side = 1)
+title(xlab = "Genetic distance (proportion of loci that are different)")
+symcapture.pca <- glPca(symcapture.gl, nf = 3)
+barplot(100*symcapture.pca$eig/sum(symcapture.pca$eig), col = heat.colors(50), main="PCA Eigenvalues")
+title(ylab="Percent of variance\nexplained", line = 2)
+title(xlab="Eigenvalues", line = 1)
+ggplot(as.data.frame(symcapture.pca$scores), aes(x = PC1, y = PC2)) + 
+  geom_point(size=2) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0)
+```
+

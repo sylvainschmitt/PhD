@@ -1,10 +1,10 @@
 ---
-title: Pervasive local-scale species niche differentiation within tropical tree species complexes (temporary)
+title: Pervasive local-scale species niche differentiation with topography within widespread tropical tree species complexes
 author: Sylvain Schmitt$^{*,1}$, Niklas Tysklind$^2$, Géraldine Derroire$^2$, Myriam Heuertz$^1$, Bruno Herault$^{3,4}$
 date: '`r Sys.Date()`'
 output:
   bookdown::html_document2:
-    number_sections: false
+    number_sections: false  
     toc: true
     toc_float: yes
   bookdown::word_document2: default
@@ -296,7 +296,7 @@ $$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\frac{1}{4}\delta_{i,j}
 where $DBH_j$ is the diameter of neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m because NCI showed very little effect beyond 20m in preliminary analysis. Size effect of neighbors through their diameter was set to 2 to represent neighbors through their basal area. Distance effect of neighbors was set to -0.25 corresponding to neighbors beyond 20m having less than 1% effect compared to the effect of neighbors at 0m. The neighbor crowding index was further split between neighbors belonging to the same taxa
 (neighbors of the complex $NCI_{complex}$ at the species complex level and conspecific neighbors $NCI_{con}$ at the sepcies level) and neighbors of remaining taxa (neighbors not belonging to the complex $NCI_{other}$ at the species complex level and heterospecific neighbors $NCI_{hetero}$ at the sepcies level).
 
-Descriptors used were derived from field censuses ($NCI_{other}$ and $NCI_{genus}$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [ref].
+Descriptors used were derived from field censuses ($NCI_{other}$ and $NCI_{genus}$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [@Conrad2015].
 
 ## Analysis
 
@@ -312,11 +312,11 @@ Species joint-distributions were infered within species complexes with softmax r
 $$Presence_{species|species~complex} \sim Dirichlet~Multinomial(softmax(\alpha + \beta*X + \gamma*X^2))$$
 were $Presence_{species|species~complex}$ is the tree species with a vector of 0 and 1 (0 for all species of the species complex it belongs except the tree species equal to 1),  $X$ is the matrix of environmental descriptors, $\alpha$ is the vector of species intercepts, $\beta$ is a matrix representing the slope and $\gamma$ is a matrix representing the quadratic form of environment variable effects for each species.
 
-Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between distributions. A Bayesian method was used to infer parameters of the model regarding each complex and species using `stan` language [ref] and `rstan` package [ref] in the R environment [ref].
+Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between distributions. A Bayesian method was used to infer parameters of the model regarding each complex and species using `stan` language [@Carpenter2017] and `rstan` package [@Team2018] in the R environment [@RCoreTeam2018].
 
 # Results
 
-The topographic wetness index ($TWI$) and the neighbor crowding index ($NCI$) had weak effects on relative abundance of species complex (Fig. \@ref(fig:ComplexesDistribution)). Nevertheless, all relative abundances of species complexes increased with $NCI_{complex}$ (except for *Talisia*). And increased value of $TWI$ resulted in a decreased relative abundance of *Licania* but increased relative abundances of *Symphonia* and *Iryanthera*.
+The topographic wetness index ($TWI$) and the neighbor crowding index ($NCI$) had weak effects on relative abundance of species complex (Fig. \@ref(fig:ComplexesDistribution)). Nevertheless, all relative abundances of species complexes increased with $NCI_{complex}$ (except for *Talisia*). And increased value of $TWI$ resulted in an increased relative abundances of *Symphonia* and *Iryanthera*.
 
 On the other hand, the topographic wetness index ($TWI$) strongly influenced species distribution within complexes, with a gradient of response from positive to negative effect within each complex (Fig. \@ref(fig:betaTWI)). For instance, *S. globulifera*, *E. coriacea*, and *I. hostmanii* species relative abundance increased with water accumulation when it decreased for *S. sp1*, *E. sagotiana*, and *I. sagotiana* within *Symphonia*, *Parvifolia* and *Iryanthera* complexes respectively (Fig. \@ref(fig:SpeciesDistribution)). Still, the $TWI$ influence was low for *Chartacea* and *Talisia* complexes.
 
@@ -324,9 +324,17 @@ Finally, $NCI_{hetero}$ and $NCI_{con}$ had no or weak effects on species relati
 
 # Discussion
 
-> I have to do more bibliography and write the intoduction but I think the take home message will be something like:
+> Species complexes of tropical tree are widely spread across habitats at local-scale, but their species show pervasive niche differentiation mainly with water accumulation and also with congeneric interactions __[WIP]__.
 
-> Species complexes of tropical tree are widely spread across habitats at local-scale, but their species show pervasive niche differentiation mainly with water accumulation and also with congeneric interactions.
+## Species complexes are widely spread across habitats
+
+Biotic and abiotic environment null or weak effect on species complexes distribution suggest that species complexes are widely spread across habitats at local-scale. Topographic wetness index (TWI) reflects topographic position where water accumulates, whereas neighbor crowding index of trees not belonging to the species complex (NCIother) represents competition with neighbors and thus access to water, nutrients and light. Consequently, TWI and NCIother represent the combined effects of abiotic and biotic environment in defining local scale habitats for species and species complexes distributions. In our study, TWI and NCIother had no effect on species complexes distribution, at the exception of a weak positive effect of TWI on *Symphonia* and *Iryanthera* species abundances, highlighting the widespread distribution of species complexes across habitats.
+
+Several of this species complexes belongs to genera already highlighted to be widespread across Amazonia [@TerSteege2013] and known to integrate species with differentiated local habitats preferences [@Allie2015]. Furthermore, we highlighted species complexes distribution across all habitats of small hills from Paracou. *Symphonia* and *Iryanthera* have an advantage in wettest environments, already evidenced experimentally [@Ferry2007], but this result should be taken with caution as the inventory does not integrate palm trees, besides hyper abundant in wet seasonally flodded bottomlands.
+
+On the other hand, neighbor crowding index of trees belonging to the species complex (NCIcomplex) had a positive effect on relative abundances of all species complexes, highlighting trees of the same species complexes to be aggregated in a radius of 20 meters. Species aggregated distribution is a widely observed phenomenon in forests pan-tropically [@Zhang2013; @PLOTKIN2000; @Wang2012; @condit_spatial_2000; @Forget1999]. Aggregation can be explained by dispersal limitation or habitat association. Consequently, due to the weak to null effect of abiotic and biotic environment variables on species complexes distribution, we assumed species complexes to be distributed in aggregates due to the sole effect of dispersal limitation of their species.
+
+## Species show pervasive niche differentiation within species complexes
 
 # Acknowledgements
 
