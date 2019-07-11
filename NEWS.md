@@ -1,3 +1,6 @@
+# PhD 0.1.9136
+* symcapture: bed in mapping & variant filtering template with outputs
+
 # PhD 0.1.9135
 * symcapture: haplotype w sarray, genomicDB & genotyping test & template w sarray, template vcf result analysis
 * distribution: draft discussion 1st paragraph

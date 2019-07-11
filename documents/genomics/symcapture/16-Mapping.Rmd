@@ -110,9 +110,28 @@ done
 rm -r mapping/sam
 ```
 
+```{bash mappingStatSH, eval=F, echo=T}
+# folders
+mkdir mappingStat
+touch readsMappingStat.txt
+
+# test
+file=$(ls bam*/*.bam | head -n 1)
+module load bioinfo/samtools-1.4 ; samtools flagstat $file | echo $file"   "$(grep "mapped (") >> readsMappingStat.txt
+cat readsMappingStat.txt
+rm readsMappingStat.txt
+touch readsMappingStat.txt
+
+# sarray
+for file in $(ls bam*/*.bam); do echo 'module load bioinfo/samtools-1.4 ; samtools flagstat '$file' | echo '$file'"   "$(grep "mapped (") >> readsMappingStat.txt'; done > mappingStat.sh
+sarray -J mappingStat -o mappingStat/%j.out -e mappingStat/%j.err -t 1:00:00 --mail-type=BEGIN,END,FAIL  mappingStat.sh
+
+# clean
+rm -r mappingStat
+```
+
 ```{r mappingStat, fig.cap="Mapping result"}
-# samtools flagstat referenceMappingAll/bam/$file | echo $file"   "$(grep "mapped (") >> referenceMappingAll/readsMappingStat.txt
-read_delim(file.path(path, "Sequences", "mapping", "mapping_stat.txt"),
+read_delim(file.path(path, "Sequences", "mapping", "readsMappingStat.txt"),
            delim = " ", col_names = c("Library", "readsMapped", "+", "0", "mapped", "percentage", ":", "N/A")) %>% 
   select(Library, readsMapped, percentage) %>% 
   mutate(Library = gsub("bam/", "", Library)) %>% 
@@ -128,61 +147,46 @@ read_delim(file.path(path, "Sequences", "mapping", "mapping_stat.txt"),
 
 ## Reference sequences
 
-We built bedtools for every alignment in order to list sequences with matches in the reference to be used to reduce explred reference area in variant calling. 99.98% of reference sequences have at least one library matching (\@ref(fig:referenceSequences)). Ceonsequently we will use all sequences from the reference in the variant calling, besides few sequences our libraries are under represented, but they will be removed at the SNP filtering.
+We built bedtools for every alignment in order to list sequences with matches in the reference to be used to reduce explred reference area in variant calling. 99.98% of reference sequences have at least one library matching (\@ref(fig:referenceSequences)). Consequently we will use all sequences from the reference in the variant calling, besides few sequences our libraries are under represented, but they will be removed at the SNP filtering.
 
-```{bash referenceSequencesSH, eval=F, echo=T}
-#!/bin/bash
-#SBATCH --time=36:00:00
-#SBATCH -J referenceSequences
-#SBATCH -o referenceSequences_output.out
-#SBATCH -e referenceSequences_error.out
-#SBATCH --mem=80G
-#SBATCH --cpus-per-task=40
-#SBATCH --mail-type=BEGIN,END,FAIL
-
-module purge
-module load bioinfo/bedtools-2.26.0
-
+```{bash bed, eval=F, echo=T}
+# folders
 mkdir bed
-N=40 # number of threads
-(
-for file in $(ls bam/*.bam)
-do 
-   ((i=i%N)); ((i++==0)) && wait
-   bedtools bamtobed -i $file > bed/$(basename "${file%.*}").bed
-done
-)
-(
-for file in $(ls bed/*.bed)
-do 
-   ((i=i%N)); ((i++==0)) && wait
-   bedtools merge -i bed/$(basename "${file%.*}").bed > merged.bed/$(basename "${file%.*}").merged.bed
-done
-)
-rm -r bed
+mkdir bed.out
+
+# test
+file=$(ls bam*/*.bam | head -n 1)
+module load bioinfo/bedtools-2.26.0 ; bedtools bamtobed -i $file > bed/$(basename "${file%.*}").bed
+rm bed/*
+
+# sarray
+for file in $(ls bam*/*.bam); do echo 'module load bioinfo/bedtools-2.26.0 ; file='$file' ; bedtools bamtobed -i $file > bed/$(basename "${file%.*}").bed'; done > bed.sh
+sarray -J bed -o bed.out/%j.out -e bed.out/%j.err -t 1:00:00 --mail-type=BEGIN,END,FAIL  bed.sh
+
+# clean
+rm -r bed.out
+  
+# statistics
+mkdir bed.out
+touch referenceMappedStats.txt
+for file in $(ls bed/*.bed); do echo "cut $file -f1 | sort | uniq | awk -v file="$(basename "${file%.*}")" '{print \$1, file}' >> referenceMappedStats.txt" ; done > bed.sh
+sarray -J bed -o bed.out/%j.out -e bed.out/%j.err -t 1:00:00 --mail-type=BEGIN,END,FAIL  bed.sh
+rm -r bed.out
 ```
 
 ```{r referenceSequences, fig.cap="Sequences from reference alignment with reads from library."}
-# bed <- lapply(list.files(file.path(path, "Sequences", "mapping", "merged.bed")), function(bed)
-#   read_tsv(file.path(path, "Sequences", "mapping", "merged.bed", bed),
-#            col_names = c("sequence", "start", "stop")) %>% 
-#     select(sequence) %>% 
-#     unique() %>% 
-#     mutate(library = gsub(".merged.bed", "", bed))) %>% 
-#   bind_rows()
-# save(bed, file = "./symcapture_save/bed.Rdata")
-# load(file = "./symcapture_save/bed.Rdata")
+# # On genologin
+# bed <- read_delim("referenceMappedStats.txt", delim = " ", col_names = c("sequence", "library"))
 # ggplot(bed, aes(library, sequence)) +
 #   geom_tile() +
 #   coord_flip() +
-#   theme(axis.text.x = element_blank(), 
-#         axis.line.x =element_blank(), 
+#   theme(axis.text.x = element_blank(),
+#         axis.line.x =element_blank(),
 #         axis.ticks.x = element_blank(),
-#         axis.text.y = element_blank(), 
-#         axis.line.y =element_blank(), 
+#         axis.text.y = element_blank(),
+#         axis.line.y =element_blank(),
 #         axis.ticks.y = element_blank()) +
-#   ggtitle(paste(length(unique(bed$sequence)), " with a least one library match (99.98%)")) +
-#   ggsave("./symcapture_save/seqAligned.png")
+#   ggsave("./seqAligned.png")
 knitr::include_graphics("./symcapture_save/seqAligned.png")
 ```
 

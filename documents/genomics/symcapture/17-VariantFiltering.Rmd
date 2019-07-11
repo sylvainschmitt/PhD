@@ -1,0 +1,250 @@
+```{r setup_variantFiltering, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
+```
+
+```{r variantFiltering}
+
+```
+
+# Variant filtering
+
+We will filter the final raw VCF with following filters (name, filter, description) :
+
+* __MissingData__ `missing < 0.5`: filter out variant if they have more than 50% missing data (\@ref(fig:missingIndR))
+* __MinorAllelicCount__ `mac > 3`: filter out variant if the minor allele is represented by less than 3 individuals (\@ref(fig:macR))
+* __AlleleCount__ `AC < 3`: filter out variant if there are more than 2 allelic form (\@ref(fig:ACR))
+* __HardToValidate__ `MQ0 >= 4 && ((MQ0 / (1.0*DP)) > 0.1 )`: filter out variant if there are at least four alignments with a mapping quality of zero and if the proportion of alignments mapping ambiguously corresponds to 1/10th of all alignments 
+* __LowCoverage__ `DP < 10`: filter out variants which are covered by less than 10 reads (\@ref(fig:DPR))
+* __LowQD__ `QD < 1.5`: filter out variants with low variant confidence (\@ref(fig:QDR))
+* __VeryLowQual__ `QUAL < 30.0` or `QUAL < 50.0`: filter out variants having a low quality score (might be decided with an histogram) (\@ref(fig:qualityR))
+* __FisherStrand__ `FS > X`: filter out variants based on Phred-scaled p-value using Fisher's exact test to detect strand bias (\@ref(fig:FSR))
+
+For this we assessed different metrics using [`vcftools`](http://vcftools.sourceforge.net/man_latest.html), proceeded to the fltering, and quickly examined the result:
+
+* __Missing individuals__ missing individuals to set the threshold
+*
+* __Filtering__ filtering step with `vcftools` and `gatk VariantFiltration`
+* __Result__ quick assesment of the produced filtered VCF
+
+## Missing individuals
+
+```{bash missingInd, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --missing-indv --out individuals
+```
+
+```{r missingIndR, fig.cap="Missing individuals frequency per SNP."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "individuals.imiss")) %>% 
+  ggplot(aes(F_MISS)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 0.5, col = "red", linetype = "dashed") +
+  xlab("Missing individuals percentage") +
+  ylab("SNP count") +
+  ggtitle("XX% (XX/XX) alleles below XX%, threshold set to 0.X")
+```
+
+## Minor allele frequency
+
+```{bash mac, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --freq --out alleles
+```
+
+```{r macR, fig.cap="Minor allele frequency SNP."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "alleles.frq"),
+         skip = 1, col_names = c("seq", "pos", "Nalleles", "Nseq", 
+                                 "allele1", "allele2")) %>% 
+  separate(allele1, c("allele1", "freq1"), sep = ":", convert = T) %>% 
+  separate(allele2, c("allele2", "freq2"), sep = ":", convert = T) %>% 
+  group_by(seq, pos) %>% 
+  mutate(minor.freq = min(freq1, freq2)) %>% 
+  ggplot(aes(minor.freq)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 3/432, col = "red", linetype = "dashed") +
+  xlab("Minor allele frequency") +
+  ylab("SNP count") +
+  ggtitle("XX% (XX/XX) alleles below XX%, threshold set to 0.X")
+```
+
+## AC - Allele count
+
+```{bash AC, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO AC -c > symcapture.AC.txt
+```
+
+```{r ACR, fig.cap="Allelic count per SNP."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.AC.txt"), na = "?") %>% 
+  ggplot(aes(AC)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 3, col = "red", linetype = "dashed") +
+  xlab("Allelic count") +
+  ylab("SNP count") +
+  ggtitle("XX% (XX/XX) alleles above 3")
+```
+
+## DP - Coverage
+
+```{bash DP, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO DP -c > symcapture.DP.txt
+```
+
+```{r DPR, fig.cap="Individuals coverage per SNP."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.DP.txt"), na = "?") %>% 
+  ggplot(aes(DP)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 10, col = "red", linetype = "dashed") +
+  xlab("Coverage") +
+  ylab("SNP") +
+  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+```
+
+## QD - Quality
+
+```{bash QD, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO QD -c > symcapture.QD.txt
+```
+
+```{r QDR, fig.cap="Individuals coverage per SNP."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.QD.txt"), na = "?") %>% 
+  ggplot(aes(QD)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 1.5, col = "red", linetype = "dashed") +
+  xlab("Quality depth") +
+  ylab("SNP") +
+  scale_x_log10() +
+  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+```
+
+## QUAL - Quality
+
+```{bash quality, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --site-quality --out alleles
+```
+
+```{r qualityR, fig.cap="Mean individual coverage."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "alleles.lqual")) %>% 
+  ggplot(aes(QUAL)) + 
+  geom_histogram() +
+  geom_vline(xintercept = c(30, 50), col = "red", linetype = "dashed") +
+  xlab("Quality depth") +
+  ylab("SNP") +
+  scale_x_log10() +
+  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+```
+
+## FS - FiscerStrand
+
+```{bash FS, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO FS -c > symcapture.FS.txt
+```
+
+```{r FSR, fig.cap="Individuals coverage per SNP."}
+read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.FS.txt"), na = "?") %>% 
+  ggplot(aes(FS)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 60, col = "red", linetype = "dashed") +
+  xlab("Fisher strand") +
+  ylab("SNP") +
+  scale_x_log10() +
+  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+```
+
+## Filtering
+
+```{bash rawFiltering, echo=T, eval=F}
+vcftools --gzvcf symcapture.all.raw.vcf.gz \
+  --max-missing 0.5 \
+  --recode --recode-INFO-all \
+  -c > symcapture.nonmissing.vcf
+gatk VariantFiltration \
+   -R ../reference/reference.fasta \
+   -V symcapture.nonmissing.vcf \
+   -O symcapture.filtered.vcf \
+   --filter-name "AlleleCount" \
+   --filter-expression "AC < 3" \
+   --filter-name "HardToValidate" \
+   --filter-expression "MQ0 >= 4 && ((MQ0 / (1.0*DP)) > 0.1 )" \
+   --filter-name "LowCoverage" \
+   --filter-expression "DP < 10" \
+   --filter-name "LowQD" \
+   --filter-expression "QD < 1.5" \
+   --filter-name "VeryLowQual" \
+   --filter-expression "QUAL < 30.0" \
+   --filter-name "FisherStrand" \
+   --filter-expression "FS < 60"
+# compression ?
+```
+
+## Result
+
+```{bash, eval=F, echo=T}
+vcftools --gzvcf symcapture.all.raw.vcf.gz   --het -c
+vcftools --gzvcf symcapture.all.raw.vcf.gz   --hardy -c | head
+vcftools --gzvcf symcapture.all.raw.vcf.gz   --TajimaD -c | head
+vcftools --gzvcf symcapture.filtered.vcf --relatedness -c
+vcftools --gzvcf symcapture.filtered.vcf --relatedness2 -c
+vcftools --gzvcf symcapture.filtered.vcf --weir-fst-pop Panama.pop --weir-fst-pop Benin.pop -c | head
+```
+
+```{r genomic}
+# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/analysis_of_genome.html
+library(vcfR)
+symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.filtered.vcf"), verbose = F)
+symcapture.gl <- vcfR2genlight(symcapture.vcf)
+library(adegenet)
+ploidy(symcapture.gl) <- 2
+symcapture.diff <- genetic_diff(symcapture.vcf, pops = as.factor(symcapture.gl@ind.names), method = 'nei')
+knitr::kable(head(symcapture.diff[1:13,]))
+reshape2::melt(symcapture.diff[,c(3:8)], varnames=c('Index', 'Sample'), value.name = 'Depth', na.rm=TRUE) %>% 
+ggplot(aes(x = variable, y = Depth)) + 
+  geom_violin(fill="#2ca25f", adjust = 1.2) +
+  xlab("") + ylab("")
+```
+
+
+```{r GBS}
+# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/gbs_analysis.html
+library(vcfR)
+symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.filtered.vcf"), verbose = F)
+pop.data <- read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.pop"))
+symcapture.gl <- vcfR2genlight(symcapture.vcf)
+pop(symcapture.gl) <- pop.data$Population
+library(poppr)
+ploidy(symcapture.gl) <- 2
+tree <- aboot(symcapture.gl, tree = "upgma", distance = bitwise.dist, 
+              sample = 100, showtree = F, cutoff = 50, quiet = T)
+library(RColorBrewer)
+cols <- brewer.pal(n = nPop(symcapture.gl), name = "Dark2")
+library(ape)
+plot.phylo(tree, cex = 0.8, font = 2, adj = 0, tip.color =  cols[pop(symcapture.gl)])
+nodelabels(tree$node.label, adj = c(1.3, -0.5), frame = "n", cex = 0.8,font = 3, xpd = TRUE)
+legend('topleft', legend = c("Panama","Benin"), fill = cols, border = FALSE, bty = "n", cex = 2)
+axis(side = 1)
+title(xlab = "Genetic distance (proportion of loci that are different)")
+library(igraph)
+symcapture.dist <- bitwise.dist(symcapture.gl)
+symcapture.msn <- poppr.msn(symcapture.gl, symcapture.dist, showplot = FALSE, include.ties = T)
+node.size <- rep(2, times = nInd(symcapture.gl))
+names(node.size) <- indNames(symcapture.gl)
+vertex.attributes(symcapture.msn$graph)$size <- node.size
+plot_poppr_msn(symcapture.gl, symcapture.msn , palette = brewer.pal(n = nPop(symcapture.gl), name = "Dark2"), gadj = 70)
+symcapture.pca <- glPca(symcapture.gl, nf = 3)
+barplot(100*symcapture.pca$eig/sum(symcapture.pca$eig), col = heat.colors(50), main="PCA Eigenvalues")
+title(ylab="Percent of variance\nexplained", line = 2)
+title(xlab="Eigenvalues", line = 1)
+symcapture.pca.scores <- as.data.frame(symcapture.pca$scores)
+symcapture.pca.scores$pop <- pop(symcapture.gl)
+ggplot(symcapture.pca.scores, aes(x = PC1, y = PC2, col = pop)) + 
+  geom_point(size=2) +
+  stat_ellipse(level = 0.95, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0)
+```
