@@ -3,11 +3,11 @@ title: Tree diameter and topography drive intraspecific trait variation in Neotr
 author: Sylvain Schmitt$^{*,1}$, Bruno Herault$^{2,3}$, Émilie Ducouret$^4$, Anne Baranger$^1$, Niklas Tysklind$^4$,  Myriam Heuertz$^1$, Éric Marcon$^4$, Saint Omer Cazal $^4$, Géraldine Derroire$^{4}$ 
 date: '`r Sys.Date()`'
 output:
-  bookdown::word_document2: default
   bookdown::html_document2:
     number_sections: false
     toc: true
     toc_float: yes
+  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -401,16 +401,16 @@ ind <- data.frame(pca.ind$coord[, 1:2, drop=FALSE])
 colnames(ind)<- c("x", "y")
 ind <- cbind(ind, data)
 # graph
-ggplot(ind, aes(x, y)) +
+ggplot(ind, aes(x, y, colour = SpeciesLong)) +
   coord_equal() +
   geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
-  geom_point(aes(colour = SpeciesLong, size = DBH), alpha = 0.5) +
+  geom_point(aes(size = DBH), alpha = 0.5) +
   geom_segment(data = var, aes(x = 0, y = 0, xend = (x*5),
                                yend = (y*5)), arrow = arrow(length = unit(1/2, "picas")),
                color = "black") +
   ggrepel::geom_text_repel(data = var, aes(x = x*5, y = y*5, label = name),
-                           box.padding = 0.8, segment.alpha = 0) +
+                           box.padding = 0.8, segment.alpha = 0, color = "black") +
   scale_colour_brewer("", palette = "Set1") +
   xlab(paste0("within PCA 1 (", round(wPCA$eig/sum(wPCA$eig)*100)[1], "%)")) +
   ylab(paste0("within PCA 2 (", round(wPCA$eig/sum(wPCA$eig)*100)[2], "%)"))
@@ -428,8 +428,11 @@ lapply(fits, function(fit)
   left_join(species) %>% 
   mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
   mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
-  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
-             xend = datatools::reorder_within(SpeciesLong, m, trait),
+  # ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+  #            xend = datatools::reorder_within(SpeciesLong, m, trait),
+  #            color = SpeciesLong, fill = SpeciesLong)) +
+  ggplot(aes(x = SpeciesLong,
+             xend = SpeciesLong,
              color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
@@ -437,14 +440,14 @@ lapply(fits, function(fit)
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  datatools::scale_x_reordered() +
+  # datatools::scale_x_reordered() +
   facet_grid(trait ~ Genus, labeller = label_parsed, 
              scales = "free_y") +
   xaxis_title(F) +
   ylab(expression(DBH[90]~(cm))) +
   scale_y_log10() +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none")
+  scale_colour_brewer(guide = "none", palette = "Set1") +
+  scale_fill_brewer(guide = "none", palette = "Set1")
 ```
 
 ```{r TWInNCI, fig.cap="Effect of topographic wetness index ($TWI$) and neighbor crowding index ($NCI$) for every trait, complex and species. The effect of $TWI$ and $NCI$ was estimated as the posterior distribution of the slope parameter $\\beta$ (see Materials and Methods) using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
@@ -460,8 +463,11 @@ lapply(fits, function(fit)
   left_join(species) %>% 
   mutate(parameter = ifelse(grepl("TWI", parameter), "beta[TWI]", "beta[NCI]")) %>% 
   mutate(parameter = factor(parameter, levels = c("beta[TWI]", "beta[NCI]"))) %>% 
-  ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
-             xend = datatools::reorder_within(SpeciesLong, m, trait),
+  # ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+  #            xend = datatools::reorder_within(SpeciesLong, m, trait),
+  #            color = SpeciesLong, fill = SpeciesLong)) +
+  ggplot(aes(x = SpeciesLong, 
+             xend = SpeciesLong,
              color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = 0, color = "gray90", size = 1) +
   geom_hline(yintercept = c(-0.25, 0.25), 
@@ -471,14 +477,14 @@ lapply(fits, function(fit)
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  datatools::scale_x_reordered() +
-    facet_grid(trait ~ parameter + Genus, labeller = label_parsed, 
-              scales = "free") +
+  # datatools::scale_x_reordered() +
+  facet_grid(trait ~ parameter + Genus, labeller = label_parsed, 
+             scales = "free") +
   xaxis_title(F) +
   ylab("Standardised effect") +
   scale_y_continuous(trans="S_sqrt") +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none") +
+  scale_colour_brewer(guide = "none", palette = "Set1") +
+  scale_fill_brewer(guide = "none", palette = "Set1") +
   ylim(-0.5, 0.5)
 ```
 

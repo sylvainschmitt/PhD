@@ -1,3 +1,9 @@
+# PhD 0.1.9137
+* distributions: Tiputini 1st test, discussion 1st draft, intro biblio 
+* functional: review2 graphs
+* parvicapture: library done, pre-repeat
+* symcapture: variant call & filtering done, population genomics start
+
 # PhD 0.1.9136
 * symcapture: bed in mapping & variant filtering template with outputs
 

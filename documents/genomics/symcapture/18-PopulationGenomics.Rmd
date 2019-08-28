@@ -1,0 +1,297 @@
+```{r setup_popgen, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+```
+
+```{r pop, eval=F}
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  filter(Pop2 != "O") %>% 
+  write_tsv(file.path(path, "Paracou.pop"), col_names = F)
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
+  filter(Pop2 == "G") %>% 
+  select(Ind) %>% 
+  write_tsv(file.path(path, "globulifera.pop"), col_names = F)
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
+  filter(Pop2 == "S") %>% 
+  select(Ind) %>% 
+  write_tsv(file.path(path, "sp1.pop"), col_names = F)
+```
+
+```{r popgenR}
+pop <- googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop")
+```
+
+# Population genomics
+
+We will ... :
+
+* __Population structure__ ...
+
+## Metrics
+
+```{bash metrics, eval=F, echo=T}
+module load bioinfo/tabix-0.2.5
+module load bioinfo/vcftools-0.1.15
+vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --het -c  > metrics/heterozygosity.stat
+vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --hardy -c > metrics/hardyweiberg.stat
+vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf   --TajimaD -c > metrics/TajimaD.stat
+vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --relatedness -c > metrics/relatedness.matrix
+vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --relatedness2 -c > metrics/relatedness2.matrix
+vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --weir-fst-pop metrics/globulifera.pop --weir-fst-pop metrics/sp1.pop -c > metrics/fst.stat
+```
+
+```{r}
+cowplot::plot_grid(
+  read_tsv(file.path(path, "metrics", "heterozygosity.stat")) %>% 
+    ggplot(aes(INDV, `F`)) +
+    geom_point() +
+    geom_hline(yintercept = 0.015, col = "red", linetype = "dashed") +
+    theme(axis.text.x=element_blank(),
+          axis.ticks.x=element_blank()) +
+    xlab("Individual") + ylab("Heterozygosity"),
+  read_tsv(file.path(path, "metrics", "fst.stat")) %>% 
+    ggplot(aes(CHROM, WEIR_AND_COCKERHAM_FST)) +
+    geom_point() +
+    geom_hline(yintercept = 0.015, col = "red", linetype = "dashed") +
+    theme(axis.text.x=element_blank(),
+          axis.ticks.x=element_blank()) +
+    xlab("Sequence") + ylab("Fst"),
+  read_tsv(file.path(path, "metrics", "relatedness2.matrix")) %>% 
+    mutate(INDV1 = gsub(".g.vcf", "", INDV1), INDV2 = gsub(".g.vcf", "", INDV2)) %>% 
+    left_join(pop, by = c("INDV1" = "Ind")) %>% 
+    mutate(Pop1 = Pop2) %>% 
+    select(-Pop, -Pop2) %>% 
+    left_join(pop, by = c("INDV2" = "Ind")) %>% 
+    select(-Pop) %>% 
+    arrange(Pop1, Pop2) %>% 
+    ggplot(aes(INDV1, INDV2, fill = log(-RELATEDNESS_PHI+1))) +
+    geom_tile() +
+    facet_grid(Pop2 ~ Pop1, scales = "free") +
+    theme(axis.text.x=element_blank(),
+          axis.ticks.x=element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y=element_blank(),
+          axis.title.y = element_blank(),
+          legend.position = "bottom") +
+    scale_fill_continuous(guide = "none"),
+  labels = c("Het", "Fst", "Kinship"), 
+  rel_heights = c(1,3)
+)
+  ```
+
+
+## Structure
+
+```{bash str, eval=F, echo=T}
+# convert file
+srun --mem=80G --cpus-per-task=1 --pty bash
+module load bioinfo/PGDSpider_2.1.1.5
+java -Xmx8192m -Xms4096m -jar $PGD_HOME/PGDSpider2-cli.jar \
+  -inputfile symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf -inputformat VCF \
+  -outputfile symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.str -outputformat STRUCTURE \
+  -spid vcf2str.spid
+exit
+
+# prepare folders
+mkdir structure
+for k in $(seq 10) ;
+do
+  mkdir structure/K$k ;
+  for r in $(seq 10) ;
+  do
+    mkdir structure/K$k/R$r ;
+  done
+done
+
+# structure
+mkdir out
+for k in $(seq 10) ; do for r in $(seq 10) ; do echo "module load bioinfo/structure_v2.3.4_console ; structure -K $k -m structure.params -i variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.str -o structure/K$k/R$r/";  done done > structure.sh
+sarray -J structure -o out/%j.structure.out -e out/%j.structure.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL structure.sh
+rm -r out
+
+# clumpak or harvester ?
+mkdir symcapture.str.out
+for k in $(seq 10) ;
+do
+  zip -r structure/k$k sympcapture.str$k.out.zip ;
+  mv sympcapture.str$k.out.zip symcapture.str.out/
+done
+zip -r symcapture.str.out symcapture.str.out.zip
+rm -r symcapture.str.out
+mkdir clumpak
+module load bioinfo/CLUMPAK-v1.1
+ln -s /usr/local/bioinfo/src/CLUMPAK/CLUMPAK-v1.1/26_03_2015_CLUMPAK/CLUMPAK/CLUMPP .
+ln -s /usr/local/bioinfo/src/CLUMPAK/CLUMPAK-v1.1/26_03_2015_CLUMPAK/CLUMPAK/mcl .
+ln -s /usr/local/bioinfo/src/CLUMPAK/CLUMPAK-v1.1/26_03_2015_CLUMPAK/CLUMPAK/distruct .
+ln -s /usr/local/bioinfo/src/CLUMPAK/CLUMPAK-v1.1/26_03_2015_CLUMPAK/CLUMPAK/fonts .
+CLUMPAK.pl --id 10 --labels Paracou.pop --dir clumpak --file symcapture.str.out.zip
+```
+
+```{r dapcGBS, fig.cap="DAPC", eval=F}
+# symcapture.dapc <- dapc(symcapture.gl.par, n.pca = 3, n.da = 2)
+# save(symcapture.dapc, file = "./symcapture_save/dapc.Rdata")
+load("./symcapture_save/dapc.Rdata")
+scatter(symcapture.dapc, col = cols, cex = 2, legend = TRUE, clabel = F, posi.leg = "bottomleft", scree.pca = TRUE,
+        posi.pca = "topleft", cleg = 0.75)
+dapc.results <- as.data.frame(symcapture.dapc$posterior)
+dapc.results$pop <- pop(symcapture.gl.par)
+dapc.results$indNames <- rownames(dapc.results)
+dapc.results <- reshape2::melt(dapc.results)
+colnames(dapc.results) <- c("Original_Pop","Sample","Assigned_Pop","Posterior_membership_probability")
+ggplot(dapc.results, aes(x=Sample, y=Posterior_membership_probability, fill=Assigned_Pop)) +
+  geom_bar(stat='identity') +
+  scale_fill_manual(values = cols) +
+  facet_grid(~ Original_Pop, scales = "free", space = "free_x") +
+  xlab("Individual") + ylab("Posterior membership probability") +
+  scale_fill_discrete("Assigned population") +
+  theme(legend.position = "bottom", 
+        axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+```
+
+## Phylogeny
+
+```{bash phylogeny, eval=F, echo=T}
+module load bioinfo/SNPhylo-3efc985
+snphylo.sh -v ../variants/symcapture.all.filtered.nonmissingind.maxmissing75.vcf
+[-p Maximum_PLCS (5)] [-c Minimum_depth_of_coverage (5)]|-H HapMap_file [-p Maximum_PNSS (5)]|-s Simple_SNP_file [-p Maximum_PNSS (5)]|-d GDS_file [-l LD_threshold (0.1)] [-m MAF_threshold (0.1)] [-M Missing_rate (0.1)] [-o Outgroup_sample_name] [-P Prefix_of_output_files (snphylo.output)] [-b [-B The_number_of_bootstrap_samples (100)]] [-a The_number_of_the_last_autosome (22)] [-r] [-A] [-h]
+
+Options:
+-A: Perform multiple alignment by MUSCLE
+-b: Performs (non-parametric) bootstrap analysis and generate a tree
+-h: Show help and exit
+-r: Skip the step removing low quality data (-p and -c option are ignored)
+
+
+# convert file
+srun --mem=80G --cpus-per-task=1 --pty bash
+module load bioinfo/PGDSpider_2.1.1.5
+java -Xmx8192m -Xms4096m -jar $PGD_HOME/PGDSpider2-cli.jar \
+  -inputfile symcapture.all.filtered.nonmissingind.maxmissing75.vcf -inputformat VCF \
+  -outputfile symcapture.all.filtered.nonmissingind.maxmissing75.phylip -outputformat PHYLIP \
+  -spid vcf2phylip.spid
+exit
+
+# RAxML
+mkdir phylogeny
+cd phylogeny
+module load bioinfo/standard-RAxML-8.2.11
+raxmlHPC -m BINGAMMA -p 12345 -s ../variants/symcapture.all.filtered.nonmissingind.maxmissing75.phylip -n T1
+```
+
+```{r setupGBS, eval=F}
+# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/gbs_analysis.html
+library(vcfR)
+library(poppr)
+library(RColorBrewer)
+library(ape)
+library(ggtree)
+library(igraph)
+symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.nonmissing.vcf"), verbose = F)
+symcapture.gl <- vcfR2genlight(symcapture.vcf)
+ploidy(symcapture.gl) <- 2
+pop <- data.frame(label = symcapture.gl@ind.names,
+                  Ind = gsub(".g.vcf", "", symcapture.gl@ind.names)) %>% 
+  left_join(googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop"))
+pop(symcapture.gl) <- pop$Pop
+cols <- brewer.pal(n = nPop(symcapture.gl), name = "Dark2")
+symcapture.gl.par <- symcapture.gl[which(symcapture.gl@pop %in% c("G", "S", "SG"))]
+# tree <- aboot(symcapture.gl, tree = "upgma", distance = bitwise.dist, 
+#               sample = 100, showtree = F, cutoff = 50, quiet = T)
+# save(tree, file = "./symcapture_save/tree.Rdata")
+load("./symcapture_save/tree.Rdata")
+g <- ggtree(tree, layout='circular')
+g + geom_tiplab(data = dplyr::inner_join(g$data, pop), size =1,
+               size=2, aes(colour = Pop, angle = angle, label = Ind)) +
+    theme(legend.position = "right", 
+        legend.title = element_blank(),
+        legend.key = element_blank()) +
+  ggsave("./symcapture_save/tree.png")
+```
+
+```{r phylo}
+# library(gdsfmt)
+# library(SNPRelate)
+# snpgdsVCF2GDS("symcapture.all.filtered.nonmissingind.maxmissing75.vcf",
+#               "symcapture.all.filtered.nonmissingind.maxmissing75.gds")
+# symcapture.geno <- openfn.gds("symcapture.all.filtered.nonmissingind.maxmissing75.gds")
+# dissMatrix  <-  snpgdsDiss(symcapture.geno, autosome.only = F, num.thread = 3)
+# snpHCluster <-  snpgdsHCluster(dissMatrix, hang = 0.25)
+# cutTree <- snpgdsCutTree(snpHCluster, z.threshold = 15, outlier.n = 5, n.perm = 5000, 
+#                          col.outlier = "red", pch.outlier=4)
+# save(cutTree, file = "tree.Rdata")
+load(file.path(path, "variants", "tree.Rdata"))
+plot(cutTree$dendrogram)
+symcapture.phylo <- ape::as.phylo(cutTree$dendrogram)
+g <- ggtree(symcapture.phylo, layout='circular')
+g + geom_tiplab(data = dplyr::inner_join(mutate(g$data, Ind = gsub(".g.vcf", "", label)), pop), size =1,
+               size=2, aes(colour = Pop2, angle = angle, label = Ind)) +
+    theme(legend.position = "right", 
+        legend.title = element_blank(),
+        legend.key = element_blank()) +
+  ggsave("./symcapture_save/tree.png")
+
+```
+
+## PCA
+
+```{r PCA2}
+# library(gdsfmt)
+# library(SNPRelate)
+# snpgdsVCF2GDS("symcapture.all.filtered.nonmissingind.maxmissing75.vcf",
+#               "symcapture.all.filtered.nonmissingind.maxmissing75.gds")
+# snpgdsVCF2GDS("symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf",
+#               "symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.gds")
+# symcapture.geno <- openfn.gds("symcapture.all.filtered.nonmissingind.maxmissing75.gds")
+# symcapture.paracou.geno <- openfn.gds("symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.gds")
+# snpset = snpgdsLDpruning(symcapture.geno, ld.threshold = 0.5, 
+#                          autosome.only = F, verbose = F, num.thread = 10)
+# snp.id=unlist(snpset)
+# snpset.paracou = snpgdsLDpruning(symcapture.paracou.geno, ld.threshold = 0.5, 
+#                                  autosome.only = F, verbose = F, num.thread = 10)
+# snp.id.paracou=unlist(snpset)
+# symcapture.pca <- snpgdsPCA(symcapture.geno, snp.id = snp.id,
+#                             autosome.only = F, num.thread = 10)
+# symcapture.pca.paracou <- snpgdsPCA(symcapture.paracou.geno, snp.id = snp.id.paracou,
+#                             autosome.only = F, num.thread = 10)
+# save(symcapture.pca, symcapture.pca.paracou, file = "gpca.Rdata")
+load(file.path(path, "variants", "gpca.Rdata"))
+symcapture.pca.tab <- as.data.frame(symcapture.pca$eigenvect)
+symcapture.pca.paracou.tab <- as.data.frame(symcapture.pca.paracou$eigenvect)
+symcapture.pca.tab$Ind <- symcapture.pca$sample.id
+symcapture.pca.paracou.tab$Ind <- symcapture.pca.paracou$sample.id
+symcapture.pca.tab <- symcapture.pca.tab %>% 
+  mutate(Ind = gsub(".g.vcf", "", Ind)) %>% 
+  left_join(pop)
+symcapture.pca.paracou.tab <- symcapture.pca.paracou.tab %>% 
+  mutate(Ind = gsub(".g.vcf", "", Ind)) %>% 
+  left_join(pop)
+g <- ggplot(symcapture.pca.tab, aes(x = V1, y = V2, col = Pop2, label = Ind)) + 
+  geom_point(size=2) +
+  stat_ellipse(level = 0.95, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0)
+g.par <- ggplot(symcapture.pca.paracou.tab, aes(x = V3, y = V4, col = Pop2, label = Ind)) + 
+  geom_point(size=2) +
+  stat_ellipse(level = 0.95, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0)
+plotly::ggplotly(g)
+plotly::ggplotly(g.par)
+```

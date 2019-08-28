@@ -12,236 +12,281 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
-```{r variantFiltering}
+```{bash variantFiltering, eval=F, echo=T}
+vcftools --gzvcf reference.sequences_00.vcf.gz --missing-indv -c
+vcftools --gzvcf reference.sequences_00.vcf.gz --missing-site -c > missing.txt
+vcftools --gzvcf reference.sequences_00.vcf.gz --site-quality -c > QUAL.txt
+vcftools --gzvcf reference.sequences_00.vcf.gz \
+  --get-INFO AC \
+  --get-INFO QD \
+  --get-INFO FS \
+  --get-INFO SOR \
+  -c > INFO.txt
+```
 
+```{r variantFilteringR}
+filtering <- left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "missing.txt")),
+          read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "QUAL.txt"))) %>% 
+  left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "INFO.txt"))) %>% 
+  mutate(QD = as.numeric(QD)) %>% 
+  mutate(MQ = as.numeric(MQ)) %>% 
+  mutate(MQRankSum = as.numeric(MQRankSum)) %>% 
+  mutate(ReadPosRankSum = as.numeric(ReadPosRankSum)) %>% 
+  sample_n(1000) # for tests
 ```
 
 # Variant filtering
 
-We will filter the final raw VCF with following filters (name, filter, description) :
+We will filter the final raw VCF with following filters (name, filter, description) using next histograms to set and test parameters values :
 
-* __MissingData__ `missing < 0.5`: filter out variant if they have more than 50% missing data (\@ref(fig:missingIndR))
-* __MinorAllelicCount__ `mac > 3`: filter out variant if the minor allele is represented by less than 3 individuals (\@ref(fig:macR))
-* __AlleleCount__ `AC < 3`: filter out variant if there are more than 2 allelic form (\@ref(fig:ACR))
-* __HardToValidate__ `MQ0 >= 4 && ((MQ0 / (1.0*DP)) > 0.1 )`: filter out variant if there are at least four alignments with a mapping quality of zero and if the proportion of alignments mapping ambiguously corresponds to 1/10th of all alignments 
-* __LowCoverage__ `DP < 10`: filter out variants which are covered by less than 10 reads (\@ref(fig:DPR))
-* __LowQD__ `QD < 1.5`: filter out variants with low variant confidence (\@ref(fig:QDR))
-* __VeryLowQual__ `QUAL < 30.0` or `QUAL < 50.0`: filter out variants having a low quality score (might be decided with an histogram) (\@ref(fig:qualityR))
-* __FisherStrand__ `FS > X`: filter out variants based on Phred-scaled p-value using Fisher's exact test to detect strand bias (\@ref(fig:FSR))
+* __Missing__ `missing > 0.15`: filter out variant if they have more than 15% missing data (\@ref(fig:missing))
+* __Allele count__ `AC > 3`: filter out variant if there are more than 2 allelic form (restricting to biallelic variants \@ref(fig:AC))
+* __Quality ([QUAL](https://software.broadinstitute.org/gatk/documentation/article?id=7258))__ `QUAL < 30`: represents the likelihood of the site to be homozygote across all samples, we filter out variants having a low quality score (\@ref(fig:QUAL))
+* __Quality depth ([QD](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_QualByDepth.php))__ `QD < 2`: filter out variants with low variant confidence (\@ref(fig:QD))
+* __Fisher strand bias ([FS](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_FisherStrand.php))__ `FS > 60`: filter out variants based on Phred-scaled p-value using Fisher's exact test to detect strand bias (\@ref(fig:FS))
+* __Strand odd ratio ([SOR](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_StrandOddsRatio.php))__ `SOR < 3`: filter out variants based on Phred-scaled p-value used to detect strand bias (\@ref(fig:SOR))
 
-For this we assessed different metrics using [`vcftools`](http://vcftools.sourceforge.net/man_latest.html), proceeded to the fltering, and quickly examined the result:
+For this we assessed different metrics using [`vcftools`](http://vcftools.sourceforge.net/man_latest.html), proceeded to the fltering, and quickly examined the result with genomic principal component analysis (gPCA):
 
-* __Missing individuals__ missing individuals to set the threshold
-*
-* __Filtering__ filtering step with `vcftools` and `gatk VariantFiltration`
-* __Result__ quick assesment of the produced filtered VCF
+* __Missing__ missing individuals histogram to set the threshold
+* __AC__ allele count histogram to set the threshold
+* __QUAL__ quality histogram to set the threshold
+* __QD__ quality by depth histogram to set the threshold
+* __FS__ Fisher strand ratio histogram to set the threshold
+* __SOR__ Strand odd ratio histogram to set the threshold
+* __Filtering__ filtering step with `gatk VariantFiltration`, `gatk SelectVariants` and `vcftools`
+* __gPCA check__ quick assesment of the produced filtered VCF
 
-## Missing individuals
+<!-- recommandations https://www.france-bioinformatique.fr/sites/default/files/V04_FiltrageVariantNLapaluRoscoff2016_0.pdf -->
+<!-- https://software.broadinstitute.org/gatk/documentation/article.php?id=6925 -->
 
-```{bash missingInd, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --missing-indv --out individuals
-```
+## Missing
 
-```{r missingIndR, fig.cap="Missing individuals frequency per SNP."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "individuals.imiss")) %>% 
-  ggplot(aes(F_MISS)) + 
-  geom_histogram() +
-  geom_vline(xintercept = 0.5, col = "red", linetype = "dashed") +
+```{r missing, fig.cap="Missing data frequency per variant."}
+Missingthresh <- 0.15
+ggplot(filtering, aes(F_MISS)) + 
+  geom_rect(xmin = Missingthresh, xmax = 100, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = Missingthresh, col = "red", linetype = "dashed") +
   xlab("Missing individuals percentage") +
-  ylab("SNP count") +
-  ggtitle("XX% (XX/XX) alleles below XX%, threshold set to 0.X")
+  ylab("variant count") +
+  ggtitle(paste0("Missing: ", round(nrow(filter(filtering, F_MISS < Missingthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, F_MISS < Missingthresh)), 
+                 " / ", nrow(filtering), ") variant below ", Missingthresh))
 ```
 
-## Minor allele frequency
+## AC
 
-```{bash mac, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --freq --out alleles
-```
-
-```{r macR, fig.cap="Minor allele frequency SNP."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "alleles.frq"),
-         skip = 1, col_names = c("seq", "pos", "Nalleles", "Nseq", 
-                                 "allele1", "allele2")) %>% 
-  separate(allele1, c("allele1", "freq1"), sep = ":", convert = T) %>% 
-  separate(allele2, c("allele2", "freq2"), sep = ":", convert = T) %>% 
-  group_by(seq, pos) %>% 
-  mutate(minor.freq = min(freq1, freq2)) %>% 
-  ggplot(aes(minor.freq)) + 
-  geom_histogram() +
-  geom_vline(xintercept = 3/432, col = "red", linetype = "dashed") +
-  xlab("Minor allele frequency") +
-  ylab("SNP count") +
-  ggtitle("XX% (XX/XX) alleles below XX%, threshold set to 0.X")
-```
-
-## AC - Allele count
-
-```{bash AC, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO AC -c > symcapture.AC.txt
-```
-
-```{r ACR, fig.cap="Allelic count per SNP."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.AC.txt"), na = "?") %>% 
-  ggplot(aes(AC)) + 
-  geom_histogram() +
-  geom_vline(xintercept = 3, col = "red", linetype = "dashed") +
+```{r AC, fig.cap="Allelic count per variant."}
+ACthresh <- 3
+ggplot(filtering, aes(AC)) + 
+  geom_rect(xmin = ACthresh, xmax = 100, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = ACthresh, col = "red", linetype = "dashed") +
   xlab("Allelic count") +
-  ylab("SNP count") +
-  ggtitle("XX% (XX/XX) alleles above 3")
+  ylab("variant count") +
+  xlim(0, 100) +
+  ggtitle(paste0("AC: ", round(nrow(filter(filtering, AC < ACthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, AC < ACthresh)), 
+                 " / ", nrow(filtering), ") variant below ", ACthresh))
 ```
 
-## DP - Coverage
+## QUAL
 
-```{bash DP, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO DP -c > symcapture.DP.txt
-```
-
-```{r DPR, fig.cap="Individuals coverage per SNP."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.DP.txt"), na = "?") %>% 
-  ggplot(aes(DP)) + 
-  geom_histogram() +
-  geom_vline(xintercept = 10, col = "red", linetype = "dashed") +
-  xlab("Coverage") +
-  ylab("SNP") +
-  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
-```
-
-## QD - Quality
-
-```{bash QD, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO QD -c > symcapture.QD.txt
-```
-
-```{r QDR, fig.cap="Individuals coverage per SNP."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.QD.txt"), na = "?") %>% 
-  ggplot(aes(QD)) + 
-  geom_histogram() +
-  geom_vline(xintercept = 1.5, col = "red", linetype = "dashed") +
+```{r QUAL, fig.cap="Variants quality."}
+QUALthresh <- 30
+ggplot(filtering, aes(QUAL)) + 
+  geom_rect(xmin = 0, xmax = log10(QUALthresh), ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = QUALthresh, col = "red", linetype = "dashed") +
   xlab("Quality depth") +
-  ylab("SNP") +
+  ylab("variant count") +
   scale_x_log10() +
-  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+  ggtitle(paste0("QUAL: ", round(nrow(filter(filtering, QUAL > QUALthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, QUAL > QUALthresh)), 
+                 " / ", nrow(filtering), ") variant above ", QUALthresh))
 ```
 
-## QUAL - Quality
+## QD
 
-```{bash quality, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --site-quality --out alleles
-```
-
-```{r qualityR, fig.cap="Mean individual coverage."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "alleles.lqual")) %>% 
-  ggplot(aes(QUAL)) + 
-  geom_histogram() +
-  geom_vline(xintercept = c(30, 50), col = "red", linetype = "dashed") +
+```{r QD, fig.cap="Variants quality by depth."}
+QDthresh <- 2
+ggplot(filtering, aes(QD)) + 
+  geom_rect(xmin = 0, xmax = QDthresh, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = QDthresh, col = "red", linetype = "dashed") +
   xlab("Quality depth") +
-  ylab("SNP") +
-  scale_x_log10() +
-  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+  ylab("variant count") +
+  ggtitle(paste0("QD: ", round(nrow(filter(filtering, QD > QDthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, QD > QDthresh)), 
+                 " / ", nrow(filtering), ") variant above ", QDthresh))
 ```
 
-## FS - FiscerStrand
+## FS
 
-```{bash FS, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz --get-INFO FS -c > symcapture.FS.txt
+```{r FS, fig.cap="Fisher strand ratio per variant."}
+FSthresh <- 60
+ggplot(filtering, aes(FS)) + 
+  geom_rect(xmin = FSthresh, xmax = 1000, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = FSthresh, col = "red", linetype = "dashed") +
+  xlab("Quality depth") +
+  ylab("variant count") +
+  ggtitle(paste0("FS: ", round(nrow(filter(filtering, FS < FSthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, FS < FSthresh)), 
+                 " / ", nrow(filtering), ") variant above ", FSthresh))
 ```
 
-```{r FSR, fig.cap="Individuals coverage per SNP."}
-read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.FS.txt"), na = "?") %>% 
-  ggplot(aes(FS)) + 
-  geom_histogram() +
-  geom_vline(xintercept = 60, col = "red", linetype = "dashed") +
-  xlab("Fisher strand") +
-  ylab("SNP") +
-  scale_x_log10() +
-  ggtitle("XX% (XX/XX) SNP below XX%, threshold set to 0.X")
+## SOR
+
+```{r SOR, fig.cap="Strand odd ratio per variant."}
+SORthresh <- 3
+ggplot(filtering, aes(SOR)) + 
+  geom_rect(xmin = SORthresh, xmax = 100, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = SORthresh, col = "red", linetype = "dashed") +
+  xlab("Quality depth") +
+  ylab("variant count") +
+  ggtitle(paste0("SOR: ", round(nrow(filter(filtering, SOR < SORthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, SOR < SORthresh)), 
+                 " / ", nrow(filtering), ") variant below ", SORthresh))
 ```
 
 ## Filtering
 
-```{bash rawFiltering, echo=T, eval=F}
-vcftools --gzvcf symcapture.all.raw.vcf.gz \
-  --max-missing 0.5 \
-  --recode --recode-INFO-all \
-  -c > symcapture.nonmissing.vcf
+Finally with all filtered combined we expect `r format(round(nrow(filter(filtering, F_MISS < Missingthresh, AC < ACthresh, QUAL > QUALthresh, QD > QDthresh, FS < FSthresh, SOR < SORthresh)) / 1000 * 26813513), big.mark = " ")` variants. We will first filter at 50% of missing data and will create an extra filtered VCF at 15% of missing. 42 sequences subset lost individuals in genotype call (over 878, 4%), blocking the functionning of `gatk CombineVariants`, so in a first time we removed the variants associated to those subest of reference sequences. We also extracted the Paracou individual from the final VCF for population genomics analysis.
+
+```{r, eval=F}
+format(round(nrow(filter(filtering, F_MISS < Missingthresh, AC < ACthresh, QUAL > QUALthresh, QD > QDthresh, FS < FSthresh, SOR < SORthresh)) / 1000 * 26813513), big.mark = " ")
+```
+
+```{bash missingidv, eval=F, echo=T}
+mkdir out
+mkdir missing_ind
+for file in $(ls symcapture.filtered.vcf/*.vcf.gz) ; do file=$(basename $file) ; file=${file%.*} ; echo "module load bioinfo/tabix-0.2.5 ; module load bioinfo/vcftools-0.1.15 ; vcftools --gzvcf symcapture.filtered.vcf/$file.gz --missing-indv -c > missing_ind/$file.missing.txt"; done > missingInd.sh
+sarray -J missingInd -o out/%j.missingInd.out -e out/%j.missingInd.err -t 1:00:00 --mail-type=BEGIN,END,FAIL missingInd.sh
+for file in $(ls missing_ind/*.missing.txt) ; do awk '{{if (NR!=1) print FILENAME"\t"$0}}' $file ; done > missingInd.txt
+rm - r out
+rm -r missing_ind
+```
+
+```{r missingindR}
+missing <- read_tsv(file.path(path, "Sequences", "variantCalling", "missingInd.txt"), 
+         col_names = c("ref", "sample", "ndata", "ngenotypes", "nmiss", "freq")) %>% 
+  mutate(ref = gsub("missing_ind/reference.sequences_", "", ref)) %>% 
+  mutate(ref = gsub(".vcf.missing.txt", "", ref)) %>% 
+  mutate(sample = gsub(".g.vcf", "", sample)) %>% 
+  reshape2::dcast(ref ~ sample, value.var = "freq") %>% 
+  reshape2::melt(id.vars = "ref", variable.name = "sample", value.name = "missing") %>% 
+  mutate(missing = ifelse(is.na(missing) | is.nan(missing), 1, missing))
+read_tsv(file.path(path, "Sequences", "variantCalling", "missingInd.txt"), 
+         col_names = c("ref", "sample", "ndata", "ngenotypes", "nmiss", "freq")) %>% 
+  mutate(ref = gsub("missing_ind/reference.sequences_", "", ref)) %>% 
+  mutate(ref = gsub(".vcf.missing.txt", "", ref)) %>% 
+  mutate(sample = gsub(".g.vcf", "", sample)) %>% 
+  group_by(ref) %>% 
+  summarise(N = n()) %>% 
+  filter(N == 432) %>% 
+  select(ref) %>% 
+  mutate(ref = paste0("symcapture.filtered.vcf/reference.sequences_", ref, ".vcf.gz")) %>% 
+  write_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing.list"), col_names = F)
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
+  filter(Pop2 != "O") %>% 
+  select(Ind) %>% 
+  write_tsv(file.path(path, "Sequences", "variantCalling", "Paracou.ind"), col_names = F)
+```
+
+
+```{bash genotype, eval=F, echo=T}
+# folders
+mkdir out
+mkdir symcapture.intermediate.vcf
+mkdir symcapture.filtered.vcf
+
+# test
+srun --mem=20G --pty bash
+file=$(basename $(ls symcapture.raw.vcf.gz/*.vcf.gz | head -n 1))
+module load bioinfo/gatk-4.1.2.0
 gatk VariantFiltration \
-   -R ../reference/reference.fasta \
-   -V symcapture.nonmissing.vcf \
-   -O symcapture.filtered.vcf \
-   --filter-name "AlleleCount" \
-   --filter-expression "AC < 3" \
-   --filter-name "HardToValidate" \
-   --filter-expression "MQ0 >= 4 && ((MQ0 / (1.0*DP)) > 0.1 )" \
-   --filter-name "LowCoverage" \
-   --filter-expression "DP < 10" \
-   --filter-name "LowQD" \
-   --filter-expression "QD < 1.5" \
-   --filter-name "VeryLowQual" \
-   --filter-expression "QUAL < 30.0" \
-   --filter-name "FisherStrand" \
-   --filter-expression "FS < 60"
-# compression ?
+   -V symcapture.raw.vcf.gz/$file \
+   --filter-expression "AC > 2"  --filter-name "AC2" \
+   --filter-expression "QUAL < 30.0"  --filter-name "QUAL30" \
+   --filter-expression "QD < 2.0"  --filter-name "QD2" \
+   --filter-expression "FS > 60.0"  --filter-name "FS60" \
+   --filter-expression "SOR > 3.0"  --filter-name "SOR3" \
+   -O symcapture.intermediate.vcf/$file
+gatk SelectVariants \
+  -V symcapture.intermediate.vcf/$file \
+  -select-type SNP \
+  --exclude-filtered \
+  -O symcapture.filtered.vcf/$file
+exit
+
+# sarray
+for file in $(ls symcapture.raw.vcf.gz/*.vcf.gz) ; do file=$(basename $file) ; echo "module load bioinfo/gatk-4.1.2.0 ; gatk VariantFiltration -V symcapture.raw.vcf.gz/$file --filter-expression \"AC > 2 || QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0\" --filter-name \"FAIL\" -O symcapture.intermediate.vcf/$file ; gatk SelectVariants -V symcapture.intermediate.vcf/$file -select-type SNP --exclude-filtered -O symcapture.filtered.vcf/$file"; done > filter.sh
+sarray -J filter -o out/%j.filter.out -e out/%j.filter.err -t 1:00:00 --mem=20G --mail-type=BEGIN,END,FAIL filter.sh
+
+# clean
+rm -r out
+rm -r symcapture.intermediate.vcf
+
+# merge
+echo -e '#!/bin/bash\n#SBATCH --time=48:00:00\n#SBATCH -J gather\n#SBATCH -o gather.out\n#SBATCH -e gather.err\n#SBATCH --mem=20G\n#SBATCH --cpus-per-task=1\n#SBATCH --mail-type=BEGIN,END,FAIL\nmodule load bioinfo/picard-2.14.1\njava -Xmx20g -jar $PICARD GatherVcfs \' > gather.sh
+for file in $(cat nonmissing.list)
+do
+	echo -e '\tI='$file' \' >> gather.sh
+done
+echo -e '\tO=symcapture.all.filtered.nonmissingind.vcf.gz\n' >> gather.sh
+
+# missing
+module load bioinfo/tabix-0.2.5
+module load bioinfo/vcftools-0.1.15
+module load bioinfo/bcftools-1.8
+vcftools --gzvcf symcapture.all.filtered.nonmissingind.vcf.gz --max-missing 0.50 --recode --recode-INFO-all -c > symcapture.all.filtered.nonmissingind.maxmissing50.vcf
+bgzip -c symcapture.all.filtered.nonmissingind.maxmissing50.vcf > symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz
+rm symcapture.all.filtered.nonmissingind.maxmissing50.vcf
+vcftools --gzvcf symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz --max-missing 0.75 --recode --recode-INFO-all -c | bgzip -c > symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz
+zcat symcapture.all.filtered.nonmissingind.maxmissing75.vcf | bcftools view -S Paracou.ind | bgzip -c > symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf.gz
+
+# biallelic
+# gatk seems to have issue filtering biallelic SNP, so I used bcftools as a second filtering
+module load bioinfo/bcftools-1.8
+bcftools view --max-alleles 2 symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz | bgzip -c > biallelic/symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz
+bcftools view --max-alleles 2 symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz | bgzip -c > biallelic/symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz
+bcftools view --max-alleles 2 symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf.gz | bgzip -c > biallelic/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf.gz
 ```
 
-## Result
+## gPCA check
 
-```{bash, eval=F, echo=T}
-vcftools --gzvcf symcapture.all.raw.vcf.gz   --het -c
-vcftools --gzvcf symcapture.all.raw.vcf.gz   --hardy -c | head
-vcftools --gzvcf symcapture.all.raw.vcf.gz   --TajimaD -c | head
-vcftools --gzvcf symcapture.filtered.vcf --relatedness -c
-vcftools --gzvcf symcapture.filtered.vcf --relatedness2 -c
-vcftools --gzvcf symcapture.filtered.vcf --weir-fst-pop Panama.pop --weir-fst-pop Benin.pop -c | head
-```
+We built a genomic principal component analysis of our filtered SNPs to overview their structure and check the filtering (Fig. \@ref(fig:pca)). XX..
 
-```{r genomic}
-# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/analysis_of_genome.html
-library(vcfR)
-symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.filtered.vcf"), verbose = F)
-symcapture.gl <- vcfR2genlight(symcapture.vcf)
-library(adegenet)
-ploidy(symcapture.gl) <- 2
-symcapture.diff <- genetic_diff(symcapture.vcf, pops = as.factor(symcapture.gl@ind.names), method = 'nei')
-knitr::kable(head(symcapture.diff[1:13,]))
-reshape2::melt(symcapture.diff[,c(3:8)], varnames=c('Index', 'Sample'), value.name = 'Depth', na.rm=TRUE) %>% 
-ggplot(aes(x = variable, y = Depth)) + 
-  geom_violin(fill="#2ca25f", adjust = 1.2) +
-  xlab("") + ylab("")
-```
-
-
-```{r GBS}
+```{r gpca, fig.cap="Cap"}
 # tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/gbs_analysis.html
+# srun --mem=100G --cpus-per-task=8 --pty bash
+# module load system/R-3.5.3
+# issue with package installation on genologin due to GDAL
 library(vcfR)
-symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.filtered.vcf"), verbose = F)
-pop.data <- read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.pop"))
-symcapture.gl <- vcfR2genlight(symcapture.vcf)
-pop(symcapture.gl) <- pop.data$Population
 library(poppr)
-ploidy(symcapture.gl) <- 2
-tree <- aboot(symcapture.gl, tree = "upgma", distance = bitwise.dist, 
-              sample = 100, showtree = F, cutoff = 50, quiet = T)
-library(RColorBrewer)
-cols <- brewer.pal(n = nPop(symcapture.gl), name = "Dark2")
 library(ape)
-plot.phylo(tree, cex = 0.8, font = 2, adj = 0, tip.color =  cols[pop(symcapture.gl)])
-nodelabels(tree$node.label, adj = c(1.3, -0.5), frame = "n", cex = 0.8,font = 3, xpd = TRUE)
-legend('topleft', legend = c("Panama","Benin"), fill = cols, border = FALSE, bty = "n", cex = 2)
-axis(side = 1)
-title(xlab = "Genetic distance (proportion of loci that are different)")
-library(igraph)
-symcapture.dist <- bitwise.dist(symcapture.gl)
-symcapture.msn <- poppr.msn(symcapture.gl, symcapture.dist, showplot = FALSE, include.ties = T)
-node.size <- rep(2, times = nInd(symcapture.gl))
-names(node.size) <- indNames(symcapture.gl)
-vertex.attributes(symcapture.msn$graph)$size <- node.size
-plot_poppr_msn(symcapture.gl, symcapture.msn , palette = brewer.pal(n = nPop(symcapture.gl), name = "Dark2"), gadj = 70)
-symcapture.pca <- glPca(symcapture.gl, nf = 3)
-barplot(100*symcapture.pca$eig/sum(symcapture.pca$eig), col = heat.colors(50), main="PCA Eigenvalues")
-title(ylab="Percent of variance\nexplained", line = 2)
-title(xlab="Eigenvalues", line = 1)
+symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz"),
+                            verbose = T)
+symcapture.gl <- vcfR2genlight(symcapture.vcf)
+rm(symcapture.vcf) ; gc()
+ploidy(symcapture.gl) <- 2
+pop <- data.frame(label = symcapture.gl@ind.names,
+                  Ind = gsub(".g.vcf", "", symcapture.gl@ind.names)) %>%
+  left_join(googlesheets::gs_title("Symcapture") %>%
+              googlesheets::gs_read("Pop"))
+pop(symcapture.gl) <- pop$Pop
+save(symcapture.gl, file = "./symcapture_save/glPca.Rdata")
+symcapture.pca <- glPca(symcapture.gl, nf = 3, n.cores = 3)
+save(symcapture.pca, symcapture.gl, file = "./symcapture_save/glPca.Rdata")
+load("./symcapture_save/glPca.Rdata")
 symcapture.pca.scores <- as.data.frame(symcapture.pca$scores)
 symcapture.pca.scores$pop <- pop(symcapture.gl)
+cols <- brewer.pal(n = npop(symcapture.gl), name = "Dark2")
 ggplot(symcapture.pca.scores, aes(x = PC1, y = PC2, col = pop)) + 
   geom_point(size=2) +
   stat_ellipse(level = 0.95, size = 1) +

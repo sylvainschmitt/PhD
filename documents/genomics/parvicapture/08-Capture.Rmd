@@ -49,27 +49,66 @@ quantit1 <- read_csv(file.path(path, "QuantIt",
   arrange(Plate_library, Position_library) %>% 
   left_join(data.frame(Plate_library = 0,
                        Position_library = as.vector(sapply(1:6, function(x) paste0(LETTERS[1:4], x))),
-                       concentration = rep(c(0, 10, 20, 40, 80, 120), each = 4)))
+                       concentration = rep(c(0, 10, 20, 40, 80, 120), each = 4))) %>% 
+  mutate(QuantIt = 1)
 data1 <- filter(quantit1, Plate_library == 0)
 quantit1 <- quantit1 %>% 
   mutate(concentration_est = lm(concentration ~ fluo, data = data1)$coefficients[2]*fluo)
-
-ggplot(quantit1, aes(concentration_est, fill = concentration_est > 10)) +
+quantit2 <- read_csv(file.path(path, "QuantIt", 
+                   "PARVICAPTURE_libraryP3P4_20190826_fluo.csv"), skip = 53)[2:4] %>% 
+  dplyr::rename(position = Well, fluo = `dosage_fluo_384_CB:501,527`) %>% 
+  dplyr::select(position, fluo) %>% 
+  filter(!is.na(fluo)) %>% 
+  left_join(read_csv(file.path(path, "QuantIt", 
+                               "PARVICAPTURE_libraryP3P4_20190826_plates.csv"),  skip = 36) %>% 
+              dplyr::rename(row = X1) %>% 
+              reshape2::melt(id.vars = "row", variable.name = "col", value.name = "library") %>% 
+              mutate(position = paste0(row, col)) %>% 
+              select(position, library)) %>% 
+  separate(library, c("Plate_library", "Position_library"), "_") %>% 
+  mutate(Plate_library = as.numeric(gsub("P", "", Plate_library))) %>% 
+  select(Plate_library, Position_library, fluo) %>% 
+  arrange(Plate_library, Position_library) %>% 
+  left_join(data.frame(Plate_library = 0,
+                       Position_library = as.vector(sapply(1:6, function(x) paste0(LETTERS[1:4], x))),
+                       concentration = rep(c(0, 10, 20, 40, 80, 120), each = 4))) %>% 
+  mutate(QuantIt = 2)
+data2 <- filter(quantit2, Plate_library == 0)
+quantit2 <- quantit2 %>% 
+  mutate(concentration_est = lm(concentration ~ fluo, data = data2)$coefficients[2]*fluo)
+quantit <- bind_rows(quantit1, quantit2) %>% 
+  filter(Plate_library != 0)
+data <- bind_rows(data1, data2)
+rm(quantit1, quantit2, data1, data2)
+ggplot(quantit, aes(concentration_est, fill = concentration_est > 10)) +
   geom_histogram() +
   scale_x_log10() +
   xlab("Concentration") +
   ylim(0, 45) +
-  annotation_custom(grob = ggplotGrob(ggplot(data1, aes(fluo, concentration)) +
+  theme(legend.position = "bottom") +
+  annotation_custom(grob = ggplotGrob(ggplot(data, aes(fluo, concentration,
+                                                       col = QuantIt, group = QuantIt)) +
                                         geom_point() +
                                         geom_smooth(method = "lm") +
                                         xlab("Fluorescence") +
-                                        ylab("Concentration")), 
-                    xmin = log10(10), xmax = log10(100), ymin = 25, ymax = 45)
+                                        ylab("Concentration") +
+                                        scale_color_continuous(guide = "none")), 
+                    xmin = log10(10), xmax = log10(100), ymin = 28, ymax = 45)
 ```
 
 ## Repeats
 
-X libraries were repeated from extraction to replace least concentrated libraries
+209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, but we have only 96 spot on plate 6 corresponding to a minimal estimated concentration of 4.4 $ng.\mu L ^{-1}$.
+
+```{r repeats}
+filter(quantit, concentration_est < 4.4) %>% 
+  arrange(Plate_library, Position_library) %>% 
+  select(Plate_library, Position_library, concentration_est) %>% 
+  mutate(Plate_repeat = 6) %>% 
+  mutate(Plate_position = as.vector(sapply(1:12, function(x) paste0(LETTERS[1:8], x)))) %>% 
+  kable()
+```
+
 
 ## Equimolar pools preparation
 

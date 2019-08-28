@@ -1,0 +1,94 @@
+---
+title: "A09 : Tiputini"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::word_document2: default
+linestretch: 1.5
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 8,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Tiputini/"
+```
+
+```{r complexes}
+complexes <- bind_rows(
+  data.frame(Complex = "E. Parvifolia",
+             Species = c("Eschweilera indet", "Eschweilera juruensis", "Eschweilera parvifolia")),
+  data.frame(Complex = "Licania",
+             Species = c("Licania indet", "Licania lata")),
+  data.frame(Complex = "Iryanthera",
+             Species = c("Iryanthera juruensis")),
+  data.frame(Complex = "Talisia",
+             Species = c("Talisia indet")))
+```
+
+```{r data}
+tiputini <- bind_rows(
+  read_csv(file.path(path, "TIP_03_GR_FINAL.csv")) %>% 
+    mutate(Plot = 3) %>% 
+    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, `D 2017`, Family, Species) %>% 
+    rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = `D 2017`),
+  read_csv(file.path(path, "TIP_05.csv"), skip = 1, ) %>% 
+    mutate(Plot = 5) %>% 
+    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, D17, Family, Species) %>% 
+    rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = D17) %>% 
+    mutate(X = gsub(",", ".", X, fixed = T), Y = gsub(",", ".", Y, fixed = T)) %>% 
+    mutate(X = as.numeric(X), Y = as.numeric(Y))
+) %>% 
+  mutate(DBH = as.numeric(DBH)) %>% 
+  filter(!is.na(TreeID) & !is.na(X) & !is.na(Y)) %>% 
+  left_join(complexes) %>% 
+  mutate(alpha = ifelse(is.na(Complex), 0.3, 1)) %>% 
+  mutate(DBHplot = ifelse(is.na(DBH), 1, DBH))         
+```
+
+# Introduction
+
+Subsequent analysis aimed to test Tiputini data integration species complexes distribution modelling.
+
+# Data
+
+Unfortunately, we lack data for sister species distribution modelling within species complexes (Fig. \@ref(fig:gdata)). We only have 4 complexes represented over 6 in current Tiputini data for plots 3 and 5 (Tab. \@ref(tab:tdata)). Moreover 2 species complexes only include 1 species and are thus unusuable and 2 species complexes include undetermined species, which we should remove, resulting in *Licania* to be also unusuable. Finally we only have *E. Parvifolia* species complex only represented by 1 individual of *E. juruensis* and 8 individuals of *E. parvifolia*, and for Paracou we used to have a minimum headcount of 10 individuals to infer the species niche. Consequently we need more data of Tiputini if we want to be able to infer sister species distribution within studied species complexes.
+
+```{r gdata, fig.cap="Species complex distribution in Tiputini plots."}
+ggplot(tiputini, aes(X, Y, size = DBHplot, col = Complex, alpha = alpha)) +
+  geom_point() +
+  facet_wrap(~ Plot, labeller = "label_both", nrow = 2) +
+  coord_equal()
+```
+
+```{r tdata}
+tiputini %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Family, Complex, Species) %>% 
+  summarise(N = n()) %>% 
+  kable(caption = "Species complex headcount per sister species.", format = "pandoc") %>% 
+  kable_styling(full_width = F)
+```
+

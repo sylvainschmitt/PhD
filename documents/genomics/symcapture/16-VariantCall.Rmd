@@ -12,8 +12,20 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/"
 ```
 
-```{r variant}
-
+```{r variant, eval=F}
+read_tsv(file.path(path, "Sequences", "variantCalling", "mapped.list"),
+         col_names = c("file")) %>% 
+  mutate(ind = gsub("../mapping/bam[234]?/", "", file)) %>% 
+  mutate(ind = gsub(".bam", "", ind)) %>% 
+  mutate(file = gsub("../mapping/", "", file)) %>% 
+  left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "haplotyped.list"),
+                     col_names = c("ind")) %>% 
+              mutate(ind = gsub("gvcf[234]?/", "", ind)) %>% 
+              mutate(ind = gsub(".g.vcf.gz", "", ind)) %>% 
+              mutate(gvcf = 1)) %>% 
+  filter(is.na(gvcf)) %>% 
+  select(file) %>% 
+  write_tsv(file.path(path, "Sequences", "variantCalling", "unhaplotyped.list"), col_names = F)
 ```
 
 # Variant call
@@ -30,22 +42,22 @@ Run the `HaplotypeCaller` on each sample's BAM files to create single-sample gVC
 
 ```{bash HaplotypeCaller, eval=F, echo=T}
 # folders
-mkdir variantCalling/gvcf4
+mkdir variantCalling/gvcf5
 
 # test
-file=$(ls mapping/bam4/*.bam | head -n 1)
+file=$(ls mapping/bam5/*.bam | head -n 1)
 srun --mem=20G --pty bash
 module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20G" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf4/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF
 exit
 rm variantCalling/gvcf4/*
 
 # sarray
-for file in $(ls mapping/bam4/*.bam); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20G\" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf4/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF"; done > haplo4.sh
-mkdir haplo4
-sarray -J haplo4 -o haplo4/%j.out -e haplo4/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL  haplo4.sh
+for file in $(ls mapping/bam5/*.bam); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20G\" HaplotypeCaller -R reference/reference.fasta -I $file -O variantCalling/gvcf5/$(basename "${file%.*}").g.vcf.gz  -ERC GVCF"; done > haplo5.sh
+mkdir haplo5
+sarray -J haplo5 -o haplo5/%j.out -e haplo5/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL  haplo5.sh
 
 # clean
-rm -r haplo4
+rm -r haplo5
 rm -r tmp
 ```
 
@@ -53,10 +65,15 @@ rm -r tmp
 
 We aggregated the GVCF files and feed in one GVCF database with `GenomicsDBImport` to be genotyped. **Beware**, `GATK 4.0.0.0` does not deal with multiple intervals when using `GenomicsDBImport`, so we used `GATK 4.1.2.0`. We divided the step on several intervals files of a maximum of 1000 sequences computed in parralel to speed up the operation. **NB**, we tested the pipeline with 3 individual haplotypes and 10 intervals of 100 sequences ran in parrallel; and it took 24 minutes. Consequently with 10 fold more sequences per intervals we may increase to 4H, and the effect of 10 fold more individual haplotypes is hard to assess.
 
+Due to a memory overload on the cluster I boosted the `sarray` to 24G per node beside limiting `gatk` java session to 20G, still the overload is strange as if `gatk` was opening parrallel session of 20G java. We should not decrease batch size as batch of 50 individuals means that we will use 9 batches ! If memorry issues persist we may decrease the intervals length (currently 1000 sequences) and increase the number of jobs in `sarray`. We may even decrease intervals to 100 sequences resulting in more than 800 jobs and run theim by batch of 100 hundreds if they are really more efficient.
+
+Running a first batch of 10 samples on 100 sequences took 35 minutes. Thus 432 samples should took ca 1 day and 40 minutes. This is the first run of DB among 8, so in total DB built should take8 days ! But on the other hand joint genotyping might be launch on each run as soon as they finish. So we might clean the first vcf and obtained a preview of population genetics structure with the first 100 sequences.
+
+
 ```{bash combine, eval=F, echo=T}
 # Sample map
 touch sample_map.txt
-for file in $(ls gvcf.test/*.g.vcf.gz)
+for file in $(ls gvcf*/*.g.vcf.gz)
 do 
    echo -e $(basename "${file%.*}")"\t"$file >> sample_map.txt
 done
@@ -65,7 +82,7 @@ done
 mkdir reference.sequences.lists
 cut ../reference/reference.fasta.fai -f1 > reference.sequences.lists/reference.sequences.list
 cd reference.sequences.lists
-split -l 1000 -d reference.sequences.list reference.sequences_ --additional-suffix=.list
+split -l 100 -d reference.sequences.list reference.sequences_ --additional-suffix=.list
 rm reference.sequences.list
 ls | wc -l
 cd ..
@@ -75,8 +92,8 @@ mkdir tmp
 mkdir symcaptureDB
 
 # test
+srun --mem=24G --pty bash
 file=$(ls reference.sequences.lists/ | head -n 1)
-srun --mem=20G --pty bash
 module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20g -Xms20g" GenomicsDBImport --genomicsdb-workspace-path symcaptureDB/"${file%.*}".DB -L reference.sequences.lists/$file --sample-name-map sample_map.txt --batch-size 50 --tmp-dir=tmp
 exit
 rm -r symcaptureDB/*
@@ -84,12 +101,17 @@ rm tmp/*
 
 # sarray
 
-for file in $(ls reference.sequences.lists.test/); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20g -Xms20g\" GenomicsDBImport --genomicsdb-workspace-path symcaptureDB/\"${file%.*}\".DB -L reference.sequences.lists/$file --sample-name-map sample_map.txt --batch-size 50 --tmp-dir=tmp"; done > combine.array.sh
-mkdir combine.array
-sarray -J combine -o combine.array/%j.out -e combine.array/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL combine.array.sh
+for file in $(ls reference.sequences.lists/); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20g -Xms20g\" GenomicsDBImport --genomicsdb-workspace-path symcaptureDB/\"${file%.*}\".DB -L reference.sequences.lists/$file --sample-name-map sample_map.txt --batch-size 10 --consolidate"; done > combine.sh
+split -l 207 -d combine.sh combine_ --additional-suffix=.sh
+rm combine.sh
+mkdir combine
+sarray -J combine -o combine/%j.out -e combine/%j.err -t 48:00:00 --mem=40G --mail-type=BEGIN,END,FAIL combine.sh
+rm combine_00.sh
+rm -r combine
+rm -r tmp
 
 # clean
-rm -r combine.array
+rm -r combine
 rm -r tmp
 ```
 
@@ -107,15 +129,15 @@ mkdir symcapture.vcf.gz
 # test
 file=$(ls reference.sequences.lists/ | head -n 1)
 srun --mem=20G --pty bash
-module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20g" GenotypeGVCFs -R ../reference/reference.fasta -L reference.sequences.lists/$file -V gendb://symcaptureDB/$file -O symcapture.vcf.gz/"${file%.*}".vcf.gz --tmp-dir=tmp
+module load bioinfo/gatk-4.1.2.0 ; gatk --java-options "-Xmx20g" GenotypeGVCFs -R ../reference/reference.fasta -L reference.sequences.lists/$file -V gendb://symcaptureDB/$file -O symcapture.vcf.gz/"${file%.*}".vcf.gz
 exit
 rm tmp/*
 rm symcapture.vcf.gz/*
 
 # sarray
 
-for file in $(ls reference.sequences.lists); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20g\" GenotypeGVCFs -R ../reference/reference.fasta -L reference.sequences.lists/$file -V gendb://symcaptureDB/$file -O symcapture.vcf.gz/\"${file%.*}\".vcf.gz --tmp-dir=tmp"; done > genotype.array.sh
-mkdir genotype.array
+for file in $(ls reference.sequences.lists); do echo "module load bioinfo/gatk-4.1.2.0 ; gatk --java-options \"-Xmx20g\" GenotypeGVCFs -R ../reference/reference.fasta -L reference.sequences.lists/$file -V gendb://symcaptureDB/${file%.*}.DB -O symcapture.vcf.gz/${file%.*}.vcf.gz"; done > genotype.sh
+mkdir genotype
 sarray -J genotype -o genotype.array/%j.out -e genotype.array/%j.err -t 48:00:00 --mem=20G --mail-type=BEGIN,END,FAIL genotype.array.sh
 
 # clean
