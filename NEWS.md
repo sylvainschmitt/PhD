@@ -1,3 +1,7 @@
+# PhD 0.1.9139
+* functional: Ecuador
+* distribution: Tiputini2
+
 # PhD 0.1.9138
 * genomics: GWAS biblio beginning
 * symcapture: pre variant call repeat

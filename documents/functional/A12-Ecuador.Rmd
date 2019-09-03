@@ -1,0 +1,336 @@
+---
+title: "A12 : Ecuador"
+date: '`r Sys.Date()`'
+author: Sylvain Schmitt
+output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: true
+    toc_float: yes
+    theme: flatly
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::word_document2: default
+linestretch: 1.5
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(plotly)
+library(ggfortify)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 8,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+path <- "../../data/Ecuador/"
+```
+
+# Introduction
+
+Subsequent analysis aimed to clean all *Eschweilera* functional raw data from Ecuador and briefly overview functional traits values in comparison with French Guiana. For each table, we needed to join files and check IDs correspondance and data values. Those operations concerned following tables: (i) Individuals, (ii) LeafFreshDry and (iv) LeafArea. We then needed to prepare the two final tables from all the previous ones (AllMeasures & AllTraits). We further seeked and removed outliers. And we finally compared functional traits distributions (trait by trait) and covariation (multitraits) with French Guiana individuals.
+
+# Data preparation
+
+## Individuals
+
+We sampled 95 individuals over Tiputin and Yasuni station (Fig. \@ref(fig:ind)).
+
+```{r ind, fig.cap="Sampled individuals."}
+individuals <- googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("Individuals") %>% 
+  mutate(Station = ifelse(Latitude < -0.66, "Yasuni", "Tiputini"))
+ggplot(individuals, aes(Latitude, Longitude, label = TreeID,
+                             label = TreeID, col = paste(Genus, Species))) +
+  geom_point() +
+  facet_wrap(~ Station, scales = "free") +
+  scale_color_discrete("Species")
+```
+
+## Leaf Fresh Dry
+
+All individuals of the LeafFreshDry table match individuals from the individual table but 24 individuals don't have leaf dry and fresh measurements (including mainly uotgroups and few *Eschweilera*, Fig. \@ref(fig:freshind)).
+
+```{r freshind, fig.cap="Individuals without leaf fresh and dry measurements."}
+freshdry <- googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("LeafFreshDry")
+ggplot(anti_join(individuals, freshdry), 
+       aes(Latitude, Longitude, label = TreeID,
+           label = TreeID, col = paste(Genus, Species))) +
+  geom_point() +
+  facet_wrap(~ Station, scales = "free") +
+  scale_color_discrete("Species")
+```
+
+## Leaf Area
+
+All individuals of the LeafArea table match individuals from the individual table but 24 individuals don't have leaf dry and fresh measurements (including mainly uotgroups and few *Eschweilera*, Fig. \@ref(fig:la)).
+
+```{r la, fig.cap="Individuals without leaf area measurement."}
+la <- googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("LeafArea")
+ggplot(anti_join(individuals, la), 
+       aes(Latitude, Longitude, label = TreeID,
+           label = TreeID, col = paste(Genus, Species))) +
+  geom_point() +
+  facet_wrap(~ Station, scales = "free") +
+  scale_color_discrete("Species")
+```
+
+## All measures
+
+AllMeasures table contains the follwoing fields with table from origin in bracket:
+
+* TreeID _(Individuals)_
+* Genus _(Individuals)_
+* Species _(Individuals)_
+* Dawkins _(LeafFreshDry)_
+* DateTime _(Individuals)_
+* Latitude _(Individuals)_
+* Longitude _(Individuals)_
+* Elevation _(Individuals)_
+* Leaf _(LeafFreshDry and LeafArea)_
+* FreshWeight _(LeafFreshDry)_
+* DryWeight _(LeafFreshDry)_
+* LTmean _(LeafFreshDry, mean(LT1, LT2, LT3))_
+* CMmean _(LeafFreshDry, mean(SPAD1, SPAD2, SPAD3))_
+* LAexclude _(LeafArea)_
+* LAinclude _(LeafArea)_
+
+
+```{r AllMeasuresJoin, eval=F}
+individuals %>% 
+  left_join(freshdry) %>% 
+  left_join(la) %>% 
+  mutate_at(vars("LT1", "LT2", "LT3", "CM1", "CM2", "CM3", "FreshWeight", "DryWeight"),
+            as.numeric) %>% 
+  group_by(TreeID, Leaf) %>% 
+  mutate(CMmean = mean(c(CM1, CM2, CM3), na.rm = T)) %>% 
+  mutate(LTmean = mean(c(LT1, LT2, LT3), na.rm = T)) %>% 
+  ungroup() %>% 
+  select(TreeID, Genus, Species, Dawkins, DateTime, Latitude, Longitude, Elevation,
+         Leaf, FreshWeight, DryWeight, LTmean, CMmean, LAexclude, LAinclude) %>% 
+  write_delim(file.path(path, "AllMeasures.csv"), delim = ",", na = "")
+```
+
+## All traits
+
+AllTraits have fields similar to AllMeasures and following final functional traits:
+
+* $SLA = \frac{DryWeight}{LAexclude}$
+* $LDMC = \frac{DryWeight}{FreshWeight}$
+* $LT = LTmean$
+* $LA = LAexclude$
+* $CC = \frac{117.1*SPAD}{148.84*SPAD}$ Homographic model for all species from @Coste2010
+
+```{r AllTraits, eval=F}
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllMeasures") %>% 
+  mutate(SLA = LAexclude/DryWeight) %>% 
+  mutate(LDMC = DryWeight/FreshWeight) %>% 
+  mutate(LT = LTmean) %>% 
+  mutate(LT = ifelse(is.nan(LT), NA, LT)) %>% 
+  mutate(LA = LAexclude) %>% 
+  mutate(CC = CMmean) %>% 
+  mutate(CC = ifelse(is.nan(CC), NA, CC)) %>% 
+  select(TreeID, Genus, Species, Dawkins, DateTime, Latitude, Longitude, Elevation,
+         Leaf, SLA, LDMC, LT, LA, CC) %>% 
+  write_delim(file.path(path, "AllTraits.csv"), delim = ",", na = "")
+```
+
+In conclusion, after data cleaning we obtained between 225 and 306 leaf measurements by traits representing 60 to 71 individuals.
+
+```{r AllTraitsSummary}
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllTraits") %>%
+  select(TreeID, Genus, Species, SLA, LDMC, LT, LA, CC) %>% 
+  reshape2::melt(id.vars = c("TreeID", "Genus", "Species"),
+                 variable.name = "Trait") %>% 
+  group_by(Trait) %>% 
+  filter(!is.na(value)) %>% 
+  summarise(Genera = length(unique(Genus)),
+            Species = length(unique(Species)),
+            Individuals = length(unique(TreeID)),
+            Leaf = n()) %>% 
+   kable(format = "html", escape = F,
+        caption = "Sampling summary statistics of headcounts by level and trait.") %>%
+  kable_styling("striped", full_width = F)
+```
+
+# Outliers
+
+## Identified
+
+Thanks to subsequent boxplot (fig \@ref(fig:outliersBoxplot) and principal component analysis (PCA, fig \@ref(fig:outliersPCA), we detected following outliers:
+
+* __Biogeco24887.L1__ the leaf seems a bit difference, species to check, but might also be a natural outlier
+* __Biogeco24922.L5__ folded leaf with increased weight compared to its surface, but not extreme outlier, to be reomved or kept
+* __$LDMC \geq 1$__ are not possible and to be removed
+
+## Boxplot
+
+Boxplots (fig \@ref(fig:outliersBoxplot) allow to identify outliers individuall on each functional traits. Table \@ref(tab:outliersTable) present outliers outside of the 5-95% interval (the value can be changed in easily in the Rmarkdown).
+
+```{r outliersBoxplot, fig.height=6, fig.width=12, fig.cap="Functional Traits Outliers Detection through Boxplots with Plotly."}
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(Code = paste0(TreeID, ".L", Leaf)) %>% 
+  # filter(!(Code %in% c("Biogeco24887.L1"))) %>% 
+  select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC) %>% 
+  reshape2::melt(id.vars = c("Code", "SpeciesLong"),
+                 variable.name = "Trait") %>% 
+  group_by(Trait) %>% 
+  mutate(value = scale(value)) %>% 
+  plot_ly(x = ~Trait, y = ~value, color = ~SpeciesLong,
+          text = ~Code, type = "box") %>%
+  layout(boxmode = "group")
+```
+
+```{r outliersTable}
+o <- 0.05
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(Code = paste0(TreeID, ".L", Leaf)) %>% 
+  # filter(!(Code %in% c("Biogeco24887.L1"))) %>% 
+  select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC) %>% 
+  reshape2::melt(id.vars = c("Code", "SpeciesLong"),
+                 variable.name = "Trait") %>% 
+  group_by(Trait, SpeciesLong) %>% 
+  filter(!is.na(value)) %>% 
+  filter(value < quantile(value, o) - 1.5*IQR(value) | value > quantile(value, (1-0)) + 1.5*IQR(value)) %>% 
+  select(Trait, SpeciesLong, Code, value) %>% 
+  arrange(Trait, desc(value)) %>% 
+  kable(caption = "Outliers outside of the 5%-95% confidenc interval.",
+        format = "html", escape = F) %>% 
+  kable_styling("striped", full_width = F) %>% 
+  collapse_rows(1)
+```
+
+## Principal Component Analysis
+
+Principal Component Analysis (PCA, fig \@ref(fig:outliersPCA) allow to identify outliers with spurious traits relations. Table below allow to search for outliers in the whole dataset (search engine set to P14-1-760 for instance).
+
+```{r outliersPCA, fig.cap="Functional Traits Outliers Detection through PCA with Plotly."}
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(Code = paste0(TreeID, ".L", Leaf)) %>% 
+  # filter(!(Code %in% c("Biogeco24922.L5"))) %>% 
+  select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC) %>% 
+  na.omit() %>% 
+  fortify(princomp(~ SLA + LDMC + LT + LA + CC, data = ., cor = T), .) %>% 
+  plot_ly(x = ~Comp.1 , y = ~Comp.2, text = ~Code,
+          type = "scatter", mode = "markers", color = ~Code,
+          opacity = 0.5, maxdisplayed = 100) %>% 
+  layout(showlegend = FALSE) %>% 
+  layout(xaxis = list(title = "PC 1"), yaxis = list(title = "PC 2"))
+```
+
+```{r DataTable}
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(Code = paste0(TreeID, ".L", Leaf)) %>% 
+  select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC) %>% 
+  DT::datatable(options = list(
+    searchHighlight = TRUE, search = list(search = 'Biogeco24922'),
+    initComplete = htmlwidgets::JS(
+      "function(settings, json) {",
+      "$(this.api().table().header()).css({'background-color': '#000', 'color': '#fff'});",
+      "}")))
+```
+
+# Traits distribution
+
+```{r data}
+data <- bind_rows(
+  googlesheets::gs_title("RARETREE_functional_traits") %>% 
+    googlesheets::gs_read("AllTraits") %>% 
+    mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+    mutate(Code = paste0(TreeID, ".L", Leaf)) %>% 
+    mutate(LDMC = ifelse(LDMC > 0.75, NA, LDMC)) %>%  
+    select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC) %>% 
+    mutate(Country = "Ecuador"),
+  googlesheets::gs_title("Measures_Eschweilera") %>% 
+    googlesheets::gs_read("AllTraits") %>% 
+    mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+    mutate(Code = paste0("P", as.character(Plot), 
+                         "-", as.character(SubPlot),
+                         "-", as.character(TreeFieldNum),
+                         "-", as.character(Leaf))) %>% 
+    select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC) %>% 
+    mutate(Country = "French Guiana"))
+```
+
+## Single distribution
+
+Whereas SLA, LT and LA seemed similarly distributed between Ecuador and French Guiana, LDMC and CC values were lower in Ecuador (Fig. \@ref(fig:distribution)). CC might need an adjustment because it was measured with a SPAD in French Guiana and Chlorophyll meter in Ecuador. Lower values of LDMC might be related to the difference of fresh weight, being field weight in Paracou probably lower that the rehydrated weight of Ecuador.
+
+```{r distribution, fig.cap="Functional traits distribution by traits between Ecuador and French Guiana."}
+data %>% 
+  reshape2::melt(id.vars = c("Code", "SpeciesLong", "Country"),
+                 variable.name = "Trait") %>% 
+  filter(!is.na(value)) %>% 
+  ggplot(aes(value, fill = Country)) +
+    geom_density(col = NA, alpha = 0.3) +
+    facet_wrap(~ Trait, scales = "free", nrow = 5)
+```
+
+## Traits covariation
+
+Traits covariation (Fig. \@ref(fig:pca)) is driven partly by the differences of mean trait values observed per trait previously for CC and LDMC. Still, *E. coriacea* individuals from Ecuador are closer from *E. coriacea* from Paracou than other *Eschweilera* species on the PCA.
+
+```{r pca, fig.cap="Principal Component Analysis (PCA) of leaf trait  between species and countries."}
+data %>% 
+  na.omit() %>% 
+  mutate(Country = ifelse(Country == "Ecuador", "Z-Ecuador", Country)) %>% 
+  autoplot(princomp(~ SLA + LDMC + LT + LA + CC, data = ., cor = T), 
+           data = .,
+           colour = "SpeciesLong", alpha = "Country",
+           loadings.label.size = 6,
+           loadings.label.colour = 'black', loadings.label.vjust = 1.1,
+           loadings = T, loadings.label = T, loadings.colour = 'black') +
+  coord_equal() +
+  geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
+  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted")  +
+  theme(legend.position = c(1, 1), 
+        legend.justification = c(1, 1),
+        legend.background = element_rect(fill = "white", colour = NA))
+```
+
+## Bonus: Elevation distribution
+
+Nothing to tell here, it was just a quick plot to give us ideas.
+
+```{r elevation, fig.cap="Functional traits distribution with elevation by trait and species."}
+googlesheets::gs_title("RARETREE_functional_traits") %>% 
+  googlesheets::gs_read("AllTraits") %>% 
+  mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
+  mutate(Code = paste0(TreeID, ".L", Leaf)) %>% 
+  mutate(LDMC = ifelse(LDMC > 0.75, NA, LDMC)) %>%  
+  select(Code, SpeciesLong, SLA, LDMC, LT, LA, CC, Elevation) %>% 
+  reshape2::melt(id.vars = c("Code", "SpeciesLong", "Elevation"),
+                 variable.name = "Trait") %>% 
+  ggplot(aes(Elevation, value, col = SpeciesLong)) +
+  geom_smooth(method = "lm") +
+  geom_point() +
+  facet_wrap(~ Trait, scales = "free") +
+  theme(legend.position = (c(0.9,0.20)))
+```
+
+# Conclusion
+
+Data have bee assembled and cleaned with relatively few outliers and almost no id mistake (**kudos !**). Protocol differences might bias the trait values of CC and LDMC between French Guiana and Ecuador, and should be adjusted by repeating the same two protocols on the same leaves to adjust trait values togethers. Anyway trait covariation seemed congruent between the two countries.
+
+# References {-}

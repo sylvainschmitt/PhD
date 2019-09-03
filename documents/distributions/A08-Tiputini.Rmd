@@ -33,39 +33,50 @@ opts_chunk$set(
   cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
-path <- "../../data/Tiputini/"
+path <- "../../data/Ecuador/Tiputini/"
 ```
 
 ```{r complexes}
 complexes <- bind_rows(
-  data.frame(Complex = "E. Parvifolia",
-             Species = c("Eschweilera indet", "Eschweilera juruensis", "Eschweilera parvifolia")),
-  data.frame(Complex = "Licania",
-             Species = c("Licania indet", "Licania lata")),
-  data.frame(Complex = "Iryanthera",
-             Species = c("Iryanthera juruensis")),
-  data.frame(Complex = "Talisia",
-             Species = c("Talisia indet")))
+  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
+             Species = c("coriacea", "parvifolia", "juruensis", "rufifolia",
+                         "andina", "bracteosa", "gigantea")),
+  data.frame(Complex = "Licania3", Genus = "Licania",
+             Species = c("granvillei", "lata")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmanniana", "grandis", "juruensis")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("pulvinote")))
 ```
 
 ```{r data}
-tiputini <- bind_rows(
-  read_csv(file.path(path, "TIP_03_GR_FINAL.csv")) %>% 
-    mutate(Plot = 3) %>% 
-    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, `D 2017`, Family, Species) %>% 
+tiputini1 <- bind_rows(
+  read_csv(file.path(path, "TIP_03_GR_FINAL.csv")) %>%
+    mutate(Plot = 3) %>%
+    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, `D 2017`, Family, Species) %>%
     rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = `D 2017`),
-  read_csv(file.path(path, "TIP_05.csv"), skip = 1, ) %>% 
-    mutate(Plot = 5) %>% 
-    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, D17, Family, Species) %>% 
-    rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = D17) %>% 
-    mutate(X = gsub(",", ".", X, fixed = T), Y = gsub(",", ".", Y, fixed = T)) %>% 
+  read_csv(file.path(path, "TIP_05.csv"), skip = 1, ) %>%
+    mutate(Plot = 5) %>%
+    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, D17, Family, Species) %>%
+    rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = D17) %>%
+    mutate(X = gsub(",", ".", X, fixed = T), Y = gsub(",", ".", Y, fixed = T)) %>%
     mutate(X = as.numeric(X), Y = as.numeric(Y))
-) %>% 
-  mutate(DBH = as.numeric(DBH)) %>% 
-  filter(!is.na(TreeID) & !is.na(X) & !is.na(Y)) %>% 
+) %>%
+  mutate(DBH = as.numeric(DBH)) %>%
+  filter(!is.na(TreeID) & !is.na(X) & !is.na(Y)) %>%
+  separate(Species, c("Genus", "Species")) %>% 
+  mutate(Plot = as.character(Plot))
+tiputini2 <- read_csv(file.path(path, "Bosques_inundados_Yasuni_Gonzalo_Rivas.csv")) %>% 
+  rename(TreeID = INDIVIDUOS, Plot = PAR, TreeFieldNum = PLACA, Family = FAMILIA, Genus = GENUS, Species = ESPECIES) %>% 
+  select(TreeID, Plot, TreeFieldNum, Family, Genus, Species) %>% 
+  filter(!is.na(TreeID)) %>% 
+  mutate(TreeFieldNum = as.character(TreeFieldNum)) %>% 
+  mutate(Family = paste0(toupper(substr(Family, 1, 1)), tolower(substr(Family, 2, nchar(Family)))))
+tiputini <- bind_rows(tiputini1, tiputini2) %>% 
   left_join(complexes) %>% 
-  mutate(alpha = ifelse(is.na(Complex), 0.3, 1)) %>% 
-  mutate(DBHplot = ifelse(is.na(DBH), 1, DBH))         
+  mutate(alpha = ifelse(is.na(Complex), 0.3, 1)) %>%
+  mutate(DBHplot = ifelse(is.na(DBH), 1, DBH))
+rm(tiputini1, tiputini2)
 ```
 
 # Introduction
@@ -87,7 +98,8 @@ ggplot(tiputini, aes(X, Y, size = DBHplot, col = Complex, alpha = alpha)) +
 tiputini %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Family, Complex, Species) %>% 
-  summarise(N = n()) %>% 
+  summarise(N = n()) %>%
+  arrange(Complex, desc(N)) %>% 
   kable(caption = "Species complex headcount per sister species.", format = "pandoc") %>% 
   kable_styling(full_width = F)
 ```
