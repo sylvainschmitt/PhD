@@ -1,0 +1,77 @@
+---
+title: "B01: GWAS"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: no
+    toc: yes
+    toc_float: yes
+  bookdown::word_document2: flatly
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: no
+    keep_tex: true
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+# Introduction
+
+This document is a methodologic and litterature review of Genome Wide Association Studies (GWAS). We wish to understand, classify and understand methods to thus implement them for *Symphonia* and *Eschweilera* GWAS with environment and/or phenotype.
+
+
+
+# Litterature
+
+## Main points
+
+### [@Korte2013]
+
+- GWAS overcome QTL limits but with other drawbacks
+- GWAS need to account population genetic structure
+- GWAS can be based on mixed models (MM)
+- GWAS detect well few loci with large effects but not the contrary
+- GWAS rely on phenotypic variance determined by allelic variants effect size and frequency, thus both rare variants and small effect size present problems for GWAS
+- genetic heterogeneity reduce discovery power
+- disentanglement of causative variants from linked neutral markers difficult
+- missing or low quality data is a major issue, overcomed by imputation of missing data infered from other individuals haplotypes or with uncertainty assesment by calculating a probability score for each SNP then used to waigh regressions
+- mixed models reduce false positive associations including individuals genetic relations or kinship as a random term in the model
+- most basic and often informative approach in GWAS are a correction for mul-tiple testing (usually a 5% Bonferroni threshold is used) and inspection of Q-Q plots and Manhattan plots for evidence of P value inflation, but the main limitation of these corrections is the assumption that every SNP tested is independent
+- missing heritability refers to the portion of genetic variance not explained by singificant SNPs
+
+### [@Turner2014]
+
+- A commonly used method used to visualize GWAS results is the “manhattan plot” – a plot of the –log10(P-value) of the association statistic on the y-axis versus the chromosomal position of the SNP on the x-axis.
+- Q-Q plots display the observed association P-value for all SNPs on the y-axis versus the expected uniform distribution of P-values under the null hypothesis of no association on the x-axis.
+- most commonly used software packages for manipulating and analyzing GWAS data is PLINK
+- qqman package is a user-friendly tool to visualize results from GWAS experiments using Q-Q and manhattan plots.
+
+## To read
+
+* https://www.genetics.org/content/187/2/367.short
+* https://www.nature.com/articles/gim200210
+* https://royalsocietypublishing.org/doi/10.1098/rsos.180608 (population genomics)
+* https://probgen2019.sciencesconf.org/ (conf to check)
+* https://www.sciencedirect.com/science/article/abs/pii/S0958166906000280
+* https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2931336/
+* https://www.researchgate.net/publication/281071967_A_unified_mixed-model_method_for_association_mapping_that_accounts_for_multiple_levels_of_relatedness
+* https://www.ncbi.nlm.nih.gov/pubmed/20628037
+* https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3352922/
+* https://www.sciencedirect.com/science/article/pii/S0092867417306293
+* https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1001275
+* https://projecteuclid.org/euclid.aoas/1318514285
+* https://www.nature.com/articles/s41588-018-0101-4
+* https://www.nature.com/articles/ng.2310
+* https://www.frontiersin.org/articles/10.3389/fgene.2019.00417/full
+* https://onlinelibrary.wiley.com/doi/abs/10.1111/1755-0998.12930
+* https://onlinelibrary.wiley.com/doi/full/10.1111/j.1365-294X.2012.05479.x
+* https://www.nature.com/articles/hdy201181
+* https://www.sciencedirect.com/science/article/pii/S0960982209020703
+* 
+
+# References

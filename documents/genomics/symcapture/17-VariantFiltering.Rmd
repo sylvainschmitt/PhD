@@ -18,6 +18,7 @@ vcftools --gzvcf reference.sequences_00.vcf.gz --missing-site -c > missing.txt
 vcftools --gzvcf reference.sequences_00.vcf.gz --site-quality -c > QUAL.txt
 vcftools --gzvcf reference.sequences_00.vcf.gz \
   --get-INFO AC \
+  --get-INFO AF \
   --get-INFO QD \
   --get-INFO FS \
   --get-INFO SOR \
@@ -29,9 +30,7 @@ filtering <- left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "
           read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "QUAL.txt"))) %>% 
   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "INFO.txt"))) %>% 
   mutate(QD = as.numeric(QD)) %>% 
-  mutate(MQ = as.numeric(MQ)) %>% 
-  mutate(MQRankSum = as.numeric(MQRankSum)) %>% 
-  mutate(ReadPosRankSum = as.numeric(ReadPosRankSum)) %>% 
+  mutate(AF = as.numeric(AF)) %>% 
   sample_n(1000) # for tests
 ```
 
@@ -158,6 +157,11 @@ Finally with all filtered combined we expect `r format(round(nrow(filter(filteri
 
 ```{r, eval=F}
 format(round(nrow(filter(filtering, F_MISS < Missingthresh, AC < ACthresh, QUAL > QUALthresh, QD > QDthresh, FS < FSthresh, SOR < SORthresh)) / 1000 * 26813513), big.mark = " ")
+
+filter(filtering, F_MISS < Missingthresh, AC < ACthresh, QUAL > QUALthresh, QD > QDthresh, FS < FSthresh, SOR < SORthresh) %>% 
+    filter(AF < 0.5) %>% 
+  ggplot(aes(AF)) +
+  geom_histogram()
 ```
 
 ```{bash missingidv, eval=F, echo=T}
@@ -200,96 +204,53 @@ googlesheets::gs_title("Symcapture") %>%
 
 
 ```{bash genotype, eval=F, echo=T}
-# folders
-mkdir out
-mkdir symcapture.intermediate.vcf
-mkdir symcapture.filtered.vcf
-
-# test
-srun --mem=20G --pty bash
-file=$(basename $(ls symcapture.raw.vcf.gz/*.vcf.gz | head -n 1))
-module load bioinfo/gatk-4.1.2.0
-gatk VariantFiltration \
-   -V symcapture.raw.vcf.gz/$file \
-   --filter-expression "AC > 2"  --filter-name "AC2" \
-   --filter-expression "QUAL < 30.0"  --filter-name "QUAL30" \
-   --filter-expression "QD < 2.0"  --filter-name "QD2" \
-   --filter-expression "FS > 60.0"  --filter-name "FS60" \
-   --filter-expression "SOR > 3.0"  --filter-name "SOR3" \
-   -O symcapture.intermediate.vcf/$file
-gatk SelectVariants \
-  -V symcapture.intermediate.vcf/$file \
-  -select-type SNP \
-  --exclude-filtered \
-  -O symcapture.filtered.vcf/$file
-exit
-
-# sarray
-for file in $(ls symcapture.raw.vcf.gz/*.vcf.gz) ; do file=$(basename $file) ; echo "module load bioinfo/gatk-4.1.2.0 ; gatk VariantFiltration -V symcapture.raw.vcf.gz/$file --filter-expression \"AC > 2 || QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0\" --filter-name \"FAIL\" -O symcapture.intermediate.vcf/$file ; gatk SelectVariants -V symcapture.intermediate.vcf/$file -select-type SNP --exclude-filtered -O symcapture.filtered.vcf/$file"; done > filter.sh
-sarray -J filter -o out/%j.filter.out -e out/%j.filter.err -t 1:00:00 --mem=20G --mail-type=BEGIN,END,FAIL filter.sh
-
-# clean
-rm -r out
-rm -r symcapture.intermediate.vcf
-
-# merge
 echo -e '#!/bin/bash\n#SBATCH --time=48:00:00\n#SBATCH -J gather\n#SBATCH -o gather.out\n#SBATCH -e gather.err\n#SBATCH --mem=20G\n#SBATCH --cpus-per-task=1\n#SBATCH --mail-type=BEGIN,END,FAIL\nmodule load bioinfo/picard-2.14.1\njava -Xmx20g -jar $PICARD GatherVcfs \' > gather.sh
 for file in $(cat nonmissing.list)
 do
-	echo -e '\tI='$file' \' >> gather.sh
+	echo -e '\tI=symcapture.raw.vcf/'$(basename $file)' \' >> gather.sh
 done
-echo -e '\tO=symcapture.all.filtered.nonmissingind.vcf.gz\n' >> gather.sh
+echo -e '\tO=symcapture.all.raw.vcf.gz\n' >> gather.sh
 
-# missing
-module load bioinfo/tabix-0.2.5
-module load bioinfo/vcftools-0.1.15
+srun --mem=80G --cpus-per-task=8 --pty bash
+
 module load bioinfo/bcftools-1.8
-vcftools --gzvcf symcapture.all.filtered.nonmissingind.vcf.gz --max-missing 0.50 --recode --recode-INFO-all -c > symcapture.all.filtered.nonmissingind.maxmissing50.vcf
-bgzip -c symcapture.all.filtered.nonmissingind.maxmissing50.vcf > symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz
-rm symcapture.all.filtered.nonmissingind.maxmissing50.vcf
-vcftools --gzvcf symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz --max-missing 0.75 --recode --recode-INFO-all -c | bgzip -c > symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz
-zcat symcapture.all.filtered.nonmissingind.maxmissing75.vcf | bcftools view -S Paracou.ind | bgzip -c > symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf.gz
+bcftools view --max-alleles 2 --threads 8 symcapture.all.raw.vcf.gz | bgzip -c --threads 8 > symcapture.all.biallelic.vcf.gz
 
-# biallelic
-# gatk seems to have issue filtering biallelic SNP, so I used bcftools as a second filtering
-module load bioinfo/bcftools-1.8
-bcftools view --max-alleles 2 symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz | bgzip -c > biallelic/symcapture.all.filtered.nonmissingind.maxmissing50.vcf.gz
-bcftools view --max-alleles 2 symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz | bgzip -c > biallelic/symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz
-bcftools view --max-alleles 2 symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf.gz | bgzip -c > biallelic/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf.gz
-```
+module load bioinfo/gatk-4.1.2.0
+gatk IndexFeatureFile \
+  -F symcapture.all.biallelic.vcf.gz
+gatk SelectVariants \
+  -V symcapture.all.biallelic.vcf.gz \
+  -select-type SNP \
+  -O symcapture.all.biallelic.snp.vcf.gz
+gatk IndexFeatureFile \
+  -F symcapture.all.biallelic.snp.vcf.gz
 
-## gPCA check
+# https://hannahvmeyer.github.io/plinkQC/articles/plinkQC.html
+module load bioinfo/plink2-v2.0_alpha2
+mkdir test
+plink2 \
+  --threads 8 \
+  --memory 80000 \
+  --vcf symcapture.all.biallelic.snp.vcf.gz \
+  --allow-extra-chr \
+  --var-min-qual 30 \
+  --mind 0.15 \
+  --geno 0.15 \
+  --maf 0.01 \
+  --hwe 0.0001 \
+  --make-bed --out test/symcapture.all.test
+  
+gatk VariantFiltration \
+  -V input.vcf.gz \
+  # --filter-expression "QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0" \
+  --filter-expression "QD < 2.0 || FS > 60.0 || SOR > 3.0" \
+  --filter-name "FAIL" \
+  -O intermediate.vcf.gz
+gatk SelectVariants \
+  -V intermediate.vcf.gz \
+  --exclude-filtered \
+  -O final.vcf.gz
 
-We built a genomic principal component analysis of our filtered SNPs to overview their structure and check the filtering (Fig. \@ref(fig:pca)). XX..
-
-```{r gpca, fig.cap="Cap"}
-# tutorial from https://grunwaldlab.github.io/Population_Genetics_in_R/gbs_analysis.html
-# srun --mem=100G --cpus-per-task=8 --pty bash
-# module load system/R-3.5.3
-# issue with package installation on genologin due to GDAL
-library(vcfR)
-library(poppr)
-library(ape)
-symcapture.vcf <- read.vcfR(file.path(path, "Sequences", "variantCalling", "symcapture.all.filtered.nonmissingind.maxmissing75.vcf.gz"),
-                            verbose = T)
-symcapture.gl <- vcfR2genlight(symcapture.vcf)
-rm(symcapture.vcf) ; gc()
-ploidy(symcapture.gl) <- 2
-pop <- data.frame(label = symcapture.gl@ind.names,
-                  Ind = gsub(".g.vcf", "", symcapture.gl@ind.names)) %>%
-  left_join(googlesheets::gs_title("Symcapture") %>%
-              googlesheets::gs_read("Pop"))
-pop(symcapture.gl) <- pop$Pop
-save(symcapture.gl, file = "./symcapture_save/glPca.Rdata")
-symcapture.pca <- glPca(symcapture.gl, nf = 3, n.cores = 3)
-save(symcapture.pca, symcapture.gl, file = "./symcapture_save/glPca.Rdata")
-load("./symcapture_save/glPca.Rdata")
-symcapture.pca.scores <- as.data.frame(symcapture.pca$scores)
-symcapture.pca.scores$pop <- pop(symcapture.gl)
-cols <- brewer.pal(n = npop(symcapture.gl), name = "Dark2")
-ggplot(symcapture.pca.scores, aes(x = PC1, y = PC2, col = pop)) + 
-  geom_point(size=2) +
-  stat_ellipse(level = 0.95, size = 1) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0)
+bcftools view -S Paracou.ind --threads 8 final.vcf.gz | bgzip --threads 8 -c > final.Paracou.vcf.gz
 ```

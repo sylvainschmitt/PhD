@@ -1,3 +1,7 @@
+# PhD 0.1.9138
+* genomics: GWAS biblio beginning
+* symcapture: pre variant call repeat
+
 # PhD 0.1.9137
 * distributions: Tiputini 1st test, discussion 1st draft, intro biblio 
 * functional: review2 graphs

@@ -100,13 +100,19 @@ ggplot(quantit, aes(concentration_est, fill = concentration_est > 10)) +
 
 209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, but we have only 96 spot on plate 6 corresponding to a minimal estimated concentration of 4.4 $ng.\mu L ^{-1}$.
 
-```{r repeats}
-filter(quantit, concentration_est < 4.4) %>% 
+```{r repeats, eval=F, echo=T}
+quantit %>% 
+  left_join(googlesheets::gs_title("Parvicapture") %>% 
+             googlesheets::gs_read("Extraction"),
+            by = c("Plate_library" = "Plate_extraction",
+                   "Position_library" = "Position_extraction")) %>% 
+  filter(concentration_est < 4.4) %>% 
   arrange(Plate_library, Position_library) %>% 
-  select(Plate_library, Position_library, concentration_est) %>% 
   mutate(Plate_repeat = 6) %>% 
-  mutate(Plate_position = as.vector(sapply(1:12, function(x) paste0(LETTERS[1:8], x)))) %>% 
-  kable()
+  mutate(Position_repeat = as.vector(sapply(1:12, function(x) paste0(LETTERS[1:8], x)))) %>% 
+  mutate(Repeat = 1) %>% 
+  select(IdGenetic, Plate_library, Position_library, Plate_repeat, Position_repeat, Genus, Species, Plot, SubPlot, TreeFieldNum, Repeat) %>% 
+  write_tsv(path = file.path(path, "repeat.tsv"))
 ```
 
 
