@@ -15,214 +15,121 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 ```
 
-```{r pop, eval=F}
-googlesheets::gs_title("Symcapture") %>% 
-              googlesheets::gs_read("Pop") %>% 
-  filter(Pop2 != "O") %>% 
-  write_tsv(file.path(path, "Paracou.pop"), col_names = F)
-googlesheets::gs_title("Symcapture") %>% 
-              googlesheets::gs_read("Pop") %>% 
-  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
-  filter(Pop2 == "G") %>% 
-  select(Ind) %>% 
-  write_tsv(file.path(path, "globulifera.pop"), col_names = F)
-googlesheets::gs_title("Symcapture") %>% 
-              googlesheets::gs_read("Pop") %>% 
-  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
-  filter(Pop2 == "S") %>% 
-  select(Ind) %>% 
-  write_tsv(file.path(path, "sp1.pop"), col_names = F)
-googlesheets::gs_title("Symcapture") %>%
-  googlesheets::gs_read("Pop") %>% 
-  write_tsv(file.path(path, "all.pop"), col_names = F)
-```
-
 ```{r popgenR}
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
+  mutate(FID = 0, IID = Ind, CLUSTER = Pop2) %>% 
+  select(FID, IID, CLUSTER) %>% 
+  filter(CLUSTER %in% c("S", "G")) %>% 
+  write_tsv(file.path(path, "paracou.2pop"), col_names = F)
 pop <- googlesheets::gs_title("Symcapture") %>% 
               googlesheets::gs_read("Pop")
+pop <- bind_rows(pop, c(Ind = "P10-3-925", Pop = "SG", Pop2 = "SG")) # to solve
 ```
 
 # Population genomics
+
+**!! Work in progress, the current analysis are done with a test of missing data filtering !!** 
 
 We will ... :
 
 * __Population structure__ ...
 
-## PCA
-
-```{r PCA2}
-# library(gdsfmt)
-# library(SNPRelate)
-# snpgdsVCF2GDS("symcapture.all.filtered.nonmissingind.maxmissing75.vcf",
-#               "symcapture.all.filtered.nonmissingind.maxmissing75.gds")
-# snpgdsVCF2GDS("symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf",
-#               "symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.gds")
-# symcapture.geno <- openfn.gds("symcapture.all.filtered.nonmissingind.maxmissing75.gds")
-# symcapture.paracou.geno <- openfn.gds("symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.gds")
-# snpset = snpgdsLDpruning(symcapture.geno, ld.threshold = 0.5, 
-#                          autosome.only = F, verbose = F, num.thread = 10)
-# snp.id=unlist(snpset)
-# snpset.paracou = snpgdsLDpruning(symcapture.paracou.geno, ld.threshold = 0.5, 
-#                                  autosome.only = F, verbose = F, num.thread = 10)
-# snp.id.paracou=unlist(snpset)
-# symcapture.pca <- snpgdsPCA(symcapture.geno, snp.id = snp.id,
-#                             autosome.only = F, num.thread = 10)
-# symcapture.pca.paracou <- snpgdsPCA(symcapture.paracou.geno, snp.id = snp.id.paracou,
-#                             autosome.only = F, num.thread = 10)
-# save(symcapture.pca, symcapture.pca.paracou, file = "gpca.Rdata")
-load(file.path(path, "variants", "gpca.Rdata"))
-symcapture.pca.tab <- as.data.frame(symcapture.pca$eigenvect)
-symcapture.pca.paracou.tab <- as.data.frame(symcapture.pca.paracou$eigenvect)
-symcapture.pca.tab$Ind <- symcapture.pca$sample.id
-symcapture.pca.paracou.tab$Ind <- symcapture.pca.paracou$sample.id
-symcapture.pca.tab <- symcapture.pca.tab %>% 
-  mutate(Ind = gsub(".g.vcf", "", Ind)) %>% 
-  left_join(pop)
-symcapture.pca.paracou.tab <- symcapture.pca.paracou.tab %>% 
-  mutate(Ind = gsub(".g.vcf", "", Ind)) %>% 
-  left_join(pop)
-(g <- ggplot(symcapture.pca.tab, aes(x = V1, y = V2, col = Pop2, label = Ind)) + 
-  geom_point(size=2) +
-  stat_ellipse(level = 0.95, size = 1) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0))
-g.par <- ggplot(symcapture.pca.paracou.tab, aes(x = V1, y = V2, col = Pop2, label = Ind)) + 
-  geom_point(size=2) +
-  stat_ellipse(level = 0.95, size = 1) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0)
-# plotly::ggplotly(g)
-# plotly::ggplotly(g.par)
-
-
-# srun --mem=100G --cpus-per-task=8 --pty bash
-# module load bioinfo/plink-v1.90b5.3
-# plink --bfile variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou --allow-extra-chr --geno 0.05 --mind 0.05 --genome --min 0.025 --maf 0.01 --hwe 0.0001 --make-bed --out qualityControl/geno
-# plink --bfile variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou --allow-extra-chr --freq
-# module load system/R-3.5.2
-# module load libraries/gdal-2.3.0
-# module load libraries/proj-4.9.3
-# R
-library(pcadapt)
-library(magrittr)
-symcapture.bed <- read.pcadapt(file.path("qualityControl", "geno.bed"), type = "bed")
-pcadapt(symcapture.bed, K = 20) %>% 
-  plot(x, option = "screeplot", K = 10) +
-  ggsave("./screeplot.png")
-read_delim(file.path(path, "symcapture.filtered.Paracou.frq"), delim = " ") %>% 
-  mutate(type = "Filtered Paracou") %>% 
-  bind_rows(read_delim(file.path(path, "symcapture.raw01.frq"), delim = " ") %>% 
-  mutate(type = "Raw 01")) %>% 
-  rename(ch = " CHR",  snp = " SNP",  A1 = "  A1", A2 = "  A2", maf = "         MAF", n = " NCHROBS") %>% 
-  mutate(maf = as.numeric(maf)) %>% 
-  ggplot(aes(maf, fill = type)) +
-  geom_histogram(position = "dodge") +
-  scale_y_sqrt()
-```
-
 ## Metrics
 
 ```{bash metrics, eval=F, echo=T}
-module load bioinfo/tabix-0.2.5
-module load bioinfo/vcftools-0.1.15
-vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --het -c  > metrics/heterozygosity.stat
-vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --hardy -c > metrics/hardyweiberg.stat
-vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf   --TajimaD -c > metrics/TajimaD.stat
-vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --relatedness -c > metrics/relatedness.matrix
-vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --relatedness2 -c > metrics/relatedness2.matrix
-vcftools --gzvcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf --weir-fst-pop metrics/globulifera.pop --weir-fst-pop metrics/sp1.pop -c > metrics/fst.stat
+module load bioinfo/plink-v1.90b5.3
+plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
+  --allow-extra-chr \
+  --within paracou.2pop \
+  --het \
+  --hardy \
+  --fst \
+  --out  symcapture.all.biallelic.snp.filtered.nonmissing.paracou
+
+# 257695 MB RAM detected; reserving 128847 MB for main workspace.
+# 454262 variants loaded from .bim file.
+# 385 people (0 males, 0 females, 385 ambiguous) loaded from .fam.
+# Ambiguous sex IDs written to
+# symcapture.all.biallelic.snp.filtered.nonmissing.paracou.nosex .
+# --within: 2 clusters loaded, covering a total of 357 people.
+# Using 1 thread (no multithreaded calculations invoked).
+# Before main variant filters, 385 founders and 0 nonfounders present.
+# Calculating allele frequencies... done.
+# Total genotyping rate is 0.934092.
+# --hardy: Writing Hardy-Weinberg report (founders only) to
+# symcapture.all.biallelic.snp.filtered.nonmissing.paracou.hwe ... done.
+# 454262 variants and 385 people pass filters and QC.
+# Note: No phenotypes present.
+# --het: 377743 variants scanned, report written to
+# symcapture.all.biallelic.snp.filtered.nonmissing.paracou.het .
+# Writing --fst report (2 populations) to
+# symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fst ... done.
+# 370611 markers with valid Fst estimates (83651 excluded).
+# Mean Fst estimate: 0.0122558
+# Weighted Fst estimate: 0.0477019
 ```
 
-```{r}
-cowplot::plot_grid(
-  read_tsv(file.path(path, "metrics", "heterozygosity.stat")) %>% 
-    ggplot(aes(INDV, `F`)) +
-    geom_point() +
-    geom_hline(yintercept = 0.015, col = "red", linetype = "dashed") +
-    theme(axis.text.x=element_blank(),
-          axis.ticks.x=element_blank()) +
-    xlab("Individual") + ylab("Heterozygosity"),
-  read_tsv(file.path(path, "metrics", "fst.stat")) %>% 
-    ggplot(aes(CHROM, WEIR_AND_COCKERHAM_FST)) +
-    geom_point() +
-    geom_hline(yintercept = 0.015, col = "red", linetype = "dashed") +
-    theme(axis.text.x=element_blank(),
-          axis.ticks.x=element_blank()) +
-    xlab("Sequence") + ylab("Fst"),
-  read_tsv(file.path(path, "metrics", "relatedness2.matrix")) %>% 
-    mutate(INDV1 = gsub(".g.vcf", "", INDV1), INDV2 = gsub(".g.vcf", "", INDV2)) %>% 
-    left_join(pop, by = c("INDV1" = "Ind")) %>% 
-    mutate(Pop1 = Pop2) %>% 
-    select(-Pop, -Pop2) %>% 
-    left_join(pop, by = c("INDV2" = "Ind")) %>% 
-    select(-Pop) %>% 
-    arrange(Pop1, Pop2) %>% 
-    ggplot(aes(INDV1, INDV2, fill = log(-RELATEDNESS_PHI+1))) +
-    geom_tile() +
-    facet_grid(Pop2 ~ Pop1, scales = "free") +
-    theme(axis.text.x=element_blank(),
-          axis.ticks.x=element_blank(),
-          axis.title.x = element_blank(),
-          axis.text.y=element_blank(),
-          axis.ticks.y=element_blank(),
-          axis.title.y = element_blank(),
-          legend.position = "bottom") +
-    scale_fill_continuous(guide = "none"),
-  labels = c("Het", "Fst", "Kinship"), 
-  rel_heights = c(1,3)
-)
-```
+```{r metricsR, fig.cap="Heterozygosity per individual and Fst per SNP (density and manhatan plots)."}
+pathCluster <- "/home/sylvain/Remotes/genotoul/work/PhD/data/Symphonia_Paracou/Sequences"
 
+g.het <- read_delim(file.path(pathCluster, "variantCalling", "paracou",
+                     "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.het"), delim = " ") %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(het = as.numeric(`F`)) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(Ind = gsub(" ", "", Ind)) %>% 
+  left_join(pop) %>% 
+  ggplot(aes(abs(het), fill = Pop2)) +
+  geom_histogram(position = "dodge") +
+  xlab("Heterozygosity")
+
+g.fst <- read_tsv(file.path(pathCluster, "variantCalling", "paracou",
+                   "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fst")) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(FST = as.numeric(FST)) %>% 
+  ggplot(aes(FST)) +
+  geom_density() +
+  scale_x_sqrt() +
+  geom_vline(xintercept = 0.015, col = "red", linetype = "dashed") +
+  xlab("Fst")
+
+cowplot::plot_grid(g.het, g.fst, nrow = 2)
+
+g.fst$data %>% 
+  filter(CHR %in% unique(g.fst$data$CHR)[1:1000]) %>%
+  mutate(contig = as.numeric(as.factor(CHR))) %>% 
+  filter(!is.nan(FST)) %>% 
+  mutate(FST = abs(FST)) %>% 
+  qqman::manhattan(chr = "contig", bp = "POS", p = "FST", suggestiveline = 0.5, logp = F,
+                   xlab = "First 1k contigs", ylab = "Fst between morphotype")
+```
 
 ## Structure
 
 ```{bash str, eval=F, echo=T}
-# convert file
-srun --mem=80G --cpus-per-task=1 --pty bash
-module load bioinfo/PGDSpider_2.1.1.5
-java -Xmx8192m -Xms4096m -jar $PGD_HOME/PGDSpider2-cli.jar \
-  -inputfile symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf -inputformat VCF \
-  -outputfile symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.str -outputformat STRUCTURE \
-  -spid vcf2str.spid
-module load bioinfo/plink2-v2.0_alpha2
-plink2 --vcf variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.vcf \
-  --make-bed --out variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou \
-  --allow-extra-chr
-exit
-
-# prepare folders
 mkdir structure
-for k in $(seq 10) ;
-do
-  mkdir structure/K$k ;
-  for r in $(seq 10) ;
-  do
-    mkdir structure/K$k/R$r ;
-  done
-done
-
-# structure
 mkdir out
-for k in $(seq 10) ; do for r in $(seq 10) ; do echo "module load bioinfo/fastStructure-1.0 ; python \$HOME_FAST/structure.py -K $k --input=variants/symcapture.all.filtered.nonmissingind.maxmissing75.Paracou --format=bed --output=structure/K$k/R$r/out.K$k.R$r --full --seed=12345";  done done > structure.sh
+for k in $(seq 10) ; do for r in $(seq 10) ; do echo "module load bioinfo/fastStructure-1.0 ; python \$HOME_FAST/structure.py -K $k --input=../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou --format=bed --output=structure/symcapture.paracou.K$k.R$r --full --seed=12345";  done done > structure.sh
 sarray -J structure -o out/%j.structure.out -e out/%j.structure.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL structure.sh
 watch 'echo "$(expr 100 - $(squeue -u sschmitt | wc -l))%"'
 rm -r out
-mkdir meanQ
-mkdir logs
-cp */*/*.meanQ meanQ/
-cp */*/*.log logs/
+scp sschmitt@genologin.toulouse.inra.fr:~/Symcapture/populationGenomics/structure/*.meanQ structure/
+scp sschmitt@genologin.toulouse.inra.fr:~/Symcapture/populationGenomics/structure/*.log structure/
 ```
 
-```{r structureLogs}
-lapply(list.files(file.path(path, "structure", "logs"), full.names = T), function(x)
+```{r structureLogs, fig.cap="Structure clustering likelihood"}
+lapply(list.files(file.path(path, "structure"), full.names = T, pattern = "log"), 
+       function(x)
   read_delim(x, delim = "=", col_names = F) %>% 
     mutate(file = x) %>% 
     filter(X1 == "Marginal Likelihood ")) %>% 
   bind_rows() %>% 
-  mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//structure/logs/out.", "", file)) %>%
+  mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//structure/symcapture.paracou.", "", file)) %>%
   mutate(file = gsub(".10.log", "", file)) %>%
   separate(file, c("K", "R")) %>% 
-  mutate(K = as.numeric(gsub("K", "", K))) %>% 
+  mutate(K = as.numeric(gsub("K", "", K))) %>%  
   mutate(R = as.numeric(gsub("R", "", R))) %>% 
   select(-X1) %>% 
   dplyr::rename(MarginalLikelihood = X2) %>% 
@@ -234,69 +141,47 @@ lapply(list.files(file.path(path, "structure", "logs"), full.names = T), functio
 ```
 
 
-```{r structureQ, fig.height=8, fig.width=15}
-fam <- read_tsv(file.path(path, "variants", "symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.fam"),
+```{r structureQ, fig.height=8, fig.width=15, fig.cap="Population structure."}
+fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
   mutate(Ind = gsub(".g.vcf", "", IID))
-symcapture.str <- readQ(list.files(file.path(path, "structure", "meanQ"), full.names = T), indlabfromfile=F)
+symcapture.str <- readQ(list.files(file.path(path, "structure"), 
+                                   full.names = T, pattern = "meanQ"), indlabfromfile=F)
 symcapture.str <- lapply(symcapture.str, "rownames<-", fam$Ind)
 symcapture.str <- sortQ(symcapture.str)
 symcapture.str <- alignK(symcapture.str)
-symcapture.str <- mergeQ(symcapture.str)                 
-p <- plotQ(symcapture.str, exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",1:10),
-      showindlab = T, useindlab = T, indlabsize = 3,
-      grplab = data.frame(morphotype = left_join(fam, pop)$Pop2, stringsAsFactors = F),
-      grplabsize = 4,linesize = 0.8, pointsize = 4, sortind = "label", sharedindlab = T, ordergrp=T, subsetgrp=c("G", "SG", "S"))
+symcapture.str <- mergeQ(symcapture.str)
+p <- plotQ(symcapture.str[2:10], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:10),
+      showindlab = F, useindlab = F, grplab = data.frame(morphotype = left_join(fam, pop)$Pop2, stringsAsFactors = F),
+      grplabsize = 4,linesize = 0.8, pointsize = 4, sortind = "all", sharedindlab = F, ordergrp=T, subsetgrp=c("G", "SG", "S"))
 gridExtra::grid.arrange(p$plot[[1]])
-p <- plotQMultiline(qlist = symcapture.str[8], exportplot = F, returnplot = T, useindlab = T, ordergrp=T, subsetgrp=c("G", "SG", "S"),
-                    grplab = data.frame(morphotype = left_join(fam, pop)$Pop2, stringsAsFactors = F))
+p <- plotQMultiline(qlist = symcapture.str[2], exportplot = F, returnplot = T, useindlab = T, ordergrp=T, sortind = "all",
+                    subsetgrp=c("G", "SG", "S"), grplab = data.frame(morphotype = left_join(fam, pop)$Pop2, stringsAsFactors = F))
 gridExtra::grid.arrange(p$plot[[1]][[1]])
 ```
 
-
-```{r, eval=F}
-fam <- read_tsv(file.path(path, "variants", "symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.fam"),
-         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
-  mutate(IID = gsub(".g.vcf", "", IID))
-bim <- read_tsv(file.path(path, "variants", "symcapture.all.filtered.nonmissingind.maxmissing75.Paracou.bim"),
-         col_names = c("seq", "id", "posMorgan", "posBp", "allele1", "allele2")) %>% 
-  mutate(id = paste0(seq, ".", posBp))
-read_delim(file.path(path, "structure", "K10", "R1", "out.K10.R1.10.meanQ"),
-         col_names = paste0("K", 1:10), delim = " ") %>% 
-  mutate(ind = fam$IID) %>% 
-  reshape2::melt(id.vars = "ind", variable.name = "cluster", value.name = "p") %>% 
-  mutate(p = as.numeric(p)) %>% 
-  filter(cluster != "K2") %>% 
-  filter(p > 0.5) %>% 
-  ggplot(aes(ind, p, col = cluster)) +
-  geom_point() # clustered indivduals
-read_delim(file.path(path, "structure", "K10", "R1", "out.K10.R1.10.meanP"),
-         col_names = paste0("K", 1:10), delim = " ") %>% 
-  mutate(snp = bim$id) %>% 
-  reshape2::melt(id.vars = "snp", variable.name = "cluster", value.name = "q") %>% 
-  filter(cluster != "K2") %>% 
-  filter(q > 0.5) %>% 
-  ggplot(aes(snp, q, col = cluster)) +
-  geom_point() +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())# clustered snps
-```
-
-
 ## Phylogeny
 
-```{r phylo, fig.height=12, fig.width=12}
+```{r phylo, fig.height=12, fig.width=12, fig.cap="Individuals phylogeny."}
+# srun --mem=80G --cpus-per-task=1 --pty bash
+# module load system/R-3.5.2
+# module load libraries/gdal-2.3.0
+# module load libraries/proj-4.9.3
+# R
 # library(gdsfmt)
 # library(SNPRelate)
-# snpgdsVCF2GDS("symcapture.all.filtered.nonmissingind.maxmissing75.vcf",
-#               "symcapture.all.filtered.nonmissingind.maxmissing75.gds")
-# symcapture.geno <- openfn.gds("symcapture.all.filtered.nonmissingind.maxmissing75.gds")
+# snpgdsBED2GDS("../variantCalling/nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing.bed",
+#               "../variantCalling/nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing.fam",
+#               "../variantCalling/nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing.bim",
+#               "phylogeny/symcapture.all.biallelic.snp.filtered.nonmissing.gds")
+# symcapture.geno <- openfn.gds("phylogeny/symcapture.all.biallelic.snp.filtered.nonmissing.gds")
 # dissMatrix  <-  snpgdsDiss(symcapture.geno, autosome.only = F, num.thread = 3)
 # snpHCluster <-  snpgdsHCluster(dissMatrix, hang = 0.25)
-# cutTree <- snpgdsCutTree(snpHCluster, z.threshold = 15, outlier.n = 5, n.perm = 5000, 
-#                          col.outlier = "red", pch.outlier=4)
-# save(cutTree, file = "tree.Rdata")
-load(file.path(path, "variants", "tree.Rdata"))
+# cutTree <- snpgdsCutTree(snpHCluster, z.threshold = 15, outlier.n = 5, n.perm = 5000,
+#                         col.outlier = "red", pch.outlier=4)
+# save(cutTree, file = "phylogeny/tree.Rdata")
+load(file.path(path, "phylogeny", "tree.Rdata"))
 symcapture.phylo <- ape::as.phylo(cutTree$dendrogram)
 g <- ggtree(symcapture.phylo, layout='circular')
 g + geom_tiplab(data = dplyr::inner_join(mutate(g$data, Ind = gsub(".g.vcf", "", label)), pop), size =1,
@@ -304,5 +189,5 @@ g + geom_tiplab(data = dplyr::inner_join(mutate(g$data, Ind = gsub(".g.vcf", "",
     theme(legend.position = "right", 
         legend.title = element_blank(),
         legend.key = element_blank())
-  # ggsave("./symcapture_save/tree.png")
+  # ggsave(file.path(path, "phylogeny", "treeAll.png"))
 ```
