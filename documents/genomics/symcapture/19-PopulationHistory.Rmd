@@ -1,0 +1,99 @@
+```{r setup_pophist, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(pophelper)
+library(dendextend)
+library(ggtree)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+```
+
+```{r pophist}
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
+  mutate(FID = 0, IID = Ind, CLUSTER = Pop2) %>% 
+  dplyr::select(FID, IID, CLUSTER) %>% 
+  filter(CLUSTER %in% c("S", "G")) %>% 
+  write_tsv(file.path(path, "paracou.2pop"), col_names = F)
+pop <- googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop")
+pop <- bind_rows(pop, c(Ind = "P10-3-925", Pop = "SG", Pop2 = "SG")) # to solve
+```
+
+# Population history
+
+We will ... :
+
+* __Phylogeny__ ...
+
+## Phylogeny
+
+### Non missing
+
+```{r phylo, fig.height=12, fig.width=12, fig.cap="Individuals phylogeny."}
+# srun --mem=80G --cpus-per-task=1 --pty bash
+# module load system/R-3.5.2
+# module load libraries/gdal-2.3.0
+# module load libraries/proj-4.9.3
+# R
+# library(gdsfmt)
+# library(SNPRelate)
+# snpgdsBED2GDS("../variantCalling/nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing.bed",
+#               "../variantCalling/nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing.fam",
+#               "../variantCalling/nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing.bim",
+#               "phylogeny/symcapture.all.biallelic.snp.filtered.nonmissing.gds")
+# symcapture.geno <- openfn.gds("phylogeny/symcapture.all.biallelic.snp.filtered.nonmissing.gds")
+# dissMatrix  <-  snpgdsDiss(symcapture.geno, autosome.only = F, num.thread = 3)
+# snpHCluster <-  snpgdsHCluster(dissMatrix, hang = 0.25)
+# cutTree <- snpgdsCutTree(snpHCluster, z.threshold = 15, outlier.n = 5, n.perm = 5000,
+#                         col.outlier = "red", pch.outlier=4)
+# save(cutTree, file = "phylogeny/tree.Rdata")
+load(file.path(path, "phylogeny", "tree.Rdata"))
+symcapture.phylo <- ape::as.phylo(cutTree$dendrogram)
+g <- ggtree(symcapture.phylo, layout='circular')
+g + geom_tiplab(data = dplyr::inner_join(mutate(g$data, Ind = gsub(".g.vcf", "", label)), pop), size =1,
+               size=2, aes(colour = Pop2, angle = angle, label = Ind)) +
+    theme(legend.position = "right", 
+        legend.title = element_blank(),
+        legend.key = element_blank())
+  # ggsave(file.path(path, "phylogeny", "treeAll.png"))
+```
+
+### Hard filter
+
+```{r phylo2, fig.height=12, fig.width=12, fig.cap="Individuals phylogeny."}
+# srun --mem=80G --cpus-per-task=1 --pty bash
+# module load system/R-3.5.2
+# module load libraries/gdal-2.3.0
+# module load libraries/proj-4.9.3
+# R
+# library(gdsfmt)
+# library(SNPRelate)
+# snpgdsBED2GDS("../variantCalling/hardFilter/symcapture.all.biallelic.snp.filtered.hardfiltered.bed",
+#               "../variantCalling/hardFilter/symcapture.all.biallelic.snp.filtered.hardfiltered.fam",
+#               "../variantCalling/hardFilter/symcapture.all.biallelic.snp.filtered.hardfiltered.bim",
+#               "phylogeny/symcapture.all.biallelic.snp.filtered.hardfiltered.gds")
+# symcapture.geno <- openfn.gds("phylogeny/symcapture.all.biallelic.snp.filtered.hardfiltered.gds")
+# dissMatrix  <-  snpgdsDiss(symcapture.geno, autosome.only = F, num.thread = 3)
+# snpHCluster <-  snpgdsHCluster(dissMatrix, hang = 0.25)
+# cutTree <- snpgdsCutTree(snpHCluster, z.threshold = 15, outlier.n = 5, n.perm = 5000,
+#                         col.outlier = "red", pch.outlier=4)
+# save(cutTree, file = "phylogeny/tree.hardfiltered.Rdata")
+load(file.path(path, "phylogeny", "tree.hardfiltered.Rdata"))
+symcapture.phylo <- ape::as.phylo(cutTree$dendrogram)
+g <- ggtree(symcapture.phylo, layout='circular')
+g + geom_tiplab(data = dplyr::inner_join(mutate(g$data, Ind = gsub(".g.vcf", "", label)), pop), size =1,
+               size=2, aes(colour = Pop2, angle = angle, label = Ind)) +
+    theme(legend.position = "right", 
+        legend.title = element_blank(),
+        legend.key = element_blank())
+  # ggsave(file.path(path, "phylogeny", "treeAll.hardfiltered.png"))
+```

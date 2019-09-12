@@ -1,3 +1,7 @@
+# PhD 0.1.9141
+* GWAS: Santi meeting
+* symcapture: variant filtering v2 & population structure
+
 # PhD 0.1.9140
 * symcapture: missing data filtering test in VariantFiltering & PopulationGenomics
 

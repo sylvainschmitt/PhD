@@ -24,7 +24,25 @@ link-citations: yes
 
 This document is a methodologic and litterature review of Genome Wide Association Studies (GWAS). We wish to understand, classify and understand methods to thus implement them for *Symphonia* and *Eschweilera* GWAS with environment and/or phenotype.
 
+# Santi meeting
 
+## SNP filtering
+
+* two SNP datasets, *e.g.* classic and hard filtering to test signal consistency
+* finer filters, *e.g.* SNP per probe or herterozygosity, for that a density plot and a manhattan plot of heterozygosity per SNP
+* GWAS and environmental genomics must be done within population groups (*e.g. S. globulifera* and *S. sp1*)
+
+## GWAS
+
+* all approaches are more or less related to linear or generalized mixed models (MM) with population structure and/or individuals kinship as covariate
+* classical approach run a model SNP by SNP
+* bayesian MM, less multitesting excluded SNPs, to test the SNP effect on trait
+* habitually our dataset will end up with 10 to 20 large-effects SNPs explaining 0.5% of the trait variance
+* but Barton polygeny review has shwon that most of human traits were related to 5% of the genome
+* polygenic approaches consider all SNPs together (or by goups of SNPs combined with Monte Carlo approach, *e.g.* `piMASS`) with an additive fixed effect
+* to avoid covariation bias, explanatory variables may be corrected by environmental or poulation structure (using linear residuals instead of raw variables)
+* __an idea would be to identify putative SNPs associated to our phenotype, *e.g.* growth, with mixed models approach ; and to use this SNP set for non linear analyses combined with ontogenetic and environmental cofactors__
+* environmental genomics will be done with software such as`baypass`, still linear model with more direct fixed factors, because here we do not search for heritability but standard covariation
 
 # Litterature
 

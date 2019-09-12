@@ -1,0 +1,437 @@
+```{r setup_popstr, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(pophelper)
+library(dendextend)
+library(ggtree)
+library(ggdendro)
+library(raster)
+library(leaflet)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+```{r popstr}
+googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop") %>% 
+  mutate(Ind = paste0(Ind, ".g.vcf", "")) %>% 
+  mutate(FID = 0, IID = Ind, CLUSTER = Pop2) %>% 
+  dplyr::select(FID, IID, CLUSTER) %>% 
+  filter(CLUSTER %in% c("S", "G")) %>% 
+  write_tsv(file.path(path, "paracou.2pop"), col_names = F)
+pop <- googlesheets::gs_title("Symcapture") %>% 
+              googlesheets::gs_read("Pop")
+pop <- bind_rows(pop, c(Ind = "P10-3-925", Pop = "SG", Pop2 = "SG")) # to solve
+```
+
+# Population structure
+
+We will explore population structure of individuals, starting with the whole Paracou population and then the tow morphotypes if they correspond to existing genotypes. Finally, we'll have a quick look at th spatial and environmental distribution of the different gene pools, before a quick look to putative SNPs specific to genepools.
+
+* __Paracou__ population structure of all *Symphonia* individuals from Paracou with `admixture`
+* __*S. globulifera*__ population structure of Paracou individuals belonging to the the *S. globulifera* **gene pool** with `admixture`
+* __*S. sp1*__ population structure of Paracou individuals belonging to the the *S. sp1* **gene pool** with `admixture`
+* __Spatial__ spatial distribution of *Symphonia* gene pools in Paracou
+* __Environmental__ environmental distribution of *Symphonia* gene pools in Paracou along the topgraphic wetness index
+* __Genotype-specifc SNPs__ identification of SNPs being putatively gene pool specific
+
+## Paracou
+
+`admixture` cross-validation analysis revealed that 3 or 2 groups were the best to represent *Symphonia* population structure in Paracou (Fig. \@ref(fig:admixtureParacouCV)). Population structure of Paracou resulted in two clusters associated to the two morphotypes: *S. globulifera* (dark blue) and *S. sp1* (light blue); and *S. globulifera* split in two subpopulations (red, Fig. \@ref(fig:admixtureParacou23)). 
+
+Looking into detail for *S. globulifera* morphotype (Fig. \@ref(fig:admixtureParacou2)), we have 32 individuals belonging to *S. sp1* phenotype, 5 admixed individuals and finally 113 individuals with matching morhpotype and genotype (70%). Whereas for *S. sp1* morphotype, we have 20 individuals belonging to *S. globulifera* phenotype, 7 admixed individuals and finally 180 individuals with matching morhpotype and genotype (88%). And last but not least, individuals identified as mixed morphotype on the field included 9 *S. globulifera* genotypes and 19 *S. sp1* genotypes. Consequently including admixed indivduals we have 146 individuals in the *S. globulifera* gene pool against 239 in the *S. sp1* gene pool.
+
+Anyway, `admixture` results for $K \geq 2$ suggest substructure in Paracou population (Fig. \@ref(fig:admixtureParacouFst)). So we should explore subpopulation structure of *S. globulifera* and *S. sp1* gene pools for individuals with more than 90% of gene pools membership.
+
+```{bash admixtureParacou, eval=F, echo=T}
+module load bioinfo/admixture_linux-1.3.0
+module load bioinfo/plink-v1.90b5.3
+mkdir admixture
+mkdir admixture/paracou
+mkdir out
+cd ../variantCalling
+mkdir paracouRenamed
+# read_tsv(file.path(pathCluster, "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bim"),
+#          col_names = F) %>% 
+#   mutate(X1 = as.numeric(as.factor(X1))) %>% 
+#   write_tsv(file.path(pathCluster, "paracouRenamed", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bim"),
+#             col_names = F)
+cp paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bed paracouRenamed
+cp paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam paracouRenamed 
+cd ../populationGenomics/admixture/paracou
+for k in $(seq 10) ; do echo "module load bioinfo/admixture_linux-1.3.0 ; admixture --cv ../../variantCalling/paracouRenamed/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bed $k | tee log$k.out" ; done > admixture.sh
+sarray -J admixture -o ../../out/%j.admixture.out -e ../../out/%j.admixture.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL admixture.sh
+scp sschmitt@genologin.toulouse.inra.fr:~/Symcapture/populationGenomics/admixture/paracou/*
+grep -h CV log*.out > CV.out
+for file in $(ls log*.out) ; do  grep "Fst divergences between estimated populations:" -A 20 $file | head -n -2 > matrices/$file ; done
+```
+
+```{r admixtureParacouCV, fig.cap="Cross-validation for the clustering of Paracou individuals. Y axis indicates corss-validation mean error, suggesting that 2 or 3 groups represent the best Paracou individuals structure."}
+read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
+  dplyr::select(X3, X4) %>% 
+  dplyr::rename(K = X3, CV = X4) %>% 
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>% 
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(2,3), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error")
+```
+
+```{r admixtureParacou23, fig.cap="Population structure of Paracou individuals for K=2 and K=3. Dark blue is associated to *S. globulifera* morphotype; whereas light blue is associated to *S. sp1*; and red is associated to a subgroup within *S. globulifera* morphotype."}
+fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+symcapture.admix <- readQ(list.files(file.path(path, "admixture", "paracou"), 
+                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
+symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
+symcapture.admix <- alignK(symcapture.admix)
+p <- plotQ(symcapture.admix[2:3], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:3),
+      showindlab = F, useindlab = F, grplab = data.frame(morphotype = left_join(fam, pop)$Pop2, stringsAsFactors = F),
+      grplabsize = 4,linesize = 0.8, pointsize = 4, sortind = "all", sharedindlab = F, ordergrp=T, subsetgrp=c("G", "SG", "S"))
+gridExtra::grid.arrange(p$plot[[1]])
+```
+
+```{r admixtureParacou2, fig.height=8, fig.width=15, fig.cap="Population structure of Paracou individuals for K = 2. Dark blue is associated to *S. globulifera* morphotype; whereas light blue is associated to *S. sp1*"}
+p <- plotQMultiline(qlist = symcapture.admix[2], exportplot = F, returnplot = T, useindlab = T, ordergrp=T, sortind = "all",
+                    subsetgrp=c("G", "SG", "S"), grplab = data.frame(morphotype = left_join(fam, pop)$Pop2, stringsAsFactors = F))
+gridExtra::grid.arrange(p$plot[[1]][[1]])
+```
+
+```{r admixtureParacouFst, fig.cap="Clusters Fst relations for K=10."}
+symcapture.matrix <- lapply(list.files(file.path(path, "admixture", "paracou", "matrices"), 
+                                       full.names = T, pattern = "log"), read_tsv, skip = 1)
+names(symcapture.matrix) <- unlist(lapply(symcapture.matrix, nrow))
+g.matrix <- symcapture.matrix$`10` %>% 
+  dplyr::rename(C1 = X1) %>% 
+  reshape2::melt(is.vars = "C1", variable.name = "C2", value.name = "Fst") %>% 
+  filter(!is.na(Fst)) %>% 
+  ggplot(aes(C1, C2, fill = Fst)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_gradient(name = "Fst",
+                      low = "#FFFFFF",
+                      high = "#012345") +
+  theme(axis.text.x = element_text(angle = -90),
+        legend.position = "bottom", axis.title = element_blank())
+m <- as.matrix(symcapture.matrix$`10`[c(-1, -11)])
+rownames(m) <- unlist(symcapture.matrix$`10`[1])
+g.tree <- ggdendrogram(data = as.dendrogram(hclust(as.dist(m))), rotate = T)
+cowplot::plot_grid(g.matrix, g.tree)
+```
+
+```{r admixtureParacouSubpopR, eval=F, echo=T}
+symcapture.admix[[2]] %>% 
+  mutate(Ind = row.names(.)) %>% 
+  left_join(pop) %>% 
+  filter(Cluster1 > 0.9) %>% 
+  mutate(IID = paste0(Ind, ".g.vcf")) %>% 
+  mutate(FID = 0, X3 = 0, X4 = 0, X5 = 0, X6 = -9) %>% 
+  dplyr::select(FID, IID, X3, X4, X5, X6) %>% 
+  write_tsv(file.path(path, "sp1.fam"), col_names = F)
+symcapture.admix[[2]] %>% 
+  mutate(Ind = row.names(.)) %>% 
+  filter(Cluster2 > 0.9) %>% 
+  left_join(pop) %>% 
+  mutate(IID = paste0(Ind, ".g.vcf")) %>% 
+  mutate(FID = 0, X3 = 0, X4 = 0, X5 = 0, X6 = -9) %>% 
+  dplyr::select(FID, IID, X3, X4, X5, X6) %>% 
+  write_tsv(file.path(path, "globulifera.fam"), col_names = F)
+symcapture.admix[[2]] %>% 
+  mutate(Ind = row.names(.)) %>% 
+  mutate(Genotype = NA) %>% 
+  mutate(Genotype = ifelse(Cluster1 > 0.9, "sp1", Genotype)) %>% 
+  mutate(Genotype = ifelse(Cluster2 > 0.9, "globulifera", Genotype)) %>% 
+  filter(!is.na(Genotype)) %>% 
+  mutate(IID = paste0(Ind, ".g.vcf", ""), FID = 0) %>% 
+  dplyr::select(FID, IID, Genotype) %>% 
+  write_tsv(file.path(path, "genotypes.pop"), col_names = F)
+```
+
+## *S. globulifera*
+
+`admixture` cross-validation analysis revealed that the *S. globulifera* gene pool was structured in two subpopulations in Paracou (Fig. \@ref(fig:admixtureGlobuliferaCV) and Fig. \@ref(fig:admixtureGlobuliferaFst)). Looking into detail (Fig. \@ref(fig:admixtureGlobulifera23) and Fig. \@ref(fig:admixtureGlobulifera2)), we have a first big subpopulation of 113 individuals (80%) compared to a smaller subpopulation of 27 individuals (20%). Interstingly, we noticed so-called *Paracou type* and *Régina type* within *S. globulifera* morphotype when sampling the individuals. And looking to few identified individuals bark, it seems that the two identified subpopulation correspond two this two types (Fig. \@ref(fig:globuTypes)). The *Paracou type* have a smoother and thinner bark compared to the thck and lashed bark of *Régina type*. **Should we further investigate those sub-morphotypes ??**
+
+```{bash admixtureGlobu, eval=F, echo=T}
+module load bioinfo/admixture_linux-1.3.0
+module load bioinfo/plink-v1.90b5.3
+mkdir admixture/globulifera
+cd ../variantCalling/globulifera
+# read_tsv(file.path("symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.bim"),
+#          col_names = F) %>%
+#   mutate(X1 = as.numeric(as.factor(X1))) %>%
+#   write_tsv("symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.bim",
+#             col_names = F)
+cp symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.bed symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.bed
+cp symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.fam symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.fam 
+cd ../../populationGenomics/admixture/globulifera
+for k in $(seq 10) ; do echo "module load bioinfo/admixture_linux-1.3.0 ; admixture --cv ../../../variantCalling/globulifera/symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.bed $k | tee log$k.out" ; done > admixture.sh
+sarray -J admixture -o ../../out/%j.admixture.out -e ../../out/%j.admixture.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL admixture.sh
+scp sschmitt@genologin.toulouse.inra.fr:~/Symcapture/populationGenomics/admixture/globulifera/*
+grep -h CV log*.out > CV.out
+for file in $(ls log*.out) ; do  grep "Fst divergences between estimated populations:" -A 20 $file | head -n -2 > matrices/$file ; done
+```
+
+```{r admixtureGlobuliferaCV, fig.cap="Cross-validation for the clustering of *Symphonia globulifera* individuals. Y axis indicates corss-validation mean error, suggesting that XX."}
+read_delim(file.path(path, "admixture", "globulifera", "CV.out"), delim = " ", col_names = F) %>% 
+  dplyr::select(X3, X4) %>% 
+  dplyr::rename(K = X3, CV = X4) %>% 
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>% 
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(2), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error") 
+```
+
+```{r admixtureGlobuliferaFst, fig.cap="Clusters Fst relations for K=10 within *Symphonia globulifera* population."}
+symcapture.matrix <- lapply(list.files(file.path(path, "admixture", "globulifera", "matrices"), 
+                                       full.names = T, pattern = "log"), read_tsv, skip = 1)
+names(symcapture.matrix) <- unlist(lapply(symcapture.matrix, nrow))
+g.matrix <- symcapture.matrix$`10` %>% 
+  dplyr::rename(C1 = X1) %>% 
+  reshape2::melt(is.vars = "C1", variable.name = "C2", value.name = "Fst") %>% 
+  filter(!is.na(Fst)) %>% 
+  ggplot(aes(C1, C2, fill = Fst)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_gradient(name = "Fst",
+                      low = "#FFFFFF",
+                      high = "#012345") +
+  theme(axis.text.x = element_text(angle = -90),
+        legend.position = "bottom", axis.title = element_blank())
+m <- as.matrix(symcapture.matrix$`10`[c(-1, -11)])
+rownames(m) <- unlist(symcapture.matrix$`10`[1])
+g.tree <- ggdendrogram(data = as.dendrogram(hclust(as.dist(m))), rotate = T)
+cowplot::plot_grid(g.matrix, g.tree)
+```
+
+```{r admixtureGlobulifera23, fig.cap="Population structure of *Symphonia globulifera* for all K."}
+fam <- read_tsv(file.path(path, "..", "variantCalling", "globulifera",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+symcapture.admix <- readQ(list.files(file.path(path, "admixture", "globulifera"), 
+                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
+symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
+symcapture.admix <- alignK(symcapture.admix)
+p <- plotQ(symcapture.admix[1:10], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",1:10),
+      showindlab = F, useindlab = F, sharedindlab = F, linesize = 0.8, pointsize = 4, sortind = "all",)
+gridExtra::grid.arrange(p$plot[[1]])
+```
+
+```{r admixtureGlobulifera2, fig.cap="Population structure of*Symphonia globulifera* for K = 2."}
+p <- plotQMultiline(qlist = symcapture.admix[2], exportplot = F, returnplot = T, useindlab = T, ordergrp=T, sortind = "all")
+gridExtra::grid.arrange(p$plot[[1]][[1]])
+```
+
+```{r globuTypes, fig.cap="The two sub-morphotypes of the *Symphonia globulifera* morphotype identified in the field. The two types are identified with their bark with the *Paracou type* having a smoother and thinner bark compared to the thck and lashed bark of *Régina type*."}
+knitr::include_graphics("./symcapture_data/SglobuliferaTypes.png")
+```
+
+
+## *S. sp1*
+
+`admixture` cross-validation analysis revealed no substructure in the *S. sp1* gene pool in Paracou (Fig. \@ref(fig:admixtureSp1CV), Fig. \@ref(fig:admixtureSp123) and Fig. \@ref(fig:admixtureSp1Fst)).
+
+```{bash admixtureSp1, eval=F, echo=T}
+module load bioinfo/admixture_linux-1.3.0
+module load bioinfo/plink-v1.90b5.3
+mkdir admixture/sp1
+cd ../variantCalling/sp1
+# read_tsv(file.path("symcapture.all.biallelic.snp.filtered.nonmissing.sp1.bim"),
+#          col_names = F) %>%
+#   mutate(X1 = as.numeric(as.factor(X1))) %>%
+#   write_tsv("symcapture.all.biallelic.snp.filtered.nonmissing.sp1.renamed.bim",
+#             col_names = F)
+cp symcapture.all.biallelic.snp.filtered.nonmissing.sp1.bed symcapture.all.biallelic.snp.filtered.nonmissing.sp1.renamed.bed
+cp symcapture.all.biallelic.snp.filtered.nonmissing.sp1.fam symcapture.all.biallelic.snp.filtered.nonmissing.sp1.renamed.fam 
+cd ../../populationGenomics/admixture/sp1
+for k in $(seq 10) ; do echo "module load bioinfo/admixture_linux-1.3.0 ; admixture --cv ../../../variantCalling/sp1/symcapture.all.biallelic.snp.filtered.nonmissing.sp1.renamed.bed $k | tee log$k.out" ; done > admixture.sh
+sarray -J admixture -o ../../out/%j.admixture.out -e ../../out/%j.admixture.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL admixture.sh
+scp sschmitt@genologin.toulouse.inra.fr:~/Symcapture/populationGenomics/admixture/sp1/*
+grep -h CV log*.out > CV.out
+for file in $(ls log*.out) ; do  grep "Fst divergences between estimated populations:" -A 20 $file | head -n -2 > matrices/$file ; done
+```
+
+```{r admixtureSp1CV, fig.cap="Cross-validation for the clustering of *Symphonia sp1* individuals. Y axis indicates corss-validation mean error, suggesting that *Symphonia sp1* doesn't have a population substructure."}
+read_delim(file.path(path, "admixture", "sp1", "CV.out"), delim = " ", col_names = F) %>% 
+  dplyr::select(X3, X4) %>% 
+  dplyr::rename(K = X3, CV = X4) %>% 
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>% 
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(1), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error")
+```
+
+```{r admixtureSp123, fig.cap="Population structure of *Symphonia sp1* individuals for all K."}
+fam <- read_tsv(file.path(path, "..", "variantCalling", "sp1",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.sp1.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+symcapture.admix <- readQ(list.files(file.path(path, "admixture", "sp1"), 
+                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
+symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
+symcapture.admix <- alignK(symcapture.admix)
+p <- plotQ(symcapture.admix[1:10], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",1:10),
+      showindlab = F, useindlab = F, linesize = 0.8, pointsize = 4, sortind = "all", sharedindlab = F)
+gridExtra::grid.arrange(p$plot[[1]])
+```
+
+```{r admixtureSp1Fst, fig.cap="Clusters Fst relations for K=10 within *S. sp1* population."}
+symcapture.matrix <- lapply(list.files(file.path(path, "admixture", "sp1", "matrices"), 
+                                       full.names = T, pattern = "log"), read_tsv, skip = 1)
+names(symcapture.matrix) <- unlist(lapply(symcapture.matrix, nrow))
+g.matrix <- symcapture.matrix$`10` %>% 
+  dplyr::rename(C1 = X1) %>% 
+  reshape2::melt(is.vars = "C1", variable.name = "C2", value.name = "Fst") %>% 
+  filter(!is.na(Fst)) %>% 
+  ggplot(aes(C1, C2, fill = Fst)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_gradient(name = "Fst",
+                      low = "#FFFFFF",
+                      high = "#012345") +
+  theme(axis.text.x = element_text(angle = -90),
+        legend.position = "bottom", axis.title = element_blank())
+m <- as.matrix(symcapture.matrix$`10`[c(-1, -11)])
+rownames(m) <- unlist(symcapture.matrix$`10`[1])
+g.tree <- ggdendrogram(data = as.dendrogram(hclust(as.dist(m))), rotate = T)
+cowplot::plot_grid(g.matrix, g.tree)
+```
+
+## Spatial
+
+Gene pool spatial distribution didn't revealed much. Few individuals with a morphotype associated to the wrong ecotype have been reassigned with their gene pool the genotype corresponding to the "good" ecotype (*e.g.* P13-4-361 previously presented as the *S. globulifera* morphotype living in plateau is a *S. sp1* genotype). But we still have individual with ecotypes not matching their genotype, especially in subplot1 1 of plot 1 where there is a mix of genotype in the bottomland but with a lot of hybridization ! In a nutshell, there are interessant patterns that deserve further detailed investigations.
+
+```{r trees}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  filter(Plot != 18) %>% 
+  collect() %>% 
+  mutate(treatment = c(c('C', 'T1', 'T2', 'T3', 
+                         'T2', 'C', 'T1', 'T3',
+                         'T1', 'T2', 'C', 'T3'), 
+                       rep('B', 4))[Plot])
+fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+trees <- readQ(file.path(path, "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.2.Q"))[[1]] %>% 
+  mutate(Ind = fam$Ind) %>% 
+  dplyr::rename(sp1 = Cluster1, globulifera = Cluster2) %>% 
+  left_join(pop) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(trees)
+# trees <- filter(trees, sp1 > 0.1, sp1 < 0.9)
+treesXY <- na.omit(trees)
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+treesPal <- colorNumeric(palette = "RdBu", domain = treesXY$globulifera)
+```
+
+```{r popStrSpace, fig.cap="Membership to the *Symphonia globulifera* gene pool for Paracou individuals."}
+limits <- shapefile(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                              "limits", "OverallPlots.shp"))
+limits <- spTransform(limits, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "RelativeElevation_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+projection(relele) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+relele <- projectRaster(relele, crs = crs)
+treesXY$TWI <- raster::extract(wetness, treesXY)
+treesXY$RelativeElevation <- raster::extract(relele, treesXY)
+treesXY$DEM <- raster::extract(dem, treesXY)
+leaflet() %>%
+  addRasterImage(aggregate(wetness, 4),  group = "TWI") %>% 
+  addPolylines(data = limits, color = 'black', group = "limits") %>%
+  addCircles(data = treesXY, radius = ~Circ/pi/10, label = ~Ind,
+             color = ~treesPal(globulifera), group = "Symphonia") %>% 
+  addLegend(pal = treesPal, title = 'globulifera membership',
+            values = c(0, 0.5, 1), position = "bottomright") %>%
+  addLayersControl(overlayGroups = c('limits', 'Symphonia'),
+                   options = layersControlOptions(collapsed = T))
+```
+
+## Environmental
+
+Gene pools distribution along topographic wetness index and relative elevation is similar to morphotype distribution, revealing the two classical and clear genotype-ecotype assocaitions. They will be further explored with environmental genomics, to identify SNPs specifically associated to the topographic association.
+
+```{r wetness, fig.cap="Membership to the *Symphonia globulifera* gene pool compared to topgraphic wetness index and relative elevation for Paracou individuals."}
+treesXY@data %>% 
+  dplyr::select(globulifera, Pop, RelativeElevation, TWI) %>%
+  reshape2::melt(id.vars = c("globulifera", "Pop")) %>% 
+  ggplot(aes(value, globulifera)) +
+  geom_vline(xintercept = 2, linetype = "dashed") +
+  geom_point(aes(col = Pop), alpha = 0.5) +
+  facet_wrap(~ variable, scales = "free", nrow = 2) +
+  ylab("Membership to S. globulifera gene pool") +
+  scale_x_sqrt() +
+  scale_color_discrete("Morphotype\nfrom the\nfield", 
+                       labels = c("S. globulifera", "S. sp1", "intermediate"))
+```
+
+## Genotype-specifc SNPs
+
+Finally, we quickly had a look to SNPs associated to gene pools with Fst values of SNPs between the two genotypes. First, with the genotype without admixed individuals (> 0.9% of belonging to the gene pool) the Fst climb to 0.026 instead of the 0.15 classically observed between morphotypes. Finally, looking at the contigs including SNP with a Fst > 0.9 (Fig. \@ref(fig:genepoolsFst)), it seems that we have numerous genotype-specific SNPs. **We need to further identify those SNPs, what should be the best appropriate method ?**
+
+```{bash , eval=F, echo=T}
+plink --threads 8 --memory 80000   --bfile symcapture.all.biallelic.snp.filtered.nonmissing   --allow-extra-chr --missing --fst --within genotypes.pop   --out symcapture.all.biallelic.snp.filtered.nonmissing
+symcapture.all.biallelic.snp.filtered.nonmissing.fst ... done.
+372725 markers with valid Fst estimates (81537 excluded).
+Mean Fst estimate: 0.0258773
+Weighted Fst estimate: 0.108062
+```
+
+
+```{r genepoolsFst, fig.cap="SNP Fst between geenpools along contigs including SNPs with an fst > 0.9."}
+g.fst <- read_tsv(file.path(path, "..", "variantCalling", "nonmissing",
+                   "symcapture.all.biallelic.snp.filtered.nonmissing.fst")) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(FST = as.numeric(FST)) %>% 
+  ggplot(aes(FST)) +
+  geom_density() +
+  scale_x_sqrt() +
+  geom_vline(xintercept = 0.025, col = "red", linetype = "dashed") +
+  xlab("Fst")
+
+g.fst$data %>% 
+  filter(CHR %in% unique(filter(g.fst$data, FST > 0.9)$CHR)) %>%
+  mutate(contig = as.numeric(as.factor(CHR))) %>% 
+  filter(!is.nan(FST)) %>% 
+  mutate(FST = abs(FST)) %>% 
+  qqman::manhattan(chr = "contig", bp = "POS", p = "FST", suggestiveline = 0.9, logp = F,
+                   xlab = "Contigs including SNP with Fst > 0.9", ylab = "Fst between morphotype")
+```
+
+## Conclusion
+
+*Symphonia* individuals from Paracou are structured in two genotypes corresponding to the previously identified morphotypes (70-80%) *S. globulifera* and *S. sp1*. In addition, the *S. globulifera* genotype is structured in two subpopulations, which might match the two identified submorphotype in Paracou called *S. globulifera type Paracou* (80%) and *S. globulifera type Régina* (20%). **Should we further investigate those sub-morphotypes ?**. Oppositely, the *S. sp1* genotype didn't include subpopulation structure. We can consequently use this population structure in further associations and environmental genomics studies, either integrating it as a covariate or most probably running independently the studies between the two genotypes. Moreover, we will use representative individuals from *S. sp1*, *S. globulifera type Paracou*, and *S. globulifera type Régina*, in association with South American (La Selva, Baro Colorado Island, and Itubera) and African (Madagascar, Benin, Cameroun, Sao Tome, Congo, Benin, Liberia, Gana and Ivory Coast) *Symphonia* and *Pentadesma* to explore population history and phylogeny.
+
+In addition, spatial distribution revealed that genotyping solved few morphotype-ecotype misassociation, but other subsist, in particular in P1-C1 with a mix of *S. globulifera*, *Sp. sp1* and admixed individuals in the bottom land. Thus, distribution of genotypes along topography (topographic wetness index and relative elevation) is similar but stronger than the distribution of morphotypes. And, SNPs differentiation between genotypes is higher than between morphotypes (Fst = 0.025 instead of 0.015) and highlight numerous SNPs candidate to be genotype-specific SNPs. **We should further identify them.**
