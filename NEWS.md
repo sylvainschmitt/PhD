@@ -1,3 +1,7 @@
+# PhD 0.1.9142
+* parvicapture: repeats, reamplification, quantit & pools
+* symcapture: introgressions test & phylogeny with migrations
+
 # PhD 0.1.9141
 * GWAS: Santi meeting
 * symcapture: variant filtering v2 & population structure

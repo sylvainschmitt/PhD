@@ -536,6 +536,12 @@ plink2 \
   --allow-extra-chr \
   --keep Paracou.fam \
   --make-bed --out paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou
+mkdir paracouOut
+plink \
+  --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \
+  --keep ParacouOut.fam \
+  --allow-extra-chr --recode vcf-iid \
+  --out paracouOut/symcapture.all.biallelic.snp.filtered.nonmissing.paracouOut
 mkdir globulifera
 plink2 \
   --threads 8 \
@@ -552,4 +558,10 @@ plink2 \
   --allow-extra-chr \
   --keep sp1.fam \
   --make-bed --out sp1/symcapture.all.biallelic.snp.filtered.nonmissing.sp1
+mkdir treemix
+plink2 \
+  --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr \
+  --keep treemix2.fam \
+  --make-bed --out treemix/symcapture.all.biallelic.snp.filtered.nonmissing.treemix
 ```

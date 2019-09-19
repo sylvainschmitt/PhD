@@ -96,7 +96,7 @@ ggplot(quantit, aes(concentration_est, fill = concentration_est > 10)) +
                     xmin = log10(10), xmax = log10(100), ymin = 28, ymax = 45)
 ```
 
-## Repeats
+## Repeats & Reamplifcations
 
 209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, but we have only 96 spot on plate 6 corresponding to a minimal estimated concentration of 4.4 $ng.\mu L ^{-1}$.
 
@@ -115,10 +115,152 @@ quantit %>%
   write_tsv(path = file.path(path, "repeat.tsv"))
 ```
 
+```{r repeatNano, eval=F}
+extraction <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction")
+read.delim2(file.path(path, "NanoDrop", "Purification", "PARVICAPTURE_library_P6_20190917.txt")) %>% 
+  mutate(Plate_extraction = 6) %>% 
+  mutate(Conc. = ifelse(Conc. < 0, 0, Conc.)) %>% 
+  dplyr::rename(Position_extraction = Well,
+                Concentration_Purified = Conc.) %>% 
+  mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
+  select(Plate_extraction, Position_extraction, Concentration_Purified) %>% 
+  ggplot(aes(48+0.15*Concentration_Purified)) +
+  geom_histogram() +
+  scale_x_log10()
+```
+
+209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, so in addition to repeats library between an estimated concentration of 4.4 and 8 $ng.\mu L ^{-1}$ have been reamplified with 8 cycles.
+
+```{r reamplification, eval=F, echo=T}
+quantit %>% 
+  left_join(googlesheets::gs_title("Parvicapture") %>% 
+             googlesheets::gs_read("Extraction"),
+            by = c("Plate_library" = "Plate_extraction",
+                   "Position_library" = "Position_extraction")) %>% 
+  filter(concentration_est > 4.4, concentration_est < 8) %>% 
+  arrange(Plate_library, Position_library) %>% 
+  mutate(Plate_reamplification = 7) %>% 
+  mutate(row = substr(Position_library, 1, 1)) %>% 
+  mutate(col = as.numeric(substr(Position_library, 2, 3))) %>% 
+  arrange(Plate_library, col, row) %>% 
+  mutate(Position_reamplification = as.vector(sapply(1:12, function(x) paste0(LETTERS[1:8], x)))) %>% 
+  mutate(Repeat = 1) %>% 
+  select(IdGenetic, Plate_library, Position_library, Plate_reamplification, Position_reamplification, Genus, Species, Plot, SubPlot, TreeFieldNum, Repeat) %>% 
+  write_tsv(path = file.path(path, "reamplification.tsv"))
+```
+
+Repeats have more or less worked with medium concentration of DNA whereas reamplification gave good results (Fig. \@ref(fig:quantit2)).
+ 
+```{r quantit2, fig.cap="Library repeats and reamplification concentration measured by QuantIt."}
+quantit3 <- read_csv(file.path(path, "QuantIt", 
+                   "PARVICAPTURE_library_P6P7_20190919_fluo.csv"), skip = 53)[2:4] %>% 
+  dplyr::rename(position = Well, fluo = `dosage_fluo_384_CB:501,527`) %>% 
+  dplyr::select(position, fluo) %>% 
+  filter(!is.na(fluo)) %>% 
+  left_join(read_csv(file.path(path, "QuantIt", 
+                               "PARVICAPTURE_library_P6P7_20190919_plates.csv"),  skip = 36) %>% 
+              dplyr::rename(row = X1) %>% 
+              reshape2::melt(id.vars = "row", variable.name = "col", value.name = "library") %>% 
+              mutate(position = paste0(row, col)) %>% 
+              select(position, library)) %>% 
+  separate(library, c("Plate_library", "Position_library"), "_") %>% 
+  mutate(Plate_library = as.numeric(gsub("P", "", Plate_library))) %>% 
+  select(Plate_library, Position_library, fluo) %>% 
+  arrange(Plate_library, Position_library) %>% 
+  left_join(data.frame(Plate_library = 0,
+                       Position_library = as.vector(sapply(1:6, function(x) paste0(LETTERS[1:4], x))),
+                       concentration = rep(c(0, 10, 20, 40, 80, 120)*21/20, each = 4))) %>% 
+  mutate(QuantIt = 3)
+data3 <- filter(quantit3, Plate_library == 0)
+quantit3 <- quantit3 %>% 
+  mutate(concentration_est = lm(concentration ~ fluo, data = data3)$coefficients[2]*fluo)
+quantit <- bind_rows(quantit, quantit3) %>% 
+  filter(Plate_library != 0)
+data <- bind_rows(data, data3)
+ggplot(filter(quantit3, Plate_library != 0), aes(concentration_est, fill = as.factor(Plate_library))) +
+  geom_histogram() +
+  scale_x_log10() +
+  xlab("Concentration") +
+  ylim(0, 45) +
+  theme(legend.position = "bottom") +
+  annotation_custom(grob = ggplotGrob(ggplot(data3, aes(fluo, concentration,
+                                                       col = QuantIt, group = QuantIt)) +
+                                        geom_point() +
+                                        geom_smooth(method = "lm") +
+                                        xlab("Fluorescence") +
+                                        ylab("Concentration") +
+                                        scale_color_continuous(guide = "none")), 
+                    xmin = log10(10), xmax = log10(100), ymin = 28, ymax = 45)
+```
 
 ## Equimolar pools preparation
 
-Equimolar pools were built for capture
+All samples will be pulled by batch of 134 following plate order for the 4 reactions of Pippin (with 1 repeat). We want 100 to 500 We will use $8 ng.\mu L^{-1} \times 20 \mu L = 160 ng$ of DNA of each sample ($8 ng.\mu L^{-1}$ being in the lower concentrations, samples below will be sacrified and considered as 8 because they are repeated), resulting in $160 ng \times 8 = 21.44 \mu g$ of DNA per sample (because we will loose material in purification, we should aim for extra).
+
+```{r pools}
+rm(quantit3, data3)
+quantit <- quantit %>% 
+  dplyr::select(-concentration, -fluo, -QuantIt) %>% 
+  dplyr::rename(concentration = concentration_est)
+extraction <- googlesheets::gs_title("Parvicapture") %>% 
+             googlesheets::gs_read("Extraction")
+reamplification <- googlesheets::gs_title("Parvicapture") %>% 
+             googlesheets::gs_read("Reamplification")
+data <- extraction %>% 
+  left_join(quantit, by = c("Plate_extraction" = "Plate_library",
+                            "Position_extraction" = "Position_library")) %>% 
+  left_join(reamplification %>% 
+              left_join(quantit, by = c("plate_reamplifacation" = "Plate_library",
+                                        "Position_reamplifcation" = "Position_library")) %>% 
+              mutate(concentration_reamplification = concentration) %>% 
+              dplyr::select(Plate_library, Position_library, concentration_reamplification),
+            by = c("Plate_extraction" = "Plate_library",
+                            "Position_extraction" = "Position_library")) %>% 
+  mutate(concentration = ifelse(is.na(concentration_reamplification), concentration, concentration_reamplification)) %>% 
+  dplyr::select(-concentration_reamplification) %>% 
+  filter(!(Plate_extraction == 5 & Repeat == 1)) %>% 
+  mutate(Pool_Pippin = rep(LETTERS[1:4], each = ceiling(nrow(.)/4))[1:nrow(.)])%>% 
+  mutate(dilution = 1) %>% 
+  mutate(volume = round(ifelse(concentration < 8, 20,
+                         160/concentration),1))
+rm(extraction, reamplification, quantit)
+```
+
+```{r poolsPlate, fig.cap="Sample pools tube per plate."}
+data %>%
+  mutate(row = substr(Position_extraction, 1, 1)) %>% 
+  mutate(col = substr(Position_extraction, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = Pool_Pippin), size =6)  +
+  geom_text(aes(label = Pool_Pippin), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_extraction, ncol = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r poolsVolume, fig.cap="Sample reaction volume per plate."}
+data %>%
+  mutate(row = substr(Position_extraction, 1, 1)) %>% 
+  mutate(col = substr(Position_extraction, 2, 3)) %>% 
+  ggplot(aes(y = factor(row,levels = rev(LETTERS[1:8])),
+             x = factor(col,levels = 1:12))) + 
+  geom_point(aes(col = volume), size =6)  +
+  geom_text(aes(label = volume), size = 2.5, col = "white") +
+  facet_wrap(~ Plate_extraction, ncol = 2, labeller = "label_both") +
+  theme_bw() +
+  labs(x=NULL, y = NULL)
+```
+
+```{r poolsTab, eval=T}
+data %>% 
+  select(Pool_Pippin, Plate_extraction, Position_extraction, volume) %>% 
+  kable(caption = "Capture reactions.",
+        col.names = c("Pool", "Plate", "Position","Volume"),
+        format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
+```
 
 ## Pools fragment size evaluation
 
