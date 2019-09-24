@@ -336,9 +336,13 @@ fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
   mutate(Ind = gsub(".g.vcf", "", IID))
-trees <- readQ(file.path(path, "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.2.Q"))[[1]] %>% 
+trees <- readQ(file.path(path, "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.3.Q"))[[1]] %>% 
   mutate(Ind = fam$Ind) %>% 
-  dplyr::rename(sp1 = Cluster1, globulifera = Cluster2) %>% 
+  dplyr::rename(Ssp1 = Cluster1, SgParacou = Cluster2, SgRegina = Cluster3) %>% 
+  mutate(type = "admixed") %>% 
+  mutate(type = ifelse(Ssp1 > 0.9, "Ssp1", type)) %>% 
+  mutate(type = ifelse(SgParacou > 0.9, "SgParacou", type)) %>% 
+  mutate(type = ifelse(SgRegina > 0.9, "SgRegina", type)) %>% 
   left_join(pop) %>% 
   mutate(X = gsub("P", "", Ind)) %>% 
   separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
@@ -348,7 +352,7 @@ treesXY <- na.omit(trees)
 coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 treesXY <- spTransform(treesXY, CRSobj = crs)
-treesPal <- colorNumeric(palette = "RdBu", domain = treesXY$globulifera)
+treesPal <- colorFactor(palette = "Set3", domain = treesXY$type)
 ```
 
 ```{r popStrSpace, fig.cap="Membership to the *Symphonia globulifera* gene pool for Paracou individuals."}
@@ -372,29 +376,29 @@ leaflet() %>%
   addRasterImage(aggregate(wetness, 4),  group = "TWI") %>% 
   addPolylines(data = limits, color = 'black', group = "limits") %>%
   addCircles(data = treesXY, radius = ~Circ/pi/10, label = ~Ind,
-             color = ~treesPal(globulifera), group = "Symphonia") %>% 
-  addLegend(pal = treesPal, title = 'globulifera membership',
-            values = c(0, 0.5, 1), position = "bottomright") %>%
-  addLayersControl(overlayGroups = c('limits', 'Symphonia'),
+             color = ~treesPal(type), group = "Symphonia") %>% 
+  addLegend(pal = treesPal, title = 'Genepool',
+            values = levels(as.factor(treesXY$type)), position = "bottomright") %>%
+  addLayersControl(overlayGroups = c('limits', 'Symphonia', "TWI"),
                    options = layersControlOptions(collapsed = T))
 ```
 
 ## Environmental
 
-Gene pools distribution along topographic wetness index and relative elevation is similar to morphotype distribution, revealing the two classical and clear genotype-ecotype assocaitions. They will be further explored with environmental genomics, to identify SNPs specifically associated to the topographic association.
+Gene pools distribution along topographic wetness index and relative elevation is similar to morphotype distribution, revealing the two classical and clear genotype-ecotype assocaitions. They will be further explored with environmental genomics, to identify SNPs specifically associated to the topographic association. Nevertheless, we can noticed that *S. globulifera type Régina* grows in habitats even wetter than *S. globulifera type Paracou* as revealed by the topographic wetness index and not the relative elevation (so the position in the watershed matters).
 
-```{r wetness, fig.cap="Membership to the *Symphonia globulifera* gene pool compared to topgraphic wetness index and relative elevation for Paracou individuals."}
+```{r wetness, fig.cap="Gene pools distribution along topgraphic wetness index and relative elevation for Paracou individuals."}
 treesXY@data %>% 
-  dplyr::select(globulifera, Pop, RelativeElevation, TWI) %>%
-  reshape2::melt(id.vars = c("globulifera", "Pop")) %>% 
-  ggplot(aes(value, globulifera)) +
-  geom_vline(xintercept = 2, linetype = "dashed") +
-  geom_point(aes(col = Pop), alpha = 0.5) +
+  dplyr::select(type, Pop, RelativeElevation, TWI) %>%
+  reshape2::melt(id.vars = c("type", "Pop")) %>% 
+  ggplot(aes(value, fill = type, color = type)) +
+  geom_density(alpha = 0.3) +
   facet_wrap(~ variable, scales = "free", nrow = 2) +
-  ylab("Membership to S. globulifera gene pool") +
   scale_x_sqrt() +
-  scale_color_discrete("Morphotype\nfrom the\nfield", 
-                       labels = c("S. globulifera", "S. sp1", "intermediate"))
+  scale_color_discrete("Genotype", labels = c("Admixed", "S. globulifera\ntype Paracou",
+                                     "S. globulifera\ntype Regina", "S. sp1")) +
+  scale_fill_discrete("Genotype", labels = c("Admixed", "S. globulifera\ntype Paracou",
+                                     "S. globulifera\ntype Regina", "S. sp1"))
 ```
 
 ## Genotype-specifc SNPs
@@ -402,116 +406,51 @@ treesXY@data %>%
 ```{bash , eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing --allow-extra-chr --out symcapture.all.biallelic.snp.filtered.nonmissing  --recode --vcf-iid
-```
-
-
-Finally, we quickly had a look to SNPs associated to gene pools with Fst values of SNPs between the two genotypes. First, with the genotype without admixed individuals (> 0.9% of belonging to the gene pool) the Fst climb to 0.026 instead of the 0.15 classically observed between morphotypes. Finally, looking at the contigs including SNP with a Fst > 0.9 (Fig. \@ref(fig:genepoolsFst)), it seems that we have numerous genotype-specific SNPs. **We need to further identify those SNPs, what should be the best appropriate method ?**
-
-```{bash , eval=F, echo=T}
-plink --threads 8 --memory 80000 --bfile symcapture.all.biallelic.snp.filtered.nonmissing --allow-extra-chr --missing --fst --within genotypes.pop   --out symcapture.all.biallelic.snp.filtered.nonmissing
-symcapture.all.biallelic.snp.filtered.nonmissing.fst ... done.
-372725 markers with valid Fst estimates (81537 excluded).
-Mean Fst estimate: 0.0258773
-Weighted Fst estimate: 0.108062
-```
-
-```{r genepoolsFst, fig.cap="SNP Fst between geenpools along contigs including SNPs with an fst > 0.9."}
-g.fst <- read_tsv(file.path(path, "..", "variantCalling", "nonmissing",
-                   "symcapture.all.biallelic.snp.filtered.nonmissing.fst")) %>% 
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
-  mutate(FST = as.numeric(FST)) %>% 
-  ggplot(aes(FST)) +
-  geom_density() +
-  scale_x_sqrt() +
-  geom_vline(xintercept = 0.025, col = "red", linetype = "dashed") +
-  xlab("Fst")
-
-g.fst$data %>% 
-  filter(CHR %in% unique(filter(g.fst$data, FST > 0.9)$CHR)) %>%
-  mutate(contig = as.numeric(as.factor(CHR))) %>% 
-  filter(!is.nan(FST)) %>% 
-  mutate(FST = abs(FST)) %>% 
-  qqman::manhattan(chr = "contig", bp = "POS", p = "FST", suggestiveline = 0.9, logp = F,
-                   xlab = "Contigs including SNP with Fst > 0.9", ylab = "Fst between morphotype")
+module load bioinfo/PGDSpider_2.1.1.5
+java -Xmx80G -Xms40G -jar $PGD_HOME/PGDSpider2-cli.jar -inputfile symcapture.all.biallelic.snp.filtered.nonmissing.vcf -inputformat VCF -outputfile symcapture.all.biallelic.snp.filtered.nonmissing.bayescan -outputformat GESTE_BAYE_SCAN -spid vcf2baypass.spid
+module load bioinfo/BayeScan2.1
+module load system/R-3.4.3
+BayeScan -threads 8 symcapture.all.biallelic.snp.filtered.nonmissing.bayescan > bayescan.out
 ```
 
 ## Introgressions
 
-```{r popgenome, include=FALSE}
-library(PopGenome)
-genome <- readData(file.path(path, "..", "variantCalling", "paracouOut"), format = "VCF")
-fam <- read_tsv(file.path(path, "..", "variantCalling", "globulifera",
-                          "symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.fam"),
-         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
-  mutate(Ind = gsub(".g.vcf", "", IID))
-symcapture.admix <- readQ(list.files(file.path(path, "admixture", "globulifera"), 
-                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
-symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
-SgParacou = symcapture.admix$symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.2.Q %>% 
-  mutate(Ind = paste0(row.names(.), ".g.vcf")) %>% 
-  filter(Cluster1 < 0.5) %>% 
-  dplyr::select(Ind) %>% 
-  unlist() %>% unname()
-SgRegina = symcapture.admix$symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.2.Q %>% 
-    mutate(Ind = paste0(row.names(.), ".g.vcf")) %>% 
-    filter(Cluster1 > 0.5) %>% 
-    dplyr::select(Ind) %>% 
-    unlist() %>% unname()
-Ssp1 = read_tsv(file.path(path, "..", "variantCalling", "sp1",
-                            "symcapture.all.biallelic.snp.filtered.nonmissing.sp1.fam"), col_names = F) %>%
-    dplyr::select(X2) %>%
-    unlist() %>% unname()
-pop <- list(SgParacou, SgRegina, Ssp1)
-genome <- set.populations(genome, pop, diploid = T)
-genome <- set.outgroup(genome, "FO23.g.vcf", diploid = T)
-genome <- sliding.window.transform(genome, width = 50)
-genome <- introgression.stats(genome, l.smooth = T, do.D = T)
-genome <- weighted.jackknife(genome, per.region = F)
+@Gompert2009 ; @Gompert2010 unused for the moment.
+
+```{bash introgressSH, eval=F, echo=T}
+mkdir introgress
+cp ../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bed ../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bim ../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam ../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.log introgress
+cd introgress
+module load bioinfo/plink-v1.90b5.3
+plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --out symcapture.all.biallelic.snp.filtered.nonmissing.paracou --recode structure
 ```
 
-Non singificant and low Patterson’s $D$ (`r round(genome@D.z, 3)`, P= `r round(genome@D.pval, 3)`) and @Pfeifer2019's $d_f$ (`r round(genome@df.z, 3)`, P= `r round(genome@df.pval, 3)`). But two genomics area have a significant P-value < 0.01 adjusted with Benjamin-Hochberg correction for $d_f$ in 50 bp window (Fig. \@ref(fig:popgenomeG)). One with significant positive values indicates introgressions of *S. globulifera type Regina* with *S. globulifera type Paracou* whereas the other with negative values indicates introgressions of *S. sp1* with *S. globulifera type Parcou*.
-
-```{r popgenomeG, fig.cap="Introgression within the *Symphonia globulifera* species complex."}
-data.frame(region.names = genome@region.names,
-           df = as.numeric(genome@df)) %>% 
-  mutate(Z = (df-mean(genome@df))/genome@df.SE) %>% 
-  mutate(P = 2*(pnorm(-abs(Z)))) %>% 
-  mutate(adjP = p.adjust(1-P, "BH")) %>% 
-  group_by(region.names) %>% 
-  mutate(pos = mean(as.numeric(strsplit(as.character(region.names)," ")[[1]][c(1,3)]))) %>% 
-  ungroup() %>% 
-  ggplot(aes(pos, df)) +
-  geom_hline(yintercept = 0, col = "lightgrey", type = "dashed") +
-  geom_line() + 
-  geom_point(aes(col = (1-adjP)<0.01, alpha = (1-adjP)<0.01)) +
-  geom_label(aes(x, y, label = label),
-             data = data.frame(x = 3000, y = c(-0.3, 0.30),
-                               label = c("Ssp1 <-> SgParacou", "SgRegina<->SgParacou"))) +
-  xlab("Genome position (bp)") +
-  ylab(expression(d[f])) +
-  scale_color_discrete("P < 0.01") +
-  scale_alpha_discrete("P < 0.01")
+```{r introgressCluster, eval=F, echo=T}
+library(introgress)
+library(magrittr)
+paracou <- data.table::fread("symcapture.all.biallelic.snp.filtered.nonmissing.paracou.recode.strct_in", skip = 2)
+loci <- readr::read_tsv("symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bim",
+         col_names = c("contig", "snp", "posCenti", "pos", "A1", "A2")) %>%
+  dplyr::mutate(snp = 1:nrow(.)) %>%
+  dplyr::mutate(locus = paste0(contig, "_snp", snp, "_pos", pos)) %>%
+  dplyr::mutate(type = "C") %>%
+  dplyr::select(locus, type, contig, pos) %>%
+  as.matrix()
+paracou <- as.matrix(t(paracou[-1]))
+count.matrix <- prepare.data(admix.gen = paracou, loci.data = loci, parental1 = "1", parental2 = "2",
+                             pop.id = F, ind.id = F, fixed = T)
+hi.index <- est.h(introgress.data = count.matrix, loci.data = loci, fixed = T,
+                p1.allele = "1", p2.allele = "2")
+mk.image(introgress.data = count.matrix, loci.data = loci, marker.order = NULL, hi.index = hi.index,
+         ylab = "Individuals", xlab.h = "population 2 ancestry", pdf = T)
+gen.out <- genomic.clines(introgress.data = count.matrix, hi.index = hi.index,
+                          loci.data = loci, sig.test = T, method = "permutation")
+save(hi.index, gen.out, "introgress.Rdata")
 ```
 
-<!-- @Gompert2009 ; @Gompert2010 unused for the moment.  -->
-
-<!-- ```{r introgress, eval=F} -->
-<!-- library(introgress) -->
-<!-- data("AdmixDataSim1") -->
-<!-- help("AdmixDataSim1") -->
-<!-- data("LociDataSim1") -->
-<!-- help("LociDataSim1") -->
-<!-- count.matrix <- prepare.data(admix.gen = AdmixDataSim1, loci.data = LociDataSim1, parental1 = "P1", parental2 = "P2", -->
-<!--                              pop.id = F, ind.id = F, fixed = T) -->
-<!-- hi.index <- est.h(introgress.data = count.matrix, loci.data = LociDataSim1, fixed = T, -->
-<!--                 p1.allele = "P1", p2.allele = "P2") -->
-<!-- mk.image(introgress.data = count.matrix, loci.data = LociDataSim1, marker.order = NULL, hi.index = hi.index, -->
-<!--          ylab = "Individuals", xlab.h = "population 2 ancestry", pdf = F) -->
-<!-- gen.out <- genomic.clines(introgress.data = count.matrix, hi.index = hi.index, -->
-<!--                           loci.data = LociDataSim1, sig.test = T, method = "permutation") -->
-<!-- gen.out$Summary.data -->
-<!-- clines.plot(cline.data = gen.out, rplots = 3, cplots = 3, pdf = F) -->
-<!-- ``` -->
+```{r introgress}
+# gen.out$Summary.data
+```
 
 ## Conclusion
 
@@ -519,7 +458,7 @@ data.frame(region.names = genome@region.names,
 
 In addition, spatial distribution revealed that genotyping solved few morphotype-ecotype misassociation, but other subsist, in particular in P1-C1 with a mix of *S. globulifera*, *Sp. sp1* and admixed individuals in the bottom land. Thus, distribution of genotypes along topography (topographic wetness index and relative elevation) is similar but stronger than the distribution of morphotypes. And, SNPs differentiation between genotypes is higher than between morphotypes (Fst = 0.025 instead of 0.015) and highlight numerous SNPs candidate to be genotype-specific SNPs. **We should further identify them.**
 
-```{r genepools}
+```{r genepoolsPictures, eval=F}
 # ls *.JPG > files.txt
 # ~/Tools/Image-ExifTool-11.65/exiftool *.JPG | grep "Date Time UTC" > time.txt
 # paste files.txt time.txt > infos.txt
@@ -532,28 +471,40 @@ individuals <- googlesheets::gs_title("Measures_Symphonia") %>%
   dplyr::select(-X1) %>% 
   separate(Date, c("day", "month", "year")) %>% 
   separate(Time, c("hour", "minute"), "H") %>% 
-  mutate(datetime = paste0(year, ":", month, ":", day, " ", hour, ":", minute, ":00")) %>% 
+  mutate(datetimeInd = paste0(year, ":", month, ":", day, " ", hour, ":", minute, ":00")) %>% 
   dplyr::select(-year, -month, -day, -hour, -minute) %>% 
-  mutate(datetime = lubridate::as_datetime(datetime))
-
-# exiftool_cmd <- paste("exiftool -GPSLongitudeRef=E -GPSLongitude=",latlon_exif[i,11]," -GPSLatitudeRef=N -GPSLatitude=",latlon_exif[i,10]," ","./nodejpg/",latlon_exif[i,4],".jpg",sep='')
-# system(exiftool_cmd)
-
-
-individuals[which.min(abs(pictures[6,]$datetime - individuals$datetime)),]
-individuals
-
-cbind(pictures,
+  mutate(datetimeInd = lubridate::as_datetime(datetimeInd))
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CodeMeas == 0) %>% 
+  filter(Plot != 18) %>% 
+  collect()
+pictures <- cbind(pictures,
   sapply(pictures$datetime, function(x) 
-  individuals[which.min(abs(x - individuals$datetime)),], simplify = F) %>% 
-      bind_rows())
-
-sapply(1:nrow(pictures), function(x)
-  cbind(pictures[x,], individuals[which.min(abs(pictures[x,]$datetime - individuals$datetime)),]))
- x <- nrow(pictures)
- cbind(pictures[x,], individuals[which.min(abs(pictures[x,]$datetime - individuals$datetime)),])
- 
+  individuals[which.min(abs(x - individuals$datetimeInd)),], simplify = F) %>% 
+      bind_rows()) %>% 
+  mutate(Ind = paste0("P", Plot, "_", SubPlot, "_", TreeFieldNum)) %>% 
+  group_by(Ind) %>% 
+  mutate(filename = paste0(Ind, "_", 1:n(), ".JPG")) %>%
+  left_join(trees)
 pictures %>% 
-  filter(is.na(datetime))
+  ungroup() %>% 
+  mutate(coordCLI = paste0("~/Tools/Image-ExifTool-11.65/exiftool -GPSLongitudeRef=E -GPSLongitude=", Lon,
+                      " -GPSLatitudeRef=N -GPSLatitude=", Lat, " ", file)) %>% 
+  dplyr::select(coordCLI) %>% 
+  write_tsv("../../../data/Symphonia_Paracou/PicturesRenamed/coordinates.sh", col_names = F)
+# bash coordinates.sh
+# rm *_original
+pictures %>% 
+  ungroup() %>% 
+  mutate(rename = paste("mv", file, filename)) %>% 
+  dplyr::select(rename) %>% 
+  write_tsv("../../../data/Symphonia_Paracou/PicturesRenamed/rename.sh", col_names = F)
+# bash rename.sh
+# Beware this is still brutal and lof of pictures doesn't correspond exactly with the time stamp, but it's the best automatic method for the moment
 ```
 

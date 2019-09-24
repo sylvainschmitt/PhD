@@ -139,17 +139,21 @@ data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex) {
   data_complex <- left_join(data,
                             Competition %>% 
-                              left_join(Complexes, by = c("Genusj" = "Genus", "Speciesj" = "Species")) %>% 
+                              left_join(Complexes, by = c("Genusj" = "Genus", "Speciesj" = "Species")) %>%
                               mutate(Complex = ifelse(is.na(Complex), "no", Complex)) %>% 
+                              left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
                               mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-                              mutate(strata = as.numeric(Complex == complex)) %>% 
+                              mutate(other = as.numeric(Complex != complex)) %>% 
+                              mutate(con = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
+                              mutate(hetero = ifelse(Complex == complex & con == 0, 1, 0)) %>% 
                               group_by(idTree) %>% 
-                              summarise(NCIother = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
-                                        NCIcomplex = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1)))
+                              summarise(NCIother = log(sum(DBHj^2*exp(-0.25*dij)*other)+1),
+                                        NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*hetero)+1),
+                                        NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*con)+1)))
   list(N = nrow(data_complex),
-       K = 3,
+       K = 4,
        Y = as.numeric(data_complex$Complex == complex),
-       X = dplyr::select(data_complex, TWI, NCIother, NCIcomplex) %>%
+       X = dplyr::select(data_complex, TWI, NCIother, NCIhetero, NCIcon) %>%
          mutate_all(funs(scale)) %>%
          as.matrix(),
        w = ifelse(data_complex$Complex == complex,
@@ -157,13 +161,17 @@ mdata <- lapply(complexes, function(complex) {
                   sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
+reshape2::melt(mdata$Symphonia$X) %>% 
+  ggplot(aes(value)) +
+  geom_histogram() +
+  facet_wrap(~ Var2, scales = "free")
 ```
 
 ```{r fit}
-# Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
-# fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
-# names(fits) <- complexes
-# save(fits, file = "./distribution_save/complexes.Rdata")
+Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
+fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
+names(fits) <- complexes
+save(fits, file = "./distribution_save/complexes.Rdata")
 load("./distribution_save/complexes.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
@@ -218,7 +226,8 @@ lapply(fits, function(fit)
   dplyr::select(complex, term, descriptor, estimate) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
+                                    `2` = "NCIother", `3` = "NCIhetero",
+                                    `4` = "NCIcon")) %>% 
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
@@ -239,7 +248,8 @@ lapply(fits, function(fit)
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
+                                    `2` = "NCIother", `3` = "NCIhetero",
+                                    `4` = "NCIcon")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
   filter(parameter != "alpha") %>% 
@@ -265,17 +275,20 @@ preds <- lapply(names(fits), function(complex){
              to = max(mdata[[complex]]$X[,1]), length.out = 100)
   NCIother <- seq(from = min(mdata[[complex]]$X[,2]), 
              to = max(mdata[[complex]]$X[,2]), length.out = 100)
-  NCIcomplex <- seq(from = min(mdata[[complex]]$X[,3]), 
+  NCIhetero <- seq(from = min(mdata[[complex]]$X[,3]), 
              to = max(mdata[[complex]]$X[,3]), length.out = 100)
+  NCIcon <- seq(from = min(mdata[[complex]]$X[,4]), 
+                   to = max(mdata[[complex]]$X[,4]), length.out = 100)
 
   alpha <- as.matrix(fits[[complex]], pars = "alpha")
   beta <- as.matrix(fits[[complex]], pars = "beta")
   gamma <- as.matrix(fits[[complex]], pars = "gamma")
 
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIcomplex) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIcomplex)^2)), simplify = F))
-  Ynciother <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*NCIother + beta[n,3]*mean(NCIcomplex) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*NCIother^2 + gamma[n,3]*mean(NCIcomplex)^2)), simplify = F))
-  Yncicomplex <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*NCIcomplex + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*NCIcomplex^2)), simplify = F))
-
+  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIhetero) + beta[n,4]*mean(NCIcon) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIhetero)^2 + gamma[n,4]*mean(NCIcon)^2)), simplify = F))
+  Ynciother <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*NCIother + beta[n,3]*mean(NCIhetero) + beta[n,4]*mean(NCIcon) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*NCIother^2 + gamma[n,3]*mean(NCIhetero)^2 + gamma[n,4]*mean(NCIcon)^2)), simplify = F))
+  Yncihetero <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*NCIhetero + beta[n,4]*mean(NCIcon) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*NCIhetero^2 + gamma[n,4]*mean(NCIcon)^2)), simplify = F))
+  Yncicon <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIhetero) + beta[n,4]*NCIcon + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIhetero)^2 + gamma[n,4]*NCIcon^2)), simplify = F))
+  
   bind_rows(
     data.frame(
       Complex = complex,
@@ -293,12 +306,19 @@ preds <- lapply(names(fits), function(complex){
       Y95 = apply(Ynciother, 2, quantile, probs = 0.95)),
     data.frame(
       Complex = complex,
-      variable = "NCIcomplex",
-      value = NCIcomplex,
-      Y = apply(Yncicomplex, 2, mean),
-      Y5 = apply(Yncicomplex, 2, quantile, probs = 0.05),
-      Y95 = apply(Yncicomplex, 2, quantile, probs = 0.95)))
-}) %>% bind_rows()
+      variable = "NCIhtereo",
+      value = NCIhetero,
+      Y = apply(Yncihetero, 2, mean),
+      Y5 = apply(Yncihetero, 2, quantile, probs = 0.05),
+      Y95 = apply(Yncihetero, 2, quantile, probs = 0.95)),
+    data.frame(
+      Complex = complex,
+      variable = "NCIcon",
+      value = NCIcon,
+      Y = apply(Yncicon, 2, mean),
+      Y5 = apply(Yncicon, 2, quantile, probs = 0.05),
+      Y95 = apply(Yncicon, 2, quantile, probs = 0.95))
+  )}) %>% bind_rows()
 preds %>% 
   left_join(group_by(data, Complex) %>% 
               summarise(Yo = n()/nrow(.))) %>% 
@@ -306,7 +326,7 @@ preds %>%
   geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
   geom_line(aes(y = Y)) +
   geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
-  facet_wrap(~ variable) + 
+  facet_wrap(~ variable, nrow = 1) + 
   xlab("") + ylab("Species complex relative abundance") +
   scale_y_sqrt() +
   theme(legend.position = "bottom")
@@ -319,8 +339,9 @@ g1 <-lapply(fits, function(fit)
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
-  mutate(descriptor = factor(descriptor, levels = c("NCIcomplex",
+                                    `2` = "NCIother", `3` = "NCIhetero",
+                                    `4` = "NCIcon")) %>% 
+  mutate(descriptor = factor(descriptor, levels = c("NCIcon", "NCIhetero", 
                                                     "NCIother", "TWI"))) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
@@ -333,7 +354,7 @@ g1 <-lapply(fits, function(fit)
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_wrap(~ descriptor, labeller = label_parsed, scales = "free_y") +
+  facet_wrap(~ descriptor, labeller = label_parsed, scales = "free_y", nrow = 1) +
   ylab("") + xlab("Species\ncomplex") + 
   scale_fill_discrete(guide = "none") +
   scale_color_discrete(guide = "none") +

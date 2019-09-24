@@ -1,3 +1,9 @@
+# PhD 0.1.9143
+* phdpages: index & disqus
+* parvicapture: pippin pools
+* symcapture: introgressions test & bayescan
+* distributions: complexes & introduction bib (tbc)
+
 # PhD 0.1.9142
 * parvicapture: repeats, reamplification, quantit & pools
 * symcapture: introgressions test & phylogeny with migrations

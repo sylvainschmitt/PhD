@@ -23,7 +23,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(DBH = CircCorr/pi) %>% 
   collect()
 load("../distribution_save/env.Rdata")
-load("vdistribution_save/Competition.Rdata")
+load("distribution_save/Competition.Rdata")
 Competition <- Competition %>% 
   mutate(dij = ifelse(dij <1, 1, dij)) %>% 
   left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
