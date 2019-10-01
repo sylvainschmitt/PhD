@@ -1,3 +1,6 @@
+# PhD 0.1.9144
+* phdpages: functional integration
+
 # PhD 0.1.9143
 * phdpages: index & disqus
 * parvicapture: pippin pools

@@ -1,27 +1,4 @@
----
-title: "A09 : Traits and growth"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-  bookdown::word_document2: default
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setupTraitsnGrowth, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -39,7 +16,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data, eval=T}
+```{r dataTraitsnGrowth, eval=T}
 # traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
 #   googlesheets::gs_read("AllTraits") %>%
 #   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
@@ -81,7 +58,7 @@ Individuals <- Individuals %>%
             funs(./sd(., na.rm = T)))
 ```
 
-# Introduction
+# Traits and growth
 
 > Changes following Geraldine remark about the temporality of functional traits value, *i.e.* the value we observe is valid only for 2015 as traits evolve with DBH.
 
@@ -91,7 +68,7 @@ The aim of this analysis is to quickly explore the potential role of individual 
 1. We computed a vigor index for every individual based on the difference between species mean predicted growth and individual observed growth in 2015 (**Individual vigor paragraph**)
 1. We integrated traits in the growth model as a new reductor of 2015 individual annual growth rate (**Traits in model paragraph**)
 
-# Individual growth
+## Individual growth
 
 We used the following model adapted from @Herault2011:
 $$log[AGR(t)+1] \sim \mathcal{N}(AGRmax_{individual}.e^{-\frac12 .[\frac{log(\frac{dbh(t)}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
@@ -150,12 +127,12 @@ data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 #                             I = length(unique(data$idTree)),
 #                             ind = as.numeric(as.factor(data$idTree)),
 #                             indsp = data %>%
-#                               select(Species, idTree) %>%
+#                               dplyr::select(Species, idTree) %>%
 #                               mutate_all(as.factor) %>%
 #                               mutate_all(as.numeric) %>%
 #                               arrange(idTree) %>%
 #                               unique() %>%
-#                               select(Species) %>%
+#                               dplyr::select(Species) %>%
 #                               unlist()
 #                 ))
 # save(fit, file = "./functional_save/growth.Rdata")
@@ -178,7 +155,7 @@ data %>%
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
   filter(CensusYear == 2015) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, AGRpred, SLA, LDMC, LT, LA, CC) %>% 
+  dplyr::select(Genus, Species, idTree, AGRpred, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
   unique() %>% 
   reshape2::melt(id.vars = c("Genus", "Species", "idTree", "AGRpred"),
@@ -196,7 +173,7 @@ data %>%
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
   filter(CensusYear == 2015) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, AGRpred, SLA, LDMC, LT, LA, CC) %>% 
+  dplyr::select(Genus, Species, idTree, AGRpred, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
   unique() %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
@@ -207,7 +184,7 @@ data %>%
   kable(digits = 3, caption = "Significative coefficients for the model AGRpred ~ SLA + LDMC + LT + LA + CC for every species in 2015.")
 ```
 
-# Individual vigor
+## Individual vigor
 
 We used the following model adapted from @Herault2011:
 $$log[AGR(t)+1] \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh(t)}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
@@ -280,7 +257,7 @@ data %>%
   filter(CensusYear == 2015) %>% 
   mutate(Vigor = agr-AGRpred) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
+  dplyr::select(Genus, Species, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
   unique() %>% 
   reshape2::melt(id.vars = c("Genus", "Species", "idTree", "Vigor"),
@@ -299,7 +276,7 @@ data %>%
   filter(CensusYear == 2015) %>% 
   mutate(Vigor = agr-AGRpred) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, SpeciesLong, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
+  dplyr::select(Genus, Species, SpeciesLong, idTree, Vigor, SLA, LDMC, LT, LA, CC) %>% 
   filter(!is.na(SLA)) %>% 
   unique() %>% 
   group_by(SpeciesLong) %>% 
@@ -309,7 +286,7 @@ data %>%
   kable(digits = 3, caption = "Significative coefficients for the model Vigor ~ SLA + LDMC + LT + LA + CC for every species in 2015.")
 ```
 
-# Traits in model
+## Traits in model
 
 We used the following model adapted from @Herault2011:
 $$log[AGR(t)+1] \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh(t)}{Dopt_{species}})}{Ks_{species}}]^2}.e^{-\beta_{Trait}.Trait}, \sigma)$$
@@ -364,7 +341,7 @@ data <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(agr = ddbh/dt) %>% 
   filter(CensusYear == 2015) %>%
   left_join(mutate_at(Individuals, vars("SLA", "LDMC", "LT", "LA", "CC"), funs(as.vector(base::scale(., center = F))))) %>% 
-  select(agr, dbh, SLA, LDMC, LT, LA, CC, Species) %>% 
+  dplyr::select(agr, dbh, SLA, LDMC, LT, LA, CC, Species) %>% 
   na.omit()
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(data),
@@ -395,8 +372,6 @@ data %>%
 bayesplot::mcmc_areas(as.array(fit, pars = c("betaSLA")))
 ```
 
-# Conclusion
+## Conclusion
 
 This was a rapide test. But as a first conclusion whereas methods 1 and 2 (individual growth and individual vigor) did not seem to indicate significant effect of traits on individual growth, including SLA as a reductor in the growth model question about an eventual negative effect of increased acquisition through increased SLA in individual growth in 2015, besides it seems globally null. We may test other traits in future analysis.
-
-# References

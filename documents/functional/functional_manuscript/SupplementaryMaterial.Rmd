@@ -3,17 +3,17 @@ title: Supplementary Materials
 author: Sylvain Schmitt, Bruno Herault, Emilie Ducouret, Anne Baranger, Niklas Tysklind,  Myriam Heuertz, Eric Marcon, Saint Omer Cazal, Geraldine Derroire
 date: '`r Sys.Date()`'
 output:
-  bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: no
+    toc_float: no
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::html_document2:
-    number_sections: false
-    toc: no
-    toc_float: no
+  bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -48,9 +48,9 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 ```
 
 ```{r data}
-load("./functional_save/Individuals.Rdata")
+load("../functional_save/Individuals.Rdata")
 Individuals0 <- Individuals
-load("./functional_save/CompetitionMatrix.Rdata")
+load("../functional_save/CompetitionMatrix.Rdata")
 sdDBH <- sd(Individuals$DBH)
 Individuals <- Individuals %>% 
   rename(LMA = invSLA) %>% 
@@ -66,7 +66,7 @@ Individuals <- Individuals %>%
 ```
 
 ```{r model}
-load("./functional_save/InteractionReduced.Rdata")
+load("../functional_save/InteractionReduced.Rdata")
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
@@ -193,9 +193,9 @@ factoextra::fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature 
 ```
 
 ```{r additiveModel}
-load("./functional_save/InteractionReduced.Rdata")
+load("../functional_save/InteractionReduced.Rdata")
 models <- list(Interaction = fits)
-load("./functional_save/Additive.Rdata")
+load("../functional_save/Additive.Rdata")
 models$Additive <- fits
 lapply(models, function(model)
   lapply(model, function(trait)
@@ -216,9 +216,9 @@ lapply(models, function(model)
 ```
 
 ```{r ontogenyModel}
-load("./functional_save/DBH.Rdata")
+load("../functional_save/DBH.Rdata")
 models <- list(michaelis = fits)
-load("./functional_save/DBHlin.Rdata")
+load("../functional_save/DBHlin.Rdata")
 models$linear <- fits
 lapply(models, function(model)
   lapply(model, function(trait)

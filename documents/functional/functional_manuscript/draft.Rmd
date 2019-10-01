@@ -39,9 +39,9 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 ```
 
 ```{r data}
-load("./functional_save/Individuals.Rdata")
+load("../functional_save/Individuals.Rdata")
 Individuals0 <- Individuals
-load("./functional_save/CompetitionMatrix.Rdata")
+load("../functional_save/CompetitionMatrix.Rdata")
 sdDBH <- sd(Individuals$DBH)
 Individuals <- Individuals %>% 
   rename(LMA = invSLA) %>% 
@@ -57,7 +57,7 @@ Individuals <- Individuals %>%
 ```
 
 ```{r model}
-load("./functional_save/InteractionReduced.Rdata")
+load("../functional_save/InteractionReduced.Rdata")
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))

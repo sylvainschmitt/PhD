@@ -24,12 +24,12 @@ After library preparation, we prepared plates for capture. We proceed as follow 
 1. __Repeats__: X libraries were repeated from extraction to replace least concentrated libraries
 1. __Equimolar pools preparation__: Equimolar pools were built for capture
 1. __Pools fragment size evaluation__: Pool fragents sizes were evalutaed by Bioanalyzer
-1. __Pools fragment size selection__: Pool fragments size were filtered by Pippin between 400 and 600 bp
+1. __Pools fragment size selection__: Pool fragments size were filtered by Pippin between 250 and 700 bp
 1. __Capture__: ...
 
 ## Dosage
 
-Obtained libraries were dosed by Qubit after range assessment by NanoDrop (16 libraries from P5). Most of libraries had a concentration above 10 $ng.\mu L^{-1}$ and libraries had consistent degradation pattern with electrophoresis. Thus we decided to repeat the X libraries below X $ng.\mu L^{-1}$ and pooled every libraries in 4 equimolar pools to be size selected by Pippin.
+Obtained libraries were dosed by Qubit after range assessment by NanoDrop (16 libraries from P5). Most of libraries had a concentration above 10 $ng.\mu L^{-1}$ and libraries had consistent degradation pattern with electrophoresis.
 
 ```{r quantit, fig.cap="Library concentration measured by QuantIt."}
 quantit1 <- read_csv(file.path(path, "QuantIt", 
@@ -98,9 +98,9 @@ ggplot(quantit, aes(concentration_est, fill = concentration_est > 10)) +
 
 ## Repeats & Reamplifcations
 
-209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, but we have only 96 spot on plate 6 corresponding to a minimal estimated concentration of 4.4 $ng.\mu L ^{-1}$.
+209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, but we have only 96 spot on plate 6 corresponding to a minimal estimated concentration of 4.4 $ng.\mu L ^{-1}$. In addition to repeats, library between an estimated concentration of 4.4 and 8 $ng.\mu L ^{-1}$ have been reamplified with 8 cycles. Repeats have more or less worked with medium concentration of DNA whereas reamplification gave good results (Fig. \@ref(fig:quantit2)).
 
-```{r repeats2, eval=F, echo=T}
+```{r repeats2, eval=F, echo=F}
 quantit %>% 
   left_join(googlesheets::gs_title("Parvicapture") %>% 
              googlesheets::gs_read("Extraction"),
@@ -130,9 +130,7 @@ read.delim2(file.path(path, "NanoDrop", "Purification", "PARVICAPTURE_library_P6
   scale_x_log10()
 ```
 
-209 libraries have an estimated concentration below 10 $ng.\mu L ^{-1}$, so in addition to repeats library between an estimated concentration of 4.4 and 8 $ng.\mu L ^{-1}$ have been reamplified with 8 cycles.
-
-```{r reamplification, eval=F, echo=T}
+```{r reamplification, eval=F, echo=F}
 quantit %>% 
   left_join(googlesheets::gs_title("Parvicapture") %>% 
              googlesheets::gs_read("Extraction"),
@@ -150,8 +148,6 @@ quantit %>%
   write_tsv(path = file.path(path, "reamplification.tsv"))
 ```
 
-Repeats have more or less worked with medium concentration of DNA whereas reamplification gave good results (Fig. \@ref(fig:quantit2)).
- 
 ```{r quantit2, fig.cap="Library repeats and reamplification concentration measured by QuantIt."}
 quantit3 <- read_csv(file.path(path, "QuantIt", 
                    "PARVICAPTURE_library_P6P7_20190919_fluo.csv"), skip = 53)[2:4] %>% 
@@ -196,7 +192,7 @@ ggplot(filter(quantit3, Plate_library != 0), aes(concentration_est, fill = as.fa
 
 ## Equimolar pools preparation
 
-All samples will be pulled by batch of 134 following plate order for the 4 reactions of Pippin (with 1 repeat). We want 100 to 500 We will use $8 ng.\mu L^{-1} \times 20 \mu L = 160 ng$ of DNA of each sample ($8 ng.\mu L^{-1}$ being in the lower concentrations, samples below will be sacrified and considered as 8 because they are repeated), resulting in $160 ng \times 8 = 21.44 \mu g$ of DNA per sample (because we will loose material in purification, we should aim for extra).
+All samples have been pulled by batch of 134 following plate order for the 4 reactions of Pippin (with 1 repeat). We wanted 100 to 500 $ng$ of DNA per capture reaction, we thus  used $8 ng.\mu L^{-1} \times 20 \mu L = 160 ng$ of DNA of each sample ($8 ng.\mu L^{-1}$ being in the lower concentrations, samples below will be sacrified and considered as 8 because they are repeated), resulting in $160 ng \times 128 = 20.48 \mu g$ of DNA per pool (because we will loose material in purification, we should aim for extra).
 
 ```{r pools}
 rm(quantit3, data3)
@@ -265,12 +261,36 @@ data %>%
 
 ## Pools fragment size evaluation
 
+Fragments size distribution was almost homogeneous between pools, only pool **D** included a fifth of it's DNA in a pike around 150 bp (Fig. \@ref(fig:TapeStation)). We used Pippin and beads to select fragments between 250 and 700 bp.
+
+```{r TapeStation, fig.cap="Pools size assessment pre Pippin."}
+knitr::include_graphics("parvicapture_data/TapeStationPrePippin.png")
+```
+
 Pool fragents sizes were evalutaed by Bioanalyzer
 
 ## Pools fragment size selection
 
-Pool fragments size were filtered by Pippin between 400 and 600 bp
+### Pippin
+
+Pool fragments size were filtered by Pippin between 250 and 700 bp. Pippin encountered a bug and didn't detect the ladder pike at 600 bp. Consequently the elution lasted too long. Nevertheless it does not explain the odd pattern observed with TapeStation (Fig. \@ref(fig:TapeStationPostPippin)). We almost completly lost the pool **D** and all other pools have been cut around 450 bp which is too high. Several things might had a role: DNA was high (4 $\mu g$ with upper limit at 5 $\mu g$), but it should have result in a lower cut not higher; and during concentration of pools from up to 800 $\mu L$ to 30 $\mu L$ we also concentrated TE buffer salts. Anyway the clear cut indicated clearly that the size selection resulted from pippin and not cleaning beads. Consequently, we considered this pippin as a failure and decided to develop a protocol with beads to size select pools with the pools originally scheduled as pippin repeat.
+
+```{r TapeStationPostPippin, fig.cap="Pools size assessment post Pippin."}
+knitr::include_graphics("parvicapture_data/TapeStationPostPippin1.png")
+```
+
+### Beads test
+
+We tested size selection with AMPure beads. The idea is to (i) capture long fragments (> 700 bp) with a small volume of beads,  (ii) transfer supernatant without long fragments, and (iii) capture intermediate fragments (> 250 bp) with beads and discard supernatant. The complicated step is the selection of the second beads volume, as supernatant already included PEG and salts depending on the first beads volume. Consequently, we first tested different first beads volume from 0.55X to 0.4X (`r paste(round(seq(0.55, 0.4, length.out = 8),2), collapse = " ")`) with a second beads volume of 1X, resulting to 0.AAX cuting at XXXbp (Fig. \@ref(fig:lowerCut)). Finally, we tested different second beads volume from 0.30X to 0.20X (`r paste(round(seq(0.3, 0.2, length.out = 8),2), collapse = " ")`) with a first beads volume of 0.AAX, resulting to 0.AAX cutting at XXXbp (Fig. \@ref(fig:upperCut)). We made the test with 4 $\mu L$ of 1kb ladder in 96 $\mu L$ of $H_2OmQ$.
+
+## Beads selection
+
+Beads selection have been realized on splitted pools (originally Pippin2), while keeping every step material in case we need to recover material. We removed long fragment > XXX bp with 0.AAX AMPure and selected fragment above XXX bp with 0.AAX AMPure. Fragments size distribution was almost homogeneous XXX (Fig. \@ref(fig:TapeStationBeads)). We obtained between XX and XX $ng$ of DNA, enough to proceed to 4 repeats of capture per pool.
+
+```{r TapeStationPostBeads, fig.cap="Pools size assessment post beads.", eval=F}
+knitr::include_graphics("parvicapture_data/TapeStationPostBeads.png")
+```
 
 ## Capture
 
-...
+We split the 4 pools in 16 reactions (4 replicates for each) and realized the capture following [ArborScience protocol](https://arborbiosci.com/wp-content/uploads/2018/04/myBaits-Manual-v4.pdf). We obtained between XXX and XXX ng of DNA per pool assessed by Qubit (with the four replicates pooled, Table \@ref(tab:QubitCapture)). We thus built the final pools for sequencing lanes. We thus obtained XX $\mu L$ of Lane 1 at $XX~nM$ and XX $\mu L$ of Lane 2 at $XX~nM$ ([see google sheets for more details]()). The material has been sent to IGA for sequencing on Illumina HiSeq 3000 on two lanes of pair-ends 150 bp sequences.

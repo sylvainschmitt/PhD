@@ -1,25 +1,4 @@
----
-title: "A06 : Biotic Model (NCI)"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt & Anne Baranger
-output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-  bookdown::word_document2: default
-linestretch: 1.5
----
-
-```{r setup, include=FALSE}
+```{r setupBiotic, include=FALSE}
 rm(list = ls()[ls() != "Model"]) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -35,7 +14,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data, eval=T}
+```{r dataBiotic, eval=T}
 # traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
 #   googlesheets::gs_read("AllTraits") %>%
 #   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
@@ -65,7 +44,7 @@ load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
-# Introduction {-}
+# Biotic Model (NCI)
 
 The aim of this document is to fit the biotic model (equation \@ref(eq:Competition)) with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit. We built the full models for all traits and all observations for all neighbors in a radius of 20m with the method to deal with edge effect with the highest likelihood.
 
@@ -90,13 +69,13 @@ where:
 * $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 * Gamma law was chosen as non informative flat prior on $\mathbb{R}^+$ for neighbors distance effect and Normal law standard error.
 
-```{r mdata, fig.cap="prepared data"}
+```{r mdataBiotic, fig.cap="prepared data"}
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 # traits <- c("invLA")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
     # sample_n(50) %>%
-    left_join(select(Competition, idTree, AreaOutside20) 
+    left_join(dplyr::select(Competition, idTree, AreaOutside20) 
               %>% unique())
   Competition_trait <- Competition
   Competition_trait$idTree <- match(Competition_trait$idTree, data_trait$idTree)
@@ -118,9 +97,7 @@ mdata <- lapply(traits, function(trait){
 names(mdata) <- traits
 ```
 
-# Sampling
-
-## Code
+### Code
 
 ```{stan, output.var="Model", echo=T, eval=F, cache=F}
 data {
@@ -179,7 +156,7 @@ generated quantities {
 }
 ```
 
-## Summary
+### Summary
 
 ```{r }
 # fits <- lapply(mdata, function(x)
@@ -200,7 +177,7 @@ lapply(as.list(traits), function(trait)
   kable_styling()
 ```
 
-## Chains
+### Chains
 
 ```{r , fig.cap="Markov chains trace plot after warmup for SLA model."}
 # lapply(fits, check_divergences)
@@ -208,13 +185,13 @@ mcmc_trace(as.array(fits$LT), regex_pars = c(pars, "lp__"),
              facet_args = list(labeller = label_parsed))
 ```
 
-## Pairs
+### Pairs
 
 ```{r , fig.cap="Markov chains pairs plot after warmup  for SLA model.", fig.height=12, fig.width=12}
 mcmc_pairs(as.array(fits$invLA), regex_pars = pars)
 ```
 
-## Posteriors
+### Posteriors
 
 ```{r , fig.cap="Model parameters posterior."}
 cowplot::plot_grid(plotlist = lapply(traits, function(trait)
@@ -234,7 +211,7 @@ cowplot::plot_grid(plotlist = lapply(traits, function(trait)
   labels = traits, nrow = 2)
 ```
 
-## Predictions
+### Predictions
 
 ```{r , fig.cap="Predictions.", fig.width=12, fig.height=12}
 lapply(as.list(traits), function(trait)
@@ -254,7 +231,3 @@ lapply(as.list(traits), function(trait)
   facet_wrap(~ trait, scales = "free", nrow = 3) +
   scale_color_discrete("Complex", labels = c("Eschweilera", "Symphonia"))
 ```
-
-# Conclusion
-
-# References

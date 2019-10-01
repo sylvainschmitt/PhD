@@ -1,16 +1,4 @@
----
-title: "A04 : Abiotic Model (TWI)"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt & Anne Baranger
-output: 
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setupAbiotic, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -26,7 +14,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data, eval=T}
+```{r dataAbiotic, eval=T}
 # traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
 #   googlesheets::gs_read("AllTraits") %>%
 #   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
@@ -56,7 +44,7 @@ load("./functional_save/Individuals.Rdata")
 load("./functional_save/CompetitionMatrix.Rdata")
 ```
 
-# Introduction {-}
+# Abiotic Model (TWI)
 
 The aim of this document is to fit the abiotic model (equation \@ref(eq:Competition)) with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the abiotic model with mixed effects (fixed for complex and random for species).
 
@@ -76,7 +64,7 @@ where:
 * $\alpha$ and $\beta_{TWI}$ are linear model parameters. $\alpha$ and $\beta_TWI$ can range in positive or negative values. Normal flat law and gamma law were respectively chosen as non informative flat priors on $\mathbb{R}$ and $\mathbb{R}^+$;
 * $\sigma$ is normal law standard error, and will, be chosen with positive values. Therefore, a gamma law was chosen as non informative flat prior on $\mathbb{R}^+$.
 
-```{r mdata, fig.cap="Prepared data."}
+```{r mdataAbiotic, fig.cap="Prepared data."}
 traits <- c("invSLA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, function(trait){
   data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),]
@@ -100,13 +88,13 @@ lapply(as.list(traits), function(trait)
   facet_wrap(~ Model, scales = "free", nrow = 3)
 ```
 
-# Sampling  {-}
+  # Sampling  {-}
 
 The model correclty converged with acceptable parameters correlation and correct predictions. Parameters posterior values and uncertainties will be discussed once the full model sampled in another document.
 
 ## Code
 
-```{stan output.var="Model", echo=T, eval=F}
+```{stan output.var="Model", echo=T, eval=F, cache=F}
 data {
   int<lower=1> N ; // # obs
   int<lower=1> S ; // # species

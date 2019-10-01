@@ -1,27 +1,4 @@
----
-title: "A09 : Niche and growth"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-  bookdown::word_document2: default
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setupNichenGrowth, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -39,7 +16,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data}
+```{r dataNichenGrowth}
 load("./functional_save/Individuals.Rdata")
 load("../distributions/distribution_save/env.Rdata")
 load("../distributions/distribution_save/Competition.Rdata")
@@ -87,7 +64,7 @@ parameters <- lapply(fits, function(fit)
                SpeciesNum = 1:length(unique(filter(Complexes, Complex == complex)$Species)),
                Species = levels(as.factor(filter(Complexes, Complex == complex)$Species)))
   ) %>% bind_rows()) %>% 
-  select(Complex, Species, parameter, variable, value) %>% 
+  dplyr::select(Complex, Species, parameter, variable, value) %>% 
   reshape2::dcast(Complex + Species ~ parameter + variable, value.var = "value")
 Individuals <- Individuals %>% 
   group_by(Species) %>% 
@@ -104,7 +81,7 @@ Individuals <- Individuals %>%
   mutate(logSuitability = log(Suitability))
 ```
 
-# Introduction
+# Niche and growth
 
 The aim of this analysis is to quickly explore the potential role of species relative niche in tree growth. For that we used three different methods:
 
@@ -112,13 +89,13 @@ The aim of this analysis is to quickly explore the potential role of species rel
 1. We computed a vigor index for every individual based on the difference between species mean predicted growth and individual observed growth (**Individual vigor paragraph**)
 1. We integrated species niche in the growth model as a new reductor (**Traits in model paragraph**)
 
-# Individual growth
+## Individual growth
 
 We used the following model adapted from @Herault2011:
 $$log(AGR+1) \sim \mathcal{N}(AGRmax_{individual}.e^{-\frac12 .[\frac{log(\frac{dbh}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
 We obtained reasonable predicitons for individual growth (Fig. \@ref(fig:predicitonIndividualGrowth)), besides due to different sampling depth between individuals the model can be really uncertain for lot of individuals. Globally the niche was not related to individual growth (Fig. \@ref(fig:NicheRelationIndividualGrowth) and Tab. \@ref(tab:NicheLmIndividualGrowth)).
 
-```{stan modelIndividual, output.var="Model", echo=F, eval=F, cache=F}
+```{stan modelIndividualNichenGrowth, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -149,7 +126,7 @@ generated quantities {
 }
 ```
 
-```{r fits}
+```{r fitsNichenGrowth}
 data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(idTree %in% local(Individuals$idTree)) %>%
@@ -171,19 +148,19 @@ data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 #                             I = length(unique(data$idTree)),
 #                             ind = as.numeric(as.factor(data$idTree)),
 #                             indsp = data %>%
-#                               select(Species, idTree) %>%
+#                               dplyr::select(Species, idTree) %>%
 #                               mutate_all(as.factor) %>%
 #                               mutate_all(as.numeric) %>%
 #                               arrange(idTree) %>%
 #                               unique() %>%
-#                               select(Species) %>%
+#                               dplyr::select(Species) %>%
 #                               unlist()
 #                 ))
 # save(fit, file = "./functional_save/growth.Rdata")
 load("./functional_save/growth.Rdata")
 ```
 
-```{r predicitonIndividualGrowth, fig.cap="Model predictions for individual growth."}
+```{r predicitonIndividualGrowthNichenGrowth, fig.cap="Model predictions for individual growth."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -192,11 +169,11 @@ data %>%
   geom_line(aes(y = AGRpred))
 ```
 
-```{r NicheRelationIndividualGrowth, fig.cap="Individual growth - Niche relation."}
+```{r NicheRelationIndividualGrowthNichenGrowth, fig.cap="Individual growth - Niche relation."}
 data %>% 
   mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, AGRmaxind, logSuitability) %>% 
+  dplyr::select(Genus, Species, idTree, AGRmaxind, logSuitability) %>% 
   unique() %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   filter(!is.na(logSuitability)) %>% 
@@ -205,11 +182,11 @@ data %>%
   geom_smooth(method = "lm")
 ```
 
-```{r NicheLmIndividualGrowth}
+```{r NicheLmIndividualGrowthNichenGrowth}
 data %>% 
   mutate(AGRmaxind = apply(as.matrix(fit, pars = "AGRmaxind"), 2, mean)[as.numeric(as.factor(data$idTree))]) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, AGRmaxind, logSuitability) %>% 
+  dplyr::select(Genus, Species, idTree, AGRmaxind, logSuitability) %>% 
   unique() %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   filter(!is.na(logSuitability)) %>% 
@@ -220,7 +197,7 @@ data %>%
   kable(digits = 3, caption = "Significative coefficients for the model AGRmaxind ~ logSuitability for every species.")
 ```
 
-# Individual vigor
+## Individual vigor
 
 We used the following model adapted from @Herault2011:
 $$log(AGR+1) \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh}{Dopt_{species}})}{Ks_{species}}]^2}, \sigma)$$
@@ -228,7 +205,7 @@ And computed the following vigor index:
 $$Vigor_{individual}=\frac{\int _{t0_{individual}} ^{tend_{individual}} AGRobserved_{individual}}{\int _{t0_{individual}} ^{tend_{individual}} AGRpredicted_{individual}}$$
 We obtained reasonable predicitons for species growth (Fig. \@ref(fig:predicitonVigor)). Globally the niche was not related to individual vigor (Fig. \@ref(fig:NicheRelationVigor) and Tab. \@ref(tab:NicheLmVigor)).
 
-```{stan modelSp, output.var="Model", echo=F, eval=F, cache=F}
+```{stan modelSpNichenGrowth, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -253,7 +230,7 @@ generated quantities {
 }
 ```
 
-```{r fitSp}
+```{r fitSpNichenGrowth}
 data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(idTree %in% local(Individuals$idTree)) %>%
@@ -277,7 +254,7 @@ data <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./functional_save/growthsp.Rdata")
 ```
 
-```{r predicitonVigor, fig.cap="Model predictions for species growth."}
+```{r predicitonVigorNichenGrowth, fig.cap="Model predictions for species growth."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -286,14 +263,14 @@ data %>%
   geom_line(aes(y = AGRpred))
 ```
 
-```{r NicheRelationVigor, fig.cap="Individual vigor - niche relation."}
+```{r NicheRelationVigorNichenGrowth, fig.cap="Individual vigor - niche relation."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>%
   group_by(idTree) %>% 
   summarise(Vigor = (sum(agr)-sum(AGRpred))/n()) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, Vigor, logSuitability) %>% 
+  dplyr::select(Genus, Species, idTree, Vigor, logSuitability) %>% 
   unique() %>% 
     filter(!is.na(logSuitability)) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
@@ -302,14 +279,14 @@ data %>%
   geom_smooth(method = "lm")
 ```
 
-```{r NicheLmVigor}
+```{r NicheLmVigorNichenGrowth}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>%
   group_by(idTree) %>% 
   summarise(Vigor = (sum(agr)-sum(AGRpred))/n()) %>% 
   left_join(Individuals) %>% 
-  select(Genus, Species, idTree, Vigor, logSuitability) %>% 
+  dplyr::select(Genus, Species, idTree, Vigor, logSuitability) %>% 
   unique() %>% 
   filter(!is.na(logSuitability)) %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
@@ -320,13 +297,13 @@ data %>%
   kable(digits = 3, caption = "Significative coefficients for the model Vigor ~ logSuitability for every species.")
 ```
 
-# Niche in model
+## Niche in model
 
 We used the following model adapted from @Herault2011:
 $$log(AGR+1) \sim \mathcal{N}(AGRmax_{species}.e^{-\frac12 .[\frac{log(\frac{dbh}{Dopt_{species}})}{Ks_{species}}]^2}.e^{-\beta_{logSuitability}.logSuitability}, \sigma)$$
 We obtained reasonable predicitons for species growth (Fig. \@ref(fig:predicitonlogSuitability)). Globally the niche did seem to have little to no effect on individual growth, except for a negative effect on *S. globulifera* and a positive effect on *S. sp1* (Fig. \@ref(fig:TWIPosteriors)).
 
-```{stan modellogSuitability, output.var="Model", echo=F, eval=F, cache=F}
+```{stan modellogSuitabilityNichenGrowth, output.var="Model", echo=F, eval=F, cache=F}
 data {
   int<lower=1> N ; // Nb of observations
   vector<lower=0>[N] AGR ; // growth vector
@@ -353,7 +330,7 @@ generated quantities {
 }
 ```
 
-```{r fitlogSuitability}
+```{r fitlogSuitabilityNichenGrowth}
 data <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(idTree %in% local(Individuals$idTree)) %>%
@@ -367,7 +344,7 @@ data <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(agr = ddbh/dt) %>% 
   left_join(Individuals) %>% 
   ungroup() %>% 
-  select(idTree, Genus, agr, dbh, logSuitability, Species) %>% 
+  dplyr::select(idTree, Genus, agr, dbh, logSuitability, Species) %>% 
   mutate_at(vars("logSuitability"), scale) %>% 
   mutate_at(vars("logSuitability"), as.vector) %>% 
   na.omit()
@@ -383,7 +360,7 @@ data <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./functional_save/growthlogSuitability.Rdata")
 ```
 
-```{r predicitonlogSuitability, fig.cap="Model predictions for logSuitability growth."}
+```{r predicitonlogSuitabilityNichenGrowth, fig.cap="Model predictions for logSuitability growth."}
 data %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -392,12 +369,10 @@ data %>%
   geom_line(aes(y = AGRpred))
 ```
 
-```{r logSuitabilityPosteriors, fig.cap="Model posteriors for logSuitability effect on growth."}
+```{r logSuitabilityPosteriorsNichenGrowth, fig.cap="Model posteriors for logSuitability effect on growth."}
 bayesplot::mcmc_areas(as.array(fit, pars = c("logSuitability")))
 ```
 
-# Conclusion
+## Conclusion
 
 This was a rapide test. But at the exception of *Symphonia* species in method 3, all methods seem to indicant no link between species niche and individual growth. Method 3 only suggest an opposite effect of niche on individual growth for *Symphonia* species (in the sense of TWI, see previous document).
-
-# References

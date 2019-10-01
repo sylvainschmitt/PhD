@@ -1,26 +1,4 @@
----
-title: "A05 : Ontogenetic model (DBH)"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt & Anne Baranger
-output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-  bookdown::word_document2: default
-linestretch: 1.5
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setupOntogeny, include=FALSE}
 # rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -36,7 +14,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data, eval=T}
+```{r dataOntogeny, eval=T}
 # traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
 #   googlesheets::gs_read("AllTraits") %>%
 #   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
@@ -78,7 +56,7 @@ Individuals <- Individuals %>%
             funs(./sd(., na.rm = T)))
 ```
 
-```{r mdata}
+```{r mdataOntogeny}
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
@@ -96,7 +74,7 @@ mdata <- lapply(models, function(model){
 names(mdata) <- models
 ```
 
-# Introduction {-}
+# Ontogenetic model (DBH)
 
 The aim of this document is to fit the ontogenic model with a Michaelis Menten form (equation \@ref(eq:OntogenyMichaelis)) or with a liner form (equation \@ref(eq:OntogenyLinear)) with observed values of functional traits for our individuals. We prepared data excluding oultiers and scaling all continuous variable to ease model fit (see figure \@ref(fig:mdata)). We tested the ontogenic model with mixed effects (fixed for complex and random for species).
 
@@ -133,11 +111,11 @@ where:
 * $\beta_{DBH}$ represents the slope of the DBH effect;
 * $\sigma$ is normal law standard error, and will, therefore, be chosen with positive values;
 
-# Michaelis Menten {-}
+## Michaelis Menten
 
-## Code
+### Code
 
-```{stan output.var="Model",echo=T, eval=F}
+```{stan output.var="Model",echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1> S ; // # species
@@ -158,7 +136,7 @@ model {
 }
 ```
 
-## Summary
+### Summary
 
 ```{r }
 # fits <- lapply(mdata, function(x)
@@ -176,11 +154,11 @@ lapply(as.list(models), function(trait)
   kable_styling()
 ```
 
-# Linear {-}
+## Linear
 
-## Code
+### Code
 
-```{stan output.var="Model",echo=T, eval=F}
+```{stan output.var="Model",echo=T, eval=F, cache=F}
 data {
   int<lower=1>  N ; // # of observations
   int<lower=1> S ; // # species
@@ -201,7 +179,7 @@ model {
 }
 ```
 
-## Summary
+### Summary
 
 ```{r }
 # fits <- lapply(mdata, function(x)
@@ -219,7 +197,7 @@ lapply(as.list(models), function(trait)
   kable_styling()
 ```
 
-# Comparison
+## Comparison
 
 ```{r}
 load("./functional_save/DBH.Rdata")

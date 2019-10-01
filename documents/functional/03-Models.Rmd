@@ -1,28 +1,4 @@
----
-title: "A03 : Model"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt & Anne Baranger
-output:
-  bookdown::html_document2:
-    number_sections: yes
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-  bookdown::word_document2: default
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_model, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -35,7 +11,7 @@ path <- "../../data/Paracou/"
 ```
 
 
-```{r data, eval=T}
+```{r data_model, eval=T}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
   googlesheets::gs_read("AllTraits") %>% 
   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>% 
@@ -52,7 +28,7 @@ traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
   ungroup()
 paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
-  filter(idTree %in% traits$idTree) %>%
+  filter(idTree %in% local(traits$idTree)) %>%
   filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
          Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
          Genus == "Symphonia" & CensusYear == 2015) %>%
@@ -64,15 +40,15 @@ Individuals <- left_join(traits, paracou) %>%
 rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 ```
 
-# Introduction {-}
+# Model
 
 The subsequent analysis aimed to graphically explore variations in leaf traits of individuals tree from *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes according to 4 descriptors: (i) tree ontogeny, (ii) biotic interactions and (iii) abiotic environment, and (iv) phylogeny through taxonomic levels. From these observations we developed a generic model linking individual phenotype to its descriptors. The generic model will be inferred later using Bayesian inference.
 
-# Material & Methods {-}
+## Material & Methods
 
 Dataset used to build submodels gathered measures of 838 trees from Paracou field station. Sampling was made over  *Symphonia globulifera* and *Eschweilera clade Parvifolia* species complexes and 5 functional leaf traits were calculated (Table \@ref(tab:Traits)). Each individual was sampled with five leaves, and functional traits were then averaged by individual for subsequent analysis.
 
-```{r Traits, fig.cap="Functional traits measured, with trait unit, and abbreviation."}
+```{r TraitsModel, fig.cap="Functional traits measured, with trait unit, and abbreviation."}
 data.frame(
   Traits = c("Specific Leaf Area", "Leaf Dry Matter Content", "Leaf Thickness", "Leaf Area", 
              "Chlorophyll Content", "Branch Bark Thickness" , "Branch Bark Density", 
@@ -90,9 +66,9 @@ Environmental and ontogenetic descriptors were chosen according to a previous an
 
 As a first approach to explore possible model shapes, measures on both complexes were plotted for each trait according to descriptors. An indicative local regression was drawn on each graph by applying loess method to each complex.
 
-# Ontogenic model
+## Ontogenic model
 
-## Data exploration {data-width=200}
+### Data exploration {data-width=200}
 
 We used diameter at breast height (DBH) as an indirect proxy for ontogeny, besides DBH being strongly correlated with Dawkins index depicted here both light access and ontogeny effect ( see figure \@ref(fig:DBH)).
 
@@ -115,7 +91,7 @@ Individuals %>%
   facet_wrap(~ Trait, scales = "free")
 ```
 
-## Model
+### Model
 
 We explained leaf trait $Trait$ according to ontogeny following a normal law with a Michaelis-Menten model form:
 
@@ -137,9 +113,9 @@ where:
 Random nested effect will be discussed in part [Full model].
 
 
-# Competition model
+## Competition model
 
-## Data exploration
+### Data exploration
 
 We used the Neighborhood Competition Index (NCI) to depict competition. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with following formula:
 $$NCI_i = \sum _{j~|~\delta_{i,j}<\delta_{max}} ^{J_i} DBHj^\beta e^{-\alpha*\delta_{i,j}} ~|~ \begin{bmatrix} \beta \\ \alpha \\ \delta_{max} \end{bmatrix} = \begin{bmatrix} 2 \\ 1 \\ 20 \end{bmatrix}$$
@@ -161,7 +137,7 @@ Individuals %>%
   facet_wrap(~ Trait, scales = "free")
 ```
 
-## Model
+### Model
 
 We explained leaf trait $Trait$ according to competition following a normal law with a linear model form around a Neighborhood Crowding Index (including both neighbor diameter and distance) :
 
@@ -186,9 +162,9 @@ where:
 
 Random nested effect will be discussed in part [Full model].
 
-# Abiotic model
+## Abiotic model
 
-## Data exploration
+### Data exploration
 
 TWI was chosen to depict the impact of physical conditions variations in the community studied. 
 
@@ -207,7 +183,7 @@ Individuals %>%
   facet_wrap(~ Trait, scales = "free")
 ```
 
-## Model
+### Model
 
 We explained leaf trait $Trait$ according to abiotic environment following a normal law with a linear model form:
 
@@ -227,7 +203,7 @@ where:
 
 Random nested effect will be discussed in part [Full model].
 
-# Descriptors interactions
+## Descriptors interactions
 
 We explored interactions by exploring previous scatter form for each descriptor regarding SLA with different subset of another descriptor (e.g. low, middle and high values, see figure \@ref(fig:Interactions)). Globally, scatter did not seem to show interactions at the exception of two: SLA seemed to have a decreasing plateau for a similar slope with DBH when increasing either NCI or TWI. At low TWI or NCI the relation between SLA and DBH seemed even null, indicating an interaction of DBH with other descriptors.
 
@@ -269,11 +245,11 @@ cowplot::plot_grid(
   labels = c("DBH", "NCI", "TWI")) 
 ```
 
-# Full model
+## Full model
 
 After defining each submodel, we tried to gather them all in a full model including ontogeny, biotic and abiotic effects to explain individual phenotype.
 
-## Additive
+### Additive
 
 First model form to be investigated is a model where phenotype would be explained by each submodel independently in an additive model form. All constraints related in submodels remain true for full model building. Namely, a possibility of null response will have to be integrated, while avoiding to add non identifiable parameters.
 
@@ -298,7 +274,7 @@ where:
 * therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$ and $\sigma$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{Comp}$.
 
 
-## Hierarchical
+### Hierarchical
 
 Another way to combine models is to understand them through a hierarchy of interacting descriptors. Thus, ontogeny effect will be assumed as the major descriptor of phenotype interacting with environment. Michaelis-menten model form used for ontogeny reach a saturation plateau, which value will be influenced by the two environmental descriptor, namely, abiotic and biotic effect.
 
@@ -324,7 +300,7 @@ where:
 * $\sigma$ is the normal law standard error, and will, be chosen with positive values;
 * therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\alpha_{env}$, $\alpha$, $\beta_{DBH}$, $\alpha_{NCI}$ and $\sigma$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for $\beta_{TWI}$ and $\beta_{Comp}$.
 
-# Random nested effects
+## Random nested effects
 
 In previous models, taxonomic levels were not integrated, but individuals displayed different trends depending on complex and species they belonged to. We chose to deal with complex as fixed effect because they were represented only by two levels ($C=2$), and we will further look at complex differentiation by investigating overlap of parameters posteriors. In addition, species were integrated as random effect for all individuals. Consequently, the additive full model \@ref(eq:Additive) become:
 
@@ -341,11 +317,11 @@ where:
 * $s \in [1,S_c]$ where $S_c$ is the number of species in complex c;
 * $c \in [1,C]$ where $C$ is the number of complexes.
 
-# Inference strategy
+## Inference strategy
 
 Subsequent paragraph introduce general guidelines to help infer the final full model that might be tricky to make converge. Anyway, subsequent rules can be transgressed.
 
-## Tricks
+### Tricks
 
 To help the model convergence following tricks might be used:
 
@@ -354,7 +330,7 @@ To help the model convergence following tricks might be used:
 * Use a transformed parameter $\beta_{DBH}' = e^{-\beta_{DBH}}$ for $\beta_{DBH}$ inference to help $\beta_{DBH}$ explore a null effect of ontogeny (**and maybe use a similar for $\alpha_{NCI}$ that might be complicated to infer due to the strong exponential effect**)
 * __Hierarchical model sampling trick ?__
 
-## Data - Traits
+### Data - Traits
 
 Used data, and therefore functional traits, to infer models should follow the following order :
 
@@ -363,7 +339,7 @@ Used data, and therefore functional traits, to infer models should follow the fo
 1. Full dataset for two orthogonal traits (e.g. 838 observations of SLA and LT)
 1. Full dataset for all traits
 
-## Models
+### Models
 
 Inferred models and sub-models should follow the following order :
 
@@ -375,7 +351,7 @@ Inferred models and sub-models should follow the following order :
     1. Hierarchical (total or one-by-one if bug)
     1. Add taxonomic levels
 
-# Conclusion {-}
+## Conclusion
 
 In conclusion, we obtained the following full model to explain functional traits variation with ontogeny ($DBH$), abiotic environment ($TWI$), biotic interactions ($NCI$) and taxonomic levels ($C, S$ mixed effects, respectivelly fixed and random):
 
@@ -415,5 +391,3 @@ In conclusion, we obtained the following full model to explain functional traits
 * all $\sigma_{species}$ represents parameters variance for species;
 * $\sigma$ and $\sigma_{species}$ are standard errors, and thus will have positive values;
 * therefore, gamma laws were chosen as non informative flat priors on $\mathbb{R}^+$ for $\sigma$  and $\sigma_{species}$. Normal flat law were chosen as non informative flat prior on $\mathbb{R}$ for all $\Theta_{c,s}$ and $\Theta_c$.
-
-# References {-}
