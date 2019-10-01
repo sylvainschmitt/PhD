@@ -1,3 +1,6 @@
+# PhD 0.1.9145
+* phdpages: distribution integration
+
 # PhD 0.1.9144
 * phdpages: functional integration
 

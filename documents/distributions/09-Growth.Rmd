@@ -1,24 +1,9 @@
 ---
-title: "A09 : Species distribution and growth"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
 output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-  bookdown::word_document2: default
-linestretch: 1.5
+  html_document: default
+  pdf_document: default
 ---
-
-```{r setup, include=FALSE}
+```{r setup_growth, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -36,7 +21,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data}
+```{r data_growth}
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
@@ -85,7 +70,7 @@ parameters <- lapply(fits, function(fit)
                SpeciesNum = 1:length(unique(filter(Complexes, Complex == complex)$Species)),
                Species = levels(as.factor(filter(Complexes, Complex == complex)$Species)))
   ) %>% bind_rows()) %>% 
-  select(Complex, Species, parameter, variable, value) %>% 
+  dplyr::select(Complex, Species, parameter, variable, value) %>% 
   reshape2::dcast(Complex + Species ~ parameter + variable, value.var = "value")
 data <- trees %>% 
   left_join(env) %>% 
@@ -106,12 +91,14 @@ data <- trees %>%
   ungroup()
 ```
 
+# Growth
+
 ## Individual growth
 
 $$log(AGR+1) \sim \mathcal{N}(AGRmax_{ind}.e^{(-\frac12.\frac{log(\frac{dbh}{Dopt})}{Ks},^2}, sigma) \\ AGRmax_{ind} \sim \mathcal{N}(AGRmax,\sigma_{ind})$$
 
 
-```{r mdata}
+```{r mdata_growth}
 paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   collect() %>% 
@@ -127,7 +114,7 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   na.omit()
 ```
 
-```{r fits}
+```{r fits_growth}
 # Model <- stan_model("./distribution_models/Growth/growthInd.stan")
 # fit <- sampling(Model, chains = 2, save_warmup = F,
 #                 data = list(N = nrow(paracou),
@@ -150,7 +137,7 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/growthInd.Rdata")
 ```
 
-```{r prediciton}
+```{r prediciton_growth}
 paracou %>% 
   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>% 
   mutate(AGRpred = apply(as.matrix(fit, pars = "AGRpred"), 2, mean)) %>% 
@@ -267,27 +254,27 @@ paracou <-  src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
          dt = CensusYear - lag(CensusYear)) %>% 
   filter(ddbh > 0) %>% 
   mutate(agr = ddbh/dt) %>% 
-  left_join(select(data, idTree, logSuitability))
+  left_join(dplyr::select(data, idTree, logSuitability))
 ```
 
 ```{r fitDist}
-Model <- stan_model("./distribution_models/Growth/growthDist.stan")
-fit <- sampling(Model, chains = 2, save_warmup = F,
-                data = list(N = nrow(paracou),
-                            AGR = paracou$agr,
-                            dbh = paracou$dbh,
-                            suitability = paracou$logSuitability,
-                            S = length(unique(paracou$Species)),
-                            sp = as.numeric(as.factor(paracou$Species))
-                ))
-save(fit, file = "./distribution_save/growthDist.Rdata")
+# Model <- stan_model("./distribution_models/Growth/growthDist.stan")
+# fit <- sampling(Model, chains = 2, save_warmup = F,
+#                 data = list(N = nrow(paracou),
+#                             AGR = paracou$agr,
+#                             dbh = paracou$dbh,
+#                             suitability = paracou$logSuitability,
+#                             S = length(unique(paracou$Species)),
+#                             sp = as.numeric(as.factor(paracou$Species))
+#                 ))
+# save(fit, file = "./distribution_save/growthDist.Rdata")
 load("./distribution_save/growthDist.Rdata")
 ```
 
-```{r posteriorDist}
+```{r posteriorDist, eval=F}
 bayesplot::mcmc_areas(as.array(fit, pars = c("Niche")))
 ```
 
-```{r DistSummary}
+```{r DistSummary, eval=F}
 fit
 ```

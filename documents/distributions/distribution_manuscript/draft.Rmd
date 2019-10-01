@@ -63,11 +63,11 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 
   collect()
-load("./distribution_save/env.Rdata")
+load("../distribution_save/env.Rdata")
 ```
 
 ```{r predComplex}
-load("./distribution_save/Competition.Rdata")
+load("../distribution_save/Competition.Rdata")
 data <- trees %>% 
   left_join(env) %>% 
   left_join(Complexes) %>% 
@@ -95,7 +95,7 @@ mdata <- lapply(complexes, function(complex) {
                   sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
-load("./distribution_save/complexes.Rdata")
+load("../distribution_save/complexes.Rdata")
 names(fits)[1:2] <- c("Chartacea", "Parvifolia")
 fitsComplex <- fits
 predComplex <- lapply(names(fits), function(complex){
@@ -141,7 +141,7 @@ predComplex <- lapply(names(fits), function(complex){
 ```
 
 ```{r predSpecies}
-load("./distribution_save/Competition.Rdata")
+load("../distribution_save/Competition.Rdata")
 Competition <- Competition %>% 
   mutate(dij = ifelse(dij <1, 1, dij)) %>% 
   left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
@@ -171,7 +171,7 @@ mdata <- lapply(complexes, function(complex) {
          as.matrix())
 })
 names(mdata) <- complexes
-load("./distribution_save/species.Rdata")
+load("../distribution_save/species.Rdata")
 predSpecies <- lapply(complexes, function(complex){
 
   N <- 25

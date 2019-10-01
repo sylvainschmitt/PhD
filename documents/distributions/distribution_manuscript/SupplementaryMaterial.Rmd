@@ -3,17 +3,17 @@ title: Supplementary Materials
 author: Sylvain Schmitt, Niklas Tysklind, Géraldine Derroire, Myriam Heuertz, Bruno Herault
 date: '`r Sys.Date()`'
 output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: no
+    toc_float: no
+  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::word_document2: default
-  bookdown::html_document2:
-    number_sections: false
-    toc: no
-    toc_float: no
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -56,8 +56,8 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(DBH = CircCorr/pi) %>% 
   collect() %>% 
   filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d)
-load("./distribution_save/env.Rdata")
-load("./distribution_save/Competition.Rdata")
+load("../distribution_save/env.Rdata")
+load("../distribution_save/Competition.Rdata")
 Competition <- Competition %>% 
   left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
   group_by(idTree) %>% 
@@ -130,7 +130,7 @@ data <- list(
 mdata <- lapply(data, function(x) list(N = nrow(x),
                                        Presence = x$Presence,
                                        Environment = x$Environment))
-load("./distribution_save/SingleModel.Rdata")
+load("../distribution_save/SingleModel.Rdata")
 preds <- lapply(names(fits), function(model){
   lapply(as.list(names(data)), function(type)
     cbind(type = type, data[[type]],

@@ -1,28 +1,4 @@
----
-title: "A01a: Single taxon model"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::word_document2: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_single, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -37,7 +13,7 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 ```
 
-```{r data}
+```{r data_single}
 n <- 100
 data <- list(
   no = data.frame(Environment = seq(0, 1, length.out = 100),
@@ -56,7 +32,7 @@ mdata <- lapply(data, function(x) list(N = nrow(x),
                                        Environment = x$Environment))
 ```
 
-```{r fits}
+```{r fits_single}
 # ModelB0 <- stan_model("./distribution_models/Bernoullis/B0.stan")
 # fitsB0 <- lapply(mdata, function(x) sampling(ModelB0, chains = 2, data = x))
 # names(fitsB0) <- names(mdata)
@@ -81,7 +57,7 @@ mdata <- lapply(data, function(x) list(N = nrow(x),
 load("./distribution_save/SingleModel.Rdata")
 ```
 
-# Introduction
+# Single taxon model
 
 The aim of this document is to find the best general form of model to fit a distribution model. Especially we are seeking for a model that can deal with three specific cases :
 
@@ -89,15 +65,15 @@ The aim of this document is to find the best general form of model to fit a dist
 * The niche optimum is a intermediate value of the environmental variable range
 * The niche optimum is a limit of the environmental variable range
 
-# Models
+## Models
 
 We used Bernoulli distribution to model species complex probability of presence. $B_0$ is the null model estimating a single theta along the whole environmental gradient. Thus $B_0$ cannot include any environmental effect. $B_{\alpha}$ is a Bernoulli logistic regression estimating a sigmoidal increasing or decreasing $\alpha$ along the whole environmental gradient in addition to the intercept $\alpha_0$. $B_{\alpha, \alpha_2}$ is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter. $B_{\alpha, \beta}$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}2$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable. $B_{\alpha, \beta}3$ is a Bernoulli logistic regression allowing a polynomial form in addition to sigmoids with the $\beta$ power parameter on the environmental variable.
 
-```{r ModelsTable, render="pandoc"}
+```{r ModelsTable_single, render="pandoc"}
 data.frame(
   Name = c("$B_0$", "$B_{\\alpha}$", "$B_{\\alpha, \\alpha_2}$", "$B_{\\alpha, \\beta}$",
            "$B_{\\alpha, \\beta}2$", "$B_{\\alpha, \\beta}3$"),
-  Formula = c("$Presence \\sim \\\mathcal{B}ernoulli(logit^{-1}(\\alpha_0))$",
+  Formula = c("$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0))$",
               "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment))$",
               "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment+\\alpha_2*Environment^2))$",
               "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment+Environment^{\\beta}))$",
@@ -110,11 +86,11 @@ data.frame(
   collapse_rows(1)
 ```
 
-# Results
+## Results
 
 $B_{\alpha}$ is responding well to the optimum in the limit of the environmental range and to no effect from the environmental variable. But $B_{\alpha}$ can't detect ecological optimum in the middle of the ecological range, besides it's the most commonly used model ! $B_{\alpha, \alpha_2}$ is giving the expected result in every case. $B_{\alpha, \beta}$, $B_{\alpha, \beta}2$, and $B_{\alpha, \beta}3$ are not dealing well with the intermediate niche optimum case. 
 
-```{r Predictions, fig.cap="Predictions."}
+```{r Predictions_single, fig.cap="Predictions."}
 lapply(names(fits), function(model){
   lapply(as.list(names(data)), function(type)
     cbind(type = type, data[[type]],
@@ -133,6 +109,6 @@ lapply(names(fits), function(model){
   facet_grid(model ~ type, scales = "free")
 ```
 
-# Discussion
+## Discussion
 
 In conclusion, $B_{\alpha, \alpha_2}$ is the best model in terms of convergence, likelihood, number of parameters, and prediction quality. Consequently we will retain $B_{\alpha, \alpha_2}$ to model species complex against the whole forest. We now need to develop a multinomial Dirichlet model to model joint niches of several species within complexes. We will additionnally check theoritically the behavior of $B_{\alpha, \alpha_2}$ in case of unweighted sampling in another document.

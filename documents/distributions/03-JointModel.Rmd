@@ -1,28 +1,4 @@
----
-title: "A02a: Joint taxon model"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::word_document2: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_joint, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -37,7 +13,7 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 ```
 
-```{r data}
+```{r data_joint}
 n <- 100
 data <- list(
   no = data.frame(Environment = seq(0, 1, length.out = 100),
@@ -83,7 +59,7 @@ mdata <- lapply(data, function(x)
                   function(sp) as.numeric(x$Species == sp))))
 ```
 
-```{r fit}
+```{r fit_joint}
 # Model <- stan_model("./distribution_models/JointModel.stan")
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- names(mdata)
@@ -92,7 +68,7 @@ load("./distribution_save/Dirichlet.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
-# Introduction
+# Joint taxon model
 
 The aim of this document is to find the best general form of model to fit a joint distribution model. Especially we are thinking for a model that can deal with three specific cases :
 
@@ -100,7 +76,7 @@ The aim of this document is to find the best general form of model to fit a join
 * The niche optimum is in a intermediate value of the environmental variable range
 * The niche optimum is at a limit of the environmental variable range
 
-# Models
+## Models
 
 The model used follow a Multinomial and Dirichlet conjugated distributions with a quadratic formed generalized through the softmax function. Each observation is defined by a simplex of size number of species $S$ coded in 0 for all species absent and 1 for species present. Consequently, $S$ values of $\alpha$, $\beta$ and $\gamma$ are inferred to compute the niche of each species along the environmental variable relativelly to other species distributions (sum being equal to 1).
 
@@ -109,11 +85,11 @@ Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*E
 {Log~Probability~Mass~Function}_{Dirichlet~Multinomial}(y|\alpha) = \Gamma(\sum \alpha)  + \sum(\Gamma(\alpha + y)) - \Gamma(\sum \alpha+\sum y) - \sum\Gamma(\alpha)
 $$
 
-# Results
+## Results
 
 The model is responding well to the optimum in the limit of the environmental range and to no effect from the environmental variable. Nevertheless, we can notice that intermediate and limit case are similar as the relative abundance is infered here, and consequently even if the complex abundance is low in intermediate case the relative abundance of the sister species can be high.
 
-```{r Predictions, fig.cap="Predictions."}
+```{r Predictions_joint, fig.cap="Predictions."}
 lapply(names(mdata), function(type)
   lapply(1:3, function(sp)
     cbind(type = type, data[[type]],
@@ -136,7 +112,7 @@ lapply(names(mdata), function(type)
   facet_wrap(~ type, nrow = 3)
 ```
 
-# Discussion
+## Discussion
 
 We will additionnally check theoritically the behavior of the model in case of unweighted sampling in another document.
 

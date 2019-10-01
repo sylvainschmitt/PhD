@@ -1,27 +1,4 @@
----
-title: "A06: Species distributions"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-linestretch: 1.5
-# csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-# bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_species, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -42,7 +19,7 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
-```{r trees}
+```{r trees_species}
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
@@ -53,7 +30,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect()
 ```
 
-```{r env}
+```{r env_species}
 # env <- trees %>%
 #   dplyr::select(idTree, Xutm, Yutm) %>%
 #   unique()
@@ -76,7 +53,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 ```
 
-```{r Competition}
+```{r Competition_species}
 # cl <- makeCluster(4)
 # clusterExport(cl, list("data", "path"))
 # Competition <- clusterMap(cl,
@@ -117,7 +94,7 @@ Competition <- Competition %>%
             NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1))
 ```
 
-```{r complexes}
+```{r complexes_species}
 Complexes <- bind_rows(
   data.frame(Complex = "Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
@@ -136,7 +113,7 @@ Complexes <- bind_rows(
              Species = c("globulifera", "sp.1")))
 ```
 
-```{r data}
+```{r data_species}
 data <- trees %>% 
   left_join(env) %>% 
   left_join(Complexes) %>% 
@@ -148,7 +125,7 @@ data <- trees %>%
   ungroup()
 ```
 
-```{r mdata}
+```{r mdata_species}
 complexes <- unique(Complexes$Complex)
 mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
@@ -164,7 +141,7 @@ mdata <- lapply(complexes, function(complex) {
 names(mdata) <- complexes
 ```
 
-```{r fit}
+```{r fit_species}
 # Model <- stan_model("./distribution_models/JointModel.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
@@ -178,17 +155,17 @@ species <- lapply(mdata, function(data)
   mutate(SpeciesLong = paste(substr(complex, 1, 1), Species))
 ```
 
-# Introduction
+# Species distributions
 
 The aim of this document is to study the distribution at micro-environmental scale with biotic and abiotic environment of species within species complexes in Paracou (not the whole species complex).
 
-# Material and Methods
+## Material and Methods
 
-## Study site
+### Study site
 
 Paracou
 
-## Individuals
+### Individuals
 
 Defined in document [A04-Complexes](A04-Complexes.html):
 
@@ -199,7 +176,7 @@ Defined in document [A04-Complexes](A04-Complexes.html):
 * *Talisia*
 * *Symphonia*
 
-## Environmental variables
+### Environmental variables
 
 Defined in document [A03-Descriptors](A03-Descriptors.html):
 
@@ -207,7 +184,7 @@ Defined in document [A03-Descriptors](A03-Descriptors.html):
 * $NCI_{hetero}$
 * $NCI_{con}$
 
-## Analysis
+### Analysis
 
 We analysed species distribution within species complex by comparing to which species belonged occurrences of the species complex. Species distribution within species complex has been investigating through softmax regression following a conjugated Dirchlet and Multinomial distribution (see document [A02-JointModel](A01-JointModel.html)):
 
@@ -217,11 +194,11 @@ with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the i
 
 Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language [ref] and `rstan` package [ref] in the R environment [ref] (see supplementary material [S1: Model] for model equations and `stan` code).
 
-# Results
+## Results
 
 The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
 
-```{r summary}
+```{r summary_species}
 lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = c(pars), droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
@@ -246,7 +223,7 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:3)
 ```
 
-```{r posterior, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
+```{r posterior_species, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
 lapply(lapply(fits, as.array, pars = "beta"), 
        bayesplot::mcmc_intervals_data) %>% 
   bind_rows(.id = "complex") %>% 
@@ -279,7 +256,7 @@ lapply(lapply(fits, as.array, pars = "beta"),
   scale_color_discrete(guide = "none")
 ```
 
-```{r posterior2, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
+```{r posterior2_species, fig.cap="Model parameters posterior.", fig.width=10, fig.height=14}
 lapply(lapply(fits, as.array, pars = "gamma"), 
        bayesplot::mcmc_intervals_data) %>% 
   bind_rows(.id = "complex") %>% 
@@ -313,7 +290,7 @@ lapply(lapply(fits, as.array, pars = "gamma"),
 ```
 
 
-```{r prediciton}
+```{r prediciton_species}
 preds <- lapply(complexes, function(complex){
 
   N <- 25
@@ -408,13 +385,11 @@ preds %>%
   gridExtra::grid.arrange(grobs = .$g)
 ```
 
-# Discussion
+## Supplementray materials
 
-# Supplementray materials
+### S1: Model
 
-## S1: Model
-
-```{stan Model, output.var="Model", echo=T, eval=F, cache=F}
+```{stan Model_species, output.var="Model", echo=T, eval=F, cache=F}
 functions {
   real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
     real alpha_plus = sum(alpha);
@@ -448,15 +423,13 @@ model {
 ```
 
 
-## S2: Diagnostic
+### S2: Diagnostic
 
 Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters.
 
-```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+```{r mcmc_species, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
 mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
-
-# References

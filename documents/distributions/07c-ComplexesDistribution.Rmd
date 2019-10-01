@@ -1,23 +1,4 @@
----
-title: "A05: Complexes distributions"
-date: '`r Sys.Date()`'
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
-  github_document: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-linestretch: 1.5
----
-
-```{r setup, include=FALSE}
+```{r setup_compdistc, include=FALSE}
 # rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -38,7 +19,7 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
-```{r trees}
+```{r trees_compdistc}
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
@@ -49,7 +30,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect()
 ```
 
-```{r env}
+```{r env_compdistc}
 # env <- trees %>%
 #   dplyr::select(idTree, Xutm, Yutm) %>%
 #   unique()
@@ -73,7 +54,7 @@ load("./distribution_save/env.Rdata")
 ```
 
 
-```{r Competition}
+```{r Competition_compdistc}
 # cl <- makeCluster(4)
 # clusterExport(cl, list("data", "path"))
 # Competition <- clusterMap(cl,
@@ -107,7 +88,7 @@ load("./distribution_save/env.Rdata")
 load("./distribution_save/Competition.Rdata")
 ```
 
-```{r complexes}
+```{r complexes_compdistc}
 Complexes <- bind_rows(
   data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
@@ -126,14 +107,14 @@ Complexes <- bind_rows(
              Species = c("globulifera", "sp.1")))
 ```
 
-```{r data}
+```{r data_compdistc}
 data <- trees %>% 
   left_join(env) %>% 
   left_join(Complexes) %>% 
   filter(!is.na(Plot))
 ```
 
-```{r mdata}
+```{r mdata_compdistc}
 complexes <- unique(Complexes$Complex)
 data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex) {
@@ -151,9 +132,9 @@ mdata <- lapply(complexes, function(complex) {
                                         NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*hetero)+1),
                                         NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*con)+1)))
   list(N = nrow(data_complex),
-       K = 4,
+       K = 3,
        Y = as.numeric(data_complex$Complex == complex),
-       X = dplyr::select(data_complex, TWI, NCIother, NCIhetero, NCIcon) %>%
+       X = dplyr::select(data_complex, TWI, NCIother, NCIhetero) %>%
          mutate_all(funs(scale)) %>%
          as.matrix(),
        w = ifelse(data_complex$Complex == complex,
@@ -161,32 +142,28 @@ mdata <- lapply(complexes, function(complex) {
                   sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
-reshape2::melt(mdata$Symphonia$X) %>% 
-  ggplot(aes(value)) +
-  geom_histogram() +
-  facet_wrap(~ Var2, scales = "free")
 ```
 
-```{r fit}
-Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
-fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
-names(fits) <- complexes
-save(fits, file = "./distribution_save/complexes.Rdata")
-load("./distribution_save/complexes.Rdata")
+```{r fit_compdistc, eval=F}
+# Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
+# fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
+# names(fits) <- complexes
+save(fits, file = "./distribution_save/complexes2.Rdata")
+load("./distribution_save/complexes2.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
-# Introduction
+# Complexes distributions (NCIhetero)
 
 The aim of this document is to study the distribution at micro-environmental scale with biotic and abiotic environment of whole species complexes in Paracou (not species within complexes).
 
-# Material and Methods
+## Material and Methods
 
-## Study site
+### Study site
 
 Paracou
 
-## Individuals
+### Individuals
 
 Ddefined in document [A04-Complexes](A04-Complexes.html):
 
@@ -197,15 +174,15 @@ Ddefined in document [A04-Complexes](A04-Complexes.html):
 * *Talisia*
 * *Symphonia*
 
-## Environmental variables
+### Environmental variables
 
 Defined in document [A03-Descriptors](A03-Descriptors.html):
 
 * TWI
 * $NCI_{other}$
-* $NCI_{complex}$
+* $NCI_{hetero}$
 
-## Analysis
+### Analysis
 
 We analysed species complex distribution by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Species complex distribution has been investigating through logistic regression following a Bernoulli distribution (model with the best likelihood and results see document [A01-SingleModel](A01-SingleModel.html)):
 
@@ -214,11 +191,11 @@ with $X$ the matrix of environmental descriptors of size $[N,K]$, $\alpha$ the i
 
 Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between traits and between effects. A Bayesian method was used to infer parameters of the model regarding each leaf traits using `stan` language and `rstan` package in the R environment (see supplementary material [S1: Model] for model equations and `stan` code).
 
-# Results
+## Results
 
 The model inference correctly converged without divergent transition and resulted in a correct predictions density distribution (see supplementary material [S2: Diagnostic]).
 
-```{r summary}
+```{r summary_compdistc, eval=F}
 lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = pars, droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
@@ -226,8 +203,7 @@ lapply(fits, function(fit)
   dplyr::select(complex, term, descriptor, estimate) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
   mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIhetero",
-                                    `4` = "NCIcon")) %>% 
+                                    `2` = "NCIother", `3` = "NCIcon")) %>% 
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
@@ -241,98 +217,7 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1)
 ```
 
-```{r posterior, fig.cap="Model parameters posterior."}
-lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit, pars = pars))) %>% 
-  bind_rows(.id = "complex") %>% 
-  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIhetero",
-                                    `4` = "NCIcon")) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
-  filter(parameter != "alpha") %>% 
-  dplyr::select(-outer_width, -inner_width, -point_est) %>% 
-  dplyr::select(complex, parameter, descriptor, ll, l, m, h, hh) %>% 
-  ggplot(aes(x = complex, xend = complex, col = descriptor, fill = descriptor)) +
-  geom_hline(yintercept = 0, color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_grid(descriptor ~ parameter, labeller = label_parsed, scales = "free_y") +
-  xlab("") + ylab("") + 
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
-```
-
-```{r prediciton, fig.cap="Predictions."}
-preds <- lapply(names(fits), function(complex){
-
-  TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
-             to = max(mdata[[complex]]$X[,1]), length.out = 100)
-  NCIother <- seq(from = min(mdata[[complex]]$X[,2]), 
-             to = max(mdata[[complex]]$X[,2]), length.out = 100)
-  NCIhetero <- seq(from = min(mdata[[complex]]$X[,3]), 
-             to = max(mdata[[complex]]$X[,3]), length.out = 100)
-  NCIcon <- seq(from = min(mdata[[complex]]$X[,4]), 
-                   to = max(mdata[[complex]]$X[,4]), length.out = 100)
-
-  alpha <- as.matrix(fits[[complex]], pars = "alpha")
-  beta <- as.matrix(fits[[complex]], pars = "beta")
-  gamma <- as.matrix(fits[[complex]], pars = "gamma")
-
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIhetero) + beta[n,4]*mean(NCIcon) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIhetero)^2 + gamma[n,4]*mean(NCIcon)^2)), simplify = F))
-  Ynciother <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*NCIother + beta[n,3]*mean(NCIhetero) + beta[n,4]*mean(NCIcon) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*NCIother^2 + gamma[n,3]*mean(NCIhetero)^2 + gamma[n,4]*mean(NCIcon)^2)), simplify = F))
-  Yncihetero <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*NCIhetero + beta[n,4]*mean(NCIcon) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*NCIhetero^2 + gamma[n,4]*mean(NCIcon)^2)), simplify = F))
-  Yncicon <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIhetero) + beta[n,4]*NCIcon + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIhetero)^2 + gamma[n,4]*NCIcon^2)), simplify = F))
-  
-  bind_rows(
-    data.frame(
-      Complex = complex,
-      variable = "TWI",
-      value = TWI,
-      Y = apply(Ytwi, 2, mean),
-      Y5 = apply(Ytwi, 2, quantile, probs = 0.05),
-      Y95 = apply(Ytwi, 2, quantile, probs = 0.95)),
-    data.frame(
-      Complex = complex,
-      variable = "NCIother",
-      value = NCIother,
-      Y = apply(Ynciother, 2, mean),
-      Y5 = apply(Ynciother, 2, quantile, probs = 0.05),
-      Y95 = apply(Ynciother, 2, quantile, probs = 0.95)),
-    data.frame(
-      Complex = complex,
-      variable = "NCIhtereo",
-      value = NCIhetero,
-      Y = apply(Yncihetero, 2, mean),
-      Y5 = apply(Yncihetero, 2, quantile, probs = 0.05),
-      Y95 = apply(Yncihetero, 2, quantile, probs = 0.95)),
-    data.frame(
-      Complex = complex,
-      variable = "NCIcon",
-      value = NCIcon,
-      Y = apply(Yncicon, 2, mean),
-      Y5 = apply(Yncicon, 2, quantile, probs = 0.05),
-      Y95 = apply(Yncicon, 2, quantile, probs = 0.95))
-  )}) %>% bind_rows()
-preds %>% 
-  left_join(group_by(data, Complex) %>% 
-              summarise(Yo = n()/nrow(.))) %>% 
-  ggplot(aes(x = value, col = Complex)) +
-  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
-  geom_line(aes(y = Y)) +
-  geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
-  facet_wrap(~ variable, nrow = 1) + 
-  xlab("") + ylab("Species complex relative abundance") +
-  scale_y_sqrt() +
-  theme(legend.position = "bottom")
-```
-
-```{r PosteriorNPrediction, fig.cap="Model parameters posterior and predictions."}
+```{r PosteriorNPrediction_compdistc, fig.cap="Model parameters posterior and predictions.", eval=F}
 g1 <-lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit, pars = "beta"))) %>% 
   bind_rows(.id = "complex") %>% 
@@ -377,13 +262,11 @@ cowplot::plot_grid(g1, g2, nrow = 2, rel_heights = c(1,2),
                    labels = LETTERS[1:2], label_x = 0.1)
 ```
 
-# Discussion
+## Supplementray materials
 
-# Supplementray materials
+### S1: Model
 
-## S1: Model
-
-```{stan Model, output.var="Model", echo=T, eval=F, cache = F}
+```{stan Model_compdistc, output.var="Model", echo=T, eval=F, cache = F}
 data {
   int<lower=1> N ;                // # of individuals
   int<lower=1> K ;                // # of environmental descriptors
@@ -404,15 +287,13 @@ model {
 }
 ```
 
-## S2: Diagnostic
+### S2: Diagnostic
 
 Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex without divergent transition, and relatively uncorrelated parameters.
 
-```{r mcmc, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+```{r mcmc_compdistc, eval=F, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
 mcmc_trace(as.array(fits$Symphonia, pars = c(pars, "lp__")),
              facet_args = list(labeller = label_parsed))
 # mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
 ```
-
-# References

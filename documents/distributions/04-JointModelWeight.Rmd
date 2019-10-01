@@ -1,28 +1,4 @@
----
-title: "A02b: Joint taxon model weight"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::word_document2: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_jointweighted, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -37,7 +13,7 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 ```
 
-```{r data}
+```{r data_jointweighted}
 data <- list(
   no = data.frame(Environment = c(sample(seq(0, 1, length.out = 1000), 850, replace = T),
                                   sample(seq(0, 1, length.out = 1000), 130, replace = T),
@@ -74,7 +50,7 @@ mdata <- lapply(data, function(x)
                   function(sp) as.numeric(x$Species == sp))))
 ```
 
-```{r fit}
+```{r fit_jointweighted}
 # Model <- stan_model("./distribution_models/JointModel.stan")
 # fits <- lapply(mdata, function(x) sampling(Model, chains = 2, data = x))
 # names(fits) <- names(mdata)
@@ -83,11 +59,11 @@ load("./distribution_save/DirichletWeight.Rdata")
 pars <- c("alpha", "beta", "gamma")
 ```
 
-# Introduction
+#  Joint taxon model weighted
 
 The aim of this document is to find the best practice to deal with unbalance sampling between absences and presences (e.g. 850 individuals from species A, 130 from species B and 20 for species C).
 
-# Models
+## Models
 
 The model used follow a Multinomial and Dirichlet conjugated distributions with a quadratic formed generalized through the softmax function. Each observation is defined by a simplex of size number of species $S$ coded in 0 for all species absent and 1 for species present. Consequently, $S$ values of $\alpha$, $\beta$ and $\gamma$ are inferred to compute the niche of each species along the environmental variable relativelly to other species distributions (sum being equal to 1).
 
@@ -96,11 +72,11 @@ Presence_{species} \sim \mathcal{Dirichlet~Multinomial}(softmax(\alpha + \beta*E
 {Log~Probability~Mass~Function}_{Dirichlet~Multinomial}(y|\alpha) = \Gamma(\sum \alpha)  + \sum(\Gamma(\alpha + y)) - \Gamma(\sum \alpha+\sum y) - \sum\Gamma(\alpha)
 $$
 
-# Results
+## Results
 
 The unweighted performed better with a better assessment of uncertainty. Both model are predicting species relative abundance and not species habitat suitability.
 
-```{r Predictions, fig.cap="Predictions."}
+```{r Predictions_jointweighted, fig.cap="Predictions."}
 preds <- lapply(names(mdata), function(type){
   N <- 100
   Env <- seq(0, 1, length.out = 100)
@@ -137,5 +113,5 @@ preds %>%
   scale_y_sqrt()
 ```
 
-# Discussion
+## Discussion
 

@@ -1,24 +1,4 @@
----
-title: "A09 : Tiputini"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-  bookdown::word_document2: default
-linestretch: 1.5
----
-
-```{r setup, include=FALSE}
+```{r setup_tiputini, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -36,7 +16,7 @@ rstan_options(auto_write = T)
 path <- "../../data/Ecuador/Tiputini/"
 ```
 
-```{r complexes}
+```{r complexes_tiputini}
 complexes <- bind_rows(
   data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
              Species = c("coriacea", "parvifolia", "juruensis", "rufifolia",
@@ -49,15 +29,15 @@ complexes <- bind_rows(
              Species = c("pulvinote")))
 ```
 
-```{r data}
+```{r data_tiputini}
 tiputini1 <- bind_rows(
   read_csv(file.path(path, "TIP_03_GR_FINAL.csv")) %>%
     mutate(Plot = 3) %>%
-    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, `D 2017`, Family, Species) %>%
+    dplyr::select(`Tree ID`, Plot, T1, `Tag No`, X, Y, `D 2017`, Family, Species) %>%
     rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = `D 2017`),
   read_csv(file.path(path, "TIP_05.csv"), skip = 1, ) %>%
     mutate(Plot = 5) %>%
-    select(`Tree ID`, Plot, T1, `Tag No`, X, Y, D17, Family, Species) %>%
+    dplyr::select(`Tree ID`, Plot, T1, `Tag No`, X, Y, D17, Family, Species) %>%
     rename(TreeID = `Tree ID`, SubPlot = T1, TreeFieldNum = `Tag No`, DBH = D17) %>%
     mutate(X = gsub(",", ".", X, fixed = T), Y = gsub(",", ".", Y, fixed = T)) %>%
     mutate(X = as.numeric(X), Y = as.numeric(Y))
@@ -68,7 +48,7 @@ tiputini1 <- bind_rows(
   mutate(Plot = as.character(Plot))
 tiputini2 <- read_csv(file.path(path, "Bosques_inundados_Yasuni_Gonzalo_Rivas.csv")) %>% 
   rename(TreeID = INDIVIDUOS, Plot = PAR, TreeFieldNum = PLACA, Family = FAMILIA, Genus = GENUS, Species = ESPECIES) %>% 
-  select(TreeID, Plot, TreeFieldNum, Family, Genus, Species) %>% 
+  dplyr::select(TreeID, Plot, TreeFieldNum, Family, Genus, Species) %>% 
   filter(!is.na(TreeID)) %>% 
   mutate(TreeFieldNum = as.character(TreeFieldNum)) %>% 
   mutate(Family = paste0(toupper(substr(Family, 1, 1)), tolower(substr(Family, 2, nchar(Family)))))
@@ -79,22 +59,22 @@ tiputini <- bind_rows(tiputini1, tiputini2) %>%
 rm(tiputini1, tiputini2)
 ```
 
-# Introduction
+# Tiputini
 
 Subsequent analysis aimed to test Tiputini data integration species complexes distribution modelling.
 
-# Data
+## Data
 
 Unfortunately, we lack data for sister species distribution modelling within species complexes (Fig. \@ref(fig:gdata)). We only have 4 complexes represented over 6 in current Tiputini data for plots 3 and 5 (Tab. \@ref(tab:tdata)). Moreover 2 species complexes only include 1 species and are thus unusuable and 2 species complexes include undetermined species, which we should remove, resulting in *Licania* to be also unusuable. Finally we only have *E. Parvifolia* species complex only represented by 1 individual of *E. juruensis* and 8 individuals of *E. parvifolia*, and for Paracou we used to have a minimum headcount of 10 individuals to infer the species niche. Consequently we need more data of Tiputini if we want to be able to infer sister species distribution within studied species complexes.
 
-```{r gdata, fig.cap="Species complex distribution in Tiputini plots."}
+```{r gdata_tiputini, fig.cap="Species complex distribution in Tiputini plots."}
 ggplot(tiputini, aes(X, Y, size = DBHplot, col = Complex, alpha = alpha)) +
   geom_point() +
   facet_wrap(~ Plot, labeller = "label_both", nrow = 2) +
   coord_equal()
 ```
 
-```{r tdata}
+```{r tdata_tiputini}
 tiputini %>% 
   filter(!is.na(Complex)) %>% 
   group_by(Family, Complex, Species) %>% 

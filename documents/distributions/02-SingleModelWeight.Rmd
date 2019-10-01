@@ -1,28 +1,4 @@
----
-title: "A01b: Single taxon model weight"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::word_document2: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_singleweighted, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -37,7 +13,7 @@ options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 ```
 
-```{r data}
+```{r data_singleweighted}
 absence <- data.frame(Environment = seq(0, 1, length.out = 1000), Presence = 0)
 data <- list(
   no = rbind(absence, 
@@ -55,7 +31,7 @@ mdata <- lapply(data, function(x) list(N = nrow(x),
                                                         1-sum(x$Presence)/length(x$Presence))))
 ```
 
-```{r fits}
+```{r fits_singleweighted}
 # unweighted <- stan_model("./distribution_models/Bernoullis/Balpha2.stan")
 # fitsUnweighted <- lapply(mdata, function(x) sampling(unweighted, chains = 2, data = x))
 # names(fitsUnweighted) <- names(mdata)
@@ -67,21 +43,21 @@ mdata <- lapply(data, function(x) list(N = nrow(x),
 load("./distribution_save/SingleModelWeight.Rdata")
 ```
 
-# Introduction
+# Single taxon model weighted
 
 The aim of this document is to find the best practice to deal with unbalance sampling between absences and presences (*e.g.* thousand absences observations against hundred presences).
 
-# Models
+## Models
 
 We used the model $B_{\alpha, \alpha_2}$ is a Bernoulli logistic regression allowing a quadratic form in addition to sigmoids with the $\alpha_2$ parameter:
 $$Presence \sim \mathcal{Bernoulli}(logit^{-1}(\alpha_0+\alpha*Environment+\alpha_2*Environment^2))$$
 with unweigthed observations or with absences weight equal to 9% and presence wieght equalt to 91%.
 
-# Results
+## Results
 
 The unweighted performed better with a better assessment of uncertainty. Both model are predicting species relative abundance and not species habitat suitability.
 
-```{r Predictions, fig.cap="Predictions."}
+```{r Predictions_singleweighted, fig.cap="Predictions."}
 lapply(names(fits), function(model){
   lapply(as.list(names(data)), function(type)
     cbind(type = type, data[[type]],
@@ -98,6 +74,6 @@ lapply(names(fits), function(model){
   facet_grid(model ~ type, scales = "free")
 ```
 
-# Discussion
+## Discussion
 
 We thus kept the unweighted model for further analysis keeping in mind that our model will predict species complex relative abundance depending on the environment gradient and not habitat suitability.

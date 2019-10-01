@@ -1,27 +1,4 @@
----
-title: "A03: Niche descriptors"
-date: '`r Sys.Date()`'
-author: Sylvain Schmitt
-output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-    theme: flatly
-  bookdown::word_document2: default
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-```{r setup, include=FALSE}
+```{r setup_descriptors, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -43,7 +20,7 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
-```{r trees}
+```{r trees_descriptors}
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
@@ -54,7 +31,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d)
 ```
 
-```{r abiotic}
+```{r abiotic_descriptors}
 # env <- trees %>%
 #   dplyr::select(idTree, Xutm, Yutm) %>%
 #   unique()
@@ -77,7 +54,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 # load("./distribution_save/env.Rdata")
 ```
 
-```{r biotic}
+```{r biotic_descriptors}
 # treesXY <- trees %>%
 #   dplyr::select(idTree, Xutm, Yutm) %>%
 #   unique()
@@ -94,7 +71,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
 load("./distribution_save/env.Rdata")
 ```
 
-```{r Competition}
+```{r Competition_descriptors}
 # cl <- makeCluster(6)
 # clusterExport(cl, list("data", "path", "d"))
 # Competition <- clusterMap(cl,
@@ -134,7 +111,7 @@ Competition <- Competition %>%
             NCIspecies = log(sum(DBHj^2*exp(-0.25*dij)*as.numeric(Species == Speciesj))+1))
 ```
 
-```{r complexes}
+```{r complexes_descriptors}
 complexes <- bind_rows(
   data.frame(Complex = "Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
@@ -153,7 +130,7 @@ complexes <- bind_rows(
              Species = c("globulifera", "sp.1")))
 ```
 
-```{r data}
+```{r data_descriptors}
 data <- trees %>% 
   left_join(env) %>% 
   left_join(complexes) %>% 
@@ -161,7 +138,7 @@ data <- trees %>%
   filter(!is.na(Plot))
 ```
 
-# Introduction
+# Descriptors
 
 Subsequent analysis aimed to select descriptors of species complex distribution.
 
@@ -169,13 +146,13 @@ Species distribution, and therefore species complex distribution, will be shaped
 
 We selected descriptors of species distribution by studying descriptors co-variation and keeping only little correlated variables with the best ecological meaning to represent abiotic environment and biotic interactions.
 
-# Material & Methods
+## Material & Methods
 
 Descriptors co-variation has been investigated tow-by-two by correlations and together by principal component analysis. Co-variations have been investigated together and separately for biotic and abiotic descriptors.
 
-# Results
+## Results
 
-## Correlations
+### Correlations
 
 Globally, topographic variables derived from the digital elevation model showed high level of co-variation (correlation between 0.57 and 0.9) at the exception of curvature. Regarding biotic descriptors digital canopy model and neighbor crowding index showed a non negligible correlation of 0.39 and neighbor crowding index for genus and species were correlated to 0.76.
 
@@ -203,7 +180,7 @@ fviz_pca_var(princomp(~ DBH + DEM + RelativeElevation +
              axes = c(1, 3), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
-## Biotic interactions
+### Biotic interactions
 
 
 ```{r pcaBiotic}
@@ -211,7 +188,7 @@ fviz_pca_var(princomp(~ MNC + NCI + NCIgenus + NCIspecies, data, cor = T),
              axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
-## Abiotic environment
+### Abiotic environment
 
 ```{r pcaAbiotic}
 fviz_pca_var(princomp(~ DEM + RelativeElevation +
@@ -219,8 +196,6 @@ fviz_pca_var(princomp(~ DEM + RelativeElevation +
              axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
-# Conclusion
+## Conclusion
 
 We thus selected three little correlated variables ($r < 0.13$) to represent species biotic and abiotic environment: (i) topographic wetness index (TWI) representing  water accumulation areas, crucial to tropical ecosystems [@ferry2010higher], (ii) neighbor crowding index of heterospecific ($NCI_{hetero}$) representing hetersopecific interaction and (iii) neighbor crowding index of conspecific ($NCI_{con}$) representing conspecific interaction
-
-# References

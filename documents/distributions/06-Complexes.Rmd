@@ -1,26 +1,4 @@
----
-title: "A04: Complexes definition"
-date: '`r Sys.Date()`'
-output:
-  bookdown::html_document2:
-    number_sections: no
-    toc: yes
-    toc_float: yes
-  bookdown::word_document2: flatly
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: no
-    keep_tex: true
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
----
-
-```{r setup, include=FALSE}
+```{r setup_complexes, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -42,11 +20,13 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
-# Introduction
+# Complexes delineation
 
 Species complex were defined based on evidence for low phylogenetic resolution or plastid DNA sharing in the clade [@baraloto_using_2012-1; @Gonzalez2009]: *Eschweilera* (Lecythidaceae); *Licania* (Chrysobalanaceae); *Iryanthera* (Myristicaceae); *Symphonia* (Clusiaceae); *Talisia* (Sapindaceae). We will further keep species with more than 10 individuals. We thus obtained 6 species complexes (Table \@ref(tab:summary)) including 2 to 9 species.
 
-```{r complexes}
+We compared species present in Paracou for the genus suspected as a species complex with @baraloto_using_2012-1 phylogeny and other resources if needed to complete the species complex delineation.
+
+```{r complexes_complexes}
 complexes <- bind_rows(
   data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
              Species = c("simiorum", "congestiflora")),
@@ -65,7 +45,7 @@ complexes <- bind_rows(
              Species = c("globulifera", "sp.1")))
 ```
 
-```{r trees}
+```{r trees_complexes}
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
@@ -74,15 +54,11 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   collect()
 ```
 
-```{r data}
+```{r data_complexes}
 data <- trees %>% 
   left_join(complexes, by = c("Genus", "Species")) %>% 
   filter(!is.na(Complex))
 ```
-
-# Complexes delineation
-
-We compared species present in Paracou for the genus suspected as a species complex with @baraloto_using_2012-1 phylogeny and other resources if needed to complete the species complex delineation.
 
 ## E. Chartacea
 
@@ -101,11 +77,11 @@ trees %>%
 ```
 
 ```{r ChartaceaBaraloto, fig.cap="Eschweilera clade Chartacea phylogeny from @baraloto_using_2012-1."}
-include_graphics("data/E.Chartacea_Baraloto.png")
+include_graphics("./distribution_data/E.Chartacea_Baraloto.png")
 ```
 
 ```{r ChartaceaChave, fig.cap="Eschweilera clade Chartacea phylogeny from Chave et al, unpublished."}
-include_graphics("data/E.Chartacea_Chave.png")
+include_graphics("./distribution_data/E.Chartacea_Chave.png")
 ```
 
 ## E. Parvifolia
@@ -125,15 +101,15 @@ trees %>%
 ```
 
 ```{r ParvifoliaBaraloto, fig.cap="Eschweilera clade Parvifolia phylogeny from @baraloto_using_2012-1."}
-include_graphics("data/E.Parvifolia_Baraloto.png")
+include_graphics("./distribution_data/E.Parvifolia_Baraloto.png")
 ```
 
 ```{r ParvifoliaChave, fig.cap="Eschweilera clade Parvifolia phylogeny from Chave et al, unpublished."}
-include_graphics("data/E.Parvifolia_Chave.png")
+include_graphics("./distribution_data/E.Parvifolia_Chave.png")
 ```
 
 ```{r ParvifoliaHeuertz, fig.cap="Eschweilera clade Parvifolia phylogeny from Heuertz et al, unpublished."}
-include_graphics("data/E.Parvifolia_Heuertz.png")
+include_graphics("./distribution_data/E.Parvifolia_Heuertz.png")
 ```
 
 ## Iryanthera
@@ -153,7 +129,7 @@ trees %>%
 ```
 
 ```{r IryantheraBaraloto, fig.cap="Iryanthera phylogeny from @baraloto_using_2012-1."}
-include_graphics("data/Iryanthera_Baraloto.png")
+include_graphics("./distribution_data/Iryanthera_Baraloto.png")
 ```
 
 ## Licania
@@ -173,15 +149,15 @@ trees %>%
 ```
 
 ```{r LicaniaBaraloto, fig.cap="Licania phylogeny from @baraloto_using_2012-1."}
-include_graphics("data/Licania_Baraloto.png")
+include_graphics("./distribution_data/Licania_Baraloto.png")
 ```
 
 ```{r Licania3Bardon, fig.cap="Clade Licania 3 phylogeny from @Bardon2016."}
-include_graphics("data/Licania3_Bardon.png")
+include_graphics("./distribution_data/Licania3_Bardon.png")
 ```
 
 ```{r Licania4Bardon, fig.cap="Clade Licania 4 phylogeny from @Bardon2016."}
-include_graphics("data/Licania4_Bardon.png")
+include_graphics("./distribution_data/Licania4_Bardon.png")
 ```
 
 ## Symphonia
@@ -201,7 +177,7 @@ trees %>%
 ```
 
 ```{r SymphoniaBaraloto, fig.cap="Symphonia phylogeny from @baraloto_using_2012-1."}
-include_graphics("data/Symphonia_Baraloto.png")
+include_graphics("./distribution_data/Symphonia_Baraloto.png")
 ```
 
 ## Talisia
@@ -221,10 +197,10 @@ trees %>%
 ```
 
 ```{r TalisiaBaraloto, fig.cap="Talisia phylogeny from @baraloto_using_2012-1."}
-include_graphics("data/Talisia_Baraloto.png")
+include_graphics("./distribution_data/Talisia_Baraloto.png")
 ```
 
-# Conclusion
+## Conclusion
 
 ```{r summary}
 data %>% 
@@ -236,5 +212,3 @@ data %>%
   kable_styling(full_width = F) %>% 
   collapse_rows(1:2)
 ```
-
-# References
