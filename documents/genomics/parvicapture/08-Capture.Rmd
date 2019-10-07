@@ -24,7 +24,7 @@ After library preparation, we prepared plates for capture. We proceed as follow 
 1. __Repeats__: X libraries were repeated from extraction to replace least concentrated libraries
 1. __Equimolar pools preparation__: Equimolar pools were built for capture
 1. __Pools fragment size evaluation__: Pool fragents sizes were evalutaed by Bioanalyzer
-1. __Pools fragment size selection__: Pool fragments size were filtered by Pippin between 250 and 700 bp
+1. __Pools fragment size selection__: Pool fragments size were filtered by Pippin (failed) and then by beads (due to pippin failure) between 200 and 700 bp, but with a narrow mode around 350 bp.
 1. __Capture__: ...
 
 ## Dosage
@@ -281,14 +281,38 @@ knitr::include_graphics("parvicapture_data/TapeStationPostPippin1.png")
 
 ### Beads test
 
-We tested size selection with AMPure beads. The idea is to (i) capture long fragments (> 700 bp) with a small volume of beads,  (ii) transfer supernatant without long fragments, and (iii) capture intermediate fragments (> 250 bp) with beads and discard supernatant. The complicated step is the selection of the second beads volume, as supernatant already included PEG and salts depending on the first beads volume. Consequently, we first tested different first beads volume from 0.55X to 0.4X (`r paste(round(seq(0.55, 0.4, length.out = 8),2), collapse = " ")`) with a second beads volume of 1X, resulting to 0.AAX cuting at XXXbp (Fig. \@ref(fig:lowerCut)). Finally, we tested different second beads volume from 0.30X to 0.20X (`r paste(round(seq(0.3, 0.2, length.out = 8),2), collapse = " ")`) with a first beads volume of 0.AAX, resulting to 0.AAX cutting at XXXbp (Fig. \@ref(fig:upperCut)). We made the test with 4 $\mu L$ of 1kb ladder in 96 $\mu L$ of $H_2OmQ$.
+We tested size selection with AMPure beads. The idea is to (i) capture long fragments (> 700 bp) with a small volume of beads,  (ii) transfer supernatant without long fragments, and (iii) capture intermediate fragments (> 250 bp) with beads and discard supernatant. The complicated step is the selection of the second beads volume, as supernatant already included PEG and salts depending on the first beads volume. Consequently, we first tested different first beads volume from 0.55X to 0.4X (`r paste(round(seq(0.55, 0.4, length.out = 8),2), collapse = " ")`) with a second beads volume of 1X, resulting to 0.53X cuting below 800bp (Fig. \@ref(fig:lowerCut)). Finally, we tested different second beads volume from 0.30X to 0.20X (`r paste(round(seq(0.3, 0.2, length.out = 8),2), collapse = " ")`) with a first beads volume of 0.53X, resulting to 0.3X cutting above 300bp (Fig. \@ref(fig:upperCut)). As results were not concluent, we did a third test with a first cut between 0.53, 0.55, 0.58, and 0.6 and a second cut between 0.4 and 0.5 resulting in 8 test samples. Size selection with a first cut at 0.6X and a second at 0.4X seemed to have the expected result with libraries between 250 and 650 bp (Fig. \@ref(fig:finalCut)). We made the test with 4 $\mu L$ of 1kb ladder in 96 $\mu L$ of $H_2OmQ$.
+
+```{r lowerCut, fig.cap="Beads size selection test I."}
+knitr::include_graphics("parvicapture_data/ElectroTestI.png")
+```
+
+```{r upperCut, fig.cap="Beads size selection test II.."}
+knitr::include_graphics("parvicapture_data/ElectroTestII.png")
+```
+
+```{r finalCut, fig.cap="Beads size selection test III."}
+knitr::include_graphics("parvicapture_data/ElectroTestIII.png")
+```
 
 ## Beads selection
 
-Beads selection have been realized on splitted pools (originally Pippin2), while keeping every step material in case we need to recover material. We removed long fragment > XXX bp with 0.AAX AMPure and selected fragment above XXX bp with 0.AAX AMPure. Fragments size distribution was almost homogeneous XXX (Fig. \@ref(fig:TapeStationBeads)). We obtained between XX and XX $ng$ of DNA, enough to proceed to 4 repeats of capture per pool.
+Beads selection have been realized on splitted pools (originally Pippin2), while keeping every step material in case we need to recover material. We removed long fragment > 700 bp with 0.6X AMPure and selected fragment above 200 bp with 0.4X AMPure. Fragments size distribution was almost homogeneous around 350 bp, except for a very small quantity of small DNA in pool D around 151 bp (Fig. \@ref(fig:TapeStationPostBeads)). We obtained between 1536 and 688 $ng$ of DNA, enough to proceed to 4 repeats of capture per pool with 172 to 384 $ng$ of DNA (Tab. \@ref(tab:SizeSelectionTab)).
 
-```{r TapeStationPostBeads, fig.cap="Pools size assessment post beads.", eval=F}
+Size selection with beads is a bit more permissive than Pippin, that's why we obtained a wider size distribution than expected and still have small distribution around 151 bp for pool D. Consequently, using beads we have to aim for a narrower spectrum and we thus lose more material (mean loss coeficient of 4, Tab. \@ref(tab:SizeSelectionTab)). On the other hand, size selection with beads resulted in a Gaussian distribution with a smaller variance with more fragments around 350 bp, which may be better for capture and sequencing.
+
+```{r TapeStationPostBeads, fig.cap="Pools size assessment post beads."}
 knitr::include_graphics("parvicapture_data/TapeStationPostBeads.png")
+```
+
+```{r SizeSelectionTab}
+data.frame(Pool = LETTERS[1:4], No = 4000, Qubit = c(3.84, 2.58, 1.72, 2.31)) %>% 
+  mutate(Nf = Qubit*10*40) %>% 
+  mutate(LossCoef = round(No/Nf)) %>% 
+  mutate(NCapture = Nf/4) %>% 
+  dplyr::select(-Qubit) %>% 
+  kable(col.names = c("Pool", "N origin (µg)", "N final (µg)", "Loss coefficient", "N capture (µg)"),
+        caption = "Beads size selection results.")
 ```
 
 ## Capture

@@ -1,3 +1,7 @@
+# PhD 0.1.9146
+* functional: manuscript v2
+
+
 # PhD 0.1.9145
 * phdpages: distribution integration
 

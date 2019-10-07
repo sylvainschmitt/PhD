@@ -3,17 +3,17 @@ title: Supplementary Materials
 author: Sylvain Schmitt, Bruno Herault, Emilie Ducouret, Anne Baranger, Niklas Tysklind,  Myriam Heuertz, Eric Marcon, Saint Omer Cazal, Geraldine Derroire
 date: '`r Sys.Date()`'
 output:
-  bookdown::html_document2:
-    number_sections: false
-    toc: no
-    toc_float: no
+  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: no
+    toc_float: no
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -143,6 +143,12 @@ preds <- lapply(models, function(model){
 
 <!-- SUPPLEMENTARY MATERIALS -->
 
+```{r abiotic, fig.cap='Principal Component Analysis (PCA) of abiotic topographic variables. All variables, slope, curvature, aspect, topgraphic rudgeness index (TRI), and topgraphic wetness index (TWI) are derived from the digital evlevation model (DEM) obtaine through LiDAR campaign in 2015.', fig.width=12, fig.height=12}
+factoextra::fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature +
+                          Aspect + TRI + TWI, Individuals, cor = T),
+               axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```
+
 ```{r dawkins, fig.cap='Diameter at breast height (DBH) and Dawkins index correlation. Box colors indicates the Dawkins index. DBH and Dawkins index correlation has been investigated by Anova. **** indicates a $p-value < 0.0001$. Letters indicate post-hoc groups investigated by Tukey Honest Significant Differences.'}
 tHSD <- multcompView::multcompLetters((mutate(Individuals, Dawkins = substr(Dawkins, 1, 1)) %>% 
                                  aov(DBH ~ Dawkins, .) %>% 
@@ -184,12 +190,6 @@ src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   geom_histogram(position = "dodge") +
   facet_wrap(~ Sample, scale = "free", nrow = 2) +
   xlab("Diameter at breast hiaght (dbh, cm)")
-```
-
-```{r abiotic, fig.cap='Principal Component Analysis (PCA) of abiotic topographic variables. All variables, slope, curvature, aspect, topgraphic rudgeness index (TRI), and topgraphic wetness index (TWI) are derived from the digital evlevation model (DEM) obtaine through LiDAR campaign in 2015.', fig.width=12, fig.height=12}
-factoextra::fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature +
-                          Aspect + TRI + TWI, Individuals, cor = T),
-               axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
 ```
 
 ```{r additiveModel}

@@ -185,8 +185,8 @@ model {
 # fits <- lapply(mdata, function(x)
 #   sampling(Model, chains = 2, data = x, save_warmup = F))
 # names(fits) <- models
-save(fits, file = "./functional_save/DBHlin.Rdata")
-load("./functional_save/DBHlin.Rdata")
+# save(fits, file = "./functional_save/DBHlin.Rdata")
+# load("./functional_save/DBHlin.Rdata")
 pars <- c( "alpha", "betaDBH", "sigma" )
 lapply(as.list(models), function(trait)
   broom::tidyMCMC(fits[[trait]], pars = c(pars, "lp__"), 

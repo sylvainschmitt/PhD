@@ -8,6 +8,7 @@ library(tidyverse)
 library(pophelper)
 library(dendextend)
 library(ggtree)
+library(adegenet)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -212,6 +213,120 @@ g.se <- cov.se %>%
 gridExtra::grid.arrange(g.llik, g.se, g.tree,   
                         heights = c(1, 2),
                         layout_matrix = rbind(c(1, 2), c(3, 3)))
+```
+
+## Site Frequency Structure
+
+### Two populations
+
+```{r vcf2sfs2pop, eval=F, echo=T}
+source("https://raw.githubusercontent.com/shenglin-liu/vcf2sfs/master/vcf2sfs.r")
+path <- "/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/variantCalling/paracouWeighted/"
+vcf <- file.path(path, "symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted.vcf")
+popmap <- file.path(path, "paracouWeighted.popmap")
+pops <- c("sp1", "globulifera")
+for(pop in pops){
+  vcf2dadi(vcf, popmap, paste0(path, pop, ".dadi"), pop)
+  dadi2fsc.1pop(paste0(path, pop, ".dadi"), paste0(path, pop, ".fastsim"),
+                pop, fold = T)
+}
+vcf2dadi(vcf, popmap, paste0(path, "all", ".dadi"), pops)
+dadi2fsc.2pop(paste0(path, "all", ".dadi"), paste0(path, "all", ".fastsim"),
+              pops, fold = T)
+```
+
+```{r sfs1pop2pop, fig.cap="Number of alleles per allele count and population."}
+pops <- c("sp1", "globulifera")
+lapply(pops, function(pop)
+  read_tsv(file.path(path, "..", "variantCalling", "paracouWeighted",
+                     paste0(pop, ".fastsim")), skip = 1) %>% gather()) %>% 
+  bind_rows() %>% 
+  separate(key, c("population", "AlleleCount"), convert = T) %>% 
+  mutate(population = gsub("d", "", population)) %>% 
+  filter(AlleleCount > 0) %>% 
+  ggplot(aes(AlleleCount, value, fill = population)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ population, nrow = 3) +
+  scale_fill_discrete(guide = "none") +
+  xlim(0,100) +
+  xlab("Allele count within population") + ylab("Number of alleles")
+```
+
+[Berlin presentation](https://github.com/speciationgenomics/presentations/blob/master/2019-8-Demographic_modeling_JM.pdf)
+
+```{r sfs2pop2pop, fig.cap="Number of alleles per allele count between population."}
+g <- read_tsv(file.path(path, "..", "variantCalling", "paracouWeighted",
+                        "all.fastsim"), skip = 1) %>%
+  reshape2::melt(value.name = "AlleleCount") %>% 
+  separate(X1, c("X1", "sp1"), convert = T) %>% 
+  separate(variable, c("X2", "globulifera"), convert = T) %>% 
+  dplyr::select(-X1, -X2) %>% 
+  filter(AlleleCount > 0) %>% 
+  ggplot(aes(sp1, globulifera, fill = log(AlleleCount+1))) +
+  geom_tile() +
+  scale_fill_gradientn(colours = rev(rainbow(10)))
+plotly::ggplotly(g)
+```
+
+### Three populations
+
+```{r vcf2sfs3pop, eval=F, echo=T}
+source("https://raw.githubusercontent.com/shenglin-liu/vcf2sfs/master/vcf2sfs.r")
+path <- "/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/variantCalling/paracouWeighted3pop/"
+vcf <- file.path(path, "symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted3pop.vcf")
+popmap <- file.path(path, "paracouWeighted3pop.popmap")
+pops <- c("sp1", "globuliferaTypeParacou", "globuliferaTypeRegina")
+for(pop in pops){
+  vcf2dadi(vcf, popmap, paste0(path, pop, ".dadi"), pop)
+  dadi2fsc.1pop(paste0(path, pop, ".dadi"), paste0(path, pop, ".fastsim"),
+                pop, fold = T)
+}
+popPairs <- combn(pops,2)
+for(i in 1:ncol(popPairs)){
+  vcf2dadi(vcf, popmap, paste0(path, popPairs[1,i], "_", popPairs[2,i], ".dadi"),
+           popPairs[,i])
+  dadi2fsc.2pop(paste0(path, popPairs[1,i], "_", popPairs[2,i], ".dadi"), 
+                paste0(path, popPairs[1,i], "_", popPairs[2,i], ".fastsim"),
+                popPairs[,i], fold = T)
+}
+```
+
+```{r sfs1pop3pop, fig.cap="Number of alleles per allele count and population."}
+pops <- c("sp1", "globuliferaTypeParacou", "globuliferaTypeRegina")
+lapply(pops, function(pop)
+  read_tsv(file.path(path, "..", "variantCalling", "paracouWeighted3pop",
+                     paste0(pop, ".fastsim")), skip = 1) %>% gather()) %>% 
+  bind_rows() %>% 
+  separate(key, c("population", "AlleleCount"), convert = T) %>% 
+  mutate(population = gsub("d", "", population)) %>% 
+  filter(AlleleCount > 0) %>% 
+  ggplot(aes(AlleleCount, value, fill = population)) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~ population, nrow = 3) +
+  scale_fill_discrete(guide = "none") +
+  xlab("Allele count within population") + ylab("Number of alleles")
+```
+
+[Berlin presentation](https://github.com/speciationgenomics/presentations/blob/master/2019-8-Demographic_modeling_JM.pdf)
+
+```{r sfs2pop3pop, fig.cap="Number of alleles per allele count between population."}
+popPairs <- combn(pops,2)
+g <- lapply(1:length(pops), function(i)
+  read_tsv(file.path(path, "..", "variantCalling", "paracouWeighted3pop",
+                     paste0(popPairs[1,i], "_", popPairs[2,i], ".fastsim")), skip = 1) %>% 
+    reshape2::melt(value.name = "AlleleCount")) %>% 
+  bind_rows() %>% 
+  separate(X1, c("population1", "pop1"), convert = T) %>% 
+  separate(variable, c("population2", "pop2"), convert = T) %>% 
+  mutate(population1 = gsub("d", "", population1)) %>% 
+  mutate(population2 = gsub("d", "", population2)) %>% 
+  filter(AlleleCount > 0) %>% 
+  ggplot(aes(pop1, pop2, fill = log(AlleleCount+1))) +
+  geom_tile() +
+  scale_fill_gradientn(colours = rev(rainbow(10))) +
+  facet_grid(population1 ~ population2) +
+  theme(axis.title = element_blank())
+plotly::ggplotly(g)
 ```
 
 ## Conclusion

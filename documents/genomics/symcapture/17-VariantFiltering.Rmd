@@ -564,4 +564,32 @@ plink2 \
   --allow-extra-chr \
   --keep treemix2.fam \
   --make-bed --out treemix/symcapture.all.biallelic.snp.filtered.nonmissing.treemix
+mkdir globuliferaTypeParacou
+plink2 \
+  --threads 8 \
+  --memory 80000 \
+  --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr \
+  --keep globuliferaTypeParacou.fam \
+  --make-bed --out globuliferaTypeParacou/symcapture.all.biallelic.snp.filtered.nonmissing.globuliferaTypeParacou
+mkdir globuliferaTypeRegina
+plink2 \
+  --threads 8 \
+  --memory 80000 \
+  --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr \
+  --keep globuliferaTypeRegina.fam \
+  --make-bed --out globuliferaTypeRegina/symcapture.all.biallelic.snp.filtered.nonmissing.globuliferaTypeRegina
+plink2 \
+  --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr \
+  --keep paracouWeighted/paracouWeighted.fam \
+  --make-bed --out paracouWeighted/symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted \
+  --recode vcf-iid
+plink2 \
+  --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr \
+  --keep paracouWeighted3pop/paracouWeighted3pop.fam \
+  --make-bed --out paracouWeighted3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted3pop \
+  --recode vcf-iid
 ```
