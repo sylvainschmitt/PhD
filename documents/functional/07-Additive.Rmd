@@ -43,19 +43,21 @@ path <- "../../data/Paracou/"
 # rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
 # save(Individuals, file = "./functional_save/Individuals.Rdata")
 load("./functional_save/Individuals.Rdata")
-load("./functional_save/CompetitionMatrix.Rdata")
 sdDBH <- sd(Individuals$DBH)
 Individuals <- Individuals %>% 
   rename(LMA = invSLA) %>% 
   group_by(Species) %>% 
   filter(n() > 20) %>% 
   ungroup() %>% 
-  left_join(Competition %>% 
-              group_by(idTree) %>% 
-              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
-  mutate(NCI = log(NCI)) %>% 
-  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
-            funs(./sd(., na.rm = T)))
+  group_by(SpeciesLong) %>% 
+  mutate(TWIs = mean(TWI, na.rm = T)) %>% 
+  mutate(TWIis = TWI - TWIs) %>% 
+  ungroup() %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWIs", "TWIis"),
+            funs(./sd(., na.rm = T))) %>% 
+  group_by(Genus) %>% 
+  mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+  ungroup()
 ```
 
 ```{r mdataAdditive}
@@ -65,15 +67,19 @@ models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 mdata <- lapply(models, function(model){
   trait <- strsplit(model, "-")[[1]][2]
   complex <- strsplit(model, "-")[[1]][1]
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+  data_ind <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
     filter(Genus == complex)
-  list(N = nrow(data_trait),
-       S = length(unique(data_trait$Species)),
-       Trait = unlist(data_trait[trait]),
-       DBH = data_trait$DBH,
-       TWI = data_trait$TWI,
-       NCI = data_trait$NCI,
-       species = as.numeric(as.factor(data_trait$Species)))
+  data_sp <- data_ind %>% 
+    dplyr::select(SpeciesNum, TWIs) %>% 
+    unique() %>% 
+    arrange(SpeciesNum) 
+  list(N = nrow(data_ind),
+       S = nrow(data_sp),
+       Trait = unlist(data_ind[trait]),
+       DBH = data_ind$DBH,
+       TWIs = data_sp$TWIs,
+       TWIis = data_ind$TWIis,
+       species = data_ind$SpeciesNum)
   })
 names(mdata) <- models
 ```
@@ -86,24 +92,28 @@ data {
   int<lower=1> S ; // # species
   vector[N] Trait ; // Trait
   vector[N] DBH ; // Diameter at Breast Height
-  vector[N] TWI ; // Topographic Wetness Index
-  vector[N] NCI ; // DBH neighbor
+  vector[S] TWIs ; // Topographic Wetness Index of species
+  vector[N] TWIis ; // Topographic Wetness Index of individual knowing species TWI_i|s
   int<lower=1, upper=S> species[N] ; // species index
 }
 parameters {
-  vector [S] alpha ; // Intercept
+  real alpha ; // genus intercept
+  vector [S] alpha_s ; // species intercepts
   vector<lower=0> [S]  betaDBH ; // DBH half-load
-  vector[S] betaTWI ; // TWI slope
-  vector[S] betaNCI ; // Competition slope
-  real<lower=0> sigma ; // Variance
+  real betaTWI ; // TWI slope
+  vector[S] gammaTWI ; // TWI slopee
+  real<lower=0> sigma_a ; // Variance of the species intercepts
+  real<lower=0> sigma_t ; // Variance
 }
 model {
   alpha ~ normal(0, 10^6) ; // Priors
+  alpha_s ~ normal(alpha, sigma_a) ;
   betaDBH ~ normal(0,1) ;
   betaTWI ~ normal(0,1) ;
-  betaNCI ~ normal(0,1) ;
-  sigma ~ cauchy(0, 5) ;
-  Trait ~ normal(alpha[species] .* (DBH ./ (betaDBH[species] + DBH)) + betaTWI[species] .* TWI +  betaNCI[species] .* NCI, sigma) ; // Likelihood
+  gammaTWI ~ normal(0,1) ;
+  sigma_a ~ normal(0, 1) ;
+  sigma_t ~ normal(0, 1) ;
+  Trait ~ normal(alpha_s[species] .* (DBH ./ (betaDBH[species] + DBH)) + betaTWI*TWIs[species] +  gammaTWI[species] .* TWIis, sigma_a) ; // Likelihood
 }
 ```
 
@@ -116,7 +126,7 @@ load("./functional_save/Additive.Rdata")
 ```
 
 ```{r additiveModel}
-load("./functional_save/InteractionReduced.Rdata")
+load("./functional_save/InterIntraTWI.Rdata")
 models <- list(Interaction = fits)
 load("./functional_save/Additive.Rdata")
 models$Additive <- fits

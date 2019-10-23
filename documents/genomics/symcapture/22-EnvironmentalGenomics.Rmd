@@ -1,0 +1,171 @@
+```{r setup_envgenom, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(bayesplot)
+library(raster)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+# Environmental genomics
+
+We will ... :
+
+* __xxx__ ...
+
+## Topography
+
+```{r TWIenvgenom, eval=F}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  collect()
+trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(trees) %>% 
+  left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop")))
+coordinates(trees) <- ~Xutm + Yutm
+proj4string(trees) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+trees <- spTransform(trees, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+trees$wetness <- raster::extract(wetness, trees)
+rm(dem, wetness)
+trees@data %>% 
+  dplyr::rename(TWI = wetness) %>% 
+  dplyr::select(FID, IID, TWI) %>% 
+  write_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "TWI.cov"),
+            col_names = F)
+```
+
+### Major effect SNPs
+
+```{bash TWIplink, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina) 
+for pop in "${pops[@]}"
+  do 
+  grep $pop paracou3pop.popmap | cut -f1 | awk '{print "0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam
+  plink \
+    --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+    --allow-extra-chr \
+    --maf 0.025 \
+    --keep $pop.fam \
+    --pheno TWI.cov \
+    --out test/TWI.$pop \
+    --linear \
+    --allow-no-sex
+done
+plink  \
+  --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep sp1.fam \
+  --extract test/TWI.snp \
+  --recode A \
+  --out test/TWI
+```
+
+```{r TWIassoc}
+pops <- c("sp1", "globuliferaTypeParacou", "globuliferaTypeRegina")
+data <- lapply(pops, function(pop)
+  read_delim(file.path(path, "..", "variantCalling", "paracou3pop",
+                       paste0("TWI.", pop, ".assoc.linear")), delim = " ") %>%
+    mutate(pop = pop)
+) %>% bind_rows() %>%
+  dplyr::select(-X10) %>%
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
+  mutate_all(funs(gsub(" ", "", .))) %>%
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(SNP = snp) %>%
+              dplyr::select(-A1)) %>%
+  mutate(qval = p.adjust(P, "fdr")) %>%
+  mutate(BP = as.numeric(BP)) %>%
+  mutate(snp = as.numeric(as.factor(SNP)))
+data %>% 
+  filter(qval < 0.9) %>%
+  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  scale_alpha_discrete(guide = "none") +
+  facet_wrap(~ pop, nrow = 3)
+```
+
+```{r}
+read_delim(file.path(path, "..", "variantCalling", "paracou3pop", "TWI.raw"), delim = " ") %>% 
+  left_join(read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "TWI.cov"))) %>% 
+  dplyr::select(Olsson_2017_scf7180005375249_snp801_A, Olsson_2017_scf7180005428523_snp1461_A, TWI) %>% 
+  reshape2::melt(id.vars = "TWI", variable.name = "snp", value.name = "alleles") %>% 
+  filter(!is.na(alleles)) %>% 
+  group_by(snp, alleles) %>% 
+  mutate(N = n()) %>%
+  ggplot(aes(as.factor(alleles), TWI)) +
+  geom_boxplot() +
+  geom_text(aes(y = 0, label = N)) +
+  facet_wrap(~ snp) +
+  scale_x_discrete(labels = c("AA", "AT", "TT")) +
+  theme(axis.line.x = element_blank(),
+        axis.title.x = element_blank())
+```
+
+```{r TWIOutliersAnnotation, eval=F}
+data %>% 
+  filter(qval < 0.05) %>% 
+  dplyr::select(SNP) %>% 
+  dplyr::rename(snp = SNP) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation"))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation"))) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("ORF") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect() %>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("Transcript") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect()%>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
+                       delim = " ") %>% 
+              dplyr::select(-X) %>% 
+              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
+              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
+              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
+              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
+              filter(trsc %in% .$trsc))
+```
+
+### Polygenic signal
+
+## Neighbors
+
+### Major effect SNPs
+
+### Polygenic signal
+
+## Conclusion

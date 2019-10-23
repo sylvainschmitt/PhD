@@ -1,0 +1,158 @@
+```{r setup_annot, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(Biostrings)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/annotation/"
+```
+
+```{r annotation}
+```
+
+# Annotation
+
+We will ... :
+
+* __XX__ ..
+
+## Method
+
+We focused on scaffolds from the hybrid genomic reference which contained a filtered SNP from the final dataset (7551 over 82792). We focused on transcripts longer than 500 bp and with at least one ORF (137 656 over 257 140). We then, used transcripts alignment on scaffolds to align back SNPs on transcripts, (**beware the indexing position depend on the format vcf start with 1 while psl with 0**). We proceeded as follow (not a common procedure but a home-made code to be double-checked):
+
+1. SNP on scaffolds with no transcript match were classified as "purely neutral" 
+1. SNP on scaffolds matching a transcript were positioned on the global alignment
+1. SNP out the alignment area were classified as "putatively hitchiking"
+1. SNP within the alignment area were further positionned among the different alignment blocks (cf `blat` functionning)
+1. SNP out of alignment blocks (intron) were classified as "putatively hitchiking"
+1. SNP in one alignment blocks were classified as "functional"
+
+```{r trscAlignment, eval=F, echo=T}
+scf <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                   "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bim"),
+         col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
+  dplyr::select(scf) %>% 
+  unique() %>% 
+  unlist()
+reference <- readDNAStringSet(file.path(path, "..", "reference",  "reference.fasta"))
+writeXStringSet(reference[scf],
+                file.path(path, "scaffolds.fasta"))
+orf <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("ORF") %>% 
+  dplyr::select(transcript_id) %>% 
+  dplyr::rename(trsc = transcript_id) %>% 
+  collect() %>% 
+  unique()
+trsc.tbl <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  dplyr::select(transcript_id, sequence) %>% 
+  dplyr::rename(trsc = transcript_id) %>% 
+  collect() %>% 
+  filter(trsc %in% orf$trsc)
+rm(orf)
+trsc <- DNAStringSet(trsc.tbl$sequence)
+names(trsc) <- trsc.tbl$trsc  
+writeXStringSet(trsc, file.path(path, "transcripts.fasta"))
+# blat scaffolds.fasta transcipts.fasta alignment.psl
+```
+
+```{r snpAlignment}
+snps <- read_tsv(file.path(path, "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.bim"),
+         col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
+  mutate(snp = paste0(scf, "_snp", pos))
+alignment <- read_tsv(file.path(path, "alignment.psl"), skip = 5, 
+                      col_names = c("matches", "misMatches", "repMatches", "nCount", 
+                                    "qNumInsert", "qBaseInsert",
+                                    "tNumInsert", "tBaseInsert", "strand", 
+                                    "qName", "qSize", "qStart", "qEnd", 
+                                    "tName", "tSize", "tStart", "tEnd", 
+                                    "blockCount", "blockSizes", "qStarts", "tStarts"), 
+                      col_types = cols(blockSizes = col_character())) # psl3 generics
+snps <- snps %>% 
+  left_join(data.frame(scf = unique(alignment$tName), aligned = 1)) %>% 
+  mutate(aligned = ifelse(is.na(aligned), 0, aligned))
+snpsFunc <- snps %>% 
+  left_join(alignment, by = c("scf" = "tName")) %>% 
+  mutate(posScf = pos-1) %>% # PSL 0-indexed !!
+  filter(tStart < posScf, tEnd > posScf) %>% 
+  separate_rows(blockSizes, qStarts, tStarts, sep = ",", convert = T) %>% 
+  filter(tStarts < posScf) %>% 
+  mutate(posTrsc = qStarts + posScf - tStarts) %>% 
+  mutate(qEnd = qStarts + blockSizes) %>% 
+  filter(posTrsc < qEnd) %>% 
+  dplyr::rename(trsc = qName) %>% 
+  dplyr::select(scf, posScf, snp, trsc, posTrsc)
+snpsHitch <- snps %>% 
+  left_join(alignment, by = c("scf" = "tName")) %>% 
+  mutate(posScf = pos-1) %>% # PSL 0-indexed !!
+  filter(!(snp %in% snpsFunc)) %>% 
+  dplyr::rename(trsc = qName) %>% 
+  dplyr::select(scf, snp, trsc) %>% 
+  unique()
+snps <- snps %>% 
+  left_join(data.frame(snp = unique(snpsFunc$snp), functional = 1)) %>% 
+  mutate(functional = ifelse(is.na(functional), 0, functional)) %>% 
+  mutate(type = ifelse(aligned == 1 & functional == 0, "hitchiker", NA)) %>% 
+  mutate(type = ifelse(functional == 1, "functional", type)) %>% 
+  mutate(type = ifelse(aligned == 0, "neutral", type))
+write_tsv(snps, file.path(path, "snps.annotation"))
+write_tsv(snpsHitch, file.path(path, "snpsHitch.annotation"))
+write_tsv(snpsFunc, file.path(path, "snpsFunc.annotation"))
+```
+
+## Results
+
+We obtained as planified a third of neutral snps (33%) against two thirds of non-neutral snps for which the majority was out of transcripts and may behave as hitchikers (Fig. \@ref(fig:snpType)). Nevertheless, few functional snps matched several transcripts and/or genes due to transcripts isoforms, genes superposition and possibl multimatching errors (Fig. \@ref(fig:snpaAlignedStats)). For the moment we wont further annotate functional SNPs with ORFs and SNPs on transcript alignment, or gene ontology and synonymy. We will only finish annotation for selected SNPs in further analyses.
+
+```{r snpType, fig.cap="Filtered snps by type. SNP have been classified between (i) \"purely neutral\", on scaffolds matching no transcript, (ii) \"hitchiker\" on a scaffolds matching a trasncript but no within the transcript itself, and (iii) functional, when positioned within the matching transcript."}
+snps %>% 
+  group_by(type) %>% 
+  summarise(N = n()) %>% 
+  mutate(Pct = N/sum(N)*100) %>% 
+  ggplot(aes(x = type, y = N, fill = type, label = paste0(round(Pct),"%"))) +
+  geom_bar(stat = "identity") +
+  geom_text() +
+  ylab("count") +
+  theme(axis.text.x = element_blank(),
+        axis.line.x = element_blank(),
+        axis.title.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete("SNP type")
+```
+
+
+```{r snpaAlignedStats, fig.cap="Transcripts and genes statistics per snp. Few snps have multiple transcripts, corresponding to different isoforms and/or multiple genes corresponding to orf superposition or multimatch error."}
+snpAligned %>% 
+  dplyr::select(snp, trsc) %>% 
+  unique() %>% 
+  group_by(snp) %>% 
+  summarise(`Number of transcripts` = n()) %>% 
+  left_join(snpAligned %>% 
+              mutate(gene = gsub("_i[0-9]", "", trsc)) %>%
+              dplyr::select(snp, gene) %>% 
+              unique() %>% 
+              group_by(snp) %>% 
+              summarise(`Number of genes` = n())) %>% 
+  reshape2::melt(id.vars = "snp") %>% 
+  ggplot(aes(value, fill = variable)) +
+  geom_histogram(position = "dodge") +
+  xlim(0,10) +
+  theme(legend.position = c(0.7,0.8))
+```
+
+```{bash snpLists, eval=F, echo=T}
+cut -f2,9 snps.annotation > snps.type
+grep neutral snps.type | cut -f1 > snps.neutral
+grep hitchiker snps.type | cut -f1 > snps.hitchiker
+grep functional snps.type | cut -f1 > snps.functional
+```
+
+

@@ -3,11 +3,11 @@ title: Tree diameter and topography drive intraspecific trait variation in Neotr
 author: Sylvain Schmitt$^{*,1}$, Bruno Herault$^{2,3}$, Émilie Ducouret$^4$, Anne Baranger$^1$, Niklas Tysklind$^4$,  Myriam Heuertz$^1$, Éric Marcon$^4$, Saint Omer Cazal $^4$, Géraldine Derroire$^{4}$ 
 date: '`r Sys.Date()`'
 output:
+  bookdown::word_document2: default
   bookdown::html_document2:
     number_sections: false
     toc: true
     toc_float: yes
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -41,38 +41,31 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 ```{r data}
 load("../functional_save/Individuals.Rdata")
 Individuals0 <- Individuals
-load("../functional_save/CompetitionMatrix.Rdata")
 sdDBH <- sd(Individuals$DBH)
 Individuals <- Individuals %>% 
   rename(LMA = invSLA) %>% 
   group_by(Species) %>% 
   filter(n() > 20) %>% 
   ungroup() %>% 
-  left_join(Competition %>% 
-              group_by(idTree) %>% 
-              summarise(NCI = (1/mean(1-AreaOutside20))*sum(DBHj^2*exp(-0.25*dij)))) %>%
-  mutate(NCI = log(NCI)) %>% 
-  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWI", "NCI"),
-            funs(./sd(., na.rm = T)))
+  group_by(SpeciesLong) %>% 
+  mutate(TWIs = mean(TWI, na.rm = T)) %>% 
+  mutate(TWIis = TWI - TWIs) %>% 
+  ungroup() %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWIs", "TWIis"),
+            funs(./sd(., na.rm = T))) %>% 
+  group_by(Genus) %>% 
+  mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+  ungroup()
+species <- Individuals %>% 
+  dplyr::select(SpeciesLong, Genus, Species, SpeciesNum) %>% 
+  unique()
 ```
 
 ```{r model}
-load("../functional_save/InteractionReduced.Rdata")
+load("../functional_save/InterIntraTWI.Rdata")
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
-species <- lapply(models, function(model){
-  trait <- strsplit(model, "-")[[1]][2]
-  complex <- strsplit(model, "-")[[1]][1]
-  Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex) %>% 
-    mutate(species = as.numeric(as.factor(Species))) %>% 
-    mutate(SpeciesLong = paste(substr(complex, 1, 1), Species)) %>% 
-    select(Genus, Species, SpeciesLong, species) %>% 
-    unique()
-}) %>% bind_rows() %>% 
-  unique() %>% 
-  mutate(complex = Genus)
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
@@ -89,28 +82,28 @@ preds <- lapply(models, function(model){
     filter(Genus == complex)
   
   DBH <- data_trait$DBH
-  TWI <- data_trait$TWI
-  NCI <- data_trait$NCI
+  TWIs <- data_trait$TWIs
+  TWIis <- data_trait$TWIis
   species <- as.numeric(as.factor(data_trait$Species))
   
-  alpha <- as.matrix(fits[[model]], pars = "alpha")
+  alpha <- as.matrix(fits[[model]], pars = "alpha_s")
   betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
   betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
-  betaNCI <- as.matrix(fits[[model]], pars = "betaNCI")
+  gammaTWI <- as.matrix(fits[[model]], pars = "gammaTWI")
   
-  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ynci <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  
+  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * TWIs +  gammaTWI[n,species] * TWIis) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * mean(TWIs) +  gammaTWI[n,species] * mean(TWIis)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * mean(TWIs) +  gammaTWI[n,species] * mean(TWIis)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Ytwis <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * TWIs +  gammaTWI[n,species] * mean(TWIis)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+  Ytwiis <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * mean(TWIs) +  gammaTWI[n,species] * TWIis) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
+
   data.frame(
     Model = model,
     Trait = trait,
     Complex = complex,
     DBH = data_trait$DBH, 
-    TWI = data_trait$TWI, 
-    NCI = NCI,
+    TWIs = data_trait$TWIs, 
+    TWIis = data_trait$TWIis,
     Genus = data_trait$Genus,
     Species = data_trait$Species,
     Y = unlist(data_trait[trait]),
@@ -123,12 +116,12 @@ preds <- lapply(models, function(model){
     Ydbh = apply(Ydbh, 2, mean),
     Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
     Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
-    Ytwi = apply(Ytwi, 2, mean),
-    Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
-    Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
-    Ynci = apply(Ynci, 2, mean),
-    Ynci5 = apply(Ynci, 2, quantile, probs = 0.05),
-    Ynci95 = apply(Ynci, 2, quantile, probs = 0.95)
+    Ytwis = apply(Ytwis, 2, mean),
+    Ytwis5 = apply(Ytwis, 2, quantile, probs = 0.05),
+    Ytwis95 = apply(Ytwis, 2, quantile, probs = 0.95),
+    Ytwiis = apply(Ytwiis, 2, mean),
+    Ytwiis5 = apply(Ytwiis, 2, quantile, probs = 0.05),
+    Ytwiis95 = apply(Ytwiis, 2, quantile, probs = 0.95)
   )}) %>% bind_rows()
 ```
 
@@ -328,32 +321,35 @@ Individuals0 %>%
 
 ```{r parameters}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", "betaTWI",
-                                "betaNCI", "sigma"), 
+  broom::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
+                                "betaTWI", "gammaTWI", 
+                                "sigma_t", "lp__"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "model") %>% 
-  separate(model, c("complex", "trait"), "-") %>% 
-  mutate(species = gsub("([[:alpha:]])", "", term)) %>% 
-  select(complex, trait, term, species, estimate, std.error, rhat) %>% 
-  mutate(species = gsub("([[:punct:]])", "", species)) %>% 
-  mutate(species = as.numeric(species)) %>% 
+  separate(model, c("Genus", "trait"), "-") %>% 
+  mutate(SpeciesNum = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(Genus, trait, term, SpeciesNum, estimate, std.error, rhat) %>% 
+  mutate(SpeciesNum = gsub("([[:punct:]])", "", SpeciesNum)) %>% 
+  mutate(SpeciesNum = as.numeric(SpeciesNum)) %>% 
   left_join(species) %>% 
   mutate(term = gsub("([[:digit:]])", "", term)) %>% 
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, 
                               alpha = "$\\alpha$",
+                              sigmaa = "$\\sigma^2_{\\alpha}$",
                               betaDBH = "$\\beta_{DBH}$", 
                               betaTWI = "$\\beta_{TWI}$", 
-                              betaNCI = "$\\beta_{NCI}$",
-                              sigma = "$\\sigma^2$")) %>% 
+                              gammaTWI = "$\\gamma_{TWI}$",
+                              sigmat = "$\\sigma^2_{t}$",
+                              lp = "log-likelihood")) %>% 
   mutate(trait = recode_factor(trait, 
                               LMA = "$LMA$",
                               LDMC = "$LDMC$", 
                               LT = "$LT$", 
                               invLA = "$\\frac{1}{LA}$",
                               CC = "$CC$")) %>% 
-  reshape2::dcast(complex + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
-  mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "", SpeciesLong)) %>% 
+  mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "All", SpeciesLong)) %>% 
+  reshape2::dcast(Genus + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
   rename(Parameter = term, Species = SpeciesLong) %>% 
   kable(caption = "Model estimated parameters for complexes, species and traits. $\\alpha$ is the species intercept, whereas $\\beta_{DBH}$ is the value of $DBH$ for which the trait accounts for half of its plateau value and $\\beta_{TWI}$ and $\\beta_{NCI}$ are the slope of $TWI$ and $NCI$ effects, respectively. See table \\@ref(tab:Trait) for abbreviation of traits.",
         escape = F, digits = 3, format = "pandoc") %>% 
@@ -416,57 +412,26 @@ ggplot(ind, aes(x, y, colour = SpeciesLong)) +
   ylab(paste0("within PCA 2 (", round(wPCA$eig/sum(wPCA$eig)*100)[2], "%)"))
 ```
 
-```{r DBH90, fig.cap="Effect of tree diameter on leaf functional trait variation. The posterior distribution of species diameter at breast height for which a given trait reaches 90% of its maximum value ($DBH_{90}$) was estimated for every trait for all species in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter and (ii) and (iii) 95th percentile of diameter for *Eschweilera* and *Symphonia*, respectively."}
-lapply(fits, function(fit) 
-  mcmc_intervals_data(as.array(fit,
-                               pars = "betaDBH"))) %>% 
-  bind_rows(.id = "model") %>% 
-  separate(model, c("complex", "trait"), "-",remove = F) %>%
-  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-   mutate(species = as.numeric(species)) %>% 
-  left_join(species) %>% 
-  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
-  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
-  # ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
-  #            xend = datatools::reorder_within(SpeciesLong, m, trait),
-  #            color = SpeciesLong, fill = SpeciesLong)) +
-  ggplot(aes(x = SpeciesLong,
-             xend = SpeciesLong,
-             color = SpeciesLong, fill = SpeciesLong)) +
-  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  # datatools::scale_x_reordered() +
-  facet_grid(trait ~ Genus, labeller = label_parsed, 
-             scales = "free_y") +
-  xaxis_title(F) +
-  ylab(expression(DBH[90]~(cm))) +
-  scale_y_log10() +
-  scale_colour_brewer(guide = "none", palette = "Set1") +
-  scale_fill_brewer(guide = "none", palette = "Set1")
-```
-
 ```{r TWInNCI, fig.cap="Effect of topographic wetness index ($TWI$) and neighbor crowding index ($NCI$) for every trait, complex and species. The effect of $TWI$ and $NCI$ was estimated as the posterior distribution of the slope parameter $\\beta$ (see Materials and Methods) using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
-                               pars = c("betaTWI", "betaNCI")))) %>% 
+                               pars = c("betaTWI", "gammaTWI")))) %>% 
   bind_rows(.id = "model") %>% 
-  separate(model, c("complex", "trait"), "-") %>%
-  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
-    mutate(species = as.numeric(species)) %>% 
-  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>%
+  separate(model, c("Genus", "trait"), "-") %>%
+  mutate(SpeciesNum = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(SpeciesNum = gsub("([[:alpha:]])", "", SpeciesNum)) %>% 
+  mutate(variable = ifelse(grepl("TWI", parameter), "TWI", "NCI")) %>% 
+  mutate(parameter = ifelse(grepl("beta", parameter), "beta", "gamma")) %>% 
+  mutate(SpeciesNum = as.numeric(SpeciesNum)) %>% 
   left_join(species) %>% 
-  mutate(parameter = ifelse(grepl("TWI", parameter), "beta[TWI]", "beta[NCI]")) %>% 
-  mutate(parameter = factor(parameter, levels = c("beta[TWI]", "beta[NCI]"))) %>% 
-  # ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
-  #            xend = datatools::reorder_within(SpeciesLong, m, trait),
-  #            color = SpeciesLong, fill = SpeciesLong)) +
-  ggplot(aes(x = SpeciesLong, 
+  mutate(Genus = ifelse(is.na(Genus), Genus, Genus),
+         Species = ifelse(is.na(Species), Genus, Species),
+         SpeciesLong = ifelse(is.na(SpeciesLong), Genus, SpeciesLong)) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  mutate(SpeciesLong = fct_relevel(SpeciesLong, "E decolorans", "E sagotiana",
+                                   "E coriacea", "Eschweilera",
+                                   "S globulifera", "S sp.1", "Symphonia")) %>% 
+  ggplot(aes(x = SpeciesLong,
              xend = SpeciesLong,
              color = SpeciesLong, fill = SpeciesLong)) +
   geom_hline(yintercept = 0, color = "gray90", size = 1) +
@@ -477,15 +442,13 @@ lapply(fits, function(fit)
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  # datatools::scale_x_reordered() +
-  facet_grid(trait ~ parameter + Genus, labeller = label_parsed, 
-             scales = "free") +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+              scales = "free_y") +
   xaxis_title(F) +
-  ylab("Standardised effect") +
+  ylab("TWI effect") +
   scale_y_continuous(trans="S_sqrt") +
-  scale_colour_brewer(guide = "none", palette = "Set1") +
-  scale_fill_brewer(guide = "none", palette = "Set1") +
-  ylim(-0.5, 0.5)
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
 ```
 
 <!-- old figures -->
@@ -551,6 +514,34 @@ axes.boxplots <- pca.plot$data %>%
         axis.ticks.x=element_blank()) +
   scale_fill_brewer("", palette = "Set1", guide = "none")
 cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
+```
+```{r bwtPCA, fig.cap='Principal Component Analysis (PCA) of leaf trait  between species and segregation of species on the two first axes. Circle and box colors indicate the species complex, whereas size of circles indicates individual diameter at breast height. Species segregation has been investigated by Anova, **** indicates a $p-value < 0.0001$ and letters indicate post-hoc groups investigated by Tukey Honest Significant Differences. See table \\@ref(tab:Trait) for abbreviation of traits.', eval=F}
+Species <- Individuals %>% 
+  dplyr::select(-idTree, -Plot, -SubPlot, 
+                -TreeFieldNum, -Bark, -Dawkins, -Dawkins.y) %>% 
+  group_by(Genus, Species, SpeciesLong) %>% 
+  summarise_all(mean, na.rm = T) %>% 
+  ungroup()
+g1 <- autoplot(princomp(~ LMA + LDMC + LT + LA + CC, data = Species, cor = T), 
+           data = Species, colour = "SpeciesLong",
+           loadings.label.size = 6,
+           loadings.label.colour = 'black', loadings.label.vjust = 1.1,
+           loadings = T, loadings.label = T, loadings.colour = 'black') +
+  geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
+  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+  scale_size_continuous(guide = "none") +
+  scale_colour_brewer("", palette = "Set1", guide = "none") +
+  ggrepel::geom_text_repel(aes(label = SpeciesLong))
+g2 <- Species %>% 
+  dplyr::select(SpeciesLong, TWI, LMA, LDMC, LT, LA, CC) %>% 
+  reshape2::melt(id.vars = c("SpeciesLong", "TWI"),
+                 variable.name = "Trait") %>% 
+  ggplot(aes(TWI, value)) +
+  geom_point(aes(col = SpeciesLong)) +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ Trait, scales = "free") +
+  scale_color_discrete(guide = "none")
+cowplot::plot_grid(g1, g2)
 ```
 
 ```{r Intercept, fig.cap="Species model intercept for every trait, complex and species. Estimated posterior with Bayesian inference. Circles represent mean estimation, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.", eval=F}
@@ -645,6 +636,41 @@ lapply(fits, function(fit)
   scale_color_discrete(guide = "none") +
   scale_fill_discrete(guide = "none") +
   ylim(-0.5, 0.5)
+```
+
+
+```{r DBH90, fig.cap="Effect of tree diameter on leaf functional trait variation. The posterior distribution of species diameter at breast height for which a given trait reaches 90% of its maximum value ($DBH_{90}$) was estimated for every trait for all species in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter and (ii) and (iii) 95th percentile of diameter for *Eschweilera* and *Symphonia*, respectively.", eval=F}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaDBH"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+   mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
+  # ggplot(aes(x = datatools::reorder_within(SpeciesLong, m, trait), 
+  #            xend = datatools::reorder_within(SpeciesLong, m, trait),
+  #            color = SpeciesLong, fill = SpeciesLong)) +
+  ggplot(aes(x = SpeciesLong,
+             xend = SpeciesLong,
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  # datatools::scale_x_reordered() +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free_y") +
+  xaxis_title(F) +
+  ylab(expression(DBH[90]~(cm))) +
+  scale_y_log10() +
+  scale_colour_brewer(guide = "none", palette = "Set1") +
+  scale_fill_brewer(guide = "none", palette = "Set1")
 ```
 
 <!-- # Ontogeny -->

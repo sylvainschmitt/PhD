@@ -1,0 +1,158 @@
+```{r setup_popgenom, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+```{r trees_popgenom, eval=F}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  collect()
+trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(trees) %>% 
+  left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop")))
+coordinates(trees) <- ~Xutm + Yutm
+proj4string(trees) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+trees <- spTransform(trees, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+trees$wetness <- scale(raster::extract(wetness, trees), center = F, scale = T)
+trees@data %>% 
+  group_by(pop) %>% 
+  dplyr::select(wetness) %>% 
+  summarise_all(mean)
+```
+
+# Population genomics
+
+We will ... :
+
+* __xxx__ ...
+
+## Genepool-specifc SNPs
+
+### `bayescan`
+
+We found one outlier of genepools-specifc SNP with a q-value of 0.0076015 (Fig. \@ref(fig:bayescanOutliers)). This SNP (Olsson_2017_scf7180005315464_snp1268) is included in a scaffold matching with two transcripts (TRINITY_DN779000_c16_g1_i2 and TRINITY_DN823862_c5_g1_i2) but not within exon, so-called hitchiker SNP. this two transcripts included 3 Open Reading Frames (ORF). Transcript were not enriched in a peculiar morphotypes with juveniles (Niklas et al., in prep). The annotation of the transcripts correspond to the retroviral aspartyl protease ([PF08284](https://pfam.xfam.org/family/RVP_2)) and aspartic-type endopeptidase activity ([GO:0004190](https://www.ebi.ac.uk/QuickGO/term/GO:0004190)) linked to a peptidase activity.
+
+```{bash bayescan, eval=F, echo=T}
+module load bioinfo/PGDSpider_2.1.1.5
+java -Xmx120G -Xms100G -jar $PGD_HOME/PGDSpider2-cli.jar \
+	-inputfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.vcf \
+	-inputformat VCF \
+	-outputfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bayescan \
+	-outputformat GESTE_BAYE_SCAN \
+	-spid vcf2bayescan.spid
+module load bioinfo/BayeScan2.1
+BayeScan -threads 10 \
+	symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bayescan \
+	> paracou3pop.bayescan.output
+```
+
+```{r bayescanConvergence}
+read_delim(file.path(path, "bayescan", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.baye.sel"), 
+                    delim = " ", skip = 1, col_names = c("iter", "LogL", paste0("Fst", 1:3))) %>% 
+  mutate(LogL = as.numeric(LogL)) %>%
+  dplyr::select(-iter, -LogL) %>%
+  mcmc_combo()
+```
+
+```{r bayescanOutliers, fig.cap="Bayescan outliers"}
+bayescan <- read.table(file.path(path, "bayescan", 
+                                 "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.baye_fst.txt")) %>% 
+  mutate(snp = as.numeric(row.names(.))) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
+  mutate(CHR = 1) %>% 
+  qqman::manhattan(chr = "CHR", bp = "snp", p = "qval", logp = T, highlight = filter(., qval < 0.05)$snp,
+                   chrlabs = "Fake", snp = "snp", suggestiveline = -log10(0.05), genomewideline = -log10(0.01),
+                   annotatePval = 0.05, annotateTop = F, xlab = "SNP",
+                   ylab = expression(-log[10]("q-value")))
+```
+
+```{r bayescanOutliersAnnotation, eval=F}
+snp <- read_tsv(file.path(path, "bayescan", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bim"), 
+         col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
+  mutate(snp = paste0(scf, "_snp", pos)) %>% 
+  mutate(snpID = 1:nrow(.)) %>% 
+  filter(snpID == 96685) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation"))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("ORF") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect() %>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("Transcript") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect()%>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
+                       delim = " ") %>% 
+              dplyr::select(-X) %>% 
+              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
+              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
+              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
+              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
+              filter(trsc %in% .$trsc))
+```
+
+### `bayescenv`
+
+```{bash bayescenv, eval=F, echo=T}
+module load bioinfo/bayescenv-1.1
+bayescenv symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bayescan \
+  -env TWI.txt \
+  -o paracou3pop.bayesenv \
+  -threads 8
+```
+
+```{r bayescenvConvergence}
+read_delim(file.path(path, "bayescenv", "paracou3pop.bayesenv.sel"), 
+                    delim = " ") %>% 
+  dplyr::select(-Iter, -logL, -X6) %>%
+  mcmc_combo()
+```
+
+```{r bayescenvOutliers}
+read.table(file.path(path, "bayescenv", "paracou3pop.bayesenv_fst.txt")) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+    mutate(snp = as.numeric(row.names(.))) %>% 
+  mutate(CHR = 1) %>% 
+  mutate(qval = qval_alpha) %>% 
+  qqman::manhattan(chr = "CHR", bp = "snp", p = "qval", logp = T, highlight = filter(., qval < 0.05)$snp,
+                   chrlabs = "Fake", snp = "snp", suggestiveline = -log10(0.05), genomewideline = -log10(0.01),
+                   annotatePval = 0.05, annotateTop = F, xlab = "SNP",
+                   ylab = expression(-log[10]("q-value")))
+```
+
+## Conclusion

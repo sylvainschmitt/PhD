@@ -1,6 +1,13 @@
+# PhD 0.1.9147
+* distribution: NCI in time & ms
+* functional: new model inter intra
+* parvicapture: LARGESCALE + capture
+* symcapture: PopStr, Annotation, PopHist, PopGenom, EnvGenom begin
+
 # PhD 0.1.9146
 * functional: manuscript v2
-
+* parvicapture: LARGESCALE + capture
+* symcapture: bayepass, introgress and SFS
 
 # PhD 0.1.9145
 * phdpages: distribution integration
