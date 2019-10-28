@@ -59,89 +59,80 @@ trees@data %>%
 
 ### Major effect SNPs
 
-```{bash TWIplink, eval=F, echo=T}
+We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers). The 14 hitchiker SNPs corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep).
+
+```{bash TWIgemma, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
-pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina) 
-for pop in "${pops[@]}"
-  do 
-  grep $pop paracou3pop.popmap | cut -f1 | awk '{print "0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam
-  plink \
-    --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
-    --allow-extra-chr \
-    --maf 0.025 \
-    --keep $pop.fam \
-    --pheno TWI.cov \
-    --out test/TWI.$pop \
-    --linear \
-    --allow-no-sex
-done
-plink  \
-  --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
   --allow-extra-chr \
-  --keep sp1.fam \
-  --extract test/TWI.snp \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno TWI.cov \
+  --out paracou3pop \
+  --make-bed
+module load bioinfo/gemma-v0.97
+gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.TWI # lmm Wald test
+# read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+#   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+#   filter(qval < 0.05) %>% 
+#   dplyr::select(rs) %>% 
+#   write_tsv(file.path(path, "gemma", "TWI", "TWI.snps.list"),
+#             col_names = F)
+plink  \
+  --bfile paracou3pop \
+  --allow-extra-chr \
+  --extract TWI.snps.list \
   --recode A \
-  --out test/TWI
+  --out TWI.snps
 ```
 
-```{r TWIassoc}
-pops <- c("sp1", "globuliferaTypeParacou", "globuliferaTypeRegina")
-data <- lapply(pops, function(pop)
-  read_delim(file.path(path, "..", "variantCalling", "paracou3pop",
-                       paste0("TWI.", pop, ".assoc.linear")), delim = " ") %>%
-    mutate(pop = pop)
-) %>% bind_rows() %>%
-  dplyr::select(-X10) %>%
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
-  mutate_all(funs(gsub(" ", "", .))) %>%
+```{r TWIassocGEMMA}
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(SNP = snp) %>%
-              dplyr::select(-A1)) %>%
-  mutate(qval = p.adjust(P, "fdr")) %>%
-  mutate(BP = as.numeric(BP)) %>%
-  mutate(snp = as.numeric(as.factor(SNP)))
-data %>% 
-  filter(qval < 0.9) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
   ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
   ylab(expression(-log[10]("q-value"))) +
   scale_alpha_discrete(guide = "none") +
-  facet_wrap(~ pop, nrow = 3)
+  scale_y_sqrt()
 ```
 
-```{r}
-read_delim(file.path(path, "..", "variantCalling", "paracou3pop", "TWI.raw"), delim = " ") %>% 
-  left_join(read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "TWI.cov"))) %>% 
-  dplyr::select(Olsson_2017_scf7180005375249_snp801_A, Olsson_2017_scf7180005428523_snp1461_A, TWI) %>% 
-  reshape2::melt(id.vars = "TWI", variable.name = "snp", value.name = "alleles") %>% 
-  filter(!is.na(alleles)) %>% 
-  group_by(snp, alleles) %>% 
-  mutate(N = n()) %>%
-  ggplot(aes(as.factor(alleles), TWI)) +
+```{r TWIoutliersHist, fig.cap="TWI outliers histogram"}
+read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+  dplyr::rename(TWI = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  ggplot(aes(Allele, TWI)) +
   geom_boxplot() +
-  geom_text(aes(y = 0, label = N)) +
-  facet_wrap(~ snp) +
-  scale_x_discrete(labels = c("AA", "AT", "TT")) +
-  theme(axis.line.x = element_blank(),
-        axis.title.x = element_blank())
+  facet_wrap(~ SNP) +
+  theme(strip.text.x = element_text(size = 5))
 ```
 
 ```{r TWIOutliersAnnotation, eval=F}
-data %>% 
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
   filter(qval < 0.05) %>% 
-  dplyr::select(SNP) %>% 
-  dplyr::rename(snp = SNP) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation"))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  group_by(type) %>% 
+  summarise(N = n())
+
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  filter(qval < 0.05) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  filter(type == "functional") %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation"))) %>% 
-  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
-              tbl("ORF") %>% 
-              filter(transcript_id %in% local(.$trsc)) %>% 
-              collect() %>% 
-              mutate(transcript_id = as.character(transcript_id)), 
-            by = c("trsc" = "transcript_id")) %>% 
   left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
                                  "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
               tbl("Transcript") %>% 
@@ -157,7 +148,38 @@ data %>%
               mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
               mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
               mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
-              filter(trsc %in% .$trsc))
+              filter(trsc %in% .$trsc)) %>% 
+  filter(!is.na(deg) | !is.na(annotation))
+
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  filter(qval < 0.05) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  filter(type == "hitchiker") %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("Transcript") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect()%>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
+                       delim = " ") %>% 
+              dplyr::select(-X) %>% 
+              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
+              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
+              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
+              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
+              filter(trsc %in% .$trsc)) %>% 
+  # filter(!is.na(annotation))
+  filter(!is.na(deg), deg != "NE") %>% 
+  group_by(deg) %>% 
+  dplyr::select(trsc, deg) %>% 
+  unique() %>% 
+  summarise(N = n())
 ```
 
 ### Polygenic signal

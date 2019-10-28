@@ -13,14 +13,14 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/annotation/"
 ```
 
-```{r annotation}
-```
-
 # Annotation
 
-We will ... :
+We developed and manually tested with few SNPs a method to match transcriptomic data from Tysklind et al., in prep with our genomic data. We found expected proportion of SNPs type, with a lot of putatively hitchiker SNPs in functional SNPs. Finally, ca 2000 SNPs were matching between the two datasets.
 
-* __XX__ ..
+population structure of individuals. Then, we quickly looked at th spatial and environmental distribution of the different gene pools and individual mismatch (before association genomic analyses).
+
+* __method__ data preparation and methodology to match transcriptomic data from Tysklind et al., in prep with our genomic data
+* __results__ SNP classification, corresponding SNPs and genes, and common SNPs between datasets.
 
 ## Method
 
@@ -103,14 +103,14 @@ snps <- snps %>%
   mutate(type = ifelse(aligned == 1 & functional == 0, "hitchiker", NA)) %>% 
   mutate(type = ifelse(functional == 1, "functional", type)) %>% 
   mutate(type = ifelse(aligned == 0, "neutral", type))
-write_tsv(snps, file.path(path, "snps.annotation"))
-write_tsv(snpsHitch, file.path(path, "snpsHitch.annotation"))
-write_tsv(snpsFunc, file.path(path, "snpsFunc.annotation"))
+# write_tsv(snps, file.path(path, "snps.annotation"))
+# write_tsv(snpsHitch, file.path(path, "snpsHitch.annotation"))
+# write_tsv(snpsFunc, file.path(path, "snpsFunc.annotation"))
 ```
 
 ## Results
 
-We obtained as planified a third of neutral snps (33%) against two thirds of non-neutral snps for which the majority was out of transcripts and may behave as hitchikers (Fig. \@ref(fig:snpType)). Nevertheless, few functional snps matched several transcripts and/or genes due to transcripts isoforms, genes superposition and possibl multimatching errors (Fig. \@ref(fig:snpaAlignedStats)). For the moment we wont further annotate functional SNPs with ORFs and SNPs on transcript alignment, or gene ontology and synonymy. We will only finish annotation for selected SNPs in further analyses.
+We obtained as planified a third of neutral snps (33%) against two thirds of non-neutral snps for which the majority was out of transcripts and may behave as hitchikers (Fig. \@ref(fig:snpType)). Nevertheless, few functional snps matched several transcripts and/or genes due to transcripts isoforms, genes superposition and possibl multimatching errors (Fig. \@ref(fig:snpaAlignedStats)). For the moment we wont further annotate functional SNPs with ORFs and SNPs on transcript alignment, or gene ontology and synonymy. We will only finish annotation for selected SNPs in further analyses. Finally, we compared obtained SNP in genomics in this analysis with transcriptomic SNPs identified by Tysklind et al., in prep (Fig. \@ref(fig:snpValidation))) and validated 2 098 common SNPs.
 
 ```{r snpType, fig.cap="Filtered snps by type. SNP have been classified between (i) \"purely neutral\", on scaffolds matching no transcript, (ii) \"hitchiker\" on a scaffolds matching a trasncript but no within the transcript itself, and (iii) functional, when positioned within the matching transcript."}
 snps %>% 
@@ -130,12 +130,12 @@ snps %>%
 
 
 ```{r snpaAlignedStats, fig.cap="Transcripts and genes statistics per snp. Few snps have multiple transcripts, corresponding to different isoforms and/or multiple genes corresponding to orf superposition or multimatch error."}
-snpAligned %>% 
+bind_rows(snpsHitch, dplyr::select(snpsFunc, scf, snp, trsc)) %>% 
   dplyr::select(snp, trsc) %>% 
   unique() %>% 
   group_by(snp) %>% 
   summarise(`Number of transcripts` = n()) %>% 
-  left_join(snpAligned %>% 
+  left_join(bind_rows(snpsHitch, dplyr::select(snpsFunc, scf, snp, trsc)) %>% 
               mutate(gene = gsub("_i[0-9]", "", trsc)) %>%
               dplyr::select(snp, gene) %>% 
               unique() %>% 
@@ -146,6 +146,26 @@ snpAligned %>%
   geom_histogram(position = "dodge") +
   xlim(0,10) +
   theme(legend.position = c(0.7,0.8))
+```
+
+```{r snpValidation, fig.cap="transcriptomic SNPs from Tysklind et al., in prep matching validated by genomic SNPs from the current gene capture."}
+snpsNiklas <- read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts", "k2rt",
+                                   "symphonia_juv_fullsample_trinity500_k2rt_type_0a_mainOutput.tsv"),
+                         delim = "\t")
+snpsFunc %>% 
+  inner_join(snpsNiklas %>% 
+  dplyr::rename(snpNiklas = SNP_ID, trsc = `#Component_ID`, posTrsc = SNP_position) %>% 
+  dplyr::select(trsc, snpNiklas, posTrsc) %>% 
+    mutate(posTrsc = as.numeric(posTrsc))) %>% 
+  dplyr::select(scf, snp, snpNiklas) %>% 
+  unique() %>% 
+  group_by(scf) %>% 
+  summarise(N = n()) %>% 
+  ggplot(aes(N)) +
+  geom_histogram() +
+  ggtitle("2 098 transcriptomic SNPs from Tysklind et al., in prep",
+          "validated by genomic SNPs from the current gene capture") +
+  xlab("Number of SNPs per scaffold")
 ```
 
 ```{bash snpLists, eval=F, echo=T}

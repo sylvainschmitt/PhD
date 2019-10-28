@@ -20,4 +20,84 @@ We will ... :
 
 * __xxx__ ...
 
+## SLA
+
+```{r SLAphenogenom, eval=F, echo =T}
+traits <- googlesheets::gs_title("Measures_Symphonia") %>%
+  googlesheets::gs_read("AllTraits") %>%
+  mutate(SLA = as.numeric(SLA)) %>% 
+  dplyr::select(idTree, SLA) %>% 
+  group_by(idTree) %>% 
+  summarise_all(mean, na.rm = T)
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  collect()
+residuals <- traits %>% 
+  left_join(trees) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  do(res = residuals(lm(log(SLA) ~ log(DBH), data = .))) %>% 
+  broom::tidy(res)
+read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.fam"),
+                col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(traits %>% 
+              left_join(trees) %>% 
+              mutate(residuals = residuals$x)) %>% 
+  dplyr::select(FID, IID, residuals) %>% 
+  write_tsv(file.path(path, "gemma", "SLA", "SLA.cov"), col_names = F)
+```
+
+### Major effect SNPs
+
+
+```{bash SLAgemma, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno SLA.cov \
+  --missing-code NA \
+  --out paracou3pop \
+  --make-bed
+module load bioinfo/gemma-v0.97
+gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.SLA # lmm Wald test
+# read_tsv(file.path(path, "gemma", "SLA", "paracou.SLA.assoc.txt")) %>% 
+#   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+#   filter(qval < 0.05) %>% 
+#   dplyr::select(rs) %>% 
+#   write_tsv(file.path(path, "gemma", "SLA", "SLA.snps.list"),
+#             col_names = F)
+plink  \
+  --bfile paracou3pop \
+  --allow-extra-chr \
+  --extract SLA.snps.list \
+  --recode A \
+  --out SLA.snps
+```
+
+```{r SLAassocGEMMA}
+read_tsv(file.path(path, "gemma", "SLA", "paracou.SLA.assoc.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt()
+```
+
 ## Conclusion

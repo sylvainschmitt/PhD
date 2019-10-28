@@ -41,7 +41,7 @@ We explored population structure of individuals. Then, we quickly looked at th s
 * __Spatial__ spatial distribution of *Symphonia* gene pools in Paracou
 * __Mismatch__ spatial distribution of *Symphonia* gene pools in Paracou
 * __Environmental__ environmental distribution of *Symphonia* gene pools in Paracou along the topgraphic wetness index
-* __Pedigree__ 
+* __Kinship__ individuals kinship
 
 ## Structure
 
@@ -200,6 +200,10 @@ coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 treesXY <- spTransform(treesXY, CRSobj = crs)
 treesPal <- colorFactor(palette = "Set3", levels = c("Ssp1", "SgParacou", "SgRegina"))
+# trees %>% 
+#   dplyr::select(Ind, Species, Pop2, type) %>% 
+#   dplyr::rename(MtBD = Species, MtF = Pop2, GP = type) %>% 
+#   write_tsv("./symcapture_save/gp.tsv")
 ```
 
 ```{r popStrSpace, fig.cap="Membership to the *Symphonia globulifera* gene pool for Paracou individuals."}
@@ -293,6 +297,8 @@ treesXY@data %>%
 
 ## Kinship
 
+We calculated kinship matrix (Fig. \@ref(fig:kinship)) for every individuals to be used in genomic scan to control for population structure.
+
 ```{bash relatedness, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 plink \
@@ -304,7 +310,7 @@ plink \
 vcftools --gzvcf  paracou3pop.all.vcf.gz  --relatedness2
 ```
 
-```{r kniship, fig.cap="Kinship matrix"}
+```{r kinship, fig.cap="Individuals kinship matrix."}
 read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all.relatedness2")) %>% 
   left_join(symcapture.admix[[2]] %>% 
               dplyr::select(Cluster1) %>% 
@@ -324,4 +330,3 @@ read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all
         axis.ticks = element_blank(),
         axis.line = element_blank())
 ```
-

@@ -1,3 +1,8 @@
+# PhD 0.1.9148
+* functional: Oikos submission
+* symcapture: PopStr, Annotation, PopHist, PopGenom, EnvGenom +explanation, 1st results
+* sampling: Sympho check 10.19
+
 # PhD 0.1.9147
 * distribution: NCI in time & ms
 * functional: new model inter intra

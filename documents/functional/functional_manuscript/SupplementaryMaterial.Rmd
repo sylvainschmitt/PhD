@@ -1,15 +1,13 @@
 ---
 title: Supplementary Materials
-author: Sylvain Schmitt, Bruno Herault, Emilie Ducouret, Anne Baranger, Niklas Tysklind,  Myriam Heuertz, Eric Marcon, Saint Omer Cazal, Geraldine Derroire
-date: '`r Sys.Date()`'
 output:
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
+  bookdown::word_document2: default
   bookdown::html_document2:
     number_sections: false
     toc: no
@@ -66,7 +64,7 @@ Individuals <- Individuals %>%
 ```
 
 ```{r model}
-load("../functional_save/InteractionReduced.Rdata")
+load("../functional_save/InterIntraTWI.Rdata")
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
@@ -85,60 +83,6 @@ species <- lapply(models, function(model){
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
-```
-
-```{r predicitons}
-traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
-complexes <- c("Symphonia", "Eschweilera")
-models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
-preds <- lapply(models, function(model){
-  trait <- strsplit(model, "-")[[1]][2]
-  complex <- strsplit(model, "-")[[1]][1]
-  data_trait <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
-    filter(Genus == complex)
-  
-  DBH <- data_trait$DBH
-  TWI <- data_trait$TWI
-  NCI <- data_trait$NCI
-  species <- as.numeric(as.factor(data_trait$Species))
-  
-  alpha <- as.matrix(fits[[model]], pars = "alpha")
-  betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
-  betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
-  betaNCI <- as.matrix(fits[[model]], pars = "betaNCI")
-  
-  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * NCI) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * mean(NCI)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * TWI +  betaNCI[n,species] * mean(NCI)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  Ynci <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n,species] * mean(TWI) +  betaNCI[n,species] * NCI) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
-  
-  data.frame(
-    Model = model,
-    Trait = trait,
-    Complex = complex,
-    DBH = data_trait$DBH, 
-    TWI = data_trait$TWI, 
-    NCI = NCI,
-    Genus = data_trait$Genus,
-    Species = data_trait$Species,
-    Y = unlist(data_trait[trait]),
-    Yp = apply(Yp, 2, mean),
-    Yp5 = apply(Yp, 2, quantile, probs = 0.05),
-    Yp95 = apply(Yp, 2, quantile, probs = 0.95),
-    Yalpha = apply(Yalpha, 2, mean),
-    Yalpha5 = apply(Yalpha, 2, quantile, probs = 0.05),
-    Yalpha95 = apply(Yalpha, 2, quantile, probs = 0.95),
-    Ydbh = apply(Ydbh, 2, mean),
-    Ydbh5 = apply(Ydbh, 2, quantile, probs = 0.05),
-    Ydbh95 = apply(Ydbh, 2, quantile, probs = 0.95),
-    Ytwi = apply(Ytwi, 2, mean),
-    Ytwi5 = apply(Ytwi, 2, quantile, probs = 0.05),
-    Ytwi95 = apply(Ytwi, 2, quantile, probs = 0.95),
-    Ynci = apply(Ynci, 2, mean),
-    Ynci5 = apply(Ynci, 2, quantile, probs = 0.05),
-    Ynci95 = apply(Ynci, 2, quantile, probs = 0.95)
-  )}) %>% bind_rows()
 ```
 
 <!-- SUPPLEMENTARY MATERIALS -->
@@ -192,28 +136,6 @@ src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   xlab("Diameter at breast height (dbh, cm)")
 ```
 
-```{r additiveModel}
-load("../functional_save/InteractionReduced.Rdata")
-models <- list(Interaction = fits)
-load("../functional_save/Additive.Rdata")
-models$Additive <- fits
-lapply(models, function(model)
-  lapply(model, function(trait)
-    broom::tidyMCMC(trait, pars = "lp__", droppars = NULL, rhat = T)
-  ) %>% bind_rows(.id = "Model")) %>% 
-  bind_rows(.id = "Form") %>% 
-  separate(Model, c("Genus", "Trait"), "-") %>% 
-  mutate(Trait = recode_factor(Trait, 
-                               LMA = "$LMA$",
-                               LDMC = "$LDMC$", 
-                               LT = "$LT$", 
-                               invLA = "$\\frac{1}{LA}$",
-                               CC = "$CC$")) %>% 
-  reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
-  mutate(Difference = Additive - Interaction) %>%
-  kable(caption = "Log-likelihood for full model form (additive vs interaction).", digits = 3, format = "pandoc", escape = F) %>% 
-  kable_styling(full_width = F)
-```
 
 ```{r ontogenyModel}
 load("../functional_save/DBH.Rdata")
@@ -240,6 +162,38 @@ lapply(models, function(model)
   kable(caption = "Log-likelihood for diameter model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
   kable_styling(full_width = F)
 ```
+
+```{r DBH90, fig.cap="Effect of tree diameter on leaf functional trait variation. The posterior distribution of species diameter at breast height for which a given trait reaches 90% of its maximum value ($DBH_{90}$) was estimated for every trait for all species in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter and (ii) and (iii) 95th percentile of diameter for *Eschweilera* and *Symphonia*, respectively."}
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaDBH"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+   mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
+  ggplot(aes(x = SpeciesLong,
+             xend = SpeciesLong,
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free_y") +
+  xaxis_title(F) +
+  ylab(expression(DBH[90]~(cm))) +
+  scale_y_log10() +
+  scale_colour_brewer(guide = "none", palette = "Set1") +
+  scale_fill_brewer(guide = "none", palette = "Set1")
+```
+
+<!-- old supp -->
 
 ```{r varcomp, fig.cap="Variance decomposition between ecological levels.", eval=F}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
