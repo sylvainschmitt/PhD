@@ -1,3 +1,6 @@
+# PhD 0.1.9149
+* symcapture: polygenic signal with BSLMM Zhou 2013 Plos Genetics
+
 # PhD 0.1.9148
 * functional: Oikos submission
 * symcapture: PopStr, Annotation, PopHist, PopGenom, EnvGenom +explanation, 1st results

@@ -61,7 +61,7 @@ trees@data %>%
 
 We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers). The 14 hitchiker SNPs corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep).
 
-```{bash TWIgemma, eval=F, echo=T}
+```{bash TWIgemmaLMM, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 plink \
   --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
@@ -73,7 +73,9 @@ plink \
   --make-bed
 module load bioinfo/gemma-v0.97
 gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
 gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.TWI # lmm Wald test
+gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
 # read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
 #   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
 #   filter(qval < 0.05) %>% 
@@ -88,7 +90,7 @@ plink  \
   --out TWI.snps
 ```
 
-```{r TWIassocGEMMA}
+```{r TWIassocMLM}
 read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
@@ -104,7 +106,7 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
   scale_y_sqrt()
 ```
 
-```{r TWIoutliersHist, fig.cap="TWI outliers histogram"}
+```{r TWIoutliersMLMHist, fig.cap="TWI outliers histogram"}
 read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
   dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
   dplyr::rename(TWI = PHENOTYPE) %>% 
@@ -117,7 +119,7 @@ read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>%
   theme(strip.text.x = element_text(size = 5))
 ```
 
-```{r TWIOutliersAnnotation, eval=F}
+```{r TWIOutliersMLMAnnotation, eval=F}
 read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>%
   filter(qval < 0.05) %>% 
@@ -184,10 +186,190 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
 
 ### Polygenic signal
 
+[@Zhou2013]
+
+```{bash TWIgemmaBSLMM, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
+```
+
+* $h$ and $PVE$ are directly related
+* $PVE$ is the phenotypic variance explained by sparsed effects $\beta$ and random effects $u$
+* $\rho$ correspond to the ratio between a models based on few SNPs with large effects ($\rho = 1$ correspond to BVSR) against a model based on many SNPs with small effects ($\rho = 0$ correspond to LMM)
+* $PGE$ is the phenotypic variance explained by sparsed effects $\beta$ alone 
+* $\pi$ is the proportion of the SNPs having a polygenic effect on the phenotype
+* $n_\gamma$ or $|\gamma|$ is the number of non-zeros SNPs
+
+```{r bayescanConvergence, fig.cap="Population Fst convergence." }
+read_tsv(file.path(path, "gemma", "TWI", "polygenic.hyp.txt")) %>% 
+  mcmc_dens()
+```
+
+* $\alpha$ intercept ?
+* $\beta$ correspond to $\beta | \gamma == 1$ the SNP effect if selected
+* $\gamma$ correspond to the parameter evaluating if the SNP has an effect or not
+
+```{r TWIassocBSLMM, eval=T}
+read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(alpha, fill = type)) +
+  geom_density(alpha = 0.3, col = NA)
+read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(beta, fill = type)) +
+  geom_density(alpha = 0.3, col = NA)
+read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(snp, gamma, col = type)) +
+  geom_point() +
+  scale_y_sqrt()
+read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(snp, beta*gamma, col = type)) +
+  geom_point() +
+  scale_y_sqrt()
+```
+
+```{r TWIoutliersBSLMMHist, fig.cap="TWI outliers histogram", eval=F}
+read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+  dplyr::rename(TWI = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  ggplot(aes(Allele, TWI)) +
+  geom_boxplot() +
+  facet_wrap(~ SNP) +
+  theme(strip.text.x = element_text(size = 5))
+```
+
+```{r TWIOutliersBSLMMAnnotation, eval=F}
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  filter(qval < 0.05) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  group_by(type) %>% 
+  summarise(N = n())
+
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  filter(qval < 0.05) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  filter(type == "functional") %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation"))) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("Transcript") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect()%>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
+                       delim = " ") %>% 
+              dplyr::select(-X) %>% 
+              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
+              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
+              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
+              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
+              filter(trsc %in% .$trsc)) %>% 
+  filter(!is.na(deg) | !is.na(annotation))
+
+read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  filter(qval < 0.05) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  filter(type == "hitchiker") %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% 
+  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+              tbl("Transcript") %>% 
+              filter(transcript_id %in% local(.$trsc)) %>% 
+              collect()%>% 
+              mutate(transcript_id = as.character(transcript_id)), 
+            by = c("trsc" = "transcript_id")) %>% 
+  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
+                       delim = " ") %>% 
+              dplyr::select(-X) %>% 
+              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
+              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
+              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
+              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
+              filter(trsc %in% .$trsc)) %>% 
+  # filter(!is.na(annotation))
+  filter(!is.na(deg), deg != "NE") %>% 
+  group_by(deg) %>% 
+  dplyr::select(trsc, deg) %>% 
+  unique() %>% 
+  summarise(N = n())
+```
+
 ## Neighbors
 
 ### Major effect SNPs
 
 ### Polygenic signal
+
+## SNP imputation
+
+We used `beagle` to impute missing data in SNPs. `beagle` doesn't work with scaffolds including less than 3 SNPs, wo we removed the 1849 corresponding SNPs.
+
+```{bash beagle, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/Beagle_v5.0
+plink \
+  --bfile ../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --extract ../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --out paracou3pop.raw \
+  --make-bed
+# read_tsv(file.path(path, "beagle", "paracou3pop.raw.bim"), col_names = F) %>%
+#   group_by(X1) %>% filter(n() < 3) %>%  ungroup() %>%  dplyr::select(X2) %>% 
+#   write_tsv(file.path(path, "beagle", "snp.lowsnpscf.list"), col_names = F)
+plink \
+  --bfile paracou3pop.raw \
+  --allow-extra-chr \
+  --out paracou3pop.raw \
+  --recode vcf-iid \
+  --exclude snp.lowsnpscf.list
+java -Xmx4g -jar $BEAGLE   gt=paracou3pop.raw.vcf out=paracou3pop.imputed nthreads=10
+plink \
+  --vcf paracou3pop.imputed.vcf.gz \
+  --allow-extra-chr \
+  --out paracou3pop.imputed \
+  --make-bed
+```
+
+```{bash pimass, eval=F, include=F}
+plink \
+  --bfile ../../beagle/paracou3pop.imputed \
+  --allow-extra-chr 0 \
+  --pheno TWI.kinship.cov \
+  --out paracou3pop \
+  --recode bimbam \
+pimass \
+  -g paracou3pop.recode.geno.txt \
+  -p paracou3pop.recode.pheno.txt \
+  -w 10000 -s 100000 -num 10 \
+  -o paracou3pop.pimass
+```
 
 ## Conclusion
