@@ -13,6 +13,9 @@ opts_chunk$set(
   cache = T, cache.lazy = F)
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
 ```
 
 # Environmental genomics
@@ -188,59 +191,46 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
 
 [@Zhou2013]
 
+A total of 31 804 SNPs explained approximately 59% of environmental variation (i.e. PVE=0.5915). Among these 31 804 SNPs, a small proportion of them (1% or 300 SNPs) have relatively large effects and explain a total of 50% PVE (i.e. PGE=0.4989).
+
 ```{bash TWIgemmaBSLMM, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 module load bioinfo/gemma-v0.97
 gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
 ```
 
-* $h$ and $PVE$ are directly related
 * $PVE$ is the phenotypic variance explained by sparsed effects $\beta$ and random effects $u$
+* $h$ and $PVE$ are directly related
 * $\rho$ correspond to the ratio between a models based on few SNPs with large effects ($\rho = 1$ correspond to BVSR) against a model based on many SNPs with small effects ($\rho = 0$ correspond to LMM)
 * $PGE$ is the phenotypic variance explained by sparsed effects $\beta$ alone 
 * $\pi$ is the proportion of the SNPs having a polygenic effect on the phenotype
 * $n_\gamma$ or $|\gamma|$ is the number of non-zeros SNPs
 
-```{r bayescanConvergence, fig.cap="Population Fst convergence." }
+```{r BSLMMTWIConvergence, fig.cap="Population Fst convergence." }
 read_tsv(file.path(path, "gemma", "TWI", "polygenic.hyp.txt")) %>% 
-  mcmc_dens()
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  mcmc_dens(facet_args = list(labeller = label_parsed))
 ```
 
-* $\alpha$ intercept ?
+* $\alpha$ intercept
 * $\beta$ correspond to $\beta | \gamma == 1$ the SNP effect if selected
 * $\gamma$ correspond to the parameter evaluating if the SNP has an effect or not
+* the  effect  size  estimate  for  the  additional  effect  is $\beta\gamma$
+* taking $|\gamma|=300$
 
 ```{r TWIassocBSLMM, eval=T}
 read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
+  mutate(effect = abs(beta*gamma)) %>% 
+  arrange(desc(effect)) %>% 
+  mutate(n_gamma = as.factor(c(rep(1,300), rep(0,nrow(.)-300)))) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   arrange(chr, ps) %>% 
   mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(alpha, fill = type)) +
-  geom_density(alpha = 0.3, col = NA)
-read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(beta, fill = type)) +
-  geom_density(alpha = 0.3, col = NA)
-read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, gamma, col = type)) +
+  ggplot(aes(snp, beta*gamma, col = type, alpha = n_gamma)) +
   geom_point() +
-  scale_y_sqrt()
-read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, beta*gamma, col = type)) +
-  geom_point() +
-  scale_y_sqrt()
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma))
 ```
 
 ```{r TWIoutliersBSLMMHist, fig.cap="TWI outliers histogram", eval=F}

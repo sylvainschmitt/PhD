@@ -1,3 +1,7 @@
+# PhD 0.1.9150
+* distribution: biblio intro syngameon
+* symvapture: BSLMM TWI begin
+
 # PhD 0.1.9149
 * symcapture: polygenic signal with BSLMM Zhou 2013 Plos Genetics
 
