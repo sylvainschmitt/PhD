@@ -16,17 +16,37 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
+load("./symcapture_save/Env.Rdata")
 ```
 
 # Environmental genomics
 
-We will ... :
+We explored and selected environmental descriptors to be used in environmental genomics. We then described the methods used to explore both major effect SNPs and polygenic signal association. Finally we used the two methods for every selected environmental descriptors, e.g. Topographic Wetness Index (TWI), Neighbor Crowding Index (NCI) and Annual Neighbor Crowding Index (ANCR), investigating selected SNPs and associated annotation. **Finally, we imputed missing SNPs but didn't used this dataset yet**.
 
-* __xxx__ ...
+* __Descriptors__ environmental descriptors definition and selection based on multicolinearity and eco-evolutionary meaningfulness
+* __Methods__ association methods for major effect SNPs and polygenic signal with `gemma`
+* __Topographic Wetness Index (TWI)__ major effect SNPs and polygenic signal with associated association
+* __Neighbor Crowding Index (NCI)__ major effect SNPs and polygenic signal with associated association
+* __Annual Neighbor Crowding Rate (ANCR)__ major effect SNPs and polygenic signal with associated association
+* __SNP imputation__ **unused for the moment**, missing SNP imputation with `beagle`
 
-## Topography
+## Descriptors
 
-```{r TWIenvgenom, eval=F}
+The topographic wetness index (TWI) was selected among several abiotic descriptors as a proxy of water accumulation. Waterlogging and topography have been highlighted as crucial for forest dynamics [@ferry2010higher] and species habitat preference [@Allie2015] at the Paracou study site. TWI was derived from a 1-m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign done in 2015.
+
+Biotic descriptors included the Neighborhood Crowding Index [NCI; @Uriarte2004] and the Annual Crowding Rate, both integrated over time. The Neighborhood Crowding Index $NCI_i$ from tree individual $i$ was calculated with following formula:
+
+$$NCI_i = (\int_{t_0} ^{2015} \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}.dt).\frac1{\Delta t}$$
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface. The decrease of neighbors $DBH$ effect with distance was set to 0.25 here to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters. $NCI$ represents biotic asymmetric competition through tree neighborhood over time. 
+
+The Annual Neighborhood Crowding Rate $ANCR_i$ from tree individual $i$ was calculated with following formula:
+
+$$ANCR_i = (\int_{t_0+1} ^{2015} \frac{ \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}} }{ \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t-1}} DBH_{j,t-1}^2 e^{-\frac14.\delta_{i,j}} }  .dt).\frac1{\Delta t}$$
+with the same parameters as $NCI_i$. $ANCR$ represents the dynamic of biotic asymmetric competition through tree neighborhood over time (derivate of $NCI_i$). Both NCI and ANCR were calculated among heterospecific and conspecific neighbors and with all enighbors confounded.
+
+Both correlations and principal component analyses showed non colinear TWI, NCI and ANCR that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom) and Fig. \@ref(fig:pca12EnvGenom)).
+
+```{r DataEnvGenom, eval=F}
 trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
                               "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
@@ -42,30 +62,167 @@ trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
   left_join(trees) %>% 
   left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
                      col_names = c("IID", "pop")))
-coordinates(trees) <- ~Xutm + Yutm
-proj4string(trees) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
-trees <- spTransform(trees, CRSobj = crs)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
 wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
                             "topography", "TWI_1m.tif"))
 dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
                         "topography", "DEM_1m_2015.tif")) # for CRS
 projection(wetness) <- projection(dem)
 wetness <- projectRaster(wetness, crs = crs)
-trees$wetness <- raster::extract(wetness, trees)
-rm(dem, wetness)
-trees@data %>% 
-  dplyr::rename(TWI = wetness) %>% 
-  dplyr::select(FID, IID, TWI) %>% 
-  write_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "TWI.cov"),
+trees$TWI <- raster::extract(wetness, treesXY)
+rm(dem, wetness, treesXY)
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("trees"))
+NCI <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    collect() %>% 
+    arrange(CensusYear) %>% 
+    summarise(idTree = local(trees$idTree[ind]),
+              NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con)/(last(CensusYear) - first(CensusYear)),
+              NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))/(last(CensusYear) - first(CensusYear)))})
+NCI <- bind_rows(NCI)
+trees <- left_join(trees, NCI)
+ANCR <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot == local(trees$Plot[ind])) %>% 
+  filter(idTree != local(trees$idTree[ind])) %>% 
+  mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+  filter(dij < 20) %>% 
+  mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  group_by(CensusYear) %>% 
+  summarise(idTree = local(trees$idTree[ind]),
+            NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con),
+            NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))) %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  collect() %>% 
+  mutate(dNCIcon = NCIcon - lag(NCIcon), 
+         dNCIhetero = NCIhetero - lag(NCIhetero), 
+         dt = CensusYear - lag(CensusYear)) %>% 
+  na.omit() %>% 
+  ungroup() %>% 
+  summarise(ANCRcon = sum(dNCIcon)/sum(dt),
+            ANCRhetero = sum(dNCIhetero)/sum(dt))})
+parallel::stopCluster(cl) ; rm(cl)
+ANCR <- bind_rows(ANCR)
+trees <- left_join(trees, ANCR)
+rm(NCI, ANCR)
+trees <- trees %>% 
+  rowwise() %>% 
+  mutate(NCI = sum(NCIcon, NCIhetero), ANCR = sum(ANCRcon, ANCRhetero))
+save(trees, file = "./symcapture_save/Env.Rdata")
+trees %>%
+  dplyr::select(FID, IID, TWI) %>%
+  write_tsv(file.path(path, "gemma", "TWI", "TWI.cov"),
+            col_names = F)
+trees %>%
+  dplyr::select(FID, IID, NCI) %>%
+  write_tsv(file.path(path, "gemma", "NCI", "NCI.cov"),
+            col_names = F)
+trees %>%
+  dplyr::select(FID, IID, ANCR) %>%
+  write_tsv(file.path(path, "gemma", "ANCR", "ANCR.cov"),
             col_names = F)
 ```
 
+```{r correlationsEnvGenom, fig.cap="Environmental descriptors correlations."}
+trees %>% 
+  dplyr::select(TWI, NCI, NCIcon, NCIhetero, ANCR, ANCRcon, ANCRhetero) %>% 
+  na.omit() %>% 
+  cor(.) %>% 
+  corrplot::corrplot.mixed()
+```
+
+```{r pca12EnvGenom, fig.cap="Environmental descriptors principal component analysis."}
+factoextra::fviz_pca_var(princomp(~ TWI + NCI + NCIcon + NCIhetero + ANCR + ANCRcon + ANCRhetero, trees, cor = T),
+                         axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```
+
+## Methods
+
 ### Major effect SNPs
 
-We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers). The 14 hitchiker SNPs corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep).
+We used per SNP linear mixed models implemented in `GEMMA` [Genome-wide Efficient Mixed Model Analysis, @Zhou2012a] to identify major effect SNPs. Linear mixed models are calculated with following formula:
+
+$$y = \alpha + x\beta + Zu + \epsilon$$
+$$u \sim \mathcal{MVN_n}(0,\lambda\sigma K)$$
+$$\epsilon \sim \mathcal{MVN_n}(0,\sigma \mathbb I_n)$$
+where $n$ is the number of individuals, $y$ is the environmental variable, $\alpha$ is the intercept representing the mean environmental variable, $x$ is a SNP, $\beta$ is the effect size of the SNP, $Z$ is the loading matrix and $u$ are random effects corresponding to individuals kniship relations, $\epsilon$ is the vector of errors, $\sigma$ is the residual variance, $\lambda$ is the ratio between the two variance components, $K$ is the kinship matrix, $\mathbb I_n$ is a $n\times n$ identity matrix, and $\mathcal MVN$ denotes multivariate normal distribution. $\beta$ significance is calculated with Wald test. And p-values are corrected for multiple testing with false discovery rate, resulting in q-values. 
+
+### Polygenic signal
+
+We used Bayesian Sparse Linear Mixed Models [BSLMM, @Zhou2013] implemented in `GEMMA` to identify polygenic signal of environmental assocaition and to charachterise the genomic structure associated to environmental variables. The objective of Bayesian Sparse Linear Mixed Models (BSLMM) is to merge the hypothesis of Bayesian Variable Sparse Regression (BVSR), which assume few SNPs with large effects, with the hypothesis of Linear Mixed Models (LMM), which assume numerous small effects SNPs, because a priori knowledge of the genomic structure associated to our studied variable is not obvious. Bayesian Sparse Linear Mixed Models are calculated with following formula:
+
+$$y = \mu + X\widetilde\beta+u+\epsilon$$
+$$u \sim \mathcal{MVN_n}(0,\sigma_b^2\tau^{-1} K)$$
+$$\epsilon \sim \mathcal{MVN_n}(0,\tau^{-1} \mathbb I_n)$$
+$$\widetilde\beta_i \sim \pi \mathcal N(0,\sigma_a^2\tau^{-1})+(1-\pi)\delta_0$$
+where $y$ is the environmental variable, $\mu$ is the intercept representing the mean environmental variable, $X$ is the matrix of SNPs ($n$ individuals and $p$ markers coded as 0, 1 or 2 copies of a reference allele), $\widetilde\beta$  correspond to SNPs sparse effects, $u$ is the random effects related to individuals kinship,  $\epsilon$ is the vector of errors, $\tau^{-1}$ is the residual variance, $\mathcal MVN$ denotes multivariate normal distribution, $\pi$ is the proportion of non-zero $\widetilde \beta$ and $\delta_0$ denotes a point mass at zero. In a nutshell:
+
+* $\mu$ and $\tau^{-1}$ control environmental variable mean and residual variance
+* $\pi$ controls the proportion of $\widetilde \beta$ values that are non-zero
+* $\sigma_a$ control the expected magnitude of non-zero $\widetilde \beta$
+* $\sigma_b$ controls the expected magnitude of the random effects $u$
+
+Models inference were done with following priors:
+
+$$\tau \sim \Gamma (k_1,k_2)$$
+$$\mu|\tau \sim \mathcal N(0, \sigma_\mu^2\tau^{-1})$$
+$$log(\pi) \sim \mathcal U(log(\frac1p),log(1))$$
+$\sigma_a$ and $\sigma_b$ priors specification were done with reparametrization. To this end the Propotion of Variance Explained by the specific sparse effects and random effects terms together (PVE) and the proportion of genetic variance explained by the sparse effects terms (PGE) were defined as follow:
+
+$$PVE(\widetilde\beta,u,\tau) = \frac{V(X\widetilde\beta+u)}{V(X\widetilde\beta+u)+\tau^{-1}}$$
+$$PVE(\widetilde\beta,u) = \frac{V(X\widetilde\beta)}{V(X\widetilde\beta+u)}$$
+Expectations of PVE and PGE are approximated with $h$ and $rho$, defined as follow:
+
+$$h:=\frac{p \pi s_a \sigma_a^2 + s_b \sigma_b^2}{p \pi s_a \sigma_a^2 + s_b \sigma_b^2+1}$$
+$$\rho:=\frac{p \pi s_a \sigma_a^2}{p \pi s_a \sigma_a^2 + s_b \sigma_b^2}$$
+where $s_a$ is the average variance of genotypes across markers, and $s_b$ is the mean of diagonal elements in $K$. $\rho$ correspond to the ratio between a models based on few SNPs with large effects ($\rho = 1$ correspond to BVSR) against a model based on many SNPs with small effects ($\rho = 0$ correspond to LMM). Both $h$ and $rho$ were defined a priori following a uniform distribution on $[0,1]$.
+
+To facilitate computation, the model used a binary indicator $\gamma=(\gamma_1,...,\gamma_p)\in[0,1]^p$ indicating wether the corresponding $\widetilde\beta$ are non-zero. $\widetilde\beta$ can thus be written as:
+$$\gamma_i \sim \mathcal B(\pi)$$
+$$\widetilde\beta_\gamma \sim \mathcal{MVN_{|\gamma|}}(0,\sigma_a^2\tau^{-1}\mathbb I_{|\gamma|})$$
+$$\widetilde\beta_{-\gamma}\sim\delta_0$$
+where $\widetilde\beta_\gamma$ correspond to the $\widetilde\beta$ with $\gamma_i=1$; $\widetilde\beta_{-\gamma}$ correspond to the $\widetilde\beta$ with $\gamma_i=0$; and $|\gamma|$ or $n_\gamma$ correspond to the number of non-zero $\gamma$.
+
+<style>
+div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
+</style>
+<div class = "blue">
+
+In summary, to interpret subsequent BSLMM results, we should remember that:
+
+* PVE is the observed variable variance explained by sparse effects $\beta$ and random effects $u$
+* PGE is the observed variable genetic variance explained by sparse effects alone
+* $\pi$ is the porportion of the SNPs having a polygenic effect on the phenotype
+* $n_\gamma$ or $|\gamma|$ is the number of non-zeros SNPs 
+* $\beta\gamma$ is the effect size estimate for the additive effect
+
+</div>
+
+## Topographic Wetness Index (TWI)
+
+### Major effect SNPs
+
+We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers, Fig. \@ref(fig:TWIassocMLM)). The 14 hitchiker SNPs (Fig. \@ref(fig:TWIoutliersMLMHist)) corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep). **Gene ontology ...**
 
 ```{bash TWIgemmaLMM, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
 plink \
   --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
   --allow-extra-chr \
@@ -74,11 +231,9 @@ plink \
   --pheno TWI.cov \
   --out paracou3pop \
   --make-bed
-module load bioinfo/gemma-v0.97
 gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
 gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
 gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.TWI # lmm Wald test
-gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
 # read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
 #   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
 #   filter(qval < 0.05) %>% 
@@ -93,7 +248,7 @@ plink  \
   --out TWI.snps
 ```
 
-```{r TWIassocMLM}
+```{r TWIassocMLM, fig.cap="q-value of major effect SNPs associated to topographic wetness index (TWI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
 read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
@@ -106,10 +261,12 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
   geom_point() +
   ylab(expression(-log[10]("q-value"))) +
   scale_alpha_discrete(guide = "none") +
-  scale_y_sqrt()
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type")
 ```
 
-```{r TWIoutliersMLMHist, fig.cap="TWI outliers histogram"}
+```{r TWIoutliersMLMHist, fig.cap="Distribution of alleles along topographic wetness index for significantly associated SNPs."}
 read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
   dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
   dplyr::rename(TWI = PHENOTYPE) %>% 
@@ -119,7 +276,9 @@ read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>%
   ggplot(aes(Allele, TWI)) +
   geom_boxplot() +
   facet_wrap(~ SNP) +
-  theme(strip.text.x = element_text(size = 5))
+  theme(strip.text.x = element_text(size = 5)) +
+  ylab("Topographic wetness index") +
+  xlab("Number of copies of the major allele.")
 ```
 
 ```{r TWIOutliersMLMAnnotation, eval=F}
@@ -189,8 +348,6 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
 
 ### Polygenic signal
 
-[@Zhou2013]
-
 A total of 31 804 SNPs explained approximately 59% of environmental variation (i.e. PVE=0.5915). Among these 31 804 SNPs, a small proportion of them (1% or 300 SNPs) have relatively large effects and explain a total of 50% PVE (i.e. PGE=0.4989).
 
 ```{bash TWIgemmaBSLMM, eval=F, echo=T}
@@ -199,24 +356,12 @@ module load bioinfo/gemma-v0.97
 gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
 ```
 
-* $PVE$ is the phenotypic variance explained by sparsed effects $\beta$ and random effects $u$
-* $h$ and $PVE$ are directly related
-* $\rho$ correspond to the ratio between a models based on few SNPs with large effects ($\rho = 1$ correspond to BVSR) against a model based on many SNPs with small effects ($\rho = 0$ correspond to LMM)
-* $PGE$ is the phenotypic variance explained by sparsed effects $\beta$ alone 
-* $\pi$ is the proportion of the SNPs having a polygenic effect on the phenotype
-* $n_\gamma$ or $|\gamma|$ is the number of non-zeros SNPs
-
 ```{r BSLMMTWIConvergence, fig.cap="Population Fst convergence." }
 read_tsv(file.path(path, "gemma", "TWI", "polygenic.hyp.txt")) %>% 
+  dplyr::select(pve, pge, pi, n_gamma) %>% 
   dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
   mcmc_dens(facet_args = list(labeller = label_parsed))
 ```
-
-* $\alpha$ intercept
-* $\beta$ correspond to $\beta | \gamma == 1$ the SNP effect if selected
-* $\gamma$ correspond to the parameter evaluating if the SNP has an effect or not
-* the  effect  size  estimate  for  the  additional  effect  is $\beta\gamma$
-* taking $|\gamma|=300$
 
 ```{r TWIassocBSLMM, eval=T}
 read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
@@ -233,89 +378,111 @@ read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>%
   ylab(expression(beta*gamma))
 ```
 
-```{r TWIoutliersBSLMMHist, fig.cap="TWI outliers histogram", eval=F}
-read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
-  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
-  dplyr::rename(TWI = PHENOTYPE) %>% 
-  reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
-  na.omit(Allele) %>% 
-  mutate(Allele = as.factor(Allele)) %>% 
-  ggplot(aes(Allele, TWI)) +
-  geom_boxplot() +
-  facet_wrap(~ SNP) +
-  theme(strip.text.x = element_text(size = 5))
-```
-
-```{r TWIOutliersBSLMMAnnotation, eval=F}
-read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
-  mutate(qval = p.adjust(p_wald, "fdr")) %>%
-  filter(qval < 0.05) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  group_by(type) %>% 
-  summarise(N = n())
-
-read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
-  mutate(qval = p.adjust(p_wald, "fdr")) %>%
-  filter(qval < 0.05) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  filter(type == "functional") %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation"))) %>% 
-  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
-              tbl("Transcript") %>% 
-              filter(transcript_id %in% local(.$trsc)) %>% 
-              collect()%>% 
-              mutate(transcript_id = as.character(transcript_id)), 
-            by = c("trsc" = "transcript_id")) %>% 
-  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
-                       delim = " ") %>% 
-              dplyr::select(-X) %>% 
-              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
-              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
-              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
-              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
-              filter(trsc %in% .$trsc)) %>% 
-  filter(!is.na(deg) | !is.na(annotation))
-
-read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
-  mutate(qval = p.adjust(p_wald, "fdr")) %>%
-  filter(qval < 0.05) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  filter(type == "hitchiker") %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% 
-  left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                                 "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
-              tbl("Transcript") %>% 
-              filter(transcript_id %in% local(.$trsc)) %>% 
-              collect()%>% 
-              mutate(transcript_id = as.character(transcript_id)), 
-            by = c("trsc" = "transcript_id")) %>% 
-  left_join(read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                                 "edgeR", "juv_sympho_43k_retained_genes_DecisionTest.txt"),
-                       delim = " ") %>% 
-              dplyr::select(-X) %>% 
-              dplyr::rename(trsc = genes, deg = X.0.5.glo_HT..0.5.glo_SF.0.5.sp1_HT.0.5.sp1_SF) %>%
-              mutate(deg = ifelse(deg == 1, "Eglo", deg)) %>% 
-              mutate(deg = ifelse(deg == -1, "Esp", deg)) %>% 
-              mutate(deg = ifelse(deg == 0, "NE", deg)) %>% 
-              filter(trsc %in% .$trsc)) %>% 
-  # filter(!is.na(annotation))
-  filter(!is.na(deg), deg != "NE") %>% 
-  group_by(deg) %>% 
-  dplyr::select(trsc, deg) %>% 
-  unique() %>% 
-  summarise(N = n())
-```
-
-## Neighbors
+## Neighbor Crowding Index (NCI)
 
 ### Major effect SNPs
 
+```{bash NCIgemmaLMM, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno NCI.cov \
+  --out paracou3pop \
+  --make-bed
+gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.NCI # lmm Wald test
+```
+
+```{r NCiassocMLM, fig.cap="q-value of major effect SNPs associated to neighbor competition index (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+read_tsv(file.path(path, "gemma", "NCI", "paracou.NCI.assoc.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type")
+```
+
 ### Polygenic signal
+
+```{bash NCIgemmaBSLMM, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
+```
+
+```{r BSLMMNCIConvergence, fig.cap="Population Fst convergence." }
+read_tsv(file.path(path, "gemma", "NCI", "polygenic.hyp.txt")) %>%
+  dplyr::select(pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  mcmc_dens(facet_args = list(labeller = label_parsed))
+```
+
+## Annual Neighbor Crowding Rate (ANCR)
+
+### Major effect SNPs
+
+```{bash ANCRgemmaLMM, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno ANCR.cov \
+  --out paracou3pop \
+  --make-bed
+gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
+gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.ANCR # lmm Wald test
+```
+
+```{r ANCRassocMLM, fig.cap="q-value of major effect SNPs associated to annual neighbor competition rate (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+read_tsv(file.path(path, "gemma", "ANCR", "paracou.ANCR.assoc.txt")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type")
+```
+
+### Polygenic signal
+
+```{bash ANCRgemmaBSLMM, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
+```
+
+```{r BSLMMANCRConvergence, fig.cap="Population Fst convergence." }
+read_tsv(file.path(path, "gemma", "ANCR", "polygenic.hyp.txt")) %>% 
+  dplyr::select(pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  mcmc_dens(facet_args = list(labeller = label_parsed))
+```
 
 ## SNP imputation
 
@@ -346,20 +513,6 @@ plink \
   --allow-extra-chr \
   --out paracou3pop.imputed \
   --make-bed
-```
-
-```{bash pimass, eval=F, include=F}
-plink \
-  --bfile ../../beagle/paracou3pop.imputed \
-  --allow-extra-chr 0 \
-  --pheno TWI.kinship.cov \
-  --out paracou3pop \
-  --recode bimbam \
-pimass \
-  -g paracou3pop.recode.geno.txt \
-  -p paracou3pop.recode.pheno.txt \
-  -w 10000 -s 100000 -num 10 \
-  -o paracou3pop.pimass
 ```
 
 ## Conclusion

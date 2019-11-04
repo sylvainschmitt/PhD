@@ -1,3 +1,7 @@
+# PhD 0.1.9151
+* lecture: bayes EFT update
+* symvapture: EnvGenom variables, methods, NCI, ANCR
+
 # PhD 0.1.9150
 * distribution: biblio intro syngameon
 * symvapture: BSLMM TWI begin
