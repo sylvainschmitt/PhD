@@ -3,6 +3,7 @@ title: "Introduction to bayesian modelling with WinBUGS"
 author: Sylvain SCHMITT
 date: "November 7, 2019, EFT Msc, ECOFOG"
 output: 
+  pdf_document: default
   revealjs::revealjs_presentation:
     theme: blood
     highlight: pygments
@@ -13,7 +14,6 @@ output:
     reveal_options:
       slideNumber: true
       previewLinks: true
-  pdf_document: default
   html_document:
      theme: readable
      toc: true
@@ -54,7 +54,7 @@ $$P(A|B)P(B) = P(A \cap B) = P(B|A)P(A)$$
 $$P(A|B) = \frac{P(B|A)P(A)}{P(B)}$$
 
 ```{r, echo=F}
-include_graphics("https://qph.fs.quoracdn.net/main-qimg-fe1f9e3bb7d94a6986d3b196bf081682")
+include_graphics("./data/bayes.jpeg")
 ```
 
 ## Bayes theorem
@@ -177,7 +177,7 @@ $$\theta \sim \mathcal B (1, 1)$$
 $$X \sim \Gamma(\alpha,\beta)~,~f(x)=\frac{\beta^\alpha x^{\alpha-1}e^{-\beta x}}{\Gamma(\alpha)}~,~\Gamma(z)=\int_0^1x^{z-1}e^{-x}dx$$
 
 ```{r, echo=F, fig.height=6}
-include_graphics("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Gamma_distribution_pdf.svg/800px-Gamma_distribution_pdf.svg.png")
+include_graphics("./data/gamma.png")
 ```
 
 ## Priors - Beta law
@@ -185,7 +185,7 @@ include_graphics("https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Gamm
 $$X \sim B (\alpha,\beta)~,~f(x)=\frac{x^{\alpha-1}(1-x)^{\beta-1}}{B(\alpha,\beta)}~,~B(\alpha,\beta)=\frac{\Gamma(\alpha)\Gamma(\beta)}{\Gamma(\alpha+\beta)}$$
 
 ```{r, echo=F}
-include_graphics("https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Beta_distribution_pdf.svg/531px-Beta_distribution_pdf.svg.png")
+include_graphics("./data/beta.png")
 ```
 
 ## Priors - Form
@@ -449,9 +449,9 @@ $$p(G_{max}|K_s, D_{opt}, \sigma) \sim \mathcal N( \frac{\sigma^2\sum_1^n f(DBH)
 ```{r, eval=F}
 # 1 - a model
 model{ for (i in 1:N)
-  y[i] ∼ f(x[i], parameters)
+  y[i] ~ f(x[i], parameters)
   ...
-  parameters ∼ prior
+  parameters ~ prior
 }
 # 2 - your data
 list(x=c(...), y=c(...), N = ...)
@@ -637,14 +637,14 @@ $$posterior \propto prior*likelihood$$
 ## Other tools -  `stan`
 
 ```{r}
-include_graphics("http://mc-stan.org/assets/img/shinystan/explore.png")
+include_graphics("./data/stan.png")
 ```
 
 
 ## Other tools -  `greta`
 
 ```{r}
-include_graphics("https://rviews.rstudio.com/post/2018-04-11-Rickert-Greta_files/mod.png")
+include_graphics("./data/greta.png")
 ```
 
 ## References

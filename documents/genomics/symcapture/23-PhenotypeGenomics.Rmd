@@ -12,6 +12,9 @@ opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
 ```
 
 # Phenotype genomics
@@ -55,7 +58,6 @@ read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
 
 ### Major effect SNPs
 
-
 ```{bash SLAgemma, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 plink \
@@ -98,6 +100,37 @@ read_tsv(file.path(path, "gemma", "SLA", "paracou.SLA.assoc.txt")) %>%
   ylab(expression(-log[10]("q-value"))) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt()
+```
+
+### Polygenic signal
+
+```{bash SLAgemmaBSLMM, eval=F, echo=T}
+module load bioinfo/gemma-v0.97
+gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
+```
+
+```{r BSLMMSLAConvergence, fig.cap="Population Fst convergence." }
+read_tsv(file.path(path, "gemma", "SLA", "polygenic.hyp.txt")) %>% 
+  dplyr::select(pve, pge, pi, n_gamma) %>% 
+  # summary()
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  mcmc_dens(facet_args = list(labeller = label_parsed))
+```
+
+```{r SLAassocBSLMM, eval=T}
+ngamma <- 17
+read_tsv(file.path(path, "gemma", "SLA", "polygenic.param.txt")) %>% 
+  mutate(effect = abs(beta*gamma)) %>% 
+  arrange(desc(effect)) %>% 
+  mutate(n_gamma = as.factor(c(rep(1, ngamma), rep(0,nrow(.)-ngamma)))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  ggplot(aes(snp, beta*gamma, col = type, alpha = n_gamma)) +
+  geom_point() +
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma))
 ```
 
 ## Conclusion

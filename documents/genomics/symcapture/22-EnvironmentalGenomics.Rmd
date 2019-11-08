@@ -256,12 +256,14 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
   arrange(chr, ps) %>% 
   mutate(snp = 1:nrow(.)) %>% 
   ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
+  # ggplot(aes(snp, beta, alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
   ylab(expression(-log[10]("q-value"))) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
+  # scale_y_continuous(trans="S_sqrt") +
   xlab("SNP number") +
   scale_color_discrete("SNP type")
 ```

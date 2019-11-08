@@ -1,3 +1,6 @@
+# PhD 0.1.9152
+* symcapture: SLA polygenic, BSLMM try in stan (fail)
+
 # PhD 0.1.9151
 * lecture: bayes EFT update
 * symvapture: EnvGenom variables, methods, NCI, ANCR
