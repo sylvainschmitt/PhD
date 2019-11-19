@@ -1,0 +1,188 @@
+```{r setup_FTgenom, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+load("./symcapture_save/Env.Rdata")
+```
+
+# Functional traits genomics
+
+We will ... :
+
+* __xxx__ ...
+
+## SLA
+
+```{r SLAphenogenom, eval=F, echo =T}
+traits <- googlesheets::gs_title("Measures_Symphonia") %>%
+  googlesheets::gs_read("AllTraits") %>%
+  mutate(SLA = as.numeric(SLA)) %>% 
+  dplyr::select(idTree, SLA) %>% 
+  group_by(idTree) %>% 
+  summarise_all(mean, na.rm = T)
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  filter(CensusYear == 2015) %>% 
+  collect()
+residuals <- traits %>% 
+  left_join(trees) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  do(res = residuals(lm(log(SLA) ~ log(DBH), data = .))) %>% 
+  broom::tidy(res)
+read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.fam"),
+                col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(traits %>% 
+              left_join(trees) %>% 
+              mutate(residuals = residuals$x)) %>% 
+  dplyr::select(FID, IID, residuals) %>% 
+  write_tsv(file.path(path, "gemma", "SLA", "SLA.cov"), col_names = F)
+```
+
+```{bash SLAgemma, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno SLA.cov \
+  --out paracou3pop \
+  --make-bed
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno SLA.cov \
+  --out $pop \
+  --make-bed &
+done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship ; done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.SLA ; done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.TWI & done
+cat SLA.LMM.snps SLA.BSLMM.snps | grep paracou3pop | cut -f1 > SLA.snps.list
+plink \
+  --bfile paracou3pop \
+  --allow-extra-chr \
+  --extract SLA.snps.list \
+  --out SLA.snps \
+  --recode A
+```
+
+### Major effect SNPs
+
+```{r SLAassocMLM, fig.cap="q-value of major effect SNPs associated to Specific Leaf Area. SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "SLA", paste0(pop,".SLA.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.))
+filter(t , qval < 0.05) %>% 
+  mutate(model = "LMM") %>% 
+  dplyr::select(rs, pop, model) %>% 
+  write_tsv(file.path(path, "gemma", "SLA", "SLA.LMM.snps"), col_names = F)
+ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+# ggplot(t, aes(snp, beta, label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
+  ylab(expression(-log[10]("q-value"))) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  # scale_y_continuous(trans="S_sqrt") +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop)
+```
+
+### Polygenic signal
+
+
+```{r BSLMMSLAConvergence, fig.cap="BSLMM parameters distribution." }
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "SLA", paste0(pop,".polygenic.SLA.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  dplyr::select(pve, pge, pi, n_gamma, Population) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  reshape2::melt(id.vars = "Population") %>% 
+  ggplot(aes(value, fill = Population, col = Population)) +
+  geom_density(alpha = 0.15) +
+  facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
+  theme(legend.position = "bottom",
+        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+```
+
+```{r SLAassocBSLMM, eval=T}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "SLA", paste0(pop,".polygenic.SLA.param.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.))
+filter(t , gamma > 0.1) %>% 
+  mutate(model = "BSLMM") %>% 
+  dplyr::select(rs, Population, model) %>% 
+  write_tsv(file.path(path, "gemma", "SLA", "SLA.BSLMM.snps"), col_names = F)
+ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
+  geom_point() +
+  ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma)) +
+  facet_wrap(~ Population, nrow = 3)
+```
+
+### Outliers
+
+```{r SLAoutliersHist, fig.cap="Distribution of alleles along specific leaf area for significantly associated SNPs."}
+read_delim(file.path(path, "gemma", "SLA", "SLA.snps.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+  dplyr::rename(SLA = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "SLA"), variable.name = "SNP", value.name = "Allele") %>% 
+  left_join(trees) %>% 
+  na.omit(Allele) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
+  ggplot(aes(pop, SLA, fill = Allele)) +
+  geom_boxplot() +
+  facet_wrap(~ SNP) +
+  coord_flip() +
+  theme(strip.text.x = element_text(size = 5)) +
+  ylab("Topographic wetness index") +
+  xlab("Population") +
+  scale_fill_discrete("Number of copies\nof the major allele")
+```
+
+## Conclusion

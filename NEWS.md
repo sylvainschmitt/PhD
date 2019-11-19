@@ -1,3 +1,7 @@
+# PhD 0.1.9153
+* parvicapture: capture 1
+* symcapture: growth begins & co
+
 # PhD 0.1.9152
 * symcapture: SLA polygenic, BSLMM try in stan (fail)
 

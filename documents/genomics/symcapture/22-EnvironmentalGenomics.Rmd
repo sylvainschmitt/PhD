@@ -216,11 +216,7 @@ In summary, to interpret subsequent BSLMM results, we should remember that:
 
 ## Topographic Wetness Index (TWI)
 
-### Major effect SNPs
-
-We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers, Fig. \@ref(fig:TWIassocMLM)). The 14 hitchiker SNPs (Fig. \@ref(fig:TWIoutliersMLMHist)) corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep). **Gene ontology ...**
-
-```{bash TWIgemmaLMM, eval=F, echo=T}
+```{bash TWIgemma, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 module load bioinfo/gemma-v0.97
 plink \
@@ -231,56 +227,124 @@ plink \
   --pheno TWI.cov \
   --out paracou3pop \
   --make-bed
-gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
-gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
-gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.TWI # lmm Wald test
-# read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
-#   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
-#   filter(qval < 0.05) %>% 
-#   dplyr::select(rs) %>% 
-#   write_tsv(file.path(path, "gemma", "TWI", "TWI.snps.list"),
-#             col_names = F)
-plink  \
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno TWI.cov \
+  --out $pop \
+  --make-bed
+done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship ; done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.TWI ; done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.TWI & done
+module load bioinfo/plink-v1.90b5.3
+cat TWI.LMM.snps TWI.BSLMM.snps | cut -f1 > TWI.snps.list
+plink \
   --bfile paracou3pop \
   --allow-extra-chr \
   --extract TWI.snps.list \
-  --recode A \
-  --out TWI.snps
+  --out TWI.snps \
+  --recode A
 ```
 
+### Major effect SNPs
+
+We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers, Fig. \@ref(fig:TWIassocMLM)). The 14 hitchiker SNPs (Fig. \@ref(fig:TWIoutliersMLMHist)) corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep). **Gene ontology ...**
+
 ```{r TWIassocMLM, fig.cap="q-value of major effect SNPs associated to topographic wetness index (TWI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>% 
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "TWI", paste0(pop,".TWI.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
   arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
-  # ggplot(aes(snp, beta, alpha = qval < 0.05, col = type)) +
+  mutate(snp = 1:nrow(.))
+filter(t , qval < 0.05) %>% 
+  mutate(model = "LMM") %>% 
+  dplyr::select(rs, pop, model) %>% 
+  write_tsv(file.path(path, "gemma", "TWI", "TWI.LMM.snps"), col_names = F)
+ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+# ggplot(t, aes(snp, beta, label = snp, alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
   ylab(expression(-log[10]("q-value"))) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   # scale_y_continuous(trans="S_sqrt") +
   xlab("SNP number") +
-  scale_color_discrete("SNP type")
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop)
 ```
 
-```{r TWIoutliersMLMHist, fig.cap="Distribution of alleles along topographic wetness index for significantly associated SNPs."}
+### Polygenic signal
+
+A total of 31 804 SNPs explained approximately 59% of environmental variation (i.e. PVE=0.5915). Among these 31 804 SNPs, a small proportion of them (1% or 300 SNPs) have relatively large effects and explain a total of 50% PVE (i.e. PGE=0.4989).
+
+```{r BSLMMTWIConvergence, fig.cap="BSLMM parameters distribution." }
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "TWI", paste0(pop,".polygenic.TWI.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  dplyr::select(pve, pge, pi, n_gamma, Population) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  reshape2::melt(id.vars = "Population") %>% 
+  ggplot(aes(value, fill = Population, col = Population)) +
+  geom_density(alpha = 0.15) +
+  facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
+  theme(legend.position = "bottom",
+        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+```
+
+```{r TWIassocBSLMM, eval=T}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "TWI", paste0(pop,".polygenic.TWI.param.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.))
+filter(t , gamma > 0.1) %>% 
+  mutate(model = "BSLMM") %>% 
+  dplyr::select(rs, Population, model) %>% 
+  write_tsv(file.path(path, "gemma", "TWI", "TWI.BSLMM.snps"), col_names = F)
+ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
+  geom_point() +
+  ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma)) +
+  facet_wrap(~ Population, nrow = 3)
+```
+
+### Outliers
+
+```{r TWIoutliersHist, fig.cap="Distribution of alleles along topographic wetness index for significantly associated SNPs."}
 read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
   dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
   dplyr::rename(TWI = PHENOTYPE) %>% 
   reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
   na.omit(Allele) %>% 
   mutate(Allele = as.factor(Allele)) %>% 
-  ggplot(aes(Allele, TWI)) +
+  left_join(trees, by = "IID", suffix = c("", ".trees")) %>% 
+  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
+  ggplot(aes(pop, TWI, fill = Allele)) +
   geom_boxplot() +
   facet_wrap(~ SNP) +
+  coord_flip() +
   theme(strip.text.x = element_text(size = 5)) +
   ylab("Topographic wetness index") +
-  xlab("Number of copies of the major allele.")
+  xlab("Population") +
+  scale_fill_discrete("Number of copies\nof the major allele")
 ```
 
 ```{r TWIOutliersMLMAnnotation, eval=F}
@@ -348,43 +412,9 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
   summarise(N = n())
 ```
 
-### Polygenic signal
-
-A total of 31 804 SNPs explained approximately 59% of environmental variation (i.e. PVE=0.5915). Among these 31 804 SNPs, a small proportion of them (1% or 300 SNPs) have relatively large effects and explain a total of 50% PVE (i.e. PGE=0.4989).
-
-```{bash TWIgemmaBSLMM, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/gemma-v0.97
-gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
-```
-
-```{r BSLMMTWIConvergence, fig.cap="Population Fst convergence." }
-read_tsv(file.path(path, "gemma", "TWI", "polygenic.hyp.txt")) %>% 
-  dplyr::select(pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  mcmc_dens(facet_args = list(labeller = label_parsed))
-```
-
-```{r TWIassocBSLMM, eval=T}
-read_tsv(file.path(path, "gemma", "TWI", "polygenic.param.txt")) %>% 
-  mutate(effect = abs(beta*gamma)) %>% 
-  arrange(desc(effect)) %>% 
-  mutate(n_gamma = as.factor(c(rep(1,300), rep(0,nrow(.)-300)))) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, beta*gamma, col = type, alpha = n_gamma)) +
-  geom_point() +
-  scale_y_continuous(trans="S_sqrt") +
-  ylab(expression(beta*gamma))
-```
-
 ## Neighbor Crowding Index (NCI)
 
-### Major effect SNPs
-
-```{bash NCIgemmaLMM, eval=F, echo=T}
+```{bash NCIgemma, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 module load bioinfo/gemma-v0.97
 plink \
@@ -395,13 +425,37 @@ plink \
   --pheno NCI.cov \
   --out paracou3pop \
   --make-bed
-gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
-gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
-gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.NCI # lmm Wald test
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno NCI.cov \
+  --out $pop \
+  --make-bed &
+done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done # centered relatedness matrix
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.NCI & done # lmm Wald test
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.NCI & done # Bayesian Sparse Linear Mixed Model
+cat NCI.BSLMM.snps | cut -f1 > NCI.snps.list
+plink \
+  --bfile paracou3pop \
+  --allow-extra-chr \
+  --extract NCI.snps.list \
+  --out NCI.snps \
+  --recode A
 ```
 
-```{r NCiassocMLM, fig.cap="q-value of major effect SNPs associated to neighbor competition index (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-read_tsv(file.path(path, "gemma", "NCI", "paracou.NCI.assoc.txt")) %>% 
+### Major effect SNPs
+
+```{r NCIassocMLM, fig.cap="q-value of major effect SNPs associated to neighbor competition index (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "NCI", paste0(pop,".NCI.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
@@ -415,29 +469,72 @@ read_tsv(file.path(path, "gemma", "NCI", "paracou.NCI.assoc.txt")) %>%
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   xlab("SNP number") +
-  scale_color_discrete("SNP type")
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop)
 ```
 
 ### Polygenic signal
 
-```{bash NCIgemmaBSLMM, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/gemma-v0.97
-gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
+```{r BSLMMNCIConvergence, fig.cap="Population Fst convergence." }
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "NCI", paste0(pop,".polygenic.NCI.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  dplyr::select(pve, pge, pi, n_gamma, Population) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  reshape2::melt(id.vars = "Population") %>% 
+  ggplot(aes(value, fill = Population, col = Population)) +
+  geom_density(alpha = 0.15) +
+  facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
+  theme(legend.position = "bottom",
+        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
 ```
 
-```{r BSLMMNCIConvergence, fig.cap="Population Fst convergence." }
-read_tsv(file.path(path, "gemma", "NCI", "polygenic.hyp.txt")) %>%
-  dplyr::select(pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  mcmc_dens(facet_args = list(labeller = label_parsed))
+```{r NCIassocBSLMM, eval=T}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "NCI", paste0(pop,".polygenic.NCI.param.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>%
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.))
+filter(t , gamma > 0.1) %>% 
+  mutate(model = "BSLMM") %>% 
+  dplyr::select(rs, Population, model) %>% 
+  write_tsv(file.path(path, "gemma", "NCI", "NCI.BSLMM.snps"), col_names = F)
+ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
+  geom_point() +
+  ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma)) +
+  facet_wrap(~ Population, nrow = 3)
+```
+
+### Outliers
+
+```{r NCIoutliersHist, fig.cap="Distribution of alleles along neighbor crowding index for significantly associated SNPs."}
+read_delim(file.path(path, "gemma", "NCI", "NCI.snps.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+  dplyr::rename(NCI = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "NCI"), variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  left_join(trees, by = "IID", suffix = c("", ".trees")) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
+  ggplot(aes(pop, NCI, fill = Allele)) +
+  geom_boxplot() +
+  facet_wrap(~ SNP) +
+  coord_flip() +
+  theme(strip.text.x = element_text(size = 5)) +
+  ylab("Neighbor crowding index") +
+  xlab("Population") +
+  scale_fill_discrete("Number of copies\nof the major allele")
 ```
 
 ## Annual Neighbor Crowding Rate (ANCR)
 
-### Major effect SNPs
-
-```{bash ANCRgemmaLMM, eval=F, echo=T}
+```{bash ANCRgemma, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 module load bioinfo/gemma-v0.97
 plink \
@@ -448,13 +545,37 @@ plink \
   --pheno ANCR.cov \
   --out paracou3pop \
   --make-bed
-gemma -bfile paracou3pop -gk 1 -o kinship # centered relatedness matrix
-gemma -bfile paracou3pop -k output/kinship.cXX.txt -eigen -o kinship.eigen
-gemma -bfile paracou3pop -k output/kinship.cXX.txt -lmm 1 -o paracou.ANCR # lmm Wald test
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno ANCR.cov \
+  --out $pop \
+  --make-bed &
+done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done # centered relatedness matrix
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.ANCR & done # lmm Wald test
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.ANCR & done # Bayesian Sparse Linear Mixed Model
+cat ANCR.BSLMM.snps | cut -f1 > ANCR.snps.list
+plink \
+  --bfile paracou3pop \
+  --allow-extra-chr \
+  --extract ANCR.snps.list \
+  --out ANCR.snps \
+  --recode A
 ```
 
+### Major effect SNPs
+
 ```{r ANCRassocMLM, fig.cap="q-value of major effect SNPs associated to annual neighbor competition rate (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-read_tsv(file.path(path, "gemma", "ANCR", "paracou.ANCR.assoc.txt")) %>% 
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "ANCR", paste0(pop,".ANCR.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
@@ -468,22 +589,67 @@ read_tsv(file.path(path, "gemma", "ANCR", "paracou.ANCR.assoc.txt")) %>%
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   xlab("SNP number") +
-  scale_color_discrete("SNP type")
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop)
 ```
 
 ### Polygenic signal
 
-```{bash ANCRgemmaBSLMM, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/gemma-v0.97
-gemma -bfile paracou3pop -bslmm 1 -o polygenic # Bayesian Sparse Linear Mixed Model
+```{r BSLMMANCRConvergence, fig.cap="Population Fst convergence." }
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "ANCR", paste0(pop,".polygenic.ANCR.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  dplyr::select(pve, pge, pi, n_gamma, Population) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  reshape2::melt(id.vars = "Population") %>% 
+  ggplot(aes(value, fill = Population, col = Population)) +
+  geom_density(alpha = 0.15) +
+  facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
+  theme(legend.position = "bottom",
+        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
 ```
 
-```{r BSLMMANCRConvergence, fig.cap="Population Fst convergence." }
-read_tsv(file.path(path, "gemma", "ANCR", "polygenic.hyp.txt")) %>% 
-  dplyr::select(pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  mcmc_dens(facet_args = list(labeller = label_parsed))
+```{r ANCRassocBSLMM, eval=T}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "ANCR", paste0(pop,".polygenic.ANCR.param.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.))
+filter(t , gamma > 0.1) %>% 
+  mutate(model = "BSLMM") %>% 
+  dplyr::select(rs, Population, model) %>% 
+  write_tsv(file.path(path, "gemma", "ANCR", "ANCR.BSLMM.snps"), col_names = F)
+ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
+  geom_point() +
+  ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma)) +
+  facet_wrap(~ Population, nrow = 3)
+```
+
+### Outliers
+
+```{r ANCRoutliersHist, fig.cap="Distribution of alleles along annual neighbor crowding rate for significantly associated SNPs."}
+read_delim(file.path(path, "gemma", "ANCR", "ANCR.snps.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+  dplyr::rename(ANCR = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "ANCR"), variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  left_join(trees, by = "IID", suffix = c("", ".trees")) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
+  ggplot(aes(pop, ANCR, fill = Allele)) +
+  geom_boxplot() +
+  facet_wrap(~ SNP) +
+  coord_flip() +
+  theme(strip.text.x = element_text(size = 5)) +
+  ylab("Annual neighbor crowding rate") +
+  xlab("Population") +
+  scale_fill_discrete("Number of copies\nof the major allele")
 ```
 
 ## SNP imputation
@@ -515,6 +681,30 @@ plink \
   --allow-extra-chr \
   --out paracou3pop.imputed \
   --make-bed
+```
+
+## Kinship & environment
+
+```{r kinshipDist, fig.cap="Individuals kinship matrix."}
+read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all.relatedness2")) %>% 
+  left_join(trees %>% 
+              dplyr::select(IID, Xutm, Yutm, TWI, NCI, ANCR) %>% 
+              dplyr::rename(INDV = IID) %>% 
+              rename_all(paste0, 1)) %>% 
+  left_join(trees %>% 
+             dplyr::select(IID, Xutm, Yutm, TWI, NCI, ANCR) %>% 
+             dplyr::rename(INDV = IID) %>% 
+             rename_all(paste0, 2)) %>% 
+  mutate(XY = sqrt((Xutm1 - Xutm2)^2+(Yutm1 - Yutm2)^2),
+         TWI = sqrt((TWI1 - TWI2)^2), NCI = sqrt((NCI1 - NCI2)^2), ANCR = sqrt((ANCR1 - ANCR2)^2)) %>% 
+    filter(INDV1 != INDV2) %>% # remove matrix diagonal
+  dplyr::select(RELATEDNESS_PHI, XY, TWI, NCI) %>% 
+  unique() %>% # remove matrix lower or upper (symetric)
+  reshape2::melt(id.vars = "RELATEDNESS_PHI", value.name = "distance") %>% 
+  ggplot(aes(distance, RELATEDNESS_PHI)) +
+  geom_point() +
+  facet_wrap(~ variable, scales = "free") +
+  scale_x_sqrt()
 ```
 
 ## Conclusion
