@@ -41,7 +41,7 @@ We will ... :
 
 ## Drift-based Phylogeny - `treemix`
 
-We used representative individuals from *S. sp1*, *S. globulifera type Paracou*, and *S. globulifera type Régina*, in association with South American (La Selva, Baro Colorado Island, and Itubera) and African (Madagascar, Benin, Cameroun, Sao Tome, Congo, Benin, Liberia, Gana and Ivory Coast) *Symphonia* and *Pentadesma* to explore population phylogeny with `treemix` (Fig. \@ref(fig:treemixPlot)). We built phylogeny for the neutral, hitchiker, and functional SNPs. All datasets suggested 1 migration event to better represent the phylogeny than none. Topology was the same between dataset, functional SNP just show less drift than others.
+We used representative individuals from *S. sp1*, *S. globulifera type Paracou*, and *S. globulifera type Régina*, in association with South American (La Selva, Baro Colorado Island, and Itubera) and African (Madagascar, Benin, Cameroun, Sao Tome, Congo, Benin, Liberia, Gana and Ivory Coast) *Symphonia* and *Pentadesma* to explore population phylogeny with `treemix` (Fig. \@ref(fig:treemixPlot)). We built phylogeny for the neutral, hitchhiker, and functional SNPs. All datasets suggested 1 migration event to better represent the phylogeny than none. Topology was the same between dataset, functional SNP just show less drift than others.
 
 ```{r treemixR, eval=F}
 fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
@@ -142,10 +142,10 @@ plink --bfile all/symcapture.all.biallelic.snp.filtered.nonmissing.treemix \
   --freq --missing --within symcapture.all.biallelic.snp.filtered.nonmissing.treemix.pop \
   --out functional/symcapture.all.biallelic.snp.filtered.nonmissing.treemix
 plink --bfile all/symcapture.all.biallelic.snp.filtered.nonmissing.treemix \
-  --extract snps.hitchiker \
+  --extract snps.hitchhiker \
   --allow-extra-chr \
   --freq --missing --within symcapture.all.biallelic.snp.filtered.nonmissing.treemix.pop \
-  --out hitchiker/symcapture.all.biallelic.snp.filtered.nonmissing.treemix
+  --out hitchhiker/symcapture.all.biallelic.snp.filtered.nonmissing.treemix
 plink --bfile all/symcapture.all.biallelic.snp.filtered.nonmissing.treemix \
   --extract snps.neutral \
   --allow-extra-chr \
@@ -155,7 +155,7 @@ gzip */symcapture.all.biallelic.snp.filtered.nonmissing.treemix.frq.strat
 python plink2treemix.py all/symcapture.all.biallelic.snp.filtered.nonmissing.treemix.frq.strat.gz treemix.all.frq.gz 
 python plink2treemix.py neutral/symcapture.all.biallelic.snp.filtered.nonmissing.treemix.frq.strat.gz treemix.neutral.frq.gz 
 python plink2treemix.py functional/symcapture.all.biallelic.snp.filtered.nonmissing.treemix.frq.strat.gz treemix.functional.frq.gz 
-python plink2treemix.py hitchiker/symcapture.all.biallelic.snp.filtered.nonmissing.treemix.frq.strat.gz treemix.hitchiker.frq.gz 
+python plink2treemix.py hitchhiker/symcapture.all.biallelic.snp.filtered.nonmissing.treemix.frq.strat.gz treemix.hitchhiker.frq.gz 
 cp *.frq.gz ../../populationGenomics/treemix
 cd ../../populationGenomics/treemix
 module load bioinfo/treemix-1.13
@@ -165,7 +165,7 @@ grep Exiting *.llik > migration.llik
 ```
 
 ```{r treemixPlot, fig.cap="Drift-based phylogeny of *Symphonia* and *Pentadesma* populations with `treemix`. Subfigure A. present the tree log-likelihood depending on the number of allowed migration events per snp type, suggesting 1 migration event to better represent the tree than none. Other figures represent the phylogeny per snp type depending on the drift parameters with a red arrow to represent the migration event from *Sp.1* and Brazil most common ancestors to *S. globulifera* most commaon ancestors.", fig.width=10}
-g.llik <- lapply(c("neutral", "hitchiker", "functional"), function(type)
+g.llik <- lapply(c("neutral", "hitchhiker", "functional"), function(type)
   read_tsv(file.path(path, "treemix", paste0("migration.", type, ".llik")), col_names = F) %>% 
     mutate(type = type)) %>% 
   bind_rows() %>% 
@@ -177,7 +177,7 @@ g.llik <- lapply(c("neutral", "hitchiker", "functional"), function(type)
   xlab("Migration events") + ylab("Log-likelihhod") +
   geom_vline(xintercept = 1) + labs(tag = "A.") +
   theme(legend.position = c(0.6,0.4))
-g.tree <- lapply(c("neutral", "hitchiker", "functional"), function(type)
+g.tree <- lapply(c("neutral", "hitchhiker", "functional"), function(type)
   ggtree(ape::read.tree(file.path(path, "treemix", type, "out1.treeout")), layout = "slanted") +
   geom_taxalink(13, 15, curvature = 0, col = "red",
                 arrow = arrow(angle = 10, length = unit(0.1, "inches"))) +
@@ -189,14 +189,14 @@ gridExtra::grid.arrange(g.llik, g.tree[[1]], g.tree[[2]], g.tree[[3]],
 
 ## Population diversity
 
-After defining populations based on our 3 gene pools (*S. sp.1*, *S. globulifera type Paracou*, and *S. globulifera type Regina*) with more than 90% of mebership to the gene pool in `admixture`, we used `vcftools` to compute nucleotide diversity $\pi$, population differentiation $F_{st}$, and Tajima's $D$ per SNP type (functional, hitchiker or neutral).
+After defining populations based on our 3 gene pools (*S. sp.1*, *S. globulifera type Paracou*, and *S. globulifera type Regina*) with more than 90% of mebership to the gene pool in `admixture`, we used `vcftools` to compute nucleotide diversity $\pi$, population differentiation $F_{st}$, and Tajima's $D$ per SNP type (functional, hitchhiker or neutral).
 
 ```{bash populationDiv, eval=F, echo=T}
 cp symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bim symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bim0
 awk '{print $1"\t"$1"_snp"$4"\t"$3"\t"$4"\t"$5"\t"$6}' symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bim0 > symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bim
 rm symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.bim0
 module load bioinfo/plink-v1.90b5.3
-types=(neutral hitchiker functional)
+types=(neutral hitchhiker functional)
 for type in "${types[@]}" ; 
   do 
   plink \
@@ -216,7 +216,7 @@ grep globuliferaTypeRegina paracou3pop.popmap | cut -f1 > globuliferaTypeRegina.
 Nucleotide diversity $\pi$ per site had a mean of 0.05140 across populations and was significantly different between populations (ANOVA, p<2e-16) with *S. globulifera type Regina* being more diverse (Fig. \@ref(fig:piR)). No significant differences existed between SNP types.
 
 ```{bash pi, eval=F, echo=T}
-types=(neutral hitchiker functional)
+types=(neutral hitchhiker functional)
 pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina) 
 for type in "${types[@]}" ; 
   do 
@@ -246,10 +246,10 @@ lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), patt
 
 ### $F_{st}$
 
-$F_{st}$ between population was globally low with a mean value of 0.15, still *S. globulifera type Regina* was more differentiated to the two toher gene pools (Fig. \@ref(fig:FstR)) for every SNP type. Nevertheless, functional SNP were significantly less differentiated than hitchikers and neutral SNPs. 
+$F_{st}$ between population was globally low with a mean value of 0.15, still *S. globulifera type Regina* was more differentiated to the two toher gene pools (Fig. \@ref(fig:FstR)) for every SNP type. Nevertheless, functional SNP were significantly less differentiated than hitchhikers and neutral SNPs. 
 
 ```{bash Fst, eval=F, echo=T}
-types=(neutral hitchiker functional)
+types=(neutral hitchhiker functional)
 pop1=(sp1 sp1 globuliferaTypeParacou) 
 pop2=(globuliferaTypeParacou globuliferaTypeRegina globuliferaTypeRegina) 
 for type in "${types[@]}" ; 
@@ -290,7 +290,7 @@ lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), patt
 Tajima's $D$ between population was globally low and significantly negative with a mean value of -0.795 and was significantly different between populations (ANOVA, p<2e-16) with *S. globulifera type Regina* having a globally higher value (Fig. \@ref(fig:TajimaDR)). We expect positive selection (or selective sweeps) to give us a negative Tajima’s $D$ in a population that doesn’t have any demographic changes going on (population expansion/contraction, migration, etc). On the other hand with balancing selection, alleles are kept at intermediate frequencies. This produces a positive Tajima’s $D$ because there will be more pairwise differences than segregating sites. Consequently, Tajima's $D$ indicates here that are population are under selection with a stronger selection operating on *S. globulifera type Paracou* and *S. sp1* than *S. globulifera type Regina*. No significant differences existed between SNP types.
 
 ```{bash TajimaD, eval=F, echo=T}
-types=(neutral hitchiker functional)
+types=(neutral hitchhiker functional)
 pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina) 
 for type in "${types[@]}" ; 
   do 
@@ -326,7 +326,7 @@ cp symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted3pop.bim symc
 awk '{print $1"\t"$1"_snp"$4"\t"$3"\t"$4"\t"$5"\t"$6}' symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted3pop.bim0 > symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted3pop.bim
 rm symcapture.all.biallelic.snp.filtered.nonmissing.paracouWeighted3pop.bim0
 module load bioinfo/plink-v1.90b5.3
-types=(neutral hitchiker functional)
+types=(neutral hitchhiker functional)
 for type in "${types[@]}" ; 
   do 
   plink \
@@ -342,7 +342,7 @@ done
 source("https://raw.githubusercontent.com/shenglin-liu/vcf2sfs/master/vcf2sfs.r")
 prefix <- file.path(path, "SFS", "paracouWeighted3pop")
 pops <- c("sp1", "globuliferaTypeParacou", "globuliferaTypeRegina")
-types <- c("neutral", "hitchiker", "functional")
+types <- c("neutral", "hitchhiker", "functional")
 for(type in types)
   for(pop in pops){
     vcf2dadi(paste0(prefix, ".", type, ".vcf"), 
@@ -410,7 +410,7 @@ g <- lapply(types, function(type)
     ggtitle(type))
 names(g) <- types
 plotly::ggplotly(g$neutral)
-plotly::ggplotly(g$hitchiker)
+plotly::ggplotly(g$hitchhiker)
 plotly::ggplotly(g$functional)
 ```
 

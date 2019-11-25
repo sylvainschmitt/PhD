@@ -15,7 +15,7 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/annotation/"
 
 # Annotation
 
-We developed and manually tested with few SNPs a method to match transcriptomic data from Tysklind et al., in prep with our genomic data. We found expected proportion of SNPs type, with a lot of putatively hitchiker SNPs in functional SNPs. Finally, ca 2000 SNPs were matching between the two datasets.
+We developed and manually tested with few SNPs a method to match transcriptomic data from Tysklind et al., in prep with our genomic data. We found expected proportion of SNPs type, with a lot of putatively hitchhiker SNPs in functional SNPs. Finally, ca 2000 SNPs were matching between the two datasets.
 
 population structure of individuals. Then, we quickly looked at th spatial and environmental distribution of the different gene pools and individual mismatch (before association genomic analyses).
 
@@ -28,9 +28,9 @@ We focused on scaffolds from the hybrid genomic reference which contained a filt
 
 1. SNP on scaffolds with no transcript match were classified as "purely neutral" 
 1. SNP on scaffolds matching a transcript were positioned on the global alignment
-1. SNP out the alignment area were classified as "putatively hitchiking"
+1. SNP out the alignment area were classified as "putatively hitchhiking"
 1. SNP within the alignment area were further positionned among the different alignment blocks (cf `blat` functionning)
-1. SNP out of alignment blocks (intron) were classified as "putatively hitchiking"
+1. SNP out of alignment blocks (intron) were classified as "putatively hitchhiking"
 1. SNP in one alignment blocks were classified as "functional"
 
 ```{r trscAlignment, eval=F, echo=T}
@@ -100,7 +100,7 @@ snpsHitch <- snps %>%
 snps <- snps %>% 
   left_join(data.frame(snp = unique(snpsFunc$snp), functional = 1)) %>% 
   mutate(functional = ifelse(is.na(functional), 0, functional)) %>% 
-  mutate(type = ifelse(aligned == 1 & functional == 0, "hitchiker", NA)) %>% 
+  mutate(type = ifelse(aligned == 1 & functional == 0, "hitchhiker", NA)) %>% 
   mutate(type = ifelse(functional == 1, "functional", type)) %>% 
   mutate(type = ifelse(aligned == 0, "neutral", type))
 # write_tsv(snps, file.path(path, "snps.annotation"))
@@ -110,9 +110,9 @@ snps <- snps %>%
 
 ## Results
 
-We obtained as planified a third of neutral snps (33%) against two thirds of non-neutral snps for which the majority was out of transcripts and may behave as hitchikers (Fig. \@ref(fig:snpType)). Nevertheless, few functional snps matched several transcripts and/or genes due to transcripts isoforms, genes superposition and possibl multimatching errors (Fig. \@ref(fig:snpaAlignedStats)). For the moment we wont further annotate functional SNPs with ORFs and SNPs on transcript alignment, or gene ontology and synonymy. We will only finish annotation for selected SNPs in further analyses. Finally, we compared obtained SNP in genomics in this analysis with transcriptomic SNPs identified by Tysklind et al., in prep (Fig. \@ref(fig:snpValidation))) and validated 2 098 common SNPs.
+We obtained as planified a third of neutral snps (33%) against two thirds of non-neutral snps for which the majority was out of transcripts and may behave as hitchhikers (Fig. \@ref(fig:snpType)). Nevertheless, few functional snps matched several transcripts and/or genes due to transcripts isoforms, genes superposition and possibl multimatching errors (Fig. \@ref(fig:snpaAlignedStats)). For the moment we wont further annotate functional SNPs with ORFs and SNPs on transcript alignment, or gene ontology and synonymy. We will only finish annotation for selected SNPs in further analyses. Finally, we compared obtained SNP in genomics in this analysis with transcriptomic SNPs identified by Tysklind et al., in prep (Fig. \@ref(fig:snpValidation))) and validated 2 098 common SNPs.
 
-```{r snpType, fig.cap="Filtered snps by type. SNP have been classified between (i) \"purely neutral\", on scaffolds matching no transcript, (ii) \"hitchiker\" on a scaffolds matching a trasncript but no within the transcript itself, and (iii) functional, when positioned within the matching transcript."}
+```{r snpType, fig.cap="Filtered snps by type. SNP have been classified between (i) \"purely neutral\", on scaffolds matching no transcript, (ii) \"hitchhiker\" on a scaffolds matching a trasncript but no within the transcript itself, and (iii) functional, when positioned within the matching transcript."}
 snps %>% 
   group_by(type) %>% 
   summarise(N = n()) %>% 
@@ -171,7 +171,7 @@ snpsFunc %>%
 ```{bash snpLists, eval=F, echo=T}
 cut -f2,9 snps.annotation > snps.type
 grep neutral snps.type | cut -f1 > snps.neutral
-grep hitchiker snps.type | cut -f1 > snps.hitchiker
+grep hitchhiker snps.type | cut -f1 > snps.hitchhiker
 grep functional snps.type | cut -f1 > snps.functional
 ```
 

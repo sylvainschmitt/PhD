@@ -1,4 +1,7 @@
 # PhD 0.1.9153
+* symcapture: post meeting Niklas & Myriam fixes, growth models begin
+
+# PhD 0.1.9153
 * parvicapture: capture 1
 * symcapture: growth begins & co
 

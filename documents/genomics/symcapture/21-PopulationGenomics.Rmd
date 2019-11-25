@@ -102,7 +102,7 @@ gridExtra::grid.arrange(g.maf.hist, g.ld.decay, g.ld.hist,
 
 ## Genepool-specifc SNPs
 
-We used `bayescan` on filtered SNPs, to detect outlier of genepools-specifc SNP with a q-value < 0.05 (Fig. \@ref(fig:bayescanOutliers)). We found 4 020 SNPs significantly associated to genepools or fixed SNPs representing 5.7% of all SNPs with 309 functional SNPs, 2456 hitchikers, and 1255 neutral. Hitchikers corresponded to 43 106 transcripts isoforms and functional to 2 981 with 2 587 in common. Among the assocaited transcripts isoforms, 89 were differentialy expressed in *S. globulifera* and 32 in *S. sp1* in juveniles (Tysklind et la., in prep). Corresponding ORFs matched 1 603 unique PFAM, 683 unique UniProt, 989 unique KEGG, and  1 260 unique GO terms (top 10 in Table \@ref(tab:bayescanOutliersAnnotation)).
+We used `bayescan` on filtered SNPs, to detect outlier of genepools-specifc SNP with a q-value < 0.05 (Fig. \@ref(fig:bayescanOutliers)). We found 4 020 SNPs significantly associated to genepools or fixed SNPs representing 5.7% of all SNPs with 309 functional SNPs, 2456 hitchhikers, and 1255 neutral. Hitchhikers corresponded to 43 106 transcripts isoforms and functional to 2 981 with 2 587 in common. Among the assocaited transcripts isoforms, 89 were differentialy expressed in *S. globulifera* and 32 in *S. sp1* in juveniles (Tysklind et la., in prep). Corresponding genes matched 1133 unique terms of gene ontology (GO) with no significantly enriched GO term in outliers genes (besides a p-value of 0.01106483 for response to water deprivation, Fig. \@ref(fig:bayescanGO), [REVIGO](http://revigo.irb.hr/) can be used for results vizualisation).
 
 ```{bash bayescan, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
@@ -153,7 +153,6 @@ bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) 
   mutate(snpNb = 1:nrow(.))) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
 
-
 ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
@@ -162,12 +161,12 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   ggtitle("4 020 significant SNPs (5.7%)", 
-          "309 functional (2.5%), 2456 hitchiker (7.0%), and 1255 neutral (5.4%)")
+          "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
 ```
 
 ```{r bayescanOutliersAnnotation}
 snpHitch <- bayescan %>% 
-  filter(qval < 0.05, type == "hitchiker") %>% 
+  filter(qval < 0.05, type == "hitchhiker") %>% 
   dplyr::select(snp) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation")))
 snpFunc <- bayescan %>% 
@@ -199,41 +198,49 @@ deHicth <- read_delim(file.path("..", "..", "..", "data", "Symphonia_Genomic", "
 # deHicth %>% 
 #   group_by(deg) %>% 
 #   summarise(n())
-annotation <- trscOut %>%
-  dplyr::select(annotation) %>% 
+```
+
+```{r bayescanGO, fig.cap="Term enrichment of Gene Ontology (GO) for outliers genes."}
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
+              dplyr::select(scf, snp, trsc) %>% 
   unique() %>% 
+  left_join(dplyr::select(bayescan, snp, qval)) %>% 
+  filter(!is.na(qval))
+
+GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
+  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
+  collect() %>% 
   separate(annotation, paste0("X", 1:16), "\t") %>% 
-  dplyr::rename(ORF = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO1 = X13, GO2 = X14) %>% 
-  dplyr::select(ORF, PFAM, UniProt, KEGG, GO1, GO2)
-# annotation %>% 
-#   filter(PFAM != ".") %>% 
-#   dplyr::select(PFAM) %>% 
-#   unique()
-# annotation %>% 
-#   filter(UniProt != ".") %>% 
-#   dplyr::select(UniProt) %>% 
-#   unique()
-# annotation %>% 
-#   filter(KEGG != ".") %>% 
-#   dplyr::select(KEGG) %>% 
-#   unique()
-# annotation %>% 
-#   filter(GO2 != ".") %>% 
-#   dplyr::select(GO1, GO2) %>% 
-#   unique()
-bind_rows(dplyr::select(annotation, GO1), 
-          dplyr::select(annotation, GO2) %>% 
-            dplyr::rename(GO1 = GO2)) %>% 
-  filter(GO1 != ".") %>% 
-  dplyr::rename(GO = GO1) %>% 
-  unique() %>% 
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
+  dplyr::select(trsc, gene, orf, GO) %>% 
+  filter(GO != ".") %>% 
+  left_join(trsc) %>% 
+  group_by(gene, GO) %>% 
+  summarise(qval = min(qval)) %>% 
+  ungroup() %>% 
+  dplyr::select(gene, qval, GO) %>% 
   separate_rows(GO, sep = "`") %>% 
-  group_by(GO) %>% 
-  summarise(N = n()) %>% 
-  arrange(desc(N)) %>% 
-  top_n(10) %>% 
-  separate(GO, c("ID", "Domain", "Ontology"), "\\^") %>% 
-  mutate(ID = paste0("[", ID, "](https://www.ebi.ac.uk/QuickGO/term/", ID, ")")) %>% 
-  kable(caption = "Top 10 of GO terms from ORFs on transcipts associated to SNPs significanlty associated to genepools.")
+  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
+  
+
+clusterProfiler::enricher(unique(filter(GO, qval < 0.05)$gene),
+                               pvalueCutoff = 0.2, 
+                               pAdjustMethod = "BH",
+                               unique(GO$gene),
+                               minGSSize = 10, 
+                               maxGSSize = 500, 
+                               qvalueCutoff = 0.2, 
+                               dplyr::select(GO, GOid, gene),
+                               TERM2NAME = dplyr::select(GO, GOid, GOname))@result %>% 
+  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  viridis::scale_fill_viridis() +
+  theme(axis.title = element_blank())
+# http://revigo.irb.hr/ for result vizualisation
 ```
 

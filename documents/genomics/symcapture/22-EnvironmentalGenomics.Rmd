@@ -41,7 +41,8 @@ with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its dista
 
 The Annual Neighborhood Crowding Rate $ANCR_i$ from tree individual $i$ was calculated with following formula:
 
-$$ANCR_i = (\int_{t_0+1} ^{2015} \frac{ \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}} }{ \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t-1}} DBH_{j,t-1}^2 e^{-\frac14.\delta_{i,j}} }  .dt).\frac1{\Delta t}$$
+$$ANCR_i = \int_{t_0+1} ^{2015} \frac{ NCI_{i,t} - NCI_{i,t-1} }{\Delta t}  .dt$$
+
 with the same parameters as $NCI_i$. $ANCR$ represents the dynamic of biotic asymmetric competition through tree neighborhood over time (derivate of $NCI_i$). Both NCI and ANCR were calculated among heterospecific and conspecific neighbors and with all enighbors confounded.
 
 Both correlations and principal component analyses showed non colinear TWI, NCI and ANCR that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom) and Fig. \@ref(fig:pca12EnvGenom)).
@@ -74,26 +75,9 @@ projection(wetness) <- projection(dem)
 wetness <- projectRaster(wetness, crs = crs)
 trees$TWI <- raster::extract(wetness, treesXY)
 rm(dem, wetness, treesXY)
-cl <- parallel::makeCluster(getOption("cl.cores", 4))
+cl <- parallel::makeCluster(getOption("cl.cores", 2))
 parallel::clusterExport(cl, list("trees"))
-NCI <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
-  library(tidyverse)
-  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
-    tbl("Paracou") %>% 
-    filter(Plot == local(trees$Plot[ind])) %>% 
-    filter(idTree != local(trees$idTree[ind])) %>% 
-    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
-    filter(dij < 20) %>% 
-    mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
-    mutate(DBH = CircCorr/pi) %>% 
-    collect() %>% 
-    arrange(CensusYear) %>% 
-    summarise(idTree = local(trees$idTree[ind]),
-              NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con)/(last(CensusYear) - first(CensusYear)),
-              NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))/(last(CensusYear) - first(CensusYear)))})
-NCI <- bind_rows(NCI)
-trees <- left_join(trees, NCI)
-ANCR <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
   library(tidyverse)
   src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
@@ -103,27 +87,28 @@ ANCR <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
   filter(dij < 20) %>% 
   mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
   mutate(DBH = CircCorr/pi) %>% 
-  group_by(CensusYear) %>% 
-  summarise(idTree = local(trees$idTree[ind]),
-            NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con),
-            NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))) %>% 
-  group_by(idTree) %>% 
-  arrange(CensusYear) %>% 
   collect() %>% 
-  mutate(dNCIcon = NCIcon - lag(NCIcon), 
-         dNCIhetero = NCIhetero - lag(NCIhetero), 
-         dt = CensusYear - lag(CensusYear)) %>% 
-  na.omit() %>% 
+  group_by(CensusYear) %>% 
+  summarise(NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con),
+            NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))) %>% 
   ungroup() %>% 
-  summarise(ANCRcon = sum(dNCIcon)/sum(dt),
-            ANCRhetero = sum(dNCIhetero)/sum(dt))})
+  arrange(CensusYear) %>%
+  mutate(NCI = NCIcon + NCIhetero,
+         dt = CensusYear - lag(CensusYear)) %>% 
+  mutate(ANCRcon = NCIcon-lag(NCIcon),
+         ANCRhetero = NCIhetero-lag(NCIhetero),
+         ANCR = NCI-lag(NCI)) %>% 
+  summarise(idTree = local(trees$idTree[ind]),
+            NCIcon = sum(NCIcon/dt, na.rm = T),
+            NCIhetero = sum(NCIcon/dt, na.rm = T),
+            NCI = sum(NCI/dt, na.rm = T),
+            ANCRcon = sum(ANCRcon/dt, na.rm = T),
+            ANCRhetero = sum(ANCRhetero/dt, na.rm = T),
+            ANCR = sum(ANCR/dt, na.rm = T))})
 parallel::stopCluster(cl) ; rm(cl)
-ANCR <- bind_rows(ANCR)
-trees <- left_join(trees, ANCR)
-rm(NCI, ANCR)
-trees <- trees %>% 
-  rowwise() %>% 
-  mutate(NCI = sum(NCIcon, NCIhetero), ANCR = sum(ANCRcon, ANCRhetero))
+NC <- bind_rows(NC)
+trees <- left_join(trees, NC)
+rm(NC)
 save(trees, file = "./symcapture_save/Env.Rdata")
 trees %>%
   dplyr::select(FID, IID, TWI) %>%
@@ -227,7 +212,7 @@ plink \
   --pheno TWI.cov \
   --out paracou3pop \
   --make-bed
-pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
 for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
 for pop in "${pops[@]}" ; do  
   plink \
@@ -240,10 +225,10 @@ for pop in "${pops[@]}" ; do
   --out $pop \
   --make-bed
 done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship ; done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.TWI ; done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.TWI & done
-module load bioinfo/plink-v1.90b5.3
 cat TWI.LMM.snps TWI.BSLMM.snps | cut -f1 > TWI.snps.list
 plink \
   --bfile paracou3pop \
@@ -255,7 +240,7 @@ plink \
 
 ### Major effect SNPs
 
-We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchikers, Fig. \@ref(fig:TWIassocMLM)). The 14 hitchiker SNPs (Fig. \@ref(fig:TWIoutliersMLMHist)) corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep). **Gene ontology ...**
+We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchhikers, Fig. \@ref(fig:TWIassocMLM)). The 14 hitchhiker SNPs (Fig. \@ref(fig:TWIoutliersHist)) corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep). **Gene ontology ...**
 
 ```{r TWIassocMLM, fig.cap="q-value of major effect SNPs associated to topographic wetness index (TWI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
 t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
@@ -283,7 +268,7 @@ ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) 
   # scale_y_continuous(trans="S_sqrt") +
   xlab("SNP number") +
   scale_color_discrete("SNP type") +
-  facet_wrap(~ pop)
+  facet_wrap(~ pop) 
 ```
 
 ### Polygenic signal
@@ -323,7 +308,7 @@ ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
   ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
   scale_y_continuous(trans="S_sqrt") +
   ylab(expression(beta*gamma)) +
-  facet_wrap(~ Population, nrow = 3)
+  facet_wrap(~ Population, nrow = 3) 
 ```
 
 ### Outliers
@@ -345,6 +330,55 @@ read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>%
   ylab("Topographic wetness index") +
   xlab("Population") +
   scale_fill_discrete("Number of copies\nof the major allele")
+```
+
+```{r TWIGO, fig.cap="Term enrichment of Gene Ontology (GO) for TWI-outlier genes."}
+outliers <- read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
+                           dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+                           dplyr::rename(TWI = PHENOTYPE) %>% 
+                           reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "snp", value.name = "Allele") %>% 
+                           mutate(snp = stringr::str_sub(snp, 1, -3)) %>% 
+                           dplyr::select(snp) %>% 
+                           unique() %>% unlist()
+
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
+              dplyr::select(scf, snp, trsc) %>% 
+  unique() %>% 
+  mutate(outlier = ifelse(snp %in% outliers, 1, 0))
+
+GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
+  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
+  collect() %>% 
+  separate(annotation, paste0("X", 1:16), "\t") %>% 
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
+  dplyr::select(trsc, gene, orf, GO) %>% 
+  filter(GO != ".") %>% 
+  left_join(trsc) %>% 
+  group_by(gene, GO) %>% 
+  summarise(outlier = max(outlier)) %>% 
+  ungroup() %>% 
+  dplyr::select(gene, outlier, GO) %>% 
+  separate_rows(GO, sep = "`") %>% 
+  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
+  
+clusterProfiler::enricher(unique(filter(GO, outlier == 1)$gene),
+                               pvalueCutoff = 0.2, 
+                               pAdjustMethod = "BH",
+                               unique(GO$gene),
+                               minGSSize = 10, 
+                               maxGSSize = 500, 
+                               qvalueCutoff = 0.2, 
+                               dplyr::select(GO, GOid, gene),
+                               TERM2NAME = dplyr::select(GO, GOid, GOname))@result %>% 
+  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  viridis::scale_fill_viridis() +
+  theme(axis.title = element_blank())
 ```
 
 ```{r TWIOutliersMLMAnnotation, eval=F}
@@ -386,7 +420,7 @@ read_tsv(file.path(path, "gemma", "TWI", "paracou.TWI.assoc.txt")) %>%
   filter(qval < 0.05) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
-  filter(type == "hitchiker") %>% 
+  filter(type == "hitchhiker") %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% 
   left_join(src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
                                  "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
@@ -425,7 +459,7 @@ plink \
   --pheno NCI.cov \
   --out paracou3pop \
   --make-bed
-pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
 for pop in "${pops[@]}" ; do  
   plink \
   --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
@@ -437,6 +471,7 @@ for pop in "${pops[@]}" ; do
   --out $pop \
   --make-bed &
 done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done # centered relatedness matrix
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.NCI & done # lmm Wald test
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.NCI & done # Bayesian Sparse Linear Mixed Model
@@ -470,7 +505,7 @@ lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"
   scale_y_sqrt() +
   xlab("SNP number") +
   scale_color_discrete("SNP type") +
-  facet_wrap(~ pop)
+  facet_wrap(~ pop) 
 ```
 
 ### Polygenic signal
@@ -487,7 +522,7 @@ lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"
   geom_density(alpha = 0.15) +
   facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
   theme(legend.position = "bottom",
-        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()) 
 ```
 
 ```{r NCIassocBSLMM, eval=T}
@@ -529,7 +564,56 @@ read_delim(file.path(path, "gemma", "NCI", "NCI.snps.raw"), delim = " ") %>%
   theme(strip.text.x = element_text(size = 5)) +
   ylab("Neighbor crowding index") +
   xlab("Population") +
-  scale_fill_discrete("Number of copies\nof the major allele")
+  scale_fill_discrete("Number of copies\nof the major allele") 
+```
+
+```{r NCIGO, fig.cap="Term enrichment of Gene Ontology (GO) for NCI-outlier genes.", eval=F}
+outliers <- read_delim(file.path(path, "gemma", "NCI", "NCI.snps.raw"), delim = " ") %>% 
+                           dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+                           dplyr::rename(TWI = PHENOTYPE) %>% 
+                           reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "snp", value.name = "Allele") %>% 
+                           mutate(snp = stringr::str_sub(snp, 1, -3)) %>% 
+                           dplyr::select(snp) %>% 
+                           unique() %>% unlist()
+
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
+              dplyr::select(scf, snp, trsc) %>% 
+  unique() %>% 
+  mutate(outlier = ifelse(snp %in% outliers, 1, 0))
+
+GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
+  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
+  collect() %>% 
+  separate(annotation, paste0("X", 1:16), "\t") %>% 
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
+  dplyr::select(trsc, gene, orf, GO) %>% 
+  filter(GO != ".") %>% 
+  left_join(trsc) %>% 
+  group_by(gene, GO) %>% 
+  summarise(outlier = max(outlier)) %>% 
+  ungroup() %>% 
+  dplyr::select(gene, outlier, GO) %>% 
+  separate_rows(GO, sep = "`") %>% 
+  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
+  
+clusterProfiler::enricher(unique(filter(GO, outlier == 1)$gene),
+                               pvalueCutoff = 0.2, 
+                               pAdjustMethod = "BH",
+                               unique(GO$gene),
+                               minGSSize = 10, 
+                               maxGSSize = 500, 
+                               qvalueCutoff = 0.2, 
+                               dplyr::select(GO, GOid, gene),
+                               TERM2NAME = dplyr::select(GO, GOid, GOname))@result %>% 
+  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  viridis::scale_fill_viridis() +
+  theme(axis.title = element_blank())
 ```
 
 ## Annual Neighbor Crowding Rate (ANCR)
@@ -545,7 +629,7 @@ plink \
   --pheno ANCR.cov \
   --out paracou3pop \
   --make-bed
-pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
 for pop in "${pops[@]}" ; do  
   plink \
   --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
@@ -557,10 +641,11 @@ for pop in "${pops[@]}" ; do
   --out $pop \
   --make-bed &
 done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done # centered relatedness matrix
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.ANCR & done # lmm Wald test
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.ANCR & done # Bayesian Sparse Linear Mixed Model
-cat ANCR.BSLMM.snps | cut -f1 > ANCR.snps.list
+cat ANCR.LMM.snps ANCR.BSLMM.snps | cut -f1 > ANCR.snps.list
 plink \
   --bfile paracou3pop \
   --allow-extra-chr \
@@ -572,7 +657,7 @@ plink \
 ### Major effect SNPs
 
 ```{r ANCRassocMLM, fig.cap="q-value of major effect SNPs associated to annual neighbor competition rate (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
   read_tsv(file.path(path, "gemma", "ANCR", paste0(pop,".ANCR.assoc.txt"))) %>% 
     mutate(pop = pop)) %>% 
   bind_rows() %>% 
@@ -580,17 +665,22 @@ lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
   arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
+  mutate(snp = 1:nrow(.))
+filter(t , qval < 0.05) %>% 
+  mutate(model = "LMM") %>% 
+  dplyr::select(rs, pop, model) %>% 
+  write_tsv(file.path(path, "gemma", "ANCR", "ANCR.LMM.snps"), col_names = F)
+ggplot(t, aes(snp, -log10(qval), alpha = qval < 0.05, col = type, label = snp)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
   ylab(expression(-log[10]("q-value"))) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   xlab("SNP number") +
   scale_color_discrete("SNP type") +
-  facet_wrap(~ pop)
+  facet_wrap(~ pop) 
 ```
 
 ### Polygenic signal
@@ -607,7 +697,7 @@ lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"
   geom_density(alpha = 0.15) +
   facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
   theme(legend.position = "bottom",
-        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank()) 
 ```
 
 ```{r ANCRassocBSLMM, eval=T}
@@ -628,7 +718,7 @@ ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
   ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
   scale_y_continuous(trans="S_sqrt") +
   ylab(expression(beta*gamma)) +
-  facet_wrap(~ Population, nrow = 3)
+  facet_wrap(~ Population, nrow = 3)  
 ```
 
 ### Outliers
@@ -649,7 +739,57 @@ read_delim(file.path(path, "gemma", "ANCR", "ANCR.snps.raw"), delim = " ") %>%
   theme(strip.text.x = element_text(size = 5)) +
   ylab("Annual neighbor crowding rate") +
   xlab("Population") +
-  scale_fill_discrete("Number of copies\nof the major allele")
+  scale_fill_discrete("Number of copies\nof the major allele") 
+```
+
+```{r ANCRGO, fig.cap="Term enrichment of Gene Ontology (GO) for ANCR-outlier genes."}
+outliers <- read_delim(file.path(path, "gemma", "ANCR", "ANCR.snps.raw"), delim = " ") %>% 
+                           dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+                           dplyr::rename(TWI = PHENOTYPE) %>% 
+                           reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "snp", value.name = "Allele") %>% 
+                           mutate(snp = stringr::str_sub(snp, 1, -3)) %>% 
+                           dplyr::select(snp) %>% 
+                           unique() %>% unlist()
+
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
+              dplyr::select(scf, snp, trsc) %>% 
+  unique() %>% 
+  mutate(outlier = ifelse(snp %in% outliers, 1, 0))
+
+GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
+  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
+  collect() %>% 
+  separate(annotation, paste0("X", 1:16), "\t") %>% 
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
+  dplyr::select(trsc, gene, orf, GO) %>% 
+  filter(GO != ".") %>% 
+  left_join(trsc) %>% 
+  group_by(gene, GO) %>% 
+  summarise(outlier = max(outlier)) %>% 
+  ungroup() %>% 
+  dplyr::select(gene, outlier, GO) %>% 
+  separate_rows(GO, sep = "`") %>% 
+  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
+  
+clusterProfiler::enricher(unique(filter(GO, outlier == 1)$gene),
+                               pvalueCutoff = 0.2, 
+                               pAdjustMethod = "BH",
+                               unique(GO$gene),
+                               minGSSize = 10, 
+                               maxGSSize = 500, 
+                               qvalueCutoff = 0.2, 
+                               dplyr::select(GO, GOid, gene),
+                               TERM2NAME = dplyr::select(GO, GOid, GOname))@result %>% 
+  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  viridis::scale_fill_viridis() +
+  theme(axis.title = element_blank()) +
+  ylim(c(0,2))
 ```
 
 ## SNP imputation
@@ -685,26 +825,51 @@ plink \
 
 ## Kinship & environment
 
-```{r kinshipDist, fig.cap="Individuals kinship matrix."}
-read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all.relatedness2")) %>% 
+```{r kinshipDist, fig.cap="Scatterplot of individuals pairwise kinship with individual pairwise spatial and environmental distances per popultion."}
+t <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all.relatedness2")) %>% 
   left_join(trees %>% 
-              dplyr::select(IID, Xutm, Yutm, TWI, NCI, ANCR) %>% 
+              dplyr::select(IID, Xutm, Yutm, TWI, NCI, ANCR, pop) %>% 
               dplyr::rename(INDV = IID) %>% 
               rename_all(paste0, 1)) %>% 
   left_join(trees %>% 
-             dplyr::select(IID, Xutm, Yutm, TWI, NCI, ANCR) %>% 
-             dplyr::rename(INDV = IID) %>% 
-             rename_all(paste0, 2)) %>% 
+              dplyr::select(IID, Xutm, Yutm, TWI, NCI, ANCR, pop) %>% 
+              dplyr::rename(INDV = IID) %>% 
+              rename_all(paste0, 2)) %>% 
+    filter(pop1 == pop2) %>% 
   mutate(XY = sqrt((Xutm1 - Xutm2)^2+(Yutm1 - Yutm2)^2),
-         TWI = sqrt((TWI1 - TWI2)^2), NCI = sqrt((NCI1 - NCI2)^2), ANCR = sqrt((ANCR1 - ANCR2)^2)) %>% 
-    filter(INDV1 != INDV2) %>% # remove matrix diagonal
-  dplyr::select(RELATEDNESS_PHI, XY, TWI, NCI) %>% 
-  unique() %>% # remove matrix lower or upper (symetric)
-  reshape2::melt(id.vars = "RELATEDNESS_PHI", value.name = "distance") %>% 
+         TWI = sqrt((TWI1 - TWI2)^2), NCI = sqrt((NCI1 - NCI2)^2), 
+         ANCR = sqrt((ANCR1 - ANCR2)^2), pop = pop1) %>% 
+  filter(INDV1 != INDV2) %>% # remove matrix diagonal
+  dplyr::select(pop, RELATEDNESS_PHI, XY, TWI, NCI) %>% 
+  unique() # remove matrix lower or upper (symetric)
+reshape2::melt(t, id.vars = c("pop", "RELATEDNESS_PHI"), value.name = "distance") %>% 
   ggplot(aes(distance, RELATEDNESS_PHI)) +
-  geom_point() +
-  facet_wrap(~ variable, scales = "free") +
-  scale_x_sqrt()
+  geom_point(alpha = 0.1) +
+  facet_grid(pop ~ variable, scales = "free") +
+  geom_smooth(method = "lm") +
+  scale_y_continuous(trans="S_sqrt") +
+  scale_x_sqrt() +
+  geom_hline(data = data.frame(y = c(0.354, 0.117, 0.0884, 0.0442), relation = c("twin", "1st-degree", "2nd-degree", "3rd-degree")),
+             aes(yintercept = y, col = relation), linetype = "dashed")
+```
+
+```{r kinshipDistReg, fig.cap="Result of linear regression between individuals pairwise kinship and individual pairwise spatial and environmental distances per population."}
+group_by(t, pop) %>% 
+  do(lm = lm(RELATEDNESS_PHI ~ XY + TWI + NCI, data = .)) %>% 
+  # broom::glance(lm)
+  broom::tidy(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  ggplot(aes(x = term, xend = term, col = term, alpha = p.value < 0.05)) +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(y = estimate)) +
+  geom_segment(aes(y = estimate - std.error, yend = estimate + std.error),
+               size = 1, show.legend = F) +
+  coord_flip() +
+  facet_wrap(~ pop, nrow = 3) +
+  scale_y_continuous(trans="S_sqrt") +
+  ggtitle("LM: Relatedness ~ Spatial distance + TWI distance + NCI distance", "Rsquared < 0.01") +
+  theme(axis.title = element_blank()) +
+  scale_color_discrete("")
 ```
 
 ## Conclusion
