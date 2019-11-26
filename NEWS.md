@@ -1,3 +1,6 @@
+# PhD 0.1.9154
+* symcapture: growth & environment
+
 # PhD 0.1.9153
 * symcapture: post meeting Niklas & Myriam fixes, growth models begin
 

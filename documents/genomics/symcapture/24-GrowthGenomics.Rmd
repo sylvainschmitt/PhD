@@ -170,6 +170,7 @@ trees <- trees %>%
   filter(!is.na(AGR), !is.na(ANCR)) %>% 
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
 fits <- list()
+fitsEnv <- list()
 mdata <- list(
   N = nrow(trees),
   I = length(unique(trees$Ind)),
@@ -186,17 +187,25 @@ mdata <- list(
 )
 # lapply(mdata, summary)
 ```
+
 ## Growth & Ontogeny
 
-We explored different way of integrating gene pools and individuals structure in the Gompertz model used in @Herault2011 to explain individual annual growth rate (AGR) with individual diameter at breast height (DBH). I used three forms of models:
+We explored different way of integrating gene pools and individuals structure in the Gompertz model used in @Herault2011 to explain individual growth with ontogeny. We used three following forms of models to explain the logarithm of Annual Growth Rate $AGR_{t,i,g}$ with Diameter at Breast Height $DBH_{t,i,g}$ at year $t$ for individual $i$ in genepool $gp$:
 
 $$GrowthNull:log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt})}{Ks}]^2), \sigma)$$
+
 $$GrowthGenePool:log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax_g.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt_g})}{Ks_g}]^2), \sigma)$$
+
 $$GrowthIndividual:log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax_i.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt_i})}{Ks_i}]^2), \sigma) \\ \begin{bmatrix} Gmax_i \\ Dopt_i \\ Ks_i \end{bmatrix} \sim \mathcal N ^3(\begin{bmatrix} Gmax_g \\ Dopt_g \\ Ks_g \end{bmatrix},\begin{bmatrix} \sigma_{Gmax} \\ \sigma_{Dopt} \\ \sigma_{Ks} \end{bmatrix} )$$
-with ...
+
+with $Gmax$, $Dopt$ and $Ks$ the parameters of the Gompertz model representing the growth potential, the optimal diameter of growth when this potential is reached, and the kurtosis of the growth curve respectivelly. Parameters of the Gompertz model were either fitted at the genus level (Model GrowthNull), at the genepool level (Model GrowthGenePool), or at the individual level as random effects centered on the genepool level (Model GrowthIndividual). 
+
+All the parameters from the Gompertz model showed significantly different values between genepools (with higher opitmal diameter and potential growth for *S. globulifera* genepools but higher kurtosis for *S. sp1*, Tab. \@ref(tab:growthOntogenyTab)). Wihtout any surprise, the model at the individual level reached the highest likelihood (8377) and the lowest residual variation ($\pm 0.15 cm.yr^{-1}$). 
+
+> **Consequently, for association-genomics, we could thus (i) use the genepool growth model (slighlty better than the null model) to derive a vitality indexed based on the sum of residuals over time, or (ii) use the individual growth model to directly derivate individual level parameters of growth.**
 
 ```{r growthOntogenyTab}
-# models <- lapply(1:3, function(i) stan_model(paste0("./symcapture_models/Growth", i, ".stan")))
+# models <- lapply(0:2, function(i) stan_model(paste0("./symcapture_models/Growth", i, ".stan")))
 # fits <- lapply(models, function(model) sampling(model, chains = 2, data = mdata, save_warmup = F))
 # names(fits) <- paste0("growth", 0:2)
 # save(fits, file = file.path("symcapture_save", 'GrowthModels.Rdata'))
@@ -294,70 +303,83 @@ bind_rows(data.frame(DBH = rep(1:100, mdata$I),
 
 ## Growth & Environment
 
-### Visual exploration
+> **A small error has to be corrected with TWI in the third model, it can't be parameterized at the individual scale.**
 
-```{r growthEnvRel, fig.cap="Environmental variables relations with Annual Growth Rates (AGR) and Individual growth model parameters (Gmax, Dopt and ks)"}
-load(file.path("symcapture_save", 'GrowthModels.Rdata'))
-cowplot::plot_grid(trees %>% 
-                     dplyr::select(CensusYear, pop, Ind, AGR, TWI, AUC, logNCI, logANCR) %>% 
-                     reshape2::melt(id.vars = c("CensusYear", "pop", "Ind", "AGR")) %>% 
-                     ggplot(aes(value, log(AGR+1), group = Ind)) +
-                     geom_line(alpha = 0.1) +
-                     facet_grid(pop ~ variable, scales = "free"),
-                   as.data.frame(fits$growth2, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
-                     reshape2::melt(variable.name = "parameter") %>% 
-                     group_by(parameter) %>% 
-                     summarise(value = mean(value)) %>% 
-                     mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-                     mutate(parameter = gsub("i", "", parameter)) %>% 
-                     mutate(IndNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-                     mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-                     mutate(IndNum = as.numeric(IndNum)) %>% 
-                     left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop, TWI))) %>% 
-                     ggplot(aes(TWI, value)) +
-                     geom_point() +
-                     facet_grid(parameter ~ pop, scales = "free") +
-                     geom_smooth(method = "lm"))
-```
-  
-### *Brutal* linear model
+We then integrated environmental effects in previous developed models of individual growth explained with ontogeny, including topography (TWI), climate (AUC), and neighbors interaction (NCI & ANCR). We used the four following forms of models to explain the logarithm of Annual Growth Rate $AGR_{t,i,g}$ with Diameter at breast Height $DBH_{t,i,g}$, Topographic Wetness Index $TWI_{i,g}$, Area Under the Curve of Relative Extractible Water Content $AUC_{t}$, Neighbor Crowding Index $NCI_{t,i,g}$, and Annual Neighbor Crowding Rate $ANCR_{t,i,g}$ at year $t$ for individual $i$ in genepool $gp$:
 
-```{r LMgrowthEnv, fig.cap="Result of the linear model between individual growth and environmental variables."}
-trees %>% 
-  group_by(pop) %>%
-  do(lm = lm(log(AGR+1) ~ log(DBH) + TWI + AUC + logNCI + logANCR, data = .)) %>% 
-  # broom::glance(lm)
-  broom::tidy(lm) %>%
-  filter(term != "(Intercept)") %>% 
-  ggplot(aes(x = term, xend = term, col = term, alpha = p.value < 0.05)) +
-  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
-  geom_point(aes(y = estimate)) +
-  geom_segment(aes(y = estimate - std.error, yend = estimate + std.error),
-               size = 1, show.legend = F) +
-  coord_flip() +
-  facet_wrap(~ pop, nrow = 3) +
-  scale_y_continuous(trans="S_sqrt") +
-  ggtitle("LM: log(AGR+1) ~ log(DBH) + TWI + AUC + logNCI + logANCR", "Rsquared in [0.019,0.053]") +
-  theme(axis.title = element_blank()) +
-  scale_color_discrete("")
-```
+$$GrowthEnvNull:\\log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt})}{Ks}]^2\\.exp(-\beta1.TWI_{i,g}).exp(-\beta2.AUC_{t}).exp(-\beta3.NCI_{t,i,g}).exp(-\beta4.ANCR_{t,i,g}), \sigma)$$
 
-### GrowthEnv0
+$$GrowthEnvGenePool:\\log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax_g.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt_g})}{Ks_g}]^2)\\.exp(-\beta1_g.TWI_{i,g}).exp(-\beta2_g.AUC_{t}).exp(-\beta3_g.NCI_{t,i,g}).exp(-\beta4_g.ANCR_{t,i,g}, \sigma)$$
 
+$$GrowthEnvIndividual:\\log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax_i.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt_i})}{Ks_i}]^2)\\.exp(-\beta1_i.TWI_{i,g}).exp(-\beta2_i.AUC_{t}).exp(-\beta3_i.NCI_{t,i,g}).exp(-\beta4_i.ANCR_{t,i,g}, \sigma) \\ \begin{bmatrix} Gmax_i \\ Dopt_i \\ Ks_i \\ \beta1_i \\ \beta2_i \\ \beta3_i \\ \beta4_i \end{bmatrix} \sim \mathcal N ^3(\begin{bmatrix} Gmax_g \\ Dopt_g \\ Ks_g \\ \beta1_g \\ \beta2_g \\ \beta3_g \\ \beta4_g \end{bmatrix},\begin{bmatrix} \sigma_{Gmax} \\ \sigma_{Dopt} \\ \sigma_{Ks} \\ \sigma_{\beta1} \\ \sigma_{\beta2} \\ \sigma_{\beta3} \\ \sigma_{\beta4} \end{bmatrix} )$$
 
-```{r growthOntogenyTab}
-# fitsEnv <- list()
-# model <- stan_model(paste0("./symcapture_models/GrowthEnv", 0, ".stan"))
-# fitsEnv$growthEnv0 <- sampling(model, chains = 2, data = mdata, save_warmup = F)
+$$GrowthIndividualEnvNull:\\log(AGR_{t,i,g}+1) \sim \mathcal N (Gmax_i.exp(\frac12.[\frac{log(\frac{DBH_{t,i,g}}{Dopt_i})}{Ks_i}]^2).\\exp(-\beta1.TWI_{i,g}).exp(-\beta2.AUC_{t}).exp(-\beta3.NCI_{t,i,g}).exp(-\beta4.ANCR_{t,i,g}), \sigma) \\ \begin{bmatrix} Gmax_i \\ Dopt_i \\ Ks_i \end{bmatrix} \sim \mathcal N ^3(\begin{bmatrix} Gmax_g \\ Dopt_g \\ Ks_g \end{bmatrix},\begin{bmatrix} \sigma_{Gmax} \\ \sigma_{Dopt} \\ \sigma_{Ks} \end{bmatrix} )$$
+
+with $Gmax$, $Dopt$ and $Ks$ the parameters of the Gompertz model representing the growth potential, the optimal diameter of growth when this potential is reached, and the kurtosis of the growth curve respectivelly. Parameters of the Gompertz model were either fitted at the genus level (Model GrowthEnvNull), at the genepool level (Model GrowthEnvGenePool), or at the individual level as random effects centered on the genepool level (Model GrowthEnvIndividual & GrowthIndividualEnvNull). $beta$ represents slopes of environmental variables effects on the potential growth rate $Gmax$. Slopes of environmental effects were either fitted at the genus level (Model GrowthEnvNull & GrowthIndividualEnvNull), at the genepool level (Model GrowthEnvGenePool), or at the individual level as random effects centered on the genepool level (Model GrowthEnvIndividual, **wrong for TWI !**).
+
+Results regarding the parameters from the Gompertz model didn't change compared to the previous paragraph, and won't be discussed here (Tab. \@ref(tab:growthEnvTab)). Effects of environemntal parameters on growth depended on the model (Tab. \@ref(tab:growthEnvTab) and Fig. \@fig(tab:growthEnvbeta) and \@fig(tab:growthEnvPred)). Whereas TWI had a significant effect in the null model, as soon as population and individual structure was included in growth response, TWI was not significant (even in model GrowthIndividualEnvNull). We could interpret TWI significant effect in the model GrowthEnvNull as a proxy of the genepool structure. AUC had globally a strong and more or less significant negative effect on growth, highlighting a decrease of individual growth in drier years. NCI had always a strong and significant positive effect on growth in every model, highlighting an increased individual growth with increased nieghbor crowding over the space and time. Similarly ANCR had a positive effect on growth but only significant without including the genepool structure for *S. globulifera* genepools whereas always significant for *S. sp1*. Maybe *S. sp1* tolerates wider values of ANCR allowing this response. Anyway individuals wariations of environmental variations where non null (Tab. \@ref(tab:growthEnvTab) and Fig. \@fig(tab:growthEnvPred)). Once again as expected, the individual model of both ontogeny and environmental effects is performing better (likelihood Tab. \@ref(tab:growthEnvTab), predicitons Fig. \@fig(tab:growthEnvPredP3), posterior post predictive check \@fig(tab:growthEnvPPC)) with a lower residual variation  ($\pm 0.15 cm.yr^{-1}$). **But when comparing ontogeny-only and ontogeny-environment growth models, environmental variation, besides significant, didn't significantly increased likelihood.**
+
+> **Consequently, for association-genomics, we could once again (i) use the genepool growth model (slighlty better than the null model) to derive a vitality indexed based on the sum of residuals over time, or (ii) use the individual growth model to directly derivate individual level parameters of growth, including eventually individual response to environmental variables (e.g. individuals better coping with drought).**
+
+```{r growthEnvTab}
+# models <- lapply(0:3, function(i) stan_model(paste0("./symcapture_models/GrowthEnv", i, ".stan")))
+# fitsEnv <- lapply(models, function(model) sampling(model, chains = 2, data = mdata, save_warmup = F))
+# names(fitsEnv) <- paste0("growthEnv", 0:3)
 # save(fitsEnv, file = file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
 load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
-mcmc_trace(as.array(fitsEnv$growthEnv0, pars = fitsEnv$growthEnv0@model_pars),
-           facet_args = list(labeller = label_parsed))
-broom::tidyMCMC(fitsEnv$growthEnv0, fitsEnv$growthEnv0@model_pars, droppars = NULL, rhat = T) %>% 
+# lapply(fitsEnv, function(fit) mcmc_trace(as.array(fit), pars = c("Gmax[1]", "Dopt[1]", "Ks[1]", 
+#                                                                  "beta[1,1]", "beta[1,2]", "beta[1,3]", "beta[1,4]",  "sigma"),
+#                                          facet_args = list(labeller = label_parsed)))
+bind_rows(broom::tidyMCMC(fitsEnv$growthEnv0, fitsEnv$growthEnv0@model_pars, droppars = NULL, rhat = T) %>% 
+            mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+            mutate(model = "Null"),
+          broom::tidyMCMC(fitsEnv$growthEnv1, fitsEnv$growthEnv1@model_pars, droppars = NULL, rhat = T) %>% 
+            separate(term, c("term", "popNum", "variable"), "([[:punct:]])") %>% 
+            mutate(term = ifelse(!is.na(variable), paste0(term, variable), term)) %>%  
+            dplyr::select(-variable) %>%
+            mutate(model = "GenePool"),
+          broom::tidyMCMC(fitsEnv$growthEnv2, fitsEnv$growthEnv1@model_pars, droppars = NULL, rhat = T) %>% 
+            separate(term, c("term", "popNum", "variable"), "([[:punct:]])") %>% 
+            mutate(term = ifelse(!is.na(variable), paste0(term, variable), term)) %>%  
+            dplyr::select(-variable) %>%
+            mutate(model = "Individual"),
+          broom::tidyMCMC(fitsEnv$growthEnv3, fitsEnv$growthEnv1@model_pars, droppars = NULL, rhat = T) %>% 
+            separate(term, c("term", "id"), "([[:punct:]])") %>% 
+            mutate(popNum = ifelse(term != "beta", id, NA)) %>% 
+            mutate(variable = ifelse(term == "beta", id, "")) %>% 
+            mutate(term = ifelse(!is.na(variable), paste0(term, variable), term)) %>%  
+            dplyr::select(-variable, -id) %>%
+            mutate(model = "IndividualNull")) %>% 
+  reshape2::dcast(term +  popNum ~ model, value.var = "estimate") %>% 
+  mutate(popNum = as.numeric(popNum)) %>% 
+  left_join(unique(dplyr::select(trees, popNum, pop))) %>% 
+  dplyr::select(term, pop, Null, GenePool, Individual, IndividualNull) %>%
   kable(caption = "Summary table of the models")
-mcmc_dens(as.array(fitsEnv$growthEnv0, pars = "beta"))
-pars <- as.data.frame(fitsEnv$growthEnv0, pars = c("Gmax", "Dopt", "Ks", "beta")) %>% 
-  reshape2::melt(variable.name = "parameter") %>% 
+```
+
+```{r growthEnvbeta, fig.cap="Posterior distributions of environmental effects per model.", fig.height=12, fig.width=12}
+cowplot::plot_grid(plotlist = lapply(fitsEnv, function(fit) mcmc_intervals(as.array(fit, pars = "beta")) +
+                                       scale_x_continuous(trans="S_sqrt")), 
+                   labels = c("GrowthEnvNull", "GrowthEnvGenePool", "GrowthEnvIndividual", "GrowthIndividualEnvNull"))
+```
+
+```{r growthEnvPred, fig.cap="Models predictions per variable and populations.", fig.height=12, fig.width=12}
+load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+t <- lapply(c("DBH", "TWI", "AUC", "logNCI", "logANCR"), function(var){
+  t <- data.frame(variable = var,
+                  value = rep(seq(min(trees[,var]), max(trees[,var]), length.out = 100), mdata$I),
+                  DBH = mean(trees$DBH), 
+                  TWI = mean(trees$TWI),
+                  AUC = mean(trees$AUC),
+                  logNCI = mean(trees$logNCI),
+                  logANCR = mean(trees$logANCR),
+                  IndNum = rep(1:mdata$I, each = 100))
+  t[,var] <- rep(seq(min(trees[,var]), max(trees[,var]), length.out = 100), mdata$I)
+  return(t)
+}) %>% bind_rows() %>% 
+  left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop)))
+pars0 <- as.data.frame(fitsEnv$growthEnv0, pars = c("Gmax", "Dopt", "Ks", "beta")) %>% 
+  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
   group_by(parameter) %>% 
   summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
@@ -366,69 +388,216 @@ pars <- as.data.frame(fitsEnv$growthEnv0, pars = c("Gmax", "Dopt", "Ks", "beta")
   dplyr::select(-variable) %>%
   mutate(join = 1) %>% 
   reshape2::dcast(join ~ parameter)
-data.frame(DBH = rep(1:100, mdata$I), 
-           TWI = mean(trees$TWI),
-           AUC = mean(trees$AUC),
-           logNCI = mean(trees$logNCI),
-           logANCR = mean(trees$logANCR),
-           IndNum = rep(1:mdata$I, each = 100)) %>% 
-  left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop))) %>% 
+pars1 <- as.data.frame(fitsEnv$growthEnv1, pars = c("Gmax", "Dopt", "Ks", "beta")) %>% 
+  reshape2::melt(variable.name = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(popNum = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(variable = substr(popNum, 2,2)) %>% 
+  mutate(popNum = substr(popNum, 1,1)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  reshape2::melt(id.vars = c("parameter", "popNum", "variable"), variable.name = "metric") %>% 
+  mutate(parameter = paste0(parameter, variable, "_", metric)) %>% 
+  dplyr::select(-variable) %>%
+  reshape2::dcast(popNum ~ parameter) %>% 
+  mutate(popNum = as.numeric(popNum))
+pars2 <- as.data.frame(fitsEnv$growthEnv2, pars = c("Gmax", "Dopt", "Ks", "beta")) %>% 
+  reshape2::melt(variable.name = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(popNum = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(variable = substr(popNum, 2,2)) %>% 
+  mutate(popNum = substr(popNum, 1,1)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  reshape2::melt(id.vars = c("parameter", "popNum", "variable"), variable.name = "metric") %>% 
+  mutate(parameter = paste0(parameter, variable, "_", metric)) %>% 
+  dplyr::select(-variable) %>%
+  reshape2::dcast(popNum ~ parameter) %>% 
+  mutate(popNum = as.numeric(popNum))
+pars2i <- as.data.frame(fitsEnv$growthEnv2, pars = c("Gmaxi", "Dopti", "Ksi", "betai")) %>% 
+  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
+  separate(parameter, c("parameter", "IndNum", "variable"), "([[:punct:]])", extra = "drop") %>% 
+  reshape2::melt(id.vars = c("parameter", "variable", "IndNum"), variable.name = "metric") %>% 
+  mutate(parameter = paste0(parameter,  variable, "_", metric)) %>% 
+  dplyr::select(-variable) %>%
+  reshape2::dcast(IndNum ~ parameter) %>% 
+  mutate(IndNum = as.numeric(IndNum))
+beta3 <- as.data.frame(fitsEnv$growthEnv3, pars = c("beta")) %>% 
+  reshape2::melt(variable.name = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
+  ungroup() %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  reshape2::melt(id.vars = c("parameter"), variable.name = "metric") %>% 
+  mutate(parameter = paste0(parameter, "_", metric)) %>% 
   mutate(join = 1) %>% 
-  left_join(pars) %>% 
-  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>%
-  mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
-  mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>%
-  ggplot(aes(x = DBH)) +
-  geom_ribbon(aes(ymin = Gpred5, ymax = Gpred95, fill = pop), alpha = 0.5) +
-  geom_point(aes(y = log(AGR +1), col = Ind), alpha = 0.4, data = trees) +
-  geom_line(aes(y = Gpred, col = Ind)) +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none") +
-  facet_wrap(~ pop)
-data.frame(DBH = mean(trees$DBH), 
-           TWI = rep(seq(min(trees$TWI), max(trees$TWI), length.out = 100), mdata$I),
-           AUC = mean(trees$AUC),
-           logNCI = mean(trees$logNCI),
-           logANCR = mean(trees$logANCR),
-           IndNum = rep(1:mdata$I, each = 100)) %>% 
-  left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop))) %>% 
-  mutate(join = 1) %>% 
-  left_join(pars) %>% 
-  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>%
-  mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
-  mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>%
-  ggplot(aes(x = TWI)) +
-  geom_ribbon(aes(ymin = Gpred5, ymax = Gpred95, fill = pop), alpha = 0.5) +
-  geom_point(aes(y = log(AGR +1), col = Ind), alpha = 0.4, data = trees) +
-  geom_line(aes(y = Gpred, col = Ind)) +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none") +
-  facet_wrap(~ pop)
-
-trees %>%  
-  mutate(join = 1) %>% 
-  left_join(pars) %>% 
-  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>%
-  mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
-  mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>%
-  dplyr::select(AGR, Ind, pop, Gpred, Gpred5, Gpred95, DBH, TWI, AUC, logNCI, logANCR) %>% 
-  reshape2::melt(id.vars = c("Ind", "pop", "AGR", "Gpred", "Gpred5", "Gpred95")) %>% 
-  ggplot(aes(x = value)) +
-  geom_ribbon(aes(ymin = Gpred5, ymax = Gpred95, fill = pop), alpha = 0.5) +
-  geom_point(aes(y = log(AGR +1), col = Ind), alpha = 0.4) +
-  geom_line(aes(y = Gpred, col = Ind)) +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none") +
-  facet_grid(pop ~ variable, scales = "free")
-
-data.frame(DBH = mean(trees$DBH), 
-           TWI = rep(seq(min(trees$TWI), max(trees$TWI), length.out = 100), mdata$I),
-           AUC = mean(trees$AUC),
-           logNCI = mean(trees$logNCI),
-           logANCR = mean(trees$logANCR),
-           IndNum = rep(1:mdata$I, each = 100))
+  reshape2::dcast(join ~ parameter)
+pars3 <- as.data.frame(fitsEnv$growthEnv3, pars = c("Gmax", "Dopt", "Ks")) %>% 
+  reshape2::melt(variable.name = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(popNum = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  reshape2::melt(id.vars = c("parameter", "popNum"), variable.name = "metric") %>% 
+  mutate(parameter = paste0(parameter, "_", metric)) %>% 
+  reshape2::dcast(popNum ~ parameter) %>% 
+  mutate(popNum = as.numeric(popNum))
+pars3i <- as.data.frame(fitsEnv$growthEnv3, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
+  reshape2::melt(variable.name = "parameter") %>% 
+  group_by(parameter) %>% 
+  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(IndNum = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  reshape2::melt(id.vars = c("parameter", "IndNum")) %>% 
+  mutate(parameter = paste0(parameter, "_", variable)) %>% 
+  dplyr::select(-variable) %>%
+  reshape2::dcast(IndNum ~ parameter) %>% 
+  mutate(IndNum = as.numeric(IndNum))
+t <- bind_rows(mutate(t, join = 1) %>% 
+            left_join(pars0) %>% 
+            mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>%
+            mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
+            mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>% 
+            mutate(model = "GrowthEnvNull"),
+          left_join(t, pars1) %>% 
+            mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>%
+            mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
+            mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>% 
+            mutate(model = "GrowthEnvGenePool"),
+          left_join(t, pars2) %>% 
+            left_join(pars2i) %>% 
+            mutate(Gpred = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2)*exp(-betai1_m*TWI)*exp(-betai2_m*AUC)*exp(-betai3_m*logNCI)*exp(-betai4_m*logANCR)) %>%
+            mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
+            mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>%
+            mutate(model = "GrowthEnvIndividual"),
+          mutate(t, join = 1) %>% 
+            left_join(beta3) %>% 
+            left_join(pars3) %>% 
+            left_join(pars3i) %>% 
+            mutate(Gpred = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>%
+            mutate(Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2)*exp(-beta1_q5*TWI)*exp(-beta2_q5*AUC)*exp(-beta3_q5*logNCI)*exp(-beta4_q5*logANCR)) %>%
+            mutate(Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)*exp(-beta1_q95*TWI)*exp(-beta2_q95*AUC)*exp(-beta3_q95*logNCI)*exp(-beta4_q95*logANCR)) %>%
+            mutate(model = "GrowthIndividualEnvNull"))
+cowplot::plot_grid(plotlist = lapply(split(t, t$model), function(t) ggplot(t, aes(x = value)) +
+                                       geom_ribbon(aes(ymin = Gpred5, ymax = Gpred95, fill = pop), alpha = 0.5) +
+                                       geom_point(aes(y = log(AGR+1), col = Ind), alpha = 0.4,
+                                                  data = dplyr::select(trees, pop, AGR, Ind, DBH, TWI, AUC, logNCI, logANCR) %>% 
+                                                    reshape2::melt(id.vars = c("pop", "AGR", "Ind"))) +
+                                       geom_line(aes(y = Gpred, col = Ind)) +
+                                       scale_color_discrete(guide = "none") +
+                                       scale_fill_discrete(guide = "none") +
+                                       facet_grid( pop ~ variable, scales = "free")), 
+                   labels = c("GrowthEnvNull", "GrowthEnvGenePool", "GrowthEnvIndividual", "GrowthIndividualEnvNull"))
 ```
 
+```{r growthEnvPredP3, fig.cap="Models predictions for individuals in Plot 3.", fig.height=12, fig.width=12}
+bind_rows(filter(trees, Plot == 3) %>% 
+            mutate(join = 1) %>% 
+            left_join(pars0) %>% 
+            mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>% 
+            mutate(model = "GrowthEnvNull"),
+          filter(trees, Plot == 3) %>% 
+            left_join(pars1) %>% 
+            mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>% 
+            mutate(model = "GrowthEnvGenePool"),
+          filter(trees, Plot == 3) %>%
+              left_join(pars2i) %>%
+            mutate(Gpred = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2)*exp(-betai1_m*TWI)*exp(-betai2_m*AUC)*exp(-betai3_m*logNCI)*exp(-betai4_m*logANCR)) %>%
+            mutate(model = "GrowthEnvIndividual"),
+          filter(trees, Plot == 3) %>% 
+            mutate(join = 1) %>% 
+            left_join(beta3) %>% 
+            left_join(pars3i) %>% 
+            mutate(Gpred = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>% 
+            mutate(model = "GrowthIndividualEnvNull")) %>% 
+  ggplot(aes(x = CensusYear)) +
+  geom_point(aes(y = log(AGR+1)), alpha = 0.2) +
+    geom_line(aes(y = Gpred, col = model)) +
+  facet_wrap(~ Ind, scales = "free") +
+  theme(legend.position = "bottom")
+```
+
+```{r growthEnvPPC, fig.cap="Compare the empirical distribution of the individual annual growth rate to the distributions of simulated annual growth rate from the posterior predictive distribution.", fig.height=12, fig.width=12}
+t <- list("0" = as.data.frame(fitsEnv$growthEnv0, pars = c("Gmax", "Dopt", "Ks", "beta")) %>% 
+            reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+            group_by(parameter) %>% 
+            sample_n(100) %>% 
+            mutate(N = 1:100) %>% 
+            ungroup() %>% 
+            mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+            reshape2::dcast(N ~ parameter) %>% 
+            mutate(join = 1) %>% 
+            right_join(mutate(trees, join = 1), by = "join") %>% 
+            mutate(Gpred = Gmax*exp(-0.5*(log(DBH/Dopt)/Ks)^2)*exp(-beta1*TWI)*exp(-beta2*AUC)*exp(-beta3*logNCI)*exp(-beta4*logANCR)) %>% 
+            dplyr::select(Ind, CensusYear, N, Gpred) %>% 
+            reshape2::dcast(Ind + CensusYear ~ N, value.var = "Gpred") %>% 
+            dplyr::select(-Ind, -CensusYear) %>% 
+            as.matrix() %>% t(),
+          "1" = as.data.frame(fitsEnv$growthEnv1, pars = c("Gmax", "Dopt", "Ks", "beta")) %>% 
+            reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+            group_by(parameter) %>% 
+            sample_n(100) %>% 
+            mutate(N = 1:100) %>% 
+            separate(parameter, c("parameter", "popNum", "variable"), "([[:punct:]])", extra = "drop") %>% 
+            mutate(parameter = paste0(parameter,  variable)) %>% 
+            dplyr::select(-variable) %>% 
+            reshape2::dcast(N + popNum ~ parameter) %>% 
+            mutate(popNum = as.numeric(popNum)) %>% 
+            right_join(trees, by = "popNum") %>% 
+            mutate(Gpred = Gmax*exp(-0.5*(log(DBH/Dopt)/Ks)^2)*exp(-beta1*TWI)*exp(-beta2*AUC)*exp(-beta3*logNCI)*exp(-beta4*logANCR)) %>% 
+            dplyr::select(Ind, CensusYear, N, Gpred) %>% 
+            reshape2::dcast(Ind + CensusYear ~ N, value.var = "Gpred") %>% 
+            dplyr::select(-Ind, -CensusYear) %>% 
+            as.matrix() %>% t(),
+          "2" = as.data.frame(fitsEnv$growthEnv2, pars = c("Gmaxi", "Dopti", "Ksi", "betai")) %>% 
+            reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+            group_by(parameter) %>% 
+            sample_n(100) %>% 
+            mutate(N = 1:100) %>% 
+            separate(parameter, c("parameter", "IndNum", "variable"), "([[:punct:]])", extra = "drop") %>% 
+            mutate(parameter = paste0(parameter,  variable)) %>% 
+            dplyr::select(-variable) %>% 
+            reshape2::dcast(N + IndNum ~ parameter) %>% 
+            mutate(IndNum = as.numeric(IndNum)) %>% 
+            left_join(trees, by = "IndNum") %>% 
+            mutate(Gpred = Gmaxi*exp(-0.5*(log(DBH/Dopti)/Ksi)^2)*exp(-betai1*TWI)*exp(-betai2*AUC)*exp(-betai3*logNCI)*exp(-betai4*logANCR)) %>% 
+            dplyr::select(Ind, CensusYear, N, Gpred) %>% 
+            reshape2::dcast(Ind + CensusYear ~ N, value.var = "Gpred") %>% 
+            dplyr::select(-Ind, -CensusYear) %>% 
+            as.matrix() %>% t(),
+          "3" = as.data.frame(fitsEnv$growthEnv3, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
+            reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+            group_by(parameter) %>% 
+            sample_n(100) %>% 
+            mutate(N = 1:100) %>% 
+            separate(parameter, c("parameter", "IndNum", "variable"), "([[:punct:]])", extra = "drop") %>% 
+            mutate(parameter = paste0(parameter,  variable)) %>% 
+            dplyr::select(-variable) %>% 
+            reshape2::dcast(N + IndNum ~ parameter) %>% 
+            left_join(as.data.frame(fitsEnv$growthEnv3, pars = "beta") %>% 
+                        reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+                        mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+                        group_by(parameter) %>% 
+                        sample_n(1000) %>% 
+                        mutate(N = 1:1000) %>% 
+                        reshape2::dcast(N ~ parameter)) %>% 
+            mutate(IndNum = as.numeric(IndNum)) %>% 
+            left_join(trees, by = "IndNum") %>% 
+            mutate(Gpred = Gmaxi*exp(-0.5*(log(DBH/Dopti)/Ksi)^2)*exp(-beta1*TWI)*exp(-beta2*AUC)*exp(-beta3*logNCI)*exp(-beta4*logANCR)) %>% 
+            dplyr::select(Ind, CensusYear, N, Gpred) %>% 
+            reshape2::dcast(Ind + CensusYear ~ N, value.var = "Gpred") %>% 
+            dplyr::select(-Ind, -CensusYear) %>% 
+            as.matrix() %>% t())
+cowplot::plot_grid(plotlist = lapply(t, function(t) ppc_dens_overlay(log(trees$AGR+1), t) +
+                                       xlim(0, max(log(trees$AGR+1)))), 
+                   labels = c("GrowthEnvNull", "GrowthEnvGenePool", "GrowthEnvIndividual", "GrowthIndividualEnvNull"))
+```
 
 ## Growth & genomics
 
