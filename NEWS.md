@@ -1,4 +1,7 @@
 # PhD 0.1.9154
+* symcapture: growth GWAS LMM & BSLMM
+
+# PhD 0.1.9154
 * symcapture: growth & environment
 
 # PhD 0.1.9153

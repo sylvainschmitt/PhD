@@ -143,12 +143,6 @@ trees %>%
   dplyr::select(logDBH, TWI) %>% 
   mutate_all(scale) %>% 
   write_tsv(file.path(path, "gemma", "AGR", "AGR.covariates"), col_names = F)
-trees %>% 
-  ungroup() %>% 
-  filter(CensusYear == 2015) %>%  # for the moment for tests with gemma 
-  mutate(AGR = log(AGR+1)) %>% 
-  dplyr::select(FID, IID, AGR) %>% 
-  write_tsv(file.path(path, "gemma", "AGR", "AGR.phenotype"), col_names = F)
 save(trees, file = "./symcapture_save/Env2.Rdata")
 ```
 
@@ -599,59 +593,90 @@ cowplot::plot_grid(plotlist = lapply(t, function(t) ppc_dens_overlay(log(trees$A
                    labels = c("GrowthEnvNull", "GrowthEnvGenePool", "GrowthEnvIndividual", "GrowthIndividualEnvNull"))
 ```
 
-## Growth & genomics
+## Growth potential $Gmax$
 
-```{bash AGRgemma, eval=F, echo=T}
+```{bash GmaxGemma, eval=F, echo=T}
+# load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+# broom::tidyMCMC(fitsEnv$growthEnv2, "Gmaxi", droppars = NULL, rhat = F) %>%
+#               separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
+#   rename(Gmax = estimate) %>%
+#   left_join(trees) %>%
+#   dplyr::select(FID, IID, Gmax) %>%
+#   unique() %>%
+#   mutate(Gmax = RNOmni::rankNorm(Gmax)) %>% 
+#   write_tsv(file.path(path, "gemma", "Gmax", "Gmax.phenotype"), col_names = F)
 module load bioinfo/plink-v1.90b5.3
 module load bioinfo/gemma-v0.97
-plink \
+cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  
+  plink \
   --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
   --allow-extra-chr \
+  --keep $pop.fam \
   --extract ../../../variantCalling/paracou3pop/LD.prune.in \
   --maf 0.05 \
-  --pheno AGR.phenotype \
-  --out paracou3pop \
-  --make-bed
-gemma -bfile paracou3pop -gk 1 -o paracou3pop.kinship
-gemma -bfile paracou3pop -k output/paracou3pop.kinship.cXX.txt -c AGR.covariates -lmm 1 -o paracou3pop.AGR
-gemma -bfile paracou3pop -k -bslmm 1 -o paracou3pop.polygenic.AGR # BSLMM doesn't support covariates
-cat AGR.LMM.snps | cut -f1 > AGR.snps.list
-plink \
-  --bfile paracou3pop \
-  --allow-extra-chr \
-  --extract AGR.snps.list \
-  --out AGR.snps \
-  --recode A
+  --pheno Gmax.phenotype \
+  --out $pop \
+  --make-bed &
+done  
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.Gmax & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Gmax & done
 ```
+
+Individual growth potential was significantly associated only to one  major effect SNPs in *S. globulifera type Paracou* genepool (Fig. \@ref(fig:GmaxAssocMLM)). Still the polygenic model (BSLMM) *started to converge* for the whole genus, whereas not for the genepools alone (Fig. \@ref(fig:BSLMMGmaxConvergence)). A total of 33875 SNPs explained approximately 80-100% of individual potential growth variation, with 0.1% of the SNP (ca 54 SNPs) having relatively large effects and explaining a total of 15% PVE (Tab. \@ref(tab:BSLMMGmaxHypPar)). But no SNPs had more than 90% chance to have an effect on individual growth potential ($\gamma > 0.9$) in the polygenic model (Fig. \@ref(fig:sGmaxAssocBSLMM).
+
+### Proportion of Variance Explained
+
+```{r GmaxPVE, eval=F}
+load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+Y <- broom::tidyMCMC(fitsEnv$growthEnv2, "Gmaxi", droppars = NULL, rhat = F) %>%
+              separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
+  rename(Gmax = estimate) %>%
+  left_join(trees) %>%
+  dplyr::select(IID, Gmax) %>%
+  unique() %>%
+  mutate(Gmax = RNOmni::rankNorm(Gmax)) %>% 
+  arrange(IID)
+K <- read_tsv(file.path(path, "..", "variantCalling", "paracou", "out.relatedness2")) %>% 
+  filter(INDV1 %in% Y$IID) %>% filter(INDV2 %in% Y$IID) %>% arrange(INDV1, INDV2) %>% 
+  reshape2::dcast(INDV1 ~ INDV2, value.var = "RELATEDNESS_PHI") %>% 
+  column_to_rownames(var = "INDV1") %>% 
+  as.matrix()
+chol((K + t(K))/2)
+model <- stan_model(paste0("./symcapture_models/Animal.stan"))
+fit <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), X = t(as.matrix(rep(1, nrow(Y)))), Y = Y$Gmax, K = 2*K), save_warmup = F)
+```
+
 
 ### Major effect SNPs
 
-We detected 19 outliers SNPs with TWI independently of population structure (2 were neutral, 3 functional and 14 hitchhikers, Fig. \@ref(fig:TWIassocMLM)). The 14 hitchhiker SNPs (Fig. \@ref(fig:TWIoutliersHist)) corresponded to 4 transcripts enriched in *S. globulifera* and 2 transcripts enriched in *S. sp1* juveniles in common garden (Tysklind et al., in prep). **Gene ontology ...**
-
-```{r AGRassocMLM, fig.cap="q-value of major effect SNPs associated to topographic wetness index (TWI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-t <- lapply(c("paracou3pop"), function(pop) 
-  read_tsv(file.path(path, "gemma", "AGR", paste0(pop,".AGR.assoc.txt"))) %>% 
+```{r GmaxAssocMLM, fig.cap="q-value of major effect SNPs associated to individual growth potential $Gmax$. SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Gmax", paste0(pop,".Gmax.assoc.txt"))) %>% 
     mutate(pop = pop)) %>% 
   bind_rows() %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>% 
   arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.))
-filter(t , qval < 0.05) %>%
-  mutate(model = "LMM") %>%
-  dplyr::select(rs, pop, model) %>%
-  write_tsv(file.path(path, "gemma", "AGR", "AGR.LMM.snps"), col_names = F)
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval)
+filter(t , qval < 0.05) %>% 
+  mutate(model = "LMM") %>% 
+  dplyr::select(rs, pop, model) %>% 
+  write_tsv(file.path(path, "gemma", "Gmax", "Gmax.LMM.snps"), col_names = F)
 ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
-# ggplot(t, aes(snp, beta, label = snp, alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
-  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
   ylab(expression(-log[10]("q-value"))) +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
-  # scale_y_continuous(trans="S_sqrt") +
   xlab("SNP number") +
   scale_color_discrete("SNP type") +
   facet_wrap(~ pop) 
@@ -659,110 +684,338 @@ ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) 
 
 ### Polygenic signal
 
-A total of 31 804 SNPs explained approximately 59% of environmental variation (i.e. PVE=0.5915). Among these 31 804 SNPs, a small proportion of them (1% or 300 SNPs) have relatively large effects and explain a total of 50% PVE (i.e. PGE=0.4989).
-
-```{r BSLMMAGRConvergence, fig.cap="BSLMM parameters distribution." }
-lapply(c("paracou3pop"), function(pop) 
-  read_tsv(file.path(path, "gemma", "AGR", paste0(pop,".polygenic.AGR.hyp.txt"))) %>% 
+```{r BSLMMGmaxConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Gmax", paste0(pop,".polygenic.Gmax.hyp.txt"))) %>% 
     mutate(Population = pop)) %>% 
-  bind_rows() %>% 
-  dplyr::select(pve, pge, pi, n_gamma, Population) %>% 
+  bind_rows()  %>% 
+  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
   dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  reshape2::melt(id.vars = "Population") %>% 
-  ggplot(aes(value, fill = Population, col = Population)) +
-  geom_density(alpha = 0.15) +
-  facet_wrap(~ variable, scales = "free", labeller = "label_parsed") +
-  theme(legend.position = "bottom",
-        axis.title = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
+  group_by(Population) %>% 
+  mutate(iteration = 1:n()) %>% 
+  filter(row_number() %% 100 == 0) %>% 
+  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
+  ggplot(aes(iteration, value)) +
+  geom_line() +
+  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
+  theme(axis.text.x = element_text(angle = 45))
 ```
 
-```{r AGRassocBSLMM, eval=T}
-t <- lapply(c("paracou3pop"), function(pop) 
-  read_tsv(file.path(path, "gemma", "AGR", paste0(pop,".polygenic.AGR.param.txt"))) %>% 
-    mutate(Population = pop)) %>% 
-  bind_rows() %>% 
+```{r BSLMMGmaxHypPar}
+read_tsv(file.path(path, "gemma", "Gmax", paste0("paracou3pop",".polygenic.Gmax.hyp.txt"))) %>% 
+  dplyr::select(pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  broom::tidyMCMC(conf.int = T) %>% 
+  kable(caption = "BSLMM hyper-parameters distribution for the whole genus.")
+```
+
+```{r GmaxAssocBSLMM, fig.cap="Effect of SNPs associated to individual growth potential $Gmax$ with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype."}
+t <- read_tsv(file.path(path, "gemma", "Gmax", paste0("paracou3pop",".polygenic.Gmax.param.txt"))) %>% 
+  mutate(Population = "paracou3pop") %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   arrange(chr, ps) %>% 
   mutate(snp = 1:nrow(.))
-filter(t , gamma > 0.1) %>% 
-  mutate(model = "BSLMM") %>% 
-  dplyr::select(rs, Population, model) %>% 
-  write_tsv(file.path(path, "gemma", "TWI", "TWI.BSLMM.snps"), col_names = F)
-ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.1)) +
+ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.9)) +
   geom_point() +
   ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
   scale_y_continuous(trans="S_sqrt") +
-  ylab(expression(beta*gamma)) +
-  facet_wrap(~ Population, nrow = 3) 
+  ylab(expression(beta*gamma))
+```
+
+## Optimal diameter $Dopt$
+
+```{bash DoptGemma, eval=F, echo=T}
+# load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+# broom::tidyMCMC(fitsEnv$growthEnv2, "Dopti", droppars = NULL, rhat = F) %>%
+#               separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
+#   rename(Dopt = estimate) %>%
+#   left_join(trees) %>%
+#   dplyr::select(FID, IID, Dopt) %>%
+#   unique() %>%
+#   mutate(Dopt = RNOmni::rankNorm(Dopt)) %>%
+#   write_tsv(file.path(path, "gemma", "Dopt", "Dopt.phenotype"), col_names = F)
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno Dopt.phenotype \
+  --out $pop \
+  --make-bed &
+done  
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.Gmax & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Gmax & done
+cat Dopt.LMM.snps | cut -f1 > Dopt.snps.list
+plink --bfile paracou3pop --allow-extra-chr --extract Dopt.snps.list --out Dopt.snps --recode A
+```
+
+Individual growth potential was significantly associated to four major effect SNPs in the genus (Fig. \@ref(fig:GmaxAssocMLM) and \@ref(fig:DoptOutliersHist), **I don't discuss *S. globulifera type Regina* because i suspect false positive of minor alleles in reduced population**). The polygenic model (BSLMM) didn't converge for the whole genus and the genepools alone (Fig. \@ref(fig:BSLMMGmaxConvergence)).
+
+### Major effect SNPs
+
+```{r DoptAssocMLM, fig.cap="q-value of major effect SNPs associated to individual optimal diameter $Dopt$. SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Dopt", paste0(pop,".Gmax.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval)
+filter(t , qval < 0.05) %>%
+  mutate(model = "LMM") %>%
+  dplyr::select(rs, pop, model) %>%
+  write_tsv(file.path(path, "gemma", "Dopt", "Dopt.LMM.snps"), col_names = F)
+ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop) 
+```
+
+### Polygenic signal
+
+```{r BSLMMDoptConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Dopt", paste0(pop,".polygenic.Gmax.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows()  %>% 
+  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  group_by(Population) %>% 
+  mutate(iteration = 1:n()) %>% 
+  filter(row_number() %% 100 == 0) %>% 
+  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
+  ggplot(aes(iteration, value)) +
+  geom_line() +
+  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
+  theme(axis.text.x = element_text(angle = 45))
 ```
 
 ### Outliers
 
-```{r AGRoutliersHist, fig.cap="Distribution of alleles along topographic wetness index for significantly associated SNPs."}
-read_delim(file.path(path, "gemma", "AGR", "AGR.snps.raw"), delim = " ") %>% 
+```{r DoptOutliersHist, fig.cap="Distribution of alleles along individual optiaml diameter $Dopt$ for significantly associated SNPs."}
+read_delim(file.path(path, "gemma", "Dopt", "Dopt.snps.raw"), delim = " ") %>% 
+  filter(PHENOTYPE != -9) %>% # !! TO SOLVE
   dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
-  dplyr::rename(AGR = PHENOTYPE) %>% 
-  reshape2::melt(id.vars = c("IID", "AGR"), variable.name = "SNP", value.name = "Allele") %>% 
+  dplyr::rename(Dopt = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "Dopt"), variable.name = "SNP", value.name = "Allele") %>% 
   na.omit(Allele) %>% 
   mutate(Allele = as.factor(Allele)) %>% 
   left_join(trees, by = "IID", suffix = c("", ".trees")) %>% 
   mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
-  ggplot(aes(pop, AGR, fill = Allele)) +
+  ggplot(aes(Allele, Dopt)) +
   geom_boxplot() +
+  stat_summary(fun.y=mean, geom="line", col = "red", size = 1.2,
+               aes(group=1))  + 
   facet_wrap(~ SNP) +
   coord_flip() +
   theme(strip.text.x = element_text(size = 5)) +
-  ylab("Topographic wetness index") +
-  xlab("Population") +
-  scale_fill_discrete("Number of copies\nof the major allele")
+  ylab("Individual optimal diameter") +
+  xlab("Number of copies of the major allele")
 ```
 
-```{r AGRGO, fig.cap="Term enrichment of Gene Ontology (GO) for TWI-outlier genes.", eval=F}
-outliers <- read_delim(file.path(path, "gemma", "AGR", "AGR.snps.raw"), delim = " ") %>% 
-                           dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
-                           dplyr::rename(TWI = PHENOTYPE) %>% 
-                           reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "snp", value.name = "Allele") %>% 
-                           mutate(snp = stringr::str_sub(snp, 1, -3)) %>% 
-                           dplyr::select(snp) %>% 
-                           unique() %>% unlist()
+## Kurtosis $Ks$
 
-trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
-              dplyr::select(scf, snp, trsc) %>% 
-  unique() %>% 
-  mutate(outlier = ifelse(snp %in% outliers, 1, 0))
+Individual growt kurtosis wasn't significantly associated to any major effect SNPs in the whole genus or any of the genepools (Fig. \@ref(fig:KsAssocMLM)). Still the polygenic model (BSLMM) *started to converge* for the whole genus, whereas not for the genepools alone (Fig. \@ref(fig:BSLMMKsConvergence)). A total of 33875 SNPs explained approximately 25% of individual kurtosis variation, with 0.1% of the SNP (ca 32 SNPs) having relatively large effects and explaining a total of 38% of PVE (Tab. \@ref(tab:BSLMMKsHypPar)). But no SNPs had more than 90% chance to have an effect on individual growth potential ($\gamma > 0.9$) in the polygenic model (Fig. \@ref(fig:KsAssocBSLMM).
 
-GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
-  tbl("Transcript") %>% 
-  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
-  dplyr::select(gene_id, transcript_id, annotation) %>% 
-  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
-  collect() %>% 
-  separate(annotation, paste0("X", 1:16), "\t") %>% 
-  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
-  dplyr::select(trsc, gene, orf, GO) %>% 
-  filter(GO != ".") %>% 
-  left_join(trsc) %>% 
-  group_by(gene, GO) %>% 
-  summarise(outlier = max(outlier)) %>% 
-  ungroup() %>% 
-  dplyr::select(gene, outlier, GO) %>% 
-  separate_rows(GO, sep = "`") %>% 
-  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
-  
-clusterProfiler::enricher(unique(filter(GO, outlier == 1)$gene),
-                               pvalueCutoff = 0.2, 
-                               pAdjustMethod = "BH",
-                               unique(GO$gene),
-                               minGSSize = 10, 
-                               maxGSSize = 500, 
-                               qvalueCutoff = 0.2, 
-                               dplyr::select(GO, GOid, gene),
-                               TERM2NAME = dplyr::select(GO, GOid, GOname))@result %>% 
-  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
-  geom_bar(stat = "identity") +
-  coord_flip() +
-  viridis::scale_fill_viridis() +
-  theme(axis.title = element_blank())
+```{bash KsGemma, eval=F, echo=T}
+# load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+# broom::tidyMCMC(fitsEnv$growthEnv2, "Ksi", droppars = NULL, rhat = F) %>%
+#               separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
+#   rename(Ks = estimate) %>%
+#   left_join(trees) %>%
+#   dplyr::select(FID, IID, Ks) %>%
+#   unique() %>%
+#   mutate(Ks = RNOmni::rankNorm(Ks)) %>%
+#   write_tsv(file.path(path, "gemma", "Ks", "Ks.phenotype"), col_names = F)
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno Ks.phenotype \
+  --out $pop \
+  --make-bed &
+done  
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.Ks & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Ks & done
+```
+
+### Major effect SNPs
+
+```{r KsAssocMLM, fig.cap="q-value of major effect SNPs associated to individual kurtosis $Ks$. SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Ks", paste0(pop,".Ks.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval)
+ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop) 
+```
+
+### Polygenic signal
+
+```{r BSLMMKsConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Ks", paste0(pop,".polygenic.Ks.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows()  %>% 
+  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  group_by(Population) %>% 
+  mutate(iteration = 1:n()) %>% 
+  filter(row_number() %% 100 == 0) %>% 
+  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
+  ggplot(aes(iteration, value)) +
+  geom_line() +
+  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
+  theme(axis.text.x = element_text(angle = 45))
+```
+
+```{r BSLMMKsHypPar}
+read_tsv(file.path(path, "gemma", "Ks", paste0("paracou3pop",".polygenic.Ks.hyp.txt"))) %>% 
+  dplyr::select(pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  broom::tidyMCMC(conf.int = T) %>% 
+  kable(caption = "BSLMM hyper-parameters distribution for the whole genus.")
+```
+
+```{r KsAssocBSLMM, fig.cap="Effect of SNPs associated to individual kurtosis $Ks$ with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype."}
+t <- read_tsv(file.path(path, "gemma", "Ks", paste0("paracou3pop",".polygenic.Ks.param.txt"))) %>% 
+  mutate(Population = "paracou3pop") %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.))
+ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.9)) +
+  geom_point() +
+  ggrepel::geom_text_repel(data = t[t$gamma > 0.1,]) +
+  scale_y_continuous(trans="S_sqrt") +
+  ylab(expression(beta*gamma))
+```
+
+## Vitality
+
+Individual vitality index wasn't significantly associated to any major effect SNPs in the whole genus or any of the genepools (Fig. \@ref(fig:VitalityAssocMLM)). The polygenic model (BSLMM) didn't converge for the whole genus and the genepools alone (Fig. \@ref(fig:BSLMMVitalityConvergence)).
+
+```{r Vitality, eval=F, echo=T}
+load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+left_join(trees, pars1) %>% 
+  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>% 
+  mutate(Vitality = log(AGR+1)-Gpred) %>% 
+  group_by(FID, IID) %>% 
+  arrange(CensusYear) %>% 
+  summarise(Vitality = sum(Vitality)/(last(CensusYear) - first(CensusYear))) %>% 
+  mutate(Vitality = RNOmni::rankNorm(Vitality)) %>%
+  write_tsv(file.path(path, "gemma", "Vitality", "Vitality.phenotype"), col_names = F)
+```
+
+```{bash VitalityGemma, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
+pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
+for pop in "${pops[@]}" ; do  
+  plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr \
+  --keep $pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 \
+  --pheno Vitality.phenotype \
+  --out $pop \
+  --make-bed &
+done  
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.Ks & done
+for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Ks & done
+```
+
+### Major effect SNPs
+
+```{r VitalityAssocMLM, fig.cap="q-value of major effect SNPs associated to individual Vitality index. SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Vitality", paste0(pop,".Ks.assoc.txt"))) %>% 
+    mutate(pop = pop)) %>% 
+  bind_rows() %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval)
+ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type") +
+  facet_wrap(~ pop) 
+```
+
+### Polygenic signal
+
+```{r BSLMMVitalityConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
+lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
+  read_tsv(file.path(path, "gemma", "Vitality", paste0(pop,".polygenic.Ks.hyp.txt"))) %>% 
+    mutate(Population = pop)) %>% 
+  bind_rows()  %>% 
+  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
+  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
+  group_by(Population) %>% 
+  mutate(iteration = 1:n()) %>% 
+  filter(row_number() %% 100 == 0) %>% 
+  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
+  ggplot(aes(iteration, value)) +
+  geom_line() +
+  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
+  theme(axis.text.x = element_text(angle = 45)) 
 ```
