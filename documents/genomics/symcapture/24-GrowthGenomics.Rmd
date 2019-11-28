@@ -165,6 +165,7 @@ trees <- trees %>%
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
 fits <- list()
 fitsEnv <- list()
+fitsAnimal <- list()
 mdata <- list(
   N = nrow(trees),
   I = length(unique(trees$Ind)),
@@ -627,30 +628,68 @@ for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Gmax & done
 ```
 
-Individual growth potential was significantly associated only to one  major effect SNPs in *S. globulifera type Paracou* genepool (Fig. \@ref(fig:GmaxAssocMLM)). Still the polygenic model (BSLMM) *started to converge* for the whole genus, whereas not for the genepools alone (Fig. \@ref(fig:BSLMMGmaxConvergence)). A total of 33875 SNPs explained approximately 80-100% of individual potential growth variation, with 0.1% of the SNP (ca 54 SNPs) having relatively large effects and explaining a total of 15% PVE (Tab. \@ref(tab:BSLMMGmaxHypPar)). But no SNPs had more than 90% chance to have an effect on individual growth potential ($\gamma > 0.9$) in the polygenic model (Fig. \@ref(fig:sGmaxAssocBSLMM).
+Individual growth potential is mainly explained by genetic variation ($\sigma_G=0.93\pm0.04$ computed with homemade bayesian animal model and confirmed with both `GEMMA` frequentist LMM and bayesian BSLMM, Fig. \@ref(fig:GmaxPVE)). Thus $Gmax$ is totally an ontogenetic factor because it controls the shape of the growth response to ontogeny and its controlled by genetics ! Individual growth potential was significantly associated only to one  major effect SNPs in *S. globulifera type Paracou* genepool (Fig. \@ref(fig:GmaxAssocMLM)). Still the polygenic model (BSLMM) *started to converge* for the whole genus, whereas not for the genepools alone (Fig. \@ref(fig:BSLMMGmaxConvergence)). A total of 33875 SNPs explained approximately 80-100% of individual potential growth variation, with 0.1% of the SNP (ca 54 SNPs) having relatively large effects and explaining a total of 15% PVE (Tab. \@ref(tab:BSLMMGmaxHypPar)). But no SNPs had more than 90% chance to have an effect on individual growth potential ($\gamma > 0.9$) in the polygenic model (Fig. \@ref(fig:sGmaxAssocBSLMM).
 
 ### Proportion of Variance Explained
 
-```{r GmaxPVE, eval=F}
+```{r GmaxPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic in individual growth potential $Gmax$."}
 load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
 Y <- broom::tidyMCMC(fitsEnv$growthEnv2, "Gmaxi", droppars = NULL, rhat = F) %>%
               separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
-  rename(Gmax = estimate) %>%
+  dplyr::rename(Gmax = estimate) %>%
   left_join(trees) %>%
   dplyr::select(IID, Gmax) %>%
   unique() %>%
-  mutate(Gmax = RNOmni::rankNorm(Gmax)) %>% 
+  mutate(Gmax = RNOmni::rankNorm(Gmax)) %>% # Is it really necessary here ?
   arrange(IID)
-K <- read_tsv(file.path(path, "..", "variantCalling", "paracou", "out.relatedness2")) %>% 
-  filter(INDV1 %in% Y$IID) %>% filter(INDV2 %in% Y$IID) %>% arrange(INDV1, INDV2) %>% 
-  reshape2::dcast(INDV1 ~ INDV2, value.var = "RELATEDNESS_PHI") %>% 
-  column_to_rownames(var = "INDV1") %>% 
+fam <- read_delim(file.path(path, "gemma", "Gmax", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+K <- read_tsv(file.path(path, "gemma", "Gmax", "paracou3pop.kinship.sXX.txt"), 
+              col_names = fam$IID) %>% 
+  mutate(IID = fam$IID) %>% 
+  column_to_rownames(var = "IID") %>% 
   as.matrix()
-chol((K + t(K))/2)
-model <- stan_model(paste0("./symcapture_models/Animal.stan"))
-fit <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), X = t(as.matrix(rep(1, nrow(Y)))), Y = Y$Gmax, K = 2*K), save_warmup = F)
+# A1 <- K - min(K) # positive K
+# A2 <- K/max(K) # standardised K
+# A3 <- (K - min(K))/max(K - min(K)) # postive and standardised K
+# diag(A) <- diag(A) - min(eigen(A)$values)
+checkCovMat <- function(M){ 
+  # quick function to check your covariate matrix before running the animal model
+  cat("Matrix have dimensions:", dim(M), "\n")
+  cat("Matrix is symmetric:", isSymmetric(M), "\n")
+  cat("Matrix is positive definite:", matrixcalc::is.positive.definite(M), "\n")
+  if(!matrixcalc::is.positive.definite(M))
+    cat("Matrix negative eigne values are:", eigen(M)$values[eigen(M)$values < 0], "\n")
+  hist(M) # check K distribution
+}
+# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
+# fitsAnimal$Gmax <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$Gmax, K = K[Y$IID,Y$IID]), save_warmup = F)
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalModels.Rdata'))
+g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "Gmax") %>% 
+                 dplyr::select(Gmax), 
+               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
+  ggplot(aes(Kinship, Gmax)) + geom_point(alpha = 0.1)
+g.sigma <- mcmc_combo(as.array(fitsAnimal$Gmax ,  pars = c("sigmaG", "sigmaE")))
+# mcmc_pairs(as.array(fitsAnimal$Gmax,  pars = c("sigma_G", "sigma_E")))
+g.breed <- mcmc_intervals_data(as.array(fitsAnimal$Gmax ,  pars = "u_tilde")) %>% 
+            mutate(IID = Y$IID) %>% 
+            left_join(dplyr::select(trees, IID, pop)) %>% 
+  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
+             xend = datatools::reorder_within(IID, m, pop)),
+         col = "lightgrey") +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.2) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
+  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
+  ylab("Breeding value") +
+  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank(), axis.text.x = element_blank())
+gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
+                        layout_matrix = rbind(c(1,2), c(3,2)))
 ```
-
 
 ### Major effect SNPs
 
@@ -759,7 +798,48 @@ cat Dopt.LMM.snps | cut -f1 > Dopt.snps.list
 plink --bfile paracou3pop --allow-extra-chr --extract Dopt.snps.list --out Dopt.snps --recode A
 ```
 
-Individual growth potential was significantly associated to four major effect SNPs in the genus (Fig. \@ref(fig:GmaxAssocMLM) and \@ref(fig:DoptOutliersHist), **I don't discuss *S. globulifera type Regina* because i suspect false positive of minor alleles in reduced population**). The polygenic model (BSLMM) didn't converge for the whole genus and the genepools alone (Fig. \@ref(fig:BSLMMGmaxConvergence)).
+Individual optimal diameter is mainly explained by genetic variation ($\sigma_G=0.78\pm0.12$ computed with homemade bayesian animal model and confirmed with both `GEMMA` frequentist LMM and bayesian BSLMM, Fig. \@ref(fig:DoptPVE)). This is unsurprisingly similar to $Gmax$ as the two are 10% correlated. Thus $Dopt$ is also mainly an ontogenetic factor because it controls the shape of the growth response to ontogeny and its controlled by genetics ! Individual optimal diameter was significantly associated to four major effect SNPs in the genus (Fig. \@ref(fig:GmaxAssocMLM) and \@ref(fig:DoptOutliersHist), **I don't discuss *S. globulifera type Regina* because i suspect false positive of minor alleles in reduced population**). The polygenic model (BSLMM) didn't converge for the whole genus and the genepools alone (Fig. \@ref(fig:BSLMMGmaxConvergence)).
+
+### Proportion of Variance Explained
+
+```{r DoptPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic in individual optimal diameter $Dopt$."}
+load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+Y <- broom::tidyMCMC(fitsEnv$growthEnv2, "Dopti", droppars = NULL, rhat = F) %>%
+              separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
+  dplyr::rename(Dopt = estimate) %>%
+  left_join(trees) %>%
+  dplyr::select(IID, Dopt) %>%
+  unique() %>%
+  mutate(Dopt = RNOmni::rankNorm(Dopt)) %>% 
+  arrange(IID)
+# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
+# fitsAnimal$Dopt <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$Dopt, K = K[Y$IID,Y$IID]), save_warmup = F)
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalModels.Rdata'))
+g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "Dopt") %>% 
+                 dplyr::select(Dopt), 
+               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
+  ggplot(aes(Kinship, Dopt)) + geom_point(alpha = 0.1)
+g.sigma <- mcmc_combo(as.array(fitsAnimal$Dopt ,  pars = c("sigmaG", "sigmaE")))
+# mcmc_pairs(as.array(fitsAnimal$Dopt,  pars = c("sigma_G", "sigma_E")))
+g.breed <- mcmc_intervals_data(as.array(fitsAnimal$Dopt ,  pars = "u_tilde")) %>% 
+            mutate(IID = Y$IID) %>% 
+            left_join(dplyr::select(trees, IID, pop)) %>% 
+  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
+             xend = datatools::reorder_within(IID, m, pop)),
+         col = "lightgrey") +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.2) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
+  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
+  ylab("Breeding value") +
+  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank(), axis.text.x = element_blank())
+gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
+                        layout_matrix = rbind(c(1,2), c(3,2)))
+```
 
 ### Major effect SNPs
 
@@ -835,7 +915,50 @@ read_delim(file.path(path, "gemma", "Dopt", "Dopt.snps.raw"), delim = " ") %>%
 
 ## Kurtosis $Ks$
 
-Individual growt kurtosis wasn't significantly associated to any major effect SNPs in the whole genus or any of the genepools (Fig. \@ref(fig:KsAssocMLM)). Still the polygenic model (BSLMM) *started to converge* for the whole genus, whereas not for the genepools alone (Fig. \@ref(fig:BSLMMKsConvergence)). A total of 33875 SNPs explained approximately 25% of individual kurtosis variation, with 0.1% of the SNP (ca 32 SNPs) having relatively large effects and explaining a total of 38% of PVE (Tab. \@ref(tab:BSLMMKsHypPar)). But no SNPs had more than 90% chance to have an effect on individual growth potential ($\gamma > 0.9$) in the polygenic model (Fig. \@ref(fig:KsAssocBSLMM).
+Individual growt kurtosis is partly explained by genetic variation ($\sigma_G=0.21\pm0.11$ computed with homemade bayesian animal model and confirmed with both `GEMMA` frequentist LMM and bayesian BSLMM, Fig. \@ref(fig:KsPVE)). Individual growt kurtosis wasn't significantly associated to any major effect SNPs in the whole genus or any of the genepools (Fig. \@ref(fig:KsAssocMLM)). Still the polygenic model (BSLMM) *started to converge* for the whole genus, whereas not for the genepools alone (Fig. \@ref(fig:BSLMMKsConvergence)). A total of 33875 SNPs explained approximately 25% of individual kurtosis variation, with 0.1% of the SNP (ca 32 SNPs) having relatively large effects and explaining a total of 38% of PVE (Tab. \@ref(tab:BSLMMKsHypPar)). But no SNPs had more than 90% chance to have an effect on individual growth potential ($\gamma > 0.9$) in the polygenic model (Fig. \@ref(fig:KsAssocBSLMM).
+
+### Proportion of Variance Explained
+
+```{r KsPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic in individual kurtosis $Ks$."}
+load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+Y <- broom::tidyMCMC(fitsEnv$growthEnv2, "Ksi", droppars = NULL, rhat = F) %>%
+              separate(term, c("term", "IndNum"), "([[:punct:]])", convert = T, extra = "drop") %>%
+  dplyr::rename(Ks = estimate) %>%
+  left_join(trees) %>%
+  dplyr::select(IID, Ks) %>%
+  unique() %>%
+  mutate(Ks = RNOmni::rankNorm(Ks)) %>% 
+  arrange(IID)
+fam <- read_delim(file.path(path, "gemma", "Gmax", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
+# fitsAnimal$Ks <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$Ks, K = K[Y$IID,Y$IID]), save_warmup = F)
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalModels.Rdata'))
+g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "Ks") %>% 
+                 dplyr::select(Ks), 
+               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
+  ggplot(aes(Kinship, Ks)) + geom_point(alpha = 0.1)
+g.sigma <- mcmc_combo(as.array(fitsAnimal$Ks ,  pars = c("sigmaG", "sigmaE")))
+# mcmc_pairs(as.array(fitsAnimal$Ks,  pars = c("sigma_G", "sigma_E")))
+g.breed <- mcmc_intervals_data(as.array(fitsAnimal$Ks ,  pars = "u_tilde")) %>% 
+            mutate(IID = Y$IID) %>% 
+            left_join(dplyr::select(trees, IID, pop)) %>% 
+  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
+             xend = datatools::reorder_within(IID, m, pop)),
+         col = "lightgrey") +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.2) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
+  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
+  ylab("Breeding value") +
+  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank(), axis.text.x = element_blank())
+gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
+                        layout_matrix = rbind(c(1,2), c(3,2)))
+```
 
 ```{bash KsGemma, eval=F, echo=T}
 # load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
@@ -868,6 +991,7 @@ for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.Ks & done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Ks & done
 ```
+
 
 ### Major effect SNPs
 
@@ -938,7 +1062,7 @@ ggplot(t, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.9)) +
 
 ## Vitality
 
-Individual vitality index wasn't significantly associated to any major effect SNPs in the whole genus or any of the genepools (Fig. \@ref(fig:VitalityAssocMLM)). The polygenic model (BSLMM) didn't converge for the whole genus and the genepools alone (Fig. \@ref(fig:BSLMMVitalityConvergence)).
+Individual vitality index is partly explained by genetic variation with a great incertitude ($\sigma_G=0.25\pm0.18$ computed with homemade bayesian animal model and confirmed with both `GEMMA` frequentist LMM and bayesian BSLMM, Fig. \@ref(fig:VitalityPVE)). Individual vitality index wasn't significantly associated to any major effect SNPs in the whole genus or any of the genepools (Fig. \@ref(fig:VitalityAssocMLM)). The polygenic model (BSLMM) didn't converge for the whole genus and the genepools alone (Fig. \@ref(fig:BSLMMVitalityConvergence)).
 
 ```{r Vitality, eval=F, echo=T}
 load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
@@ -973,6 +1097,50 @@ done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship & done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.Ks & done
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.polygenic.Ks & done
+```
+
+### Proportion of Variance Explained
+
+```{r VitalityPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic in individual vitality index."}
+load(file.path("symcapture_save", 'GrowthEnvModels.Rdata'))
+Y <- left_join(trees, pars1) %>% 
+  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2)*exp(-beta1_m*TWI)*exp(-beta2_m*AUC)*exp(-beta3_m*logNCI)*exp(-beta4_m*logANCR)) %>% 
+  mutate(Vitality = log(AGR+1)-Gpred) %>% 
+  group_by(FID, IID) %>% 
+  arrange(CensusYear) %>% 
+  summarise(Vitality = sum(Vitality)/(last(CensusYear) - first(CensusYear))) %>% 
+  mutate(Vitality = RNOmni::rankNorm(Vitality)) %>%
+  dplyr::select(Vitality, IID) %>%
+  arrange(IID)
+fam <- read_delim(file.path(path, "gemma", "Gmax", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
+# fitsAnimal$Vitality <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$Vitality, K = K[Y$IID,Y$IID]), save_warmup = F)
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalModels.Rdata'))
+g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "Vitality") %>% 
+                 dplyr::select(Vitality), 
+               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
+  ggplot(aes(Kinship, Vitality)) + geom_point(alpha = 0.1)
+g.sigma <- mcmc_combo(as.array(fitsAnimal$Vitality ,  pars = c("sigmaG", "sigmaE")))
+# mcmc_pairs(as.array(fitsAnimal$Vitality,  pars = c("sigma_G", "sigma_E")))
+g.breed <- mcmc_intervals_data(as.array(fitsAnimal$Vitality ,  pars = "u_tilde")) %>% 
+            mutate(IID = Y$IID) %>% 
+            left_join(dplyr::select(trees, IID, pop)) %>% 
+  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
+             xend = datatools::reorder_within(IID, m, pop)),
+         col = "lightgrey") +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.2) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
+  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
+  ylab("Breeding value") +
+  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank(), axis.text.x = element_blank())
+gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
+                        layout_matrix = rbind(c(1,2), c(3,2)))
 ```
 
 ### Major effect SNPs
