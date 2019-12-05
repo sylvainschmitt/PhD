@@ -1,3 +1,7 @@
+# PhD 0.1.9156
+* distribution: draft 1
+* symcapture: introgress, corrected envgenom & growthgenom
+
 # PhD 0.1.9155
 * symcapture: homemade PVE in growth
 

@@ -87,7 +87,7 @@ data <- trees %>%
   filter(!is.na(Plot))
 ```
 
-```{r correlations, fig.cap="Correlation of abiotic topographic variables and neighbor crowding indexes (NCI). All variables, relative elevation (RelEl), slope, curvature (Curv), aspect, topgraphic rudgeness index (TRI), and topgraphic wetness index (TWI) are derived from the digital evlevation model (DEM) obtaine through LiDAR campaign in 2015, the digital canopy model (DCM) has been obtained in the same campaign, and neighbor crowding index (NCI) of heterospecific (NCIh) or conspecific (NCIc) are derived from Paracou census campaign of 2015."}
+```{r correlations, fig.cap="Correlation of abiotic topographic variables and neighbor crowding indexes (NCI). All variables, relative elevation (RelEl), slope, curvature (Curv), aspect, topographic ruggedness index (TRI), and topographic wetness index (TWI) are derived from the digital elevation model (DEM) obtained through LiDAR campaign in 2015, the digital canopy model (DCM) has been obtained in the same campaign, and neighbor crowding index (NCI) of heterospecific (NCIh) or conspecific (NCIc) are derived from Paracou census campaign of 2015."}
 data %>% 
   dplyr::select(DEM, RelativeElevation, Slope, Curvature, TRI, TWI,
                 MNC, NCIhetero, NCIcon) %>% 
@@ -113,7 +113,7 @@ data.frame(
   kable_styling(full_width = F)
 ```
 
-```{r Predictions, fig.cap="Habitat suitability of single taxa model for every model form and three theoric species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is a intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range."}
+```{r Predictions, fig.cap="Habitat suitability of single taxa model for every model form and three theoretical species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is an intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range."}
 n <- 100
 data <- list(
   no = data.frame(Environment = seq(0, 1, length.out = 100),

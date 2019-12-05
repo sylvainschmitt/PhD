@@ -1,21 +1,21 @@
 ---
-title: Pervasive local-scale species niche differentiation with topography within widespread Neotropical tree syngameon
+title: Pervasive local-scale species niche differentiation with topography within widespread Neotropical tree species complexes
 date: '`r Sys.Date()`'
 output:
   bookdown::word_document2:
     reference_docx: ./template/template.docx
-  bookdown::html_document2:
-    number_sections: false  
-    toc: true
-    toc_float: yes
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
+  bookdown::html_document2:
+    number_sections: false  
+    toc: true
+    toc_float: yes
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+csl: /home/sylvain/Documents/Bibliography/csl/joe.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
@@ -95,7 +95,7 @@ mdata <- lapply(complexes, function(complex) {
                   sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
-load("../distribution_save/complexes.Rdata")
+load("../distribution_save/complexes0.Rdata")
 names(fits)[1:2] <- c("Chartacea", "Parvifolia")
 fitsComplex <- fits
 predComplex <- lapply(names(fits), function(complex){
@@ -274,54 +274,35 @@ predSpecies <- lapply(complexes, function(complex){
 
 # Abstract
 
-> To be written
+Lowland Amazonia include 4962 described tree species belonging to 810 genera, resulting in many species-rich genera. Numerous species-rich tree genera share a large amount of genetic variation due to a recent common ancestor and/or hybridization, forming species complexes. Despite species complexes key role to understand Neotropical diversification, and the importance of ecological niches exploitation in species complexes establishment, little is known about Neotropical species complexes distribution.
+
+By taking advantage of a long-term study site in a hyperdiverse tropical forest of the Guiana Shield, we explored sister species distribution between and within species complexes along a diversity of micro-habitats varying both in abiotic environment and biotic interactions. Combining tree inventories and LiDAR-derived topographic data, we used a Bayesian modelling framework to test the role of topography and tree neighboring at different taxonomic scales on both species complexes distribution and sister-species relative distribution within species complexes.
+
+Species complexes of Neotropical trees were widely spread across habitats at local-scale. But sister species showed pervasive niche differentiation along topographic position, water accumulation, and competition gradients within species complexes. If supported by ecological reproductive isolation of species and adaptive introgression at the complex level, our results suggest that both habitat specialisation of sister species and widespread distribution of species complexes might explain the success of these Neotropical species complex at the regional scale [@TerSteege2013].
 
 ## Keywords
 
-species complex; species distribution model; species; ...
+species distribution model; syngameon; habitat specialisation; ...
 
 \newpage 
 
 # Introduction 
 
-Tropical forests and more especially Neotropics shelter the highest level of biodiversity worldwide [@Gaston2000], already highlighted more than 40 years ago [@connell_diversity_1978]. Lowland Amazonia include 4962 known tree species over 810 genera [@TerSteege2013]. Many Neotropical genera are thus species rich and present higher level of genetic polyphormisms than species-poor genera, likely related to introgressions between sister species [@Caron2019]. Among this species-rich genera, several are qualified of species complexes because they share a large ammount of genetic variation due to a recent common ancestor and/or hybridization [@baraloto_using_2012-1]. In addition, species linked by hybridization form syngameons, generally non-randomly structured among plants [@Boecklen2017]. For instance, @Marques2014 revealed numerous hybridization events in co-occuring *Epindendrum* species resulting in parental species being more back-crossed than pure-bred. Intersepcific hybrids occurs in 40% of families and 16% of genera, and more often in species-rich taxa [@Whitney2010].
+Tropical forests and especially Neotropics shelter the highest level of biodiversity worldwide [@Gaston2000], as already highlighted by @connell_diversity_1978 more than 40 years ago. Lowland Amazonia include 4962 described tree species belonging to 810 genera [@TerSteege2013], resulting in many species-rich genera. Among Neotropical species-rich genera, many have been shown to include higher level of genetic polymorphisms than species-poor genera, likely related to introgressions between sister species [@Caron2019]. Indeed, interspecific hybrids occurs in 16% of genera, and more often in species-rich taxa [@Whitney2010]. Species sharing a large amount of genetic variation due to a recent common ancestor and/or hybridization are defined as species complexes. In addition, species forming a group of otherwise distinct species interconnected by limited gene exchange are called syngameon [@Suarez-Gonzalez2018]. Despite species complexes key role to understand Neotropical diversification [@Pinheiro2018], little is known about Neotropical species complexes [@baraloto_using_2012-1; @Levi2019a; @TerSteege2013].
 
-<!-- **Species complexes importance in evolution ?** -->
-Species complexes are key to understand and test hypothesis on species delimitation, and thus help understanding the processes that have promoted neotropical diversification [@Pinheiro2018].
-Simulations suggest that low hybridization success promote species-coexistence in the community [@Cannon2015b]. Syngameaon resulting from these hybridization might have a selective advantage, qualified of genomic mutalism, decreasing the risk of extinction of species within syngameon while increasing their local adaptation [@Cannon2015b].
+Simulations suggest that low hybridization success promote species-coexistence in the community [@Cannon2015b]. Syngameons resulting from hybridization might have a selective advantage, decreasing the risk of extinction while increasing local adaptation of their distinct species [@Cannon2015b]. Consequently, syngameon are not necessarily a transitional or incipient phase of a process towards complete speciation [@Cannon2019a]. Both syngameon and species complexes can result from a gene flow due to hybridization between donor species. Hybrids are often sterile or less fertile than their parents, despite some survive and reproduce allowing the transfer of adaptive variance across species boundaries [@Runemark2019]. Similarly, species complexes can result from adaptive radiation following and hybrid swarm [@Seehausen2004]. Hybrid species or species complexes establishment require reproductive isolation against paternal or sister species. Novel ecological niches exploitation helps gaining extrinsic isolation barriers [@Runemark2019]. 
 
-<!-- **Other informations ?** -->
-Despite the putative importance of species complexes in evolution, a little is known about the ecological distribution of the complex and the belonging species' niches.
-Congeneric taxa have been suggested to present pervasive species-habitat associations with topography French Guiana [@Allie2015].
-Nutrient-poor white-sand and clay forests specialist species are often found in the same genera in the Peruvian Amazon, and sister species edaphic specialization is promoted by herbivores [@Fine2004].
-*Pagamea coriacea* (Rubiaceae) live in sympatry with two differentiated population living in more shaded habitats and over sandstone bedrocks opposed to deeper sandy soils and canopy individuals [@Esteves2013].
+Neotropical congeneric species have been shown to present pervasive species-habitat associations with topography [@Allie2015], soil type [@Fine2004; @Esteves2013], fertility [@Fine2004], and light access [@Esteves2013]. Similarly in Europe, white oaks is a well known species complex with species ecological preferences, including drought, cold tolerance and adaptation to alkaline soils [@Cannon2019a]. Nevertheless, little is known about the ecological distribution of the Neotropical species complexes and the belonging species' ecological niches.
 
-In the present study, we explored sister species distribution between and within species complexes along abiotic environment and biotic interactions. We took advantage of a long-term study site with more than  75000 censused and geolocalised individuals in a highly diverse tropical forest site located within the Guiana Shield in the Amazon Basin. The site encompasses a diversity of micro-habitats through topographic variation ranging from seasonally flooded bottomlands to drier plateaus [@Allie2015] and displays variation in tree crowding including canopy gaps and closed-canopy forest patches [@ferry2010higher]. Combining tree inventories and LiDAR-derived topographic data, we used multivariate Bayesian modelling to address the following questions: (1) how do biotic and abiotic environment influence species complexes distribution at local scale ? (2) how do biotic and abiotic environment influence sister species relative distribution within species complexes ? Based on ... [citation], we expected species complexes to be distributed all along topgraphy and thus widespread at local scale, but ... We hypothesized that both abiotic environment and tree neighbours shaped sister species relative distribution within species complexes, due to the pervasive habitat specialization along topography of several congeneric taxa [@Allie2015].
-
-
-List of articles that might be used:
-
-- Cannon & Petit 2019
-- Suarez 2018
-- @Seehausen2004
-
-- Cannon Lerdeau 2019
-- Levi 2019
-- Berehegaray 2015 (minor)
-- Cronk Suarez Gonzalez 2018
-- Barluenga & Meyer 2004
-- Barluenga 2006
-- gene flow: Anderson, 1953;Morjan and Rieseberg, 2004; Arnold et al., 2008b; Givnish, 2010
-- Advantageous alleles Fitzpatrick et al., 2010
-- genetic rescue Baskett andGomulkiewicz, 2011
+In the present study, we explored sister species distribution between and within species complexes along abiotic environment and biotic interactions. We took advantage of a long-term study site with more than 75000 censused and geolocalized individuals in a highly diverse tropical forest site located within the Guiana Shield in the Amazon Basin. The site encompasses a diversity of micro-habitats through topographic variation ranging from seasonally flooded bottomlands to drier plateaus [@Allie2015] and displays variation in tree crowding including canopy gaps and closed-canopy forest patches [@ferry2010higher]. Combining tree inventories and LiDAR-derived topographic data, we used Bayesian modelling to address the following questions: (1) how do biotic and abiotic environment influence species complexes distribution at local scale ? (2) how do biotic and abiotic environment influence sister species relative distribution within species complexes ? Based on the local abundance of species-rich genera [@Allie2016], we expected species complexes to be widespread at local scale spanning all topographic positions. We hypothesized that both abiotic environment and tree neighbours shaped sister species relative distribution within species complexes, due to the pervasive habitat specialization along topography of several congeneric taxa [@Allie2015].
 
 # Material and Methods
 
 ## Study site
 
-The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
+The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041 mm annual rainfall and mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
 
-The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
+The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (diameter at breast height > 10 cm) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
 
 ## Species complexes
 
@@ -333,68 +314,63 @@ Three little correlated (Pearson's r < 0.13, see supplementary material S1) envi
 
 A neighbor crowding index [$NCI$; @Uriarte2004a] was used as a descriptor of biotic interactions through tree neighborhood, implying that other biotic effects, such as herbivory and pathogen effects, were not directly taken into account. The neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated with the following formula:
 $$NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\frac{1}{4}\delta_{i,j}}$$
-$$NCI_i = \int_{t_0} ^{2015} \sum _{j|\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t} ^2 e^{-\frac{1}{4}\delta_{i,j}}.dt$$
+where $DBH_j$ is the diameter of neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m because NCI showed very little effect beyond 20m in preliminary analysis. Size effect of neighbors through their diameter was set to 2 to represent neighbors through their basal area. Distance effect of neighbors was set to -0.25 corresponding to neighbors beyond 20m having less than 1% effect compared to the effect of neighbors at 0m. The neighbor crowding index was further split between different taxa categories: (i) $NCI_{con}$ represented conspecific neighbors, (ii) $NCI_{complex}$ represented neighbors belonging to the same species complex, (iii) $NCI_{hetero}$ represented heterospecific neighbors and (iv) $NCI_{other}$ represented neighbors not belonging to the species complex.
 
-where $DBH_j$ is the diameter of neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to 20m because NCI showed very little effect beyond 20m in preliminary analysis. Size effect of neighbors through their diameter was set to 2 to represent neighbors through their basal area. Distance effect of neighbors was set to -0.25 corresponding to neighbors beyond 20m having less than 1% effect compared to the effect of neighbors at 0m. The neighbor crowding index was further split between neighbors belonging to the same taxa
-(neighbors of the complex $NCI_{complex}$ at the species complex level and conspecific neighbors $NCI_{con}$ at the sepcies level) and neighbors of remaining taxa (neighbors not belonging to the complex $NCI_{other}$ at the species complex level and heterospecific neighbors $NCI_{hetero}$ at the sepcies level).
-
-Descriptors used were derived from field censuses ($NCI_{other}$ and $NCI_{genus}$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [@Conrad2015].
+Descriptors used were derived from field censuses ($NCI$) or derived from a 1-m resolution digital elevation model built using LiDAR campaign done in 2015 ($TWI$) using SAGA-GIS [@Conrad2015].
 
 ## Analysis
 
 ### Complexes distribution
 
-Species complex distribution was infered by comparing species complex occurrence, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absence. Species complex presence $Presence$ was infered with a logistic regression following a Bernoulli distribution (best model form tested, see , see supplementary material S2 and S3):
+Species complex distribution was inferred by comparing species complex occurrences, considered as presence, against all occurrences of tree belonging to other species, considered as pseudo-absences. Species complex presences $Presence_{species~complex}$ was inferred with a logistic regression following a Bernoulli distribution (best model form tested, see supplementary material S2 and S3):
 $$Presence_{species~complex} \sim Bernoulli[logit^{-1}(\alpha + \beta*X+\gamma*X^2)]$$
-were $X$ is the matrix of environmental descriptors, $\alpha$ is the intercept, $\beta$ is a vector representing the slope and $\gamma$ is a vector representing the quadratic form of environment variable effects.
+were $X$ is the matrix of environmental descriptors, $\alpha$ is the intercept, $\beta$ is a vector representing the slope of environmental descriptors and $\gamma$ is a vector representing the quadratic form of environment variable effects.
 
 ### Species distribution
 
-Species joint-distributions were infered within species complexes with softmax regression following a conjugated Dirchlet and Multinomial distribution:
+Species joint-distributions were inferred within species complexes with softmax regression following a conjugated Dirichlet Process and Multinomial distribution:
 $$Presence_{species|species~complex} \sim Dirichlet~Multinomial(softmax(\alpha + \beta*X + \gamma*X^2))$$
-were $Presence_{species|species~complex}$ is the tree species with a vector of 0 and 1 (0 for all species of the species complex it belongs except the tree species equal to 1),  $X$ is the matrix of environmental descriptors, $\alpha$ is the vector of species intercepts, $\beta$ is a matrix representing the slope and $\gamma$ is a matrix representing the quadratic form of environment variable effects for each species.
+were ${Presence_{species|species~complex}}_i$ representing the species for individual $i$ as a simplex of 0 and 1 (0 for all other species from the species complex and 1 for the species), $X$ is the matrix of environmental descriptors, $\alpha$ is the vector of species intercepts, $\beta$ is a matrix representing the slope of environmental descriptors and $\gamma$ is a matrix representing the quadratic form of environment variable effects for each species.
 
 Environmental descriptors were all scaled for the model inference, in order to ease model inference and later compare strength of effects between distributions. A Bayesian method was used to infer parameters of the model regarding each complex and species using `stan` language [@Carpenter2017] and `rstan` package [@Team2018] in the R environment [@RCoreTeam2018].
 
 # Results
 
-The topographic wetness index ($TWI$) and the neighbor crowding index ($NCI$) had weak effects on relative abundance of species complex (Fig. \@ref(fig:ComplexesDistribution)). Nevertheless, all relative abundances of species complexes increased with $NCI_{complex}$ (except for *Talisia*). And increased value of $TWI$ resulted in an increased relative abundances of *Symphonia* and *Iryanthera*.
+The topographic wetness index ($TWI$) and the neighbor crowding index ($NCI$) had weak effects on relative abundance of species complex (Fig. \@ref(fig:ComplexesDistribution)). Nevertheless, all relative abundances of species complexes increased with $NCI_{complex}$ (except for *Talisia*). And *Symphonia* and *Iryanthera* showed a small preference for wet habitats (positive $beta$ for $TWI$) whereas *Licania* showed a small preference for drier habitats (negative $beta$ for $TWI$).
 
-On the other hand, the topographic wetness index ($TWI$) strongly influenced species distribution within complexes, with a gradient of response from positive to negative effect within each complex (Fig. \@ref(fig:betaTWI)). For instance, *S. globulifera*, *E. coriacea*, and *I. hostmanii* species relative abundance increased with water accumulation when it decreased for *S. sp1*, *E. sagotiana*, and *I. sagotiana* within *Symphonia*, *Parvifolia* and *Iryanthera* complexes respectively (Fig. \@ref(fig:SpeciesDistribution)). Still, the $TWI$ influence was low for *Chartacea* and *Talisia* complexes.
+On the other hand, the topographic wetness index ($TWI$) strongly influenced species distribution within complexes, with a gradient of response from positive to negative effect within each complex (Fig. \@ref(fig:betaTWI)). For instance, *S. globulifera*, *E. coriacea*, and *I. hostmanii* species relative abundance increased with water accumulation when it decreased for *S. sp1*, *E. sagotiana*, and *I. sagotiana* within *Symphonia*, *Parvifolia* and *Iryanthera* complexes respectively (Fig. \@ref(fig:SpeciesDistribution)). Still, the $TWI$ influence was null or low for *Chartacea* and *Talisia* complexes.
 
-Finally, $NCI_{hetero}$ and $NCI_{con}$ had no or weak effects on species relative abundance within species complexes. Still conspecific interactions ($NCI_{con}$) had an effect on species from *Parvifolia* and *Symphonia* complexes with a change of dominance within the complex with increasing congeneric interactions (*E. sagotiana* and *E. decolorans* replacing *E. coriacea* and *E. wachenheimii*, *S. globulifera* replacing *S. sp1* within *Parvifolia* and  *Symphonia* complexes respectively). And heterospecific interactions ($NCI_{hetero}$) had an effect on species from *Symphonia* complexe with a change of dominance within the complex with increasing heterospecific interactions (*S. sp1* replacing *S. globulifera*).
+Finally, $NCI_{hetero}$ and $NCI_{con}$ had no or weak effects on species relative abundance within species complexes. Still conspecific interactions ($NCI_{con}$) had an effect on species from *Parvifolia* and *Symphonia* complexes with a change of dominance within the complex with increasing congeneric interactions (*E. sagotiana* and *E. decolorans* replacing *E. coriacea* and *E. wachenheimii*, *S. globulifera* replacing *S. sp1* within *Parvifolia* and  *Symphonia* complexes respectively). And heterospecific interactions ($NCI_{hetero}$) had an effect on species from *Symphonia* complex with a change of dominance within the complex with increasing heterospecific interactions (*S. sp1* replacing *S. globulifera*).
 
 # Discussion
 
-> Species complexes of tropical tree are widely spread across habitats at local-scale, but their species show pervasive niche differentiation mainly with water accumulation and a little with congeneric interactions __[WIP]__.
+Despite species complexes key role to understand Neotropical diversification [@Pinheiro2018], and the importance of ecological niches exploitation in species complexes establishment [@Runemark2019], little is known about Neotropical species complexes distribution [@baraloto_using_2012-1; @Levi2019a; @TerSteege2013]. Here, we show that species complexes of Neotropical trees are widely spread across habitats at local-scale. Moreover, sister species show pervasive niche differentiation along topographic position, water accumulation, and competition gradients within species complexes. Consequently, if supported by ecological reproductive isolation of species and adaptive introgression at the complex level, our results suggest that both habitat specialisation of sister species and widespread distribution of species complexes might explain the success of these Neotropical species complex at the regional scale [@TerSteege2013].
 
 ## Species complexes are widely spread across habitats
 
-Biotic and abiotic environment null or weak effect on species complexes distribution suggest that species complexes are widely spread across habitats at local-scale. Topographic wetness index (TWI) reflects topographic position where water accumulates, whereas neighbor crowding index of trees not belonging to the species complex (NCIother) represents competition with neighbors and thus access to water, nutrients and light. Consequently, TWI and NCIother represent the combined effects of abiotic and biotic environment in defining local scale habitats for species and species complexes distributions. In our study, TWI and NCIother had no effect on species complexes distribution, at the exception of a weak positive effect of TWI on *Symphonia* and *Iryanthera* species abundances, highlighting the widespread distribution of species complexes across habitats.
+Biotic and abiotic environment null or weak effect on species complexes distribution suggest that species complexes are widely spread across habitats at local-scale. Topographic wetness index (TWI) reflects topographic position where water accumulates. Whereas, neighbor crowding index of trees not belonging to the species complex (NCIother) represents competition with neighbors and thus access to water, nutrients and light. Consequently, TWI and NCIother represent the combined effects of abiotic and biotic environment in defining local scale habitats for species and species complexes distributions. In our study, TWI and NCIother had no effect on species complexes distribution, at the exception of a weak effect of TWI on *Symphonia*, *Iryanthera*  and *Licania* abundances, highlighting the widespread distribution of species complexes across habitats.
 
-Several of this species complexes belongs to genera already highlighted to be widespread across Amazonia [@TerSteege2013] and known to integrate species with differentiated local habitats preferences [@Allie2015]. Furthermore, we highlighted species complexes distribution across all habitats of small hills from Paracou. *Symphonia* and *Iryanthera* have an advantage in wettest environments, already evidenced experimentally [@Ferry2007], but this result should be taken with caution as the inventory does not integrate palm trees, besides hyper abundant in wet seasonally flodded bottomlands.
-
-On the other hand, neighbor crowding index of trees belonging to the species complex (NCIcomplex) had a positive effect on relative abundances of all species complexes, highlighting trees of the same species complexes to be aggregated in a radius of 20 meters. Species aggregated distribution is a widely observed phenomenon in forests pan-tropically [@Zhang2013; @PLOTKIN2000; @Wang2012; @condit_spatial_2000; @Forget1999]. Aggregation can be explained by dispersal limitation or habitat association. Consequently, due to the weak to null effect of abiotic and biotic environment variables on species complexes distribution, we assumed species complexes to be distributed in aggregates due to the sole effect of dispersal limitation of their species.
+*Symphonia* and *Iryanthera* advantage in wet habitats was already evidenced experimentally [@Ferry2007], and might be due to a more constraining habitat with anoxy requiring species specific adaptations. In addition, neighbor crowding index of trees belonging to the species complex (NCIcomplex) had a positive effect on relative abundances of all species complexes, highlighting trees of the same species complexes to be aggregated in a radius of 20 meters. Species aggregated distribution is a widely observed phenomenon in forests pan-tropically [@Zhang2013; @PLOTKIN2000; @Wang2012; @condit_spatial_2000; @Forget1999]. Aggregation can be explained by dispersal limitation or habitat association. Consequently, due to the weak to null effect of abiotic and biotic environment variables on species complexes distribution, we assumed species complexes to be distributed in aggregates due to the sole effect of dispersal limitation of their species.
 
 ## Species show pervasive niche differentiation within species complexes
 
-The opposed response of sister species relative distribution wihtin species complexes of *Iryanthera*, *Licania*, *Symphonia* and *Eschweilera* clade *Parvifolia* to biotic and abiotic environment highlight a pervasive niche differentiation wihtin species complexes among four clades abundant locally [citation] or at the regional scale [@TerSteege2013]. More specifically, sister species of *Iryanthera*, *Licania*, & *Symphonia* species complexes are segregated along a gradient of dry habitats with increased heterospecific tree interaction to wetter habitats with low heterospecific tree interactions. Similarly, sister species of *Eschweilera* clade *Parvifolia* species complex are segregated along a gradient of dry habitats with increased conspecific tree interactions to wetter habitats with low conspecific tree interactions. Moreover, because of the widespread distribution of every species complexes, the sister species relative distribution conditional to the complex distribution is thus conserved across habitats ($P(Species)=P(Complex).P(Species|Complex)$).
+The repeated opposed response of sister species relative distribution within species complexes to biotic and abiotic environment highlighted a pervasive niche differentiation of species within four locally-abundant species complexes. Indeed, sister species within *Iryanthera*, *Licania*, *Symphonia*, and *Eschweilera* clade *Parvifolia* species complexes are segregated along a gradient from wet habitats with low heterospecific neighboring (conspecific neighboring for *Eschweilera*)  to drier habitats with increased heterospecific neighboring (conspecific neighboring for *Eschweilera*). The sister species segregation along a topographic, wet, and neighboring gradient could be linked to the increased dynamic of bottomlands compared to slopes and plateaus in Paracou [@ferry2010higher], with seasonally flooded and lower topographic position suffering from an increased tree mortality resulting in diminished standing biomass. Our results are in agreement with previous evidence of species-habitat associations with topography and seasonal flooding between sister species at local [@Allie2015; @Ferry2007] and regional [@Guitet2015; @Fine2014] scales. 
 
-Increased dynamic of bottomlands of Paracou lowlands [@ferry2010higher] could explain sister species segregation along a gradient of dry habitats with increased heterospecific tree interaction to wetter habitats with low heterospecific tree interactions due to increased tree mortality and lower tree biomass. 
+## Conclusion
 
-Janzen Connell for *Parvifolia* ?
-
-Opposed species-habitat association with topography and seasonal flooding between sister species have already been highlighted in litterature across several genera at local [@Allie2015; @Ferry2007] and regional scale [@Guitet2015; @Fine2014]. The pervasive niche differentiation within species complexes with topographic position and seasonal flooding might related to repeated functional strategy adaptation [Schmitt *et al*., in prep; @Ferry2007] to local environment with several diversification events across taxa (*e.g.* @Fine2014 for Protiae).
-
-Evolutionary benefits of habitat specialization ?
+We found Neotropical tree species complexes to be widespread across habitats at local scale, while the sister species composing them showed pervasive habitat differentiation along topography and competition gradients. The pervasive niche differentiation between sister species might be related to repeated functional strategy adaptation to local environment [Schmitt *et al., under review*; @Ferry2007] with several diversification events across taxa (*e.g.* @Fine2014 for Protiae). Habitat specialisation increase isolation barriers between species, allowing reproductive isolation for establishment of sister species [@Runemark2019]. Meanwhile, porous genomes allow for the transfer of adaptive genes through introgression that may benefit one or several sister species, allowing coevolution at the species complex level [@Cannon2015b]. Consequently, if habitat specialisation allow reproductive isolation and porous genomes allow adaptive introgression, our results suggest that both habitat specialisation of sister species and widespread distribution of species complexes might explain the success of these Neotropical species complex at the regional scale [@TerSteege2013]. Further studies both about the effect of habitat specialisation on reproductive isolation and adaptive introgression are needed to correctly assess this hypothesis. Ongoing genetic data production on individuals from *Symphonia* and *Eschweilera* clade *Parvifolia* species complexes will hopefully allow us to explore this question in future contributions.
 
 # Acknowledgements
 
-We thanks the university of Bordeaux for a PhD grant to Sylvain Schmitt. We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification.
+We thank the University of Bordeaux for a PhD grant to Sylvain Schmitt. We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification.
 
 # Authors’ contributions
 
-NT and SS conceived the ideas; SS, BH and NT designed methodology; XX analysed model outputs; SS, and XX led the writing of the manuscript. All authors contributed critically to the drafts and gave final approval for publication.
+NT and SS conceived the ideas; SS, BH and NT designed methodology; SS and BH analysed model outputs; SS, NT and MH led the writing of the manuscript. All authors contributed critically to the drafts and gave final approval for publication.
+
+# Data accessibility
+
+TWI and spatial positions of individuals were extracted from the Paracou Station database, for which access is modulated by the scientific director of the station (https://paracou.cirad.fr).
 
 # References
 
@@ -409,11 +385,11 @@ __Table \@ref(tab:ComplexTab)__ Identified species complexes with species includ
 
 ## Figure captions
 
-__Figure \@ref(fig:ComplexesDistribution)__ Relative abundance of species complexes. Subplot **A** represent $\beta$ parameter values for each descriptor and species complex, with the circle representing the mean value of the parameter posterior, thick lines the 50% confidence interval and thin lines the 95% confidence interval. Subplot **B**, represent species complex predicted relative abundance, with dashed line indicating observed relative abundance of species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.
+__Figure \@ref(fig:ComplexesDistribution)__ Relative abundance of species complexes. Subplot **A** represent $\beta$ parameter values for each descriptor and species complex, with the circle representing the mean value of the parameter posterior, thick lines the 50% confidence interval and thin lines the 95% confidence interval. Subplot **B**, represent species complex predicted relative abundance, with dashed line indicating observed relative abundance of species complex in Paracou, and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.
 
 __Figure \@ref(fig:betaTWI)__ TWI and NCI heterospecific and conspecific effects on species relative distribution within species complexes. $\beta_{TWI}$, $\beta_{NCIhetero}$, $\beta_{TWIcon}$ posterior are represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).
 
-__Figure \@ref(fig:SpeciesDistribution)__ Relative abundance of species wihtin species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.
+__Figure \@ref(fig:SpeciesDistribution)__ Relative abundance of species within species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.
 
 \newpage 
 
@@ -433,7 +409,7 @@ trees %>%
 
 <!-- figures -->
 
-```{r ComplexesDistribution, fig.cap="Relative abundance of species complexes. Subplot **A** represent $\\beta$ parameter values for each descriptor and species complex, with the circle representing the mean value of the parameter posterior, thick lines the 50% confidence interval and thin lines the 95% confidence interval. Subplot **B**, represent species complex predicted relative abundance, with dashed line indicating observed relative abundance of species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex."}
+```{r ComplexesDistribution, fig.cap="Relative abundance of species complexes. Subplot **A** represent $\\beta$ parameter values for each descriptor and species complex, with the circle representing the mean value of the parameter posterior, thick lines the 50% confidence interval and thin lines the 95% confidence interval. Subplot **B**, represent species complex predicted relative abundance and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex."}
 g1 <-lapply(fitsComplex, function(fit) 
   bayesplot::mcmc_intervals_data(as.array(fit, pars = "beta"))) %>% 
   bind_rows(.id = "complex") %>% 
@@ -466,7 +442,7 @@ g2 <-predComplex %>%
   ggplot(aes(x = value, col = Complex)) +
   geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
   geom_line(aes(y = Y)) +
-  geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
+  # geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
   facet_wrap(~ variable, nrow = 1, scales = "free") + 
   xlab("") + ylab("Species complex relative abundance") +
   scale_y_sqrt() +
@@ -474,7 +450,7 @@ g2 <-predComplex %>%
         strip.background = element_blank(),
         strip.text.x = element_blank())
 cowplot::plot_grid(g1, g2, nrow = 2, rel_heights = c(1,2), 
-                   labels = LETTERS[1:2], label_x = 0.1)
+                   labels = LETTERS[1:2], label_x = 0.1) 
 ```
 
 ```{r betaTWI, fig.cap="TWI and NCI heterospecific and conspecific effects on species relative distribution within species complexes. $\\beta_{TWI}$, $\\beta_{NCIhetero}$, $\\beta_{TWIcon}$ posterior are represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).", fig.height=10} 
@@ -519,7 +495,7 @@ lapply(fits, function(fit)
   scale_color_discrete(guide = "none")
 ```
 
-```{r SpeciesDistribution, fig.cap="Relative abundance of species wihtin species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectivelly the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.", fig.height=10}
+```{r SpeciesDistribution, fig.cap="Relative abundance of species within species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.", fig.height=10}
 predSpecies %>%
     group_by(complex) %>% 
   left_join(data %>% 
