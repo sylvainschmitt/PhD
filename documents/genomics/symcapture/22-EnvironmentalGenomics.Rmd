@@ -69,6 +69,15 @@ trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
   left_join(trees) %>% 
   left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
                      col_names = c("IID", "pop")))
+# trees2 <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+#                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+#          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+#   mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+#   mutate(X = gsub("P", "", Ind)) %>% 
+#   separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+#   left_join(trees) %>% 
+#   left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+#                      col_names = c("IID", "pop")))
 treesXY <- trees
 coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
@@ -236,6 +245,8 @@ for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.BSLMM.TWI & done
 cat TWI.LMM.snps | cut -f1 > TWI.snps.list
 plink --bfile paracou3pop --allow-extra-chr --extract TWI.snps.list --out TWI.snps --recode A
+plink --bfile ../../../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
+  --allow-extra-chr --extract TWI.snps.list --out TWI.snps.paracou --recode A
 ```
 
 Topographic wetness index (TWI) is a major environmental factor of genomic variation ($\sigma_G=0.79\pm0.13$, Fig. \@ref(fig:TWIPVE)). TWI was significantly associated only to one major effect SNPs across genepools (Fig. \@ref(fig:TWIassocMLM)), with an advantage of the major allele A in wet areas (Fig. \@ref(fig:TWIoutliersHist)). The polygenic model indicated 0.1% [0-0.45] of the genome to be related to TWI corresponding to 34 [0-146] SNPs, but the model didn't identified specific SNPs in our dataset (no $\gamma > 0.5$).

@@ -1,0 +1,230 @@
+```{r setup_introgression, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+library(bayesplot)
+library(rstan)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+load("./symcapture_save/Env2.Rdata")
+```
+
+# Introgressions
+
+Genomics structure analyses (population, envionmental and growth genomics) have been done with *pure* populations, defined with `admixture` as individuals with more than 90% of its genotype related to the genepool, rejecting admixed and introgressed individuals. In order to explore the importance of gene flow in the *Symphonia* species complex, we then explored admixed and introgressed individuals by identifying them and exploring there distribution along environments, with growth parameters and at genomic loci previously identified:
+
+* __Identification__ we used `introgress` to detect admixed individual hybrid index and further classed them
+* __Environment__
+* __Growth__ 
+
+## Identification
+
+We used the method developed by @Gompert2009 implemented in `introgress` [@Gompert2010] to map admixture between Paracou genepools. We used individuals with more than 90% of the genotype belonging to the genepool to define parental allele frequencies and mapped admixture between the two pairs of *S. sp1* - *S. globulifera Paracou* and *S. sp1* - *S. globulifera Regina* as the remaining pair didn't show admixture sign with the `admixture` software. We furthered classified individuals as (i) *pure-bred* with a hybrid index $h$ above 0.9, (ii) introgressed with $h \in [0.6-0.9]$, and (iii) admixed with $h \in [0.5-0.6]$.
+
+We obtained relatilevely low levels of admixture (Fig. \@ref(fig:introgress)) with 222 *S. sp1* pure-bred, 108 *S. globulifera Paracou* pure-bred, and 30 *S. globulifera Regina* pure-bred. Only 5 individuals were admixed (2 *S. sp1* - *S. globulifera Regina* and 3 *S. sp1* - *S. globulifera Paracou*). Nevertheless *S. sp1* showed 13(6%) individuals introgressed with *S. globulifera Regina* and *S. globulifera Paracou* showed 7(6%) individuals introgressed with *S. sp1*.
+
+
+```{bash introgressSH, eval=F, echo=F}
+module load bioinfo/plink-v1.90b5.3
+plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr \
+  --extract LD.prune.in --maf 0.05 --geno 0 --out paracou.filtered --make-bed --recode structure
+```
+
+```{r introgressCluster, eval=F, echo=F}
+paracou <- data.table::fread(file.path(path, "..", "variantCalling", "paracou", "paracou.filtered.recode.strct_in"), skip = 2) %>% as.tbl()
+inds <- gsub(".g.vcf", "", paracou$V1)
+pops <- symcapture.admix[[3]] %>% 
+  rownames_to_column(var = "Ind") %>%
+  mutate(type = "admixed") %>% 
+  mutate(type = ifelse(Cluster1 > 0.9, "Ssp1", type)) %>% 
+  mutate(type = ifelse(Cluster2 > 0.9, "SgParacou", type)) %>% 
+  mutate(type = ifelse(Cluster3 > 0.9, "SgRegina", type)) %>% 
+  mutate(type = ifelse(type == "admixed" & Cluster3 < 0.1, "admixedSP", type)) %>% 
+  mutate(type = ifelse(type == "admixed", "admixedSR", type))
+paracou <- paracou[-c(1:2)]
+cl <- parallel::makeCluster(getOption("cl.cores", 2))
+parallel::clusterExport(cl, list("paracou"))
+admix <- parallel::parLapply(cl, seq(1:(ncol(paracou)/2)), 
+                             function(i) paste(unlist(paracou[,i]), unlist(paracou[,(i+1)]), sep = "/"))
+parallel::stopCluster(cl) ; rm(cl)
+names(admix) <- 1:length(admix)
+admix <- bind_rows(admix)
+loci <- readr::read_tsv(file.path(path, "..", "variantCalling", "paracou", "paracou.filtered.bim"),
+         col_names = c("contig", "snp", "posCenti", "pos", "A1", "A2")) %>%
+  dplyr::mutate(snp = 1:nrow(.)) %>%
+  dplyr::mutate(locus = paste0(contig, "_snp", snp, "_pos", pos)) %>%
+  dplyr::mutate(type = "C") %>%
+  dplyr::select(locus, type, contig, pos) %>%
+  as.matrix()
+count.matrix <- list(sp = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "SgRegina", type != "admixedSR")$Ind),]), 
+                                       parental1 = t(admix[which(inds %in% filter(pops, type == "Ssp1")$Ind),]),
+                                       parental2 = t(admix[which(inds %in% filter(pops, type == "SgParacou")$Ind),]),
+                                       loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F),
+                     sr = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "SgParacou", type != "admixedSP")$Ind),]), 
+                                       parental1 = t(admix[which(inds %in% filter(pops, type == "Ssp1")$Ind),]),
+                                       parental2 = t(admix[which(inds %in% filter(pops, type == "SgRegina")$Ind),]),
+                                       loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F))
+cl <- parallel::makeCluster(getOption("cl.cores", 2))
+parallel::clusterExport(cl, list("count.matrix", "loci"))
+hi.index <- parallel::parLapply(cl, count.matrix, function(m) introgress::est.h(introgress.data = m, loci.data = loci, fixed = F))
+parallel::stopCluster(cl) ; rm(cl)
+hi.index$sp$Ind <- inds[which(inds %in% filter(pops, type != "SgRegina", type != "admixedSR")$Ind)]
+hi.index$sr$Ind <- inds[which(inds %in% filter(pops, type != "SgParacou", type != "admixedSP")$Ind)]
+hi.index <- bind_rows(hi.index, .id = "pair")
+save(symcapture.admix, hi.index, file = file.path("symcapture_save", "introgress.Rdata"))
+```
+
+```{r introgressT}
+load(file = file.path("symcapture_save", "introgress.Rdata"))
+hi.index %>% 
+  dplyr::select(Ind, pair, h) %>% 
+  reshape2::dcast(Ind ~ pair) %>% 
+  mutate(pop = NA) %>% 
+  mutate(pop = ifelse(sr < 0.1 & sp < 0.1, "S. sp1 pure", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sp > 0.9, "S. globulifera Paracou pure", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sr > 0.9, "S. globulifera Regina pure", pop)) %>%
+  mutate(pop = ifelse(is.na(pop) & !is.na(sr) & sr > 0.3, "Admixed S. sp1 - S. globulifera Regina", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & !is.na(sr) & sr < 0.3 & sr > sp, "S. sp1 introgressed with S. globulifera Regina", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sp > 0.7, "S. globulifera Paracou introgressed with S. sp1", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sp > 0.1 & sp < 0.7, "Admixed S. globulifera - S. sp1", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop), "S. sp1 pure", pop)) %>% 
+  dplyr::select(-sr, -sp) %>% 
+  write_tsv(file.path(path, "populations", "paracou.hybridmap"))
+# read_tsv(file.path(path, "populations", "paracou.hybridmap")) %>% 
+#   group_by(pop) %>% summarise(N = n()) %>% kable()
+```
+
+```{r introgress, fig.cap="Population structure and fraction of the genome inherited from S. sp1 for each individual (hybrid index or admixture coefficient). Population structure assessed with ADMIXTURE is represented with the color bar for each individual, with the percentage of membership to S. sp1 genepools represented by the bar height. The hybdrid index and it's confidence interval is represented by the black line and the white area. The white dashed line indicates levels used to define previous genepools and parental alleles frequencies."}
+hi.index %>% 
+  mutate(pair = recode(pair, sp = "S. sp1 - S. globulifera type Paracou", 
+                       sr = "S. sp1 - S. globulifera type Regina")) %>% 
+  left_join(symcapture.admix[[3]] %>% 
+              rownames_to_column(var = "Ind") %>%
+              reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
+              mutate(genepool = recode(genepool, Cluster1 = "S. sp1", Cluster2 = "S. globulifera type Paracou", 
+                                       Cluster3 = "S. globulifera type Regina"))) %>% 
+  ggplot(aes(reorder(Ind, h), group = NA)) +
+  geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +
+  geom_hline(yintercept = c(0.1, 0.9), linetype = "dashed", col = "white") +
+  geom_ribbon(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.5, fill = "white") +
+  geom_line(aes(y = 1 - h)) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(), axis.line.x = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  scale_color_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  ylab("S. sp1 ancestry") +
+  facet_wrap(~ pair, scale = "free", nrow = 2) +
+  theme(legend.position = "bottom")
+```
+
+## Populations
+
+**Map admixture for significant SNPs on the gene associated to the enriched GOterm !**
+
+```{r PopOutliersIntrogress, fig.cap="Distribution of alleles along topographic wetness index for the significantly associated SNP between pure-bred and admixed individuals."}
+t <- read_delim(file.path(path, "bayescan", "bayescan.snps.paracou.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
+  reshape2::melt(id.vars = "IID", variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  left_join(trees2, by = "IID", suffix = c("", ".trees")) %>% 
+  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
+            by = "Ind", suffix = c("", ".hybrid")) %>% 
+  mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
+                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
+                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
+                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
+                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed"))
+
+y <- t %>% 
+  group_by(pop.hybrid, SNP, Allele) %>% 
+  summarise(N = n()) %>% 
+  reshape2::dcast(SNP + pop.hybrid ~ Allele) %>% 
+  group_by(SNP) %>% 
+  filter(any(pop.hybrid == "S. globulifera Paracou introgressed with S. sp1" & is.na(`0`) & is.na(`2`))) %>% 
+  filter(any(pop.hybrid == "S. globulifera Paracou pure" & is.na(`1`)))
+
+ggplot(filter(t, SNP %in% unique(y$SNP), 4) %>% 
+         group_by(pop, pop.hybrid, SNP, Allele) %>% 
+         summarise(N = n()),
+       aes(pop.hybrid, N, fill = pop, col = pop)) +
+  geom_col() +
+  coord_flip() +
+  theme(axis.title.y = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  facet_grid(Allele ~ SNP)
+```
+
+## Environment
+
+Introgression of *S. sp1* within *S. globulifera Paracou*, allowed introgressed *S. globulifera Paracou* individuals to reach drier habitats (TWI < 3) of *S. sp1*, but not the introgression of *S. globulifera Regina* in *S. sp1* (Fig. \@ref(fig:introgressTWI)). Admixed didn't showed any specific patterns, and the pattern is similar but less clear for competition (NCI). Mapping pure-bred and admixed individuals on the TWI-specific SNP didn't show any sign of specific introgression of the T allele confering an advantage in drier habitats.
+
+```{r introgressTWI, fig.cap="Pure-bred and admixed individuals distribution along the Topographic Wetness Index (TWI) per genepool."}
+read_tsv(file.path(path, "populations", "paracou.hybridmap")) %>% 
+  left_join(trees2, by = "Ind", suffix = c(".hybrid", "")) %>% 
+  mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
+                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
+                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
+                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
+                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed")) %>% 
+  dplyr::select(Ind, pop, pop.hybrid, TWI, NCI) %>% 
+  reshape2::melt(id.vars = c("Ind", "pop", "pop.hybrid")) %>% 
+  ggplot(aes(pop.hybrid, value, fill = pop, col = pop)) +
+  geom_hline(aes(yintercept = y), linetype = "dashed", color = "grey",
+             data = data.frame(y = c(3,NA), variable = c("TWI", "NCI"))) +
+  geom_boxplot(alpha = 0.7) +
+  coord_flip() +
+  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626"),
+                    guide = guide_legend(nrow = 2)) +
+  scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  theme(axis.title.y = element_blank(), legend.position = "bottom") +
+  # scale_y_sqrt() +
+  ylab("Topographic Wetness index (TWI)") + 
+  facet_wrap(~ variable, scales = "free_x")
+```
+
+```{r TWIoutliersIntrogress, fig.cap="Distribution of alleles along topographic wetness index for the significantly associated SNP between pure-bred and admixed individuals."}
+read_delim(file.path(path, "gemma", "TWI", "TWI.snps.paracou.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
+  reshape2::melt(id.vars = "IID", variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  left_join(trees2, by = "IID", suffix = c("", ".trees")) %>% 
+  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
+            by = "Ind", suffix = c("", ".hybrid")) %>% 
+  mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
+                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
+                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
+                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
+                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed")) %>% 
+  mutate(Allele = recode(Allele, "0" = "TT", "1" = "TA", "2" = "AA")) %>% 
+  ggplot(aes(pop.hybrid, TWI, fill = pop, col = pop, label = Ind)) +
+  geom_hline(yintercept = 3, linetype = "dashed", col = 'lightgrey') +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter() +
+  facet_wrap(~ SNP) +
+  coord_flip() +
+  ylab("Topographic wetness index") +
+  theme(axis.title.y = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  facet_grid(Allele ~ SNP)
+```
+
+

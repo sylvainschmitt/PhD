@@ -1,6 +1,5 @@
 // adapted from https://github.com/diogro/stanAnimal/blob/master/package/src/stan_files/animalModelUni.stan
 data {
-  int<lower=1> J ; // # of fixed effects (intercept, ontogeny & environment)
   int<lower=0>  N ; // # of individuals
   real Y[N] ; // phenotype
   cov_matrix[N] K ; // kinship covariance matrix
