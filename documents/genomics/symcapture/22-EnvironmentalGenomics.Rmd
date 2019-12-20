@@ -251,6 +251,8 @@ plink --bfile ../../../variantCalling/paracou/symcapture.all.biallelic.snp.filte
 
 Topographic wetness index (TWI) is a major environmental factor of genomic variation ($\sigma_G=0.79\pm0.13$, Fig. \@ref(fig:TWIPVE)). TWI was significantly associated only to one major effect SNPs across genepools (Fig. \@ref(fig:TWIassocMLM)), with an advantage of the major allele A in wet areas (Fig. \@ref(fig:TWIoutliersHist)). The polygenic model indicated 0.1% [0-0.45] of the genome to be related to TWI corresponding to 34 [0-146] SNPs, but the model didn't identified specific SNPs in our dataset (no $\gamma > 0.5$).
 
+The TWI-associated SNP is a putative hitchiker located at 305 bp of gene coding for Pentatricopeptide repeat-containing protein At3g22470 implicated in mitochondrial communication.
+
 ### Proportion of Variance Explained
 
 ```{r TWIPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic with Topographic Wetness Index (TWI)."}
@@ -383,6 +385,28 @@ read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>%
   ylab("Topographic wetness index") +
   xlab("Population") +
   scale_fill_discrete("Number of copies\nof the major allele")
+```
+
+```{r TWIoutliersGO, eval=F}
+snp <- read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
+  dplyr::rename(TWI = PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>% 
+  mutate(Allele = as.factor(Allele)) %>% 
+  left_join(trees, by = "IID", suffix = c("", ".trees"))
+
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation")) %>% 
+  filter(snp == "Olsson_2017_scf7180005379595_snp1055")
+go <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
+  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
+  collect() %>% 
+  separate(annotation, paste0("X", 1:16), "\t") %>% 
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13)
 ```
 
 ## Neighbor Crowding Index (NCI)

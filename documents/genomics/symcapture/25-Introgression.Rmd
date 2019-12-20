@@ -29,6 +29,12 @@ Genomics structure analyses (population, envionmental and growth genomics) have 
 * __Environment__
 * __Growth__ 
 
+## Methodology
+
+> Another demographic process that can lead to idiosyncratic effects at individual loci is hy-bridization and introgression from related taxa [@Hoban2016]
+
+This justify the realization of all genomics scan without admixed individuals and the inclusion of admixed individuals a posteriori.
+
 ## Identification
 
 We used the method developed by @Gompert2009 implemented in `introgress` [@Gompert2010] to map admixture between Paracou genepools. We used individuals with more than 90% of the genotype belonging to the genepool to define parental allele frequencies and mapped admixture between the two pairs of *S. sp1* - *S. globulifera Paracou* and *S. sp1* - *S. globulifera Regina* as the remaining pair didn't show admixture sign with the `admixture` software. We furthered classified individuals as (i) *pure-bred* with a hybrid index $h$ above 0.9, (ii) introgressed with $h \in [0.6-0.9]$, and (iii) admixed with $h \in [0.5-0.6]$.
@@ -133,31 +139,76 @@ hi.index %>%
 
 **Map admixture for significant SNPs on the gene associated to the enriched GOterm !**
 
-```{r PopOutliersIntrogress, fig.cap="Distribution of alleles along topographic wetness index for the significantly associated SNP between pure-bred and admixed individuals."}
+6 genes with 4 genic and 38 outliers with qval < 0.05
+
+No evidence for an allele transfer through introgressed or admixed individuals so far. I think it is not the right way to do it.
+
+```{r, eval=F}
+bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
+  mutate(snpNb = as.numeric(row.names(.))) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
+  left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
+  mutate(snpNb = 1:nrow(.))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
+
+outliers <- data.frame(gene = c("TRINITY_DN795961_c2_g1", "TRINITY_DN796902_c0_g1", "TRINITY_DN800044_c7_g3", 
+                                "TRINITY_DN817465_c3_g1", "TRINITY_DN827983_c2_g1", "TRINITY_DN828088_c2_g1")) %>% 
+  left_join(bind_rows(read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>%
+                        mutate(type = "genic"),
+                      read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation")) %>% 
+                        mutate(type = "hitchhiker")) %>% 
+              mutate(gene = stringr::str_sub(trsc, 1, -4))) %>% 
+  filter(snp %in% filter(bayescan, qval < 0.05)$snp)
+
 t <- read_delim(file.path(path, "bayescan", "bayescan.snps.paracou.raw"), delim = " ") %>% 
   dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
   reshape2::melt(id.vars = "IID", variable.name = "SNP", value.name = "Allele") %>% 
+  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
   na.omit(Allele) %>% 
   mutate(Allele = as.factor(Allele)) %>% 
-  left_join(trees2, by = "IID", suffix = c("", ".trees")) %>% 
-  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
-            by = "Ind", suffix = c("", ".hybrid")) %>% 
-  mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+  left_join(filter(trees, !is.na(AGR)) %>% 
+                              mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+                              dplyr::select(pop.hybrid, pop, Ind, IID) %>% unique()) %>% 
   mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
                       "S. globulifera Regina pure" = "S. gobulifera Regina", 
                       "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
                       "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
                       "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed"))
 
-y <- t %>% 
-  group_by(pop.hybrid, SNP, Allele) %>% 
-  summarise(N = n()) %>% 
-  reshape2::dcast(SNP + pop.hybrid ~ Allele) %>% 
-  group_by(SNP) %>% 
-  filter(any(pop.hybrid == "S. globulifera Paracou introgressed with S. sp1" & is.na(`0`) & is.na(`2`))) %>% 
-  filter(any(pop.hybrid == "S. globulifera Paracou pure" & is.na(`1`)))
+p1 <- group_by(t, SNP) %>% 
+  filter(pop.hybrid == "S. sp1 pure") %>% 
+  filter(all(Allele != 1))
+ 
+p2 <- group_by(t, SNP) %>% 
+  filter(pop.hybrid == "S. globulifera Paracou pure") %>% 
+  filter(all(Allele != 1))
 
-ggplot(filter(t, SNP %in% unique(y$SNP), 4) %>% 
+ad <- group_by(t, SNP) %>% 
+  filter(pop.hybrid == "S. globulifera Paracou introgressed with S. sp1") %>% 
+  filter(all(Allele == 1))
+
+snps <- c(unique(p1$SNP[p1$SNP %in% ad$SNP]), unique(p2$SNP[p2$SNP %in% ad$SNP]))
+
+# snps <- c(unique(p1$SNP[p1$SNP %in% p2$SNP]), unique(p1$SNP[p1$SNP %in% ad$SNP]), unique(p2$SNP[p2$SNP %in% ad$SNP]))
+
+p1 <- group_by(t, SNP) %>% 
+  filter(pop.hybrid == "S. sp1 pure") %>% 
+  filter(all(Allele != 1))
+ 
+p2 <-  filter(t, SNP %in% outliers$snp) %>% 
+  group_by(SNP) %>% 
+  filter(pop.hybrid == "S. globulifera Regina pure") %>% 
+  filter(all(Allele != 1))
+
+ad <- filter(t, SNP %in% outliers$snp) %>% 
+  group_by(SNP) %>% 
+  filter(pop.hybrid == "S. sp1 introgressed with S. globulifera Regina") %>% 
+  filter(any(Allele == 1))
+
+snps <- c(unique(p1$SNP[p1$SNP %in% p2$SNP]), unique(p1$SNP[p1$SNP %in% ad$SNP]), unique(p2$SNP[p2$SNP %in% ad$SNP]))
+
+ggplot(filter(t, SNP %in% snps) %>% 
          group_by(pop, pop.hybrid, SNP, Allele) %>% 
          summarise(N = n()),
        aes(pop.hybrid, N, fill = pop, col = pop)) +
@@ -174,8 +225,7 @@ ggplot(filter(t, SNP %in% unique(y$SNP), 4) %>%
 Introgression of *S. sp1* within *S. globulifera Paracou*, allowed introgressed *S. globulifera Paracou* individuals to reach drier habitats (TWI < 3) of *S. sp1*, but not the introgression of *S. globulifera Regina* in *S. sp1* (Fig. \@ref(fig:introgressTWI)). Admixed didn't showed any specific patterns, and the pattern is similar but less clear for competition (NCI). Mapping pure-bred and admixed individuals on the TWI-specific SNP didn't show any sign of specific introgression of the T allele confering an advantage in drier habitats.
 
 ```{r introgressTWI, fig.cap="Pure-bred and admixed individuals distribution along the Topographic Wetness Index (TWI) per genepool."}
-read_tsv(file.path(path, "populations", "paracou.hybridmap")) %>% 
-  left_join(trees2, by = "Ind", suffix = c(".hybrid", "")) %>% 
+trees %>% 
   mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
   mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
                       "S. globulifera Regina pure" = "S. gobulifera Regina", 
@@ -204,9 +254,7 @@ read_delim(file.path(path, "gemma", "TWI", "TWI.snps.paracou.raw"), delim = " ")
   reshape2::melt(id.vars = "IID", variable.name = "SNP", value.name = "Allele") %>% 
   na.omit(Allele) %>% 
   mutate(Allele = as.factor(Allele)) %>% 
-  left_join(trees2, by = "IID", suffix = c("", ".trees")) %>% 
-  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
-            by = "Ind", suffix = c("", ".hybrid")) %>% 
+  left_join(trees, by = "IID", suffix = c("", ".trees")) %>% 
   mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
   mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
                       "S. globulifera Regina pure" = "S. gobulifera Regina", 
@@ -217,14 +265,112 @@ read_delim(file.path(path, "gemma", "TWI", "TWI.snps.paracou.raw"), delim = " ")
   ggplot(aes(pop.hybrid, TWI, fill = pop, col = pop, label = Ind)) +
   geom_hline(yintercept = 3, linetype = "dashed", col = 'lightgrey') +
   geom_boxplot(alpha = 0.7) +
-  geom_jitter() +
-  facet_wrap(~ SNP) +
   coord_flip() +
   ylab("Topographic wetness index") +
   theme(axis.title.y = element_blank()) +
-  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626"),
+                    guide = guide_legend(nrow = 2)) +
   scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
-  facet_grid(Allele ~ SNP)
+  facet_grid(Allele ~ SNP) +
+  theme(legend.position = "bottom")
 ```
 
+## Growth
+
+```{r growthOntogenyAdmixedTab}
+mdata <- function(data){
+  data <- data %>% 
+    filter(!is.na(AGR)) %>% 
+    mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop.hybrid)))
+  list(N = nrow(data),
+       I = length(unique(data$IndNum)),
+       G = length(unique(data$popNum)),
+       AGR = data$AGR,
+       DBH = data$DBH,
+       TWI = as.vector(scale(data$TWI, center = F)),
+       AREW = as.vector(scale(data$AREW, center = F)),
+       NCI = as.vector(scale(data$NCI, center = F)),
+       ind = data$IndNum,
+       gp = data$popNum,
+       indingp = unique(arrange(data, IndNum)[c("IndNum", "popNum")])$popNum)}
+# growth <- stan_model("./symcapture_models/Growth.stan")
+# fitGrowth <- sampling(growth, chains = 2, data = mdata(trees), save_warmup = F)
+# save(fitGrowth, file = file.path("symcapture_save", 'growthAdmixed.Rdata'))
+load(file.path("symcapture_save", 'growthAdmixed.Rdata'))
+# broom::tidyMCMC(fitGrowth, c("Gmax", "Gmaxg", "sigmaGmaxg", "sigmaGmaxi",
+#                              "Dopt", "Doptg", "sigmaDoptg", "sigmaDopti",
+#                              "Ks", "Ksg", "sigmaKsg", "sigmaKsi",
+#                              "sigma", "lp__"), droppars = NULL, rhat = T) %>% 
+#   kable(caption = "Summary table of the ontogenic growth model including admixed individuals")
+```
+
+```{r growthOntegnyAdmixedPosteriors, fig.cap="Ontogenic parameters distribution at the admixture or the individual level between pure-bred and admixed individuals. Individual parameters distribution represent the parameters estimate distribution, whereas population parameters distribution represent the posterior distribution of the parameter.", fig.width=12}
+bind_rows(as.data.frame(fitGrowth, pars = c("Gmaxg", "Doptg", "Ksg")) %>% 
+            reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
+            separate(parameter, c("parameter", "popNum"), "[:punct:]", convert = T) %>% 
+            mutate(parameter = gsub("g$", "", parameter)) %>% 
+            mutate(level = "Population") %>% 
+            left_join(filter(trees, !is.na(AGR)) %>% 
+                        mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+                        mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop.hybrid))) %>% 
+                        dplyr::select(popNum, pop.hybrid, pop) %>% unique()),
+          broom::tidyMCMC(fitGrowth, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
+            separate(term, c("parameter", "IndNum"), "[:punct:]", convert = T) %>% 
+            mutate(parameter = gsub("i$", "", parameter)) %>% 
+            dplyr::rename(value = estimate) %>% 
+            dplyr::select(-std.error) %>% 
+            mutate(level = "Individual") %>% 
+            left_join(filter(trees, !is.na(AGR)) %>% 
+                        mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
+                        mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop.hybrid))) %>% 
+                        dplyr::select(popNum, pop.hybrid, pop, IndNum, Ind) %>% unique())) %>% 
+  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
+                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
+                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
+                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
+                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed")) %>% 
+  ggplot(aes(pop.hybrid, value, fill = pop, col = pop)) +
+  geom_boxplot(alpha = 0.7) +
+  coord_flip() +
+  theme(axis.title.y = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626"), 
+                    guide = guide_legend(nrow = 2)) +
+  scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  facet_grid(level ~ parameter, scales = "free_x") +
+  theme(legend.position = "bottom")
+```
+
+```{r DoptOutliersAdmixed, fig.cap="Distribution of alleles along individual optiaml diameter $Dopt$ for the significantly associated SNP between pure-bred and admixed individuals."}
+read_delim(file.path(path, "gemma", "Dopt", "Dopt.snps.paracou.raw"), delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
+  reshape2::melt(id.vars = "IID", variable.name = "SNP", value.name = "Allele") %>% 
+  na.omit(Allele) %>%
+  mutate(Allele = as.factor(Allele)) %>% 
+  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
+  left_join(  broom::tidyMCMC(fitGrowth, pars = "Dopti") %>% 
+                separate(term, c("parameter", "IndNum"), "[:punct:]", convert = T) %>% 
+                mutate(parameter = gsub("i$", "", parameter)) %>% 
+                left_join(filter(trees, !is.na(AGR)) %>% 
+                            mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>% 
+                            mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop.hybrid))) %>% 
+                            dplyr::select(pop, pop.hybrid, IID, Ind, IndNum) %>% unique())) %>% 
+  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
+                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
+                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
+                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
+                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed")) %>% 
+  mutate(Allele = recode(Allele, "0" = "CC", "1" = "CG", "2" = "GG")) %>% 
+  na.omit(pop.hybrid) %>% 
+  ggplot(aes(pop.hybrid, estimate, fill = pop, col = pop, label = Ind)) +
+  geom_boxplot(alpha = 0.7) +
+  coord_flip() +
+  ylab("Individual optimal diameter") +
+  xlab("Number of copies of the major allele") +
+  theme(axis.title.y = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626"),
+                    guide = guide_legend(nrow = 2)) +
+  scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  facet_grid(Allele ~ SNP) +
+  theme(legend.position = "bottom")
+```
 

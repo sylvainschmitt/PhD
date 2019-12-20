@@ -1,3 +1,7 @@
+# PhD 0.1.9158
+* parvicapture: sequences delivery, quality, trimming, mapping, and SNP calling
+* symcapture: synonymy, TWI outlier
+
 # PhD 0.1.9157
 * symcapture: introgression chapter begin
 
@@ -8,7 +12,7 @@
 # PhD 0.1.9155
 * symcapture: homemade PVE in growth
 
-# PhD 0.1.9154
+# PhD 0.1.9154  
 * symcapture: growth GWAS LMM & BSLMM
 
 # PhD 0.1.9154

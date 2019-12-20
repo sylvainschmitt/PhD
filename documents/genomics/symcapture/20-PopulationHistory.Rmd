@@ -223,6 +223,15 @@ for type in "${types[@]}" ;
     vcftools --vcf paracou3pop.$type.vcf --keep $pop.list --site-pi --out $type.$pop &
   done
 done
+types=(synonymous anonymous)
+pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina) 
+for type in "${types[@]}" ; 
+  do 
+  for pop in "${pops[@]}" ; 
+    do 
+    vcftools --vcf paracou3pop.$type.vcf --keep $pop.list --window-pi 100 --out $type.$pop &
+  done
+done
 ```
 
 ```{r piR, fig.cap="Populations $\\pi$ distribution estimated by `vcftools` per site."}
@@ -231,6 +240,7 @@ lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), patt
     mutate(file = file)) %>% 
   bind_rows() %>% 
   separate(file, c("type", "Population", "sites", "pi"), sep = "[:punct:]") %>% 
+  filter(type %in% c("neutral", "hitchiker", "functional")) %>% 
   dplyr::select(-sites, -pi) %>% 
   ggplot(aes(Population, PI, fill = Population)) +
   geom_boxplot() +
@@ -240,6 +250,25 @@ lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), patt
   ylab(expression(pi)) +
   theme(axis.text.x = element_text(angle = 45),
         axis.line.x = element_blank())
+```
+
+```{r piR2, fig.cap="Populations $\\frac{\\pi_a}{\\pi_s}$ distribution estimated by `vcftools` on a 100 bp window."}
+lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), pattern = ".windowed.pi"), function(file)
+  read_tsv(file.path(path, "..", "populationGenomics", "diversity", file)) %>% 
+    mutate(file = file)) %>% 
+  bind_rows() %>% 
+  separate(file, c("type", "Population", "sites", "pi"), sep = "[:punct:]") %>% 
+  filter(type %in% c("anonymous", "synonymous")) %>% 
+  dplyr::select(-sites, -pi) %>% 
+  reshape2::dcast(Population + CHROM + BIN_START + BIN_END ~ type, value.var = "PI") %>% 
+  na.omit() %>% 
+  mutate(piapis = anonymous/synonymous) %>% 
+  ggplot(aes(Population, piapis, fill = Population)) +
+  geom_boxplot() +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  scale_fill_discrete(guide = "none") +
+  ylab(expression(frac(pi[a],pi[s]))) +
+  scale_y_log10()
 ```
 
 ### $F_{st}$

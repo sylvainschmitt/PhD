@@ -175,4 +175,74 @@ grep hitchhiker snps.type | cut -f1 > snps.hitchhiker
 grep functional snps.type | cut -f1 > snps.functional
 ```
 
+## Synonymy
+
+```{r synonymyPrep, eval=F, echo=T}
+snps <- read_tsv(file.path(path, "snpsFunc.annotation")) %>% 
+  left_join(read_tsv(file.path(path, "snps.annotation")))
+trsc <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                             "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(snps$trsc)) %>% 
+  dplyr::rename(trsc = transcript_id) %>% 
+  dplyr::select(trsc, sequence) %>% collect()
+t <- snps %>% 
+  dplyr::select(snp, trsc, posTrsc, A1, A2) %>% 
+  reshape2::melt(id.vars = c("snp", "trsc", "posTrsc"), 
+                 variable.name = "Allele", value.name = "base") %>% 
+  arrange(snp) %>% 
+  left_join(trsc) %>% 
+  mutate(ref = stringr::str_sub(sequence, posTrsc, posTrsc)) %>%
+  group_by(snp) %>% 
+  filter(any(base %in% ref))
+t %>% 
+  filter(base != ref) %>% 
+  ungroup() %>% 
+  dplyr::select(trsc, posTrsc, base) %>% 
+  write_tsv(path = file.path(path, "SNPsOnTrsc.tsv"), col_names = F)
+```
+
+```{bash synonymy, eval=F, echo=T}
+mkdir TransDecoder
+cp transcripts.fasta TransDecoder/
+cd TransDecoder/
+TransDecoder.LongOrfs -t transcripts.fasta
+makeblastdb \
+  -in /bank/ebi/uniprot/current/fasta/uniprot_sprot.fasta \
+  -dbtype prot -input_type fasta -out uniprot/uniprot_sprot.fa -hash_index
+blastp -query transcripts.fasta.transdecoder_dir/longest_orfs.pep \
+  -db uniprot/uniprot_sprot.fa \
+  -max_target_seqs 1 -outfmt 6 -evalue 1e-5 -num_threads 4 > blastp.outfmt6
+hmmscan --cpu 4 --domtblout pfam.domtblout \
+	Pfam/Pfam-A.hmm \
+	transcripts.fasta.transdecoder_dir/longest_orfs.pep
+TransDecoder.Predict -t transcripts.fasta \
+	--retain_pfam_hits pfam.domtblout --retain_blastp_hits blastp.outfmt6
+~/Tools/gffread/gffread longest_orfs.gff3 -T -o longest_orfs.gtf
+perl ~/Tools/SNPdat_package_v1.0.5/SNPdat_v1.0.5.pl \
+  -i SNPsOnTrsc.tsv \
+  -g longest_orfs.gtf \
+  -f transcripts.fasta \
+  -s synonymy.summary \
+  -o synonymy.output
+```
+
+```{r synonymyRes, eval=F, echo=T}
+snps <- read_tsv(file.path(path, "snpsFunc.annotation")) %>% 
+  left_join(read_tsv(file.path(path, "snps.annotation")))
+synonymy <- read_tsv(file.path(path, "synonymy.output"), col_names = T)
+ggplot(synonymy, aes(synonymous)) + 
+  geom_bar() +
+  ggtitle(paste0(round(178908/475272*100), "% of non synonymous SNPs in genic SNPs"))
+snps %>% 
+  mutate(TRSC = toupper(trsc)) %>% 
+  left_join(dplyr::rename(synonymy, TRSC = "Chromosome Number", posTrsc = "SNP Position")) %>% 
+  dplyr::select(-TRSC) %>% 
+  group_by(snp) %>% 
+  summarise(synonymous = as.numeric(any(synonymous == "Y", na.rm = T))) %>% 
+  mutate(synonymous = recode(synonymous, "1" = "synonymous", "0" = "anonymous")) %>% 
+  write_tsv(path = file.path(path, "snpSynonymy.annotation"), col_names = F)
+# grep synonymous snpSynonymy.annotation | cut -f1 > snp.synonymous
+# grep anonymous snpSynonymy.annotation | cut -f1 > snp.anonymous
+```
 

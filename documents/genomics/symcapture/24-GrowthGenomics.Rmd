@@ -67,21 +67,22 @@ $ANCR$ represents the dynamic of biotic asymmetric competition through tree neig
 Both correlations and principal component analyses showed non colinear DBH, TWI, AUC, NCI and ANCR that we selected for further analyses (Fig. \@ref(fig:correlationsGrowthGenom) and Fig. \@ref(fig:pcaGrowthGenom)).
 
 ```{r DataGrowthGenom, eval=F}
-# length(unique(trees$IID)) # should be 372
 trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
                               "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(Genus == "Symphonia") %>% 
   collect()
-trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop",
-                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop.fam"),
+trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
   mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
   mutate(X = gsub("P", "", Ind)) %>% 
   separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
   left_join(trees) %>% 
   left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
-                     col_names = c("IID", "pop")))
+                     col_names = c("IID", "pop"))) %>% 
+  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
+            by = "Ind", suffix = c("", ".hybrid"))
 treesXY <- trees
 coordinates(treesXY) <- ~Xutm + Yutm
 proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
@@ -104,7 +105,7 @@ weather <- read_csv(file.path("../../../data/Paracou/", "weather", "REW_1978-201
   dplyr::rename(CensusYear = year)
 trees <- left_join(trees, weather)
 rm(weather)
-cl <- parallel::makeCluster(getOption("cl.cores", 2))
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
 parallel::clusterExport(cl, list("trees"))
 NCI <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
   library(tidyverse)
@@ -157,35 +158,24 @@ factoextra::fviz_pca_var(princomp(~ DBH + TWI + AREW + SREW + NCI + ANCR, trees,
 ```
 
 ```{r mdata}
+load("./symcapture_save/Env2.Rdata")  
 trees <- trees %>% 
-  # filter(Plot == 16) %>% # for test purposes
+  na.omit(pop) %>% # remove admixed
   filter(!is.na(AGR), !is.na(ANCR)) %>% 
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
 treesSub <- filter(trees, Plot == 16) %>% # for test purposes
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
-fitsAnimal <- list()
-mdata <- list(N = nrow(trees),
-              I = length(unique(trees$Ind)),
-              G = length(unique(trees$pop)),
-              AGR = trees$AGR,
-              DBH = trees$DBH,
-              TWI = as.vector(scale(trees$TWI, center = F)),
-              AREW = as.vector(scale(trees$AREW, center = F)),
-              NCI = as.vector(scale(trees$NCI, center = F)),
-              ind = trees$IndNum,
-              gp = trees$popNum,
-              indingp = unique(arrange(trees, IndNum)[c("IndNum", "popNum")])$popNum)
-mdataSub <- list(N = nrow(treesSub),
-              I = length(unique(treesSub$Ind)),
-              G = length(unique(treesSub$pop)),
-              AGR = treesSub$AGR,
-              DBH = treesSub$DBH,
-              TWI = as.vector(scale(treesSub$TWI, center = F)),
-              AREW = as.vector(scale(treesSub$AREW, center = F)),
-              NCI = as.vector(scale(treesSub$NCI, center = F)),
-              ind = treesSub$IndNum,
-              gp = treesSub$popNum,
-              indingp = unique(arrange(treesSub, IndNum)[c("IndNum", "popNum")])$popNum)
+mdata <- function(data) list(N = nrow(data),
+                             I = length(unique(data$Ind)),
+                             G = length(unique(data$pop)),
+                             AGR = data$AGR,
+                             DBH = data$DBH,
+                             TWI = as.vector(scale(data$TWI, center = F)),
+                             AREW = as.vector(scale(data$AREW, center = F)),
+                             NCI = as.vector(scale(data$NCI, center = F)),
+                             ind = data$IndNum,
+                             gp = data$popNum,
+                             indingp = unique(arrange(data, IndNum)[c("IndNum", "popNum")])$popNum)
 ```
 
 ## Growth
@@ -204,7 +194,7 @@ At the genus level, *Symphonia* individuals showed a maximum growth of $6.91\pm1
 
 ```{r growthOntogenyTab}
 # growth <- stan_model("./symcapture_models/Growth.stan")
-# fitGrowth <- sampling(growth, chains = 2, data = mdata, save_warmup = F)
+# fitGrowth <- sampling(growth, chains = 2, data = mdata(trees), save_warmup = F)
 # save(fitGrowth, file = file.path("symcapture_save", 'growth.Rdata'))
 load(file.path("symcapture_save", 'growth.Rdata'))
 broom::tidyMCMC(fitGrowth, c("Gmax", "Gmaxg", "sigmaGmaxg", "sigmaGmaxi",
@@ -248,8 +238,8 @@ parsi <- as.data.frame(fitGrowth, pars = c("Gmaxi", "Dopti", "Ksi")) %>%
   dplyr::select(-variable) %>%
   reshape2::dcast(IndNum ~ parameter) %>% 
   mutate(IndNum = as.numeric(IndNum))
-data.frame(DBH = rep(1:100, mdata$I), 
-           IndNum = rep(1:mdata$I, each = 100)) %>% 
+data.frame(DBH = rep(1:100, mdata(trees)$I), 
+           IndNum = rep(1:mdata(trees)$I, each = 100)) %>% 
   left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop))) %>% 
   mutate(genusNum = 1) %>% 
   left_join(pars) %>% 
@@ -265,8 +255,6 @@ data.frame(DBH = rep(1:100, mdata$I),
          Gpred5i = Gmaxi_q5*exp(-0.5*(log(DBH/Dopti_q5)/Ksi_q5)^2),
          Gpred95i = Gmaxi_q95*exp(-0.5*(log(DBH/Dopti_q95)/Ksi_q95)^2)) %>% 
   ggplot(aes(x = DBH)) +
-  # geom_ribbon(aes(ymin = Gpred5, ymax = Gpred95), alpha = 0.5, fill = "lightgrey") +
-  # geom_ribbon(aes(ymin = Gpred5g, ymax = Gpred95g, group = pop), alpha = 0.5, fill = "lightgrey") +
   geom_ribbon(aes(ymin = Gpred5i, ymax = Gpred95i, group = Ind), alpha = 0.5, fill = "lightgrey") +
    geom_point(aes(y = log(AGR +1), col = Ind), alpha = 0.4, data = trees) +
   geom_line(aes(y = Gpredi, col = Ind), linetype = "dotted") +
@@ -527,6 +515,8 @@ for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -
 for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.BSLMM.Dopt ; done
 cat Dopt.BSLMM.snps | cut -f1 > Dopt.snps.list
 plink --bfile paracou3pop --allow-extra-chr --extract Dopt.snps.list --out Dopt.snps --recode A
+plink --bfile ../../../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
+  --allow-extra-chr --extract Dopt.snps.list --out Dopt.snps.paracou --recode A
 ```
 
 Individual optimal diameter is mainly explained by genetic variation ($\sigma_G=0.68\pm0.14$, Fig. \@ref(fig:DoptPVE)). $Dopt$ is thus an ontogenetic factor as it controls the shape of the growth response to ontogeny and its controlled by genetics ! Individual optimal diameter wasn't significantly associated to any  major effect SNPs (Fig. \@ref(fig:DoptAssocMLM)). The polygenic model indicated 0.07% [0-0.42] of the genome to be related to Dopt corresponding to 24 [1-136] SNPs, and identified one neutral SNPs assocaited to individual optimal diameter ($\gamma>0.5$, Fig. \@ref(fig:DoptAssocBSLMM) and Fig. \@ref(fig:DoptOutliersHist)), already highlighted as a population specific SNP (see populations genomic).
