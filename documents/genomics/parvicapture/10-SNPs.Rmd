@@ -14,517 +14,286 @@ opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
 path <- "../../../data/Eschweilera_Paracou"
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
+```
+
+```{r}
+clades <- rbind(
+  data.frame(Clade = "Parvifolia",
+             Species = c("sagotiana", "coriacea", "decolorans", "pedicellata", "wachenheimii", "grandiflora",
+                         "grandiflora_form2")),
+  data.frame(Clade = "Chartacea",
+             Species = c("congestiflora", "simiorum"))
+)
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit() %>% 
+  left_join(clades)
+individuals %>% 
+  filter(Clade == "Parvifolia") %>% 
+  mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
+  dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
+  write_tsv(path = file.path(path, "Sequences", "calling", "Parvifolia.fam"), col_names = F)
 ```
 
 # SNPs
 
-We filtered the previously produced raw vcf with several steps:
+We filtered the previously produced raw vcf (**491 517** variants over **438** individuals) with several steps:
 
-<!-- * __Gather__ raw vcf files gathering in **26 813 513** variants over **432** individuals -->
-<!-- * __Biallelic__ raw vcf filtering in **19 242 294** variants over **432** individuals -->
-<!-- * __SNP__ biallelic vcf filtering in **17 521 879** variants over **432** individuals -->
-<!-- * __Filters__ biallelic snp vcf filtering in **15 531 866** variants over **432** individuals -->
-<!-- * __Missing__ filtered biallelic snp vcf filtering in **454 262** variants over **406** individuals -->
-<!-- * __Paracou__ filtered & non missing biallelic snp vcf filtering in **454 262** variants over **385** individuals -->
+* __Biallelic__ raw vcf filtering in **299 207** variants over **438** individuals
+* __SNP__ biallelic vcf filtering in **255 700** variants over **438** individuals
+* __Filters__ biallelic snp vcf filtering in **217 643** variants over **438** individuals
+* __Missing__ filtered biallelic snp vcf filtering in **80 686** variants over **435** individuals
+* __Parvifolia__ filtered & non missing biallelic snp vcf filtering in **80 686** variants over **X** individuals
 
-<!-- ## Gather -->
+## Biallelic
 
-<!-- We first gathered all raw vcf. 42 sequences subset lost individuals in genotype call (over 878, 4%), blocking the functionning of `gatk CombineVariants`, so we first removed the variants associated to those subest of reference sequences. This resulted in 26 813 513 variants. -->
+We then used `bcftools` to limit data to biallelic variants (`--max-alleles 2`), resulting in 299 207 biallelic variants.
 
-<!-- ```{bash missingidv, eval=F, echo=T} -->
-<!-- mkdir out -->
-<!-- mkdir missing_ind -->
-<!-- for file in $(ls symcapture.filtered.vcf/*.vcf.gz) ; do file=$(basename $file) ; file=${file%.*} ; echo "module load bioinfo/tabix-0.2.5 ; module load bioinfo/vcftools-0.1.15 ; vcftools --gzvcf symcapture.filtered.vcf/$file.gz --missing-indv -c > missing_ind/$file.missing.txt"; done > missingInd.sh -->
-<!-- sarray -J missingInd -o out/%j.missingInd.out -e out/%j.missingInd.err -t 1:00:00 --mail-type=BEGIN,END,FAIL missingInd.sh -->
-<!-- for file in $(ls missing_ind/*.missing.txt) ; do awk '{{if (NR!=1) print FILENAME"\t"$0}}' $file ; done > missingInd.txt -->
-<!-- rm - r out -->
-<!-- rm -r missing_ind -->
-<!-- ``` -->
+```{bash biallelic, eval=F, echo=T}
+srun --mem=20G --cpus-per-task=8 --pty bash
+module load bioinfo/bcftools-1.8
+bcftools view --max-alleles 2 --threads 8 parvicapture.raw.vcf.gz | bgzip -c --threads 8 > parvicapture.biallelic.vcf.gz
+bcftools stats --threads 8 parvicapture.biallelic.vcf.gz
+```
 
-<!-- ```{r missingindR, eval=F} -->
-<!-- missing <- read_tsv(file.path(path, "Sequences", "variantCalling", "missingInd.txt"),  -->
-<!--          col_names = c("ref", "sample", "ndata", "ngenotypes", "nmiss", "freq")) %>%  -->
-<!--   mutate(ref = gsub("missing_ind/reference.sequences_", "", ref)) %>%  -->
-<!--   mutate(ref = gsub(".vcf.missing.txt", "", ref)) %>%  -->
-<!--   mutate(sample = gsub(".g.vcf", "", sample)) %>%  -->
-<!--   reshape2::dcast(ref ~ sample, value.var = "freq") %>%  -->
-<!--   reshape2::melt(id.vars = "ref", variable.name = "sample", value.name = "missing") %>%  -->
-<!--   mutate(missing = ifelse(is.na(missing) | is.nan(missing), 1, missing)) -->
-<!-- read_tsv(file.path(path, "Sequences", "variantCalling", "missingInd.txt"),  -->
-<!--          col_names = c("ref", "sample", "ndata", "ngenotypes", "nmiss", "freq")) %>%  -->
-<!--   mutate(ref = gsub("missing_ind/reference.sequences_", "", ref)) %>%  -->
-<!--   mutate(ref = gsub(".vcf.missing.txt", "", ref)) %>%  -->
-<!--   mutate(sample = gsub(".g.vcf", "", sample)) %>%  -->
-<!--   group_by(ref) %>%  -->
-<!--   summarise(N = n()) %>%  -->
-<!--   filter(N == 432) %>%  -->
-<!--   dplyr::select(ref) %>%  -->
-<!--   mutate(ref = paste0("symcapture.filtered.vcf/reference.sequences_", ref, ".vcf.gz")) %>%  -->
-<!--   write_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing.list"), col_names = F) -->
-<!-- googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop") %>%  -->
-<!--   mutate(Ind = paste0(Ind, ".g.vcf", "")) %>%  -->
-<!--   filter(Pop2 != "O") %>%  -->
-<!--   dplyr::select(Ind) %>%  -->
-<!--   write_tsv(file.path(path, "Sequences", "variantCalling", "Paracou.ind"), col_names = F) -->
-<!-- ``` -->
+## SNP
 
-<!-- ```{bash gather, eval=F, echo=T} -->
-<!-- echo -e '#!/bin/bash\n#SBATCH --time=48:00:00\n#SBATCH -J gather\n#SBATCH -o gather.out\n#SBATCH -e gather.err\n#SBATCH --mem=20G\n#SBATCH --cpus-per-task=1\n#SBATCH --mail-type=BEGIN,END,FAIL\nmodule load bioinfo/picard-2.14.1\njava -Xmx20g -jar $PICARD GatherVcfs \' > gather.sh -->
-<!-- for file in $(cat nonmissing.list) -->
-<!-- do -->
-<!-- 	echo -e '\tI=symcapture.raw.vcf/'$(basename $file)' \' >> gather.sh -->
-<!-- done -->
-<!-- echo -e '\tO=symcapture.all.raw.vcf.gz\n' >> gather.sh -->
-<!-- zcat symcapture.all.raw.vcf.gz | grep "#contig" | wc -l -->
-<!-- ``` -->
+We then used `gatk` to limit data to biallelic snps, resulting in 255 700 biallelic snps.
 
-<!-- ## Biallelic -->
+```{bash snp, eval=F, echo=T}
+module load bioinfo/gatk-4.1.2.0
+gatk IndexFeatureFile -F parvicapture.biallelic.vcf.gz
+gatk SelectVariants -V parvicapture.biallelic.vcf.gz -select-type SNP -O parvicapture.all.biallelic.snp.vcf.gz
+gatk IndexFeatureFile -F parvicapture.all.biallelic.snp.vcf.gz
+module load bioinfo/bcftools-1.8
+bcftools stats  --threads 8 parvicapture.all.biallelic.snp.vcf.gz
+```
 
-<!-- We then used `bcftools` to limit data to biallelic variants (`--max-alleles 2`), resulting in 19 242 294 biallelic variants. -->
+## Filters
 
-<!-- ```{bash biallelic, eval=F, echo=T} -->
-<!-- srun --mem=80G --cpus-per-task=8 --pty bash -->
-<!-- module load bioinfo/bcftools-1.8 -->
-<!-- bcftools view --max-alleles 2 --threads 8 symcapture.all.raw.vcf.gz | bgzip -c --threads 8 > symcapture.all.biallelic.vcf.gz -->
-<!-- bcftools stats  --threads 8 symcapture.all.biallelic.vcf.gz -->
-<!-- ``` -->
+We filtered the biallelic snp vcf with following filters (name, filter, description), resulting in 217 643 filtered biallelic snps,  using next histograms to set and test parameters values :
 
-<!-- ## SNP -->
+* __Quality ([QUAL](https://software.broadinstitute.org/gatk/documentation/article?id=7258))__ `QUAL < 30`: represents the likelihood of the site to be homozygote across all samples, we filter out variants having a low quality score (\@ref(fig:filtersR))
+* __Quality depth ([QD](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_QualByDepth.php))__ `QD < 2`: filter out variants with low variant confidence (\@ref(fig:filtersR))
+* __Fisher strand bias ([FS](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_FisherStrand.php))__ `FS > 60`: filter out variants based on Phred-scaled p-value using Fisher's exact test to detect strand bias (\@ref(fig:filtersR))
+* __Strand odd ratio ([SOR](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_StrandOddsRatio.php))__ `SOR < 3`: filter out variants based on Phred-scaled p-value used to detect strand bias (\@ref(fig:filtersR))
 
-<!-- We then used `gatk` to limit data to biallelic snps, resulting in 17 521 879 biallelic snps. -->
+```{bash filters, eval=F, echo=T}
+module load bioinfo/tabix-0.2.5
+module load bioinfo/vcftools-0.1.15
+vcftools --gzvcf parvicapture.all.biallelic.snp.vcf.gz --missing-indv -c > stats/missing.ind.txt
+vcftools --gzvcf parvicapture.all.biallelic.snp.vcf.gz --missing-site -c > stats/missing.site.txt
+vcftools --gzvcf parvicapture.all.biallelic.snp.vcf.gz --site-quality -c > stats/QUAL.txt
+vcftools --gzvcf parvicapture.all.biallelic.snp.vcf.gz --get-INFO AC --get-INFO AF --get-INFO QD \
+  --get-INFO FS --get-INFO SOR -c > stats/INFO.txt
+```
 
-<!-- ```{bash snp, eval=F, echo=T} -->
-<!-- module load bioinfo/gatk-4.1.2.0 -->
-<!-- gatk IndexFeatureFile \ -->
-<!--   -F symcapture.all.biallelic.vcf.gz -->
-<!-- gatk SelectVariants \ -->
-<!--   -V symcapture.all.biallelic.vcf.gz \ -->
-<!--   -select-type SNP \ -->
-<!--   -O symcapture.all.biallelic.snp.vcf.gz -->
-<!-- gatk IndexFeatureFile \ -->
-<!--   -F symcapture.all.biallelic.snp.vcf.gz -->
-<!-- module load bioinfo/bcftools-1.8 -->
-<!-- bcftools stats  --threads 8 symcapture.all.biallelic.snp.vcf.gz -->
-<!-- ``` -->
+```{r filtersR, fig.cap="Quality, quality by depth, fisher strand and strand odd ratios per biallelic SNPs."}
+filtering <- left_join(read_tsv(file.path(path, "Sequences", "calling", "stats", "missing.site.txt")),
+          read_tsv(file.path(path, "Sequences", "calling", "stats", "QUAL.txt"))) %>%
+  left_join(read_tsv(file.path(path, "Sequences", "calling", "stats", "INFO.txt"))) %>%
+  mutate(QD = as.numeric(QD)) %>%
+  mutate(AF = as.numeric(AF)) %>%
+  sample_n(1000) # for tests
+QUALthresh <- 30
+g.qual <- ggplot(filtering, aes(QUAL)) +
+  geom_rect(xmin = 0, xmax = log10(QUALthresh), ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = QUALthresh, col = "red", linetype = "dashed") +
+  xlab("Quality") +
+  ylab("Biallelic SNPs") +
+  scale_x_log10() +
+  ggtitle(paste0("QUAL: ", round(nrow(filter(filtering, QUAL > QUALthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, QUAL > QUALthresh)),
+                 " / ", nrow(filtering), ") variant above ", QUALthresh))
+QDthresh <- 2
+g.qd <- ggplot(filtering, aes(QD)) +
+  geom_rect(xmin = 0, xmax = QDthresh, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = QDthresh, col = "red", linetype = "dashed") +
+  xlab("Quality depth") +
+  ylab("Biallelic SNPs") +
+  ggtitle(paste0("QD: ", round(nrow(filter(filtering, QD > QDthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, QD > QDthresh)),
+                 " / ", nrow(filtering), ") variant above ", QDthresh))
+FSthresh <- 60
+g.fs <- ggplot(filtering, aes(FS)) +
+  geom_rect(xmin = FSthresh, xmax = 1000, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = FSthresh, col = "red", linetype = "dashed") +
+  xlab("Fisher Strand Ratio") +
+  ylab("Biallelic SNPs") +
+  ggtitle(paste0("FS: ", round(nrow(filter(filtering, FS < FSthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, FS < FSthresh)),
+                 " / ", nrow(filtering), ") variant above ", FSthresh))
+SORthresh <- 3
+g.sor <- ggplot(filtering, aes(SOR)) +
+  geom_rect(xmin = SORthresh, xmax = 100, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) +
+  geom_density(fill = "blue", alpha = 0.4, col = NA) +
+  geom_vline(xintercept = SORthresh, col = "red", linetype = "dashed") +
+  xlab("Strand Odd Ratio") +
+  ylab("Biallelic SNPs") +
+  ggtitle(paste0("SOR: ", round(nrow(filter(filtering, SOR < SORthresh))/nrow(filtering)*100, 2),
+                 "% (", nrow(filter(filtering, SOR < SORthresh)),
+                 " / ", nrow(filtering), ") variant below ", SORthresh))
+cowplot::plot_grid(g.qual, g.qd, g.fs, g.sor)
+```
 
-<!-- ## Filters -->
+```{bash filters2, eval=F, echo=T}
+module load bioinfo/gatk-4.1.2.0
+gatk VariantFiltration \
+  -V parvicapture.all.biallelic.snp.vcf.gz \
+  --filter-expression "QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0" \
+  --filter-name "FAIL" \
+  -O parvicapture.all.biallelic.snp.intermediate.vcf.gz
+gatk SelectVariants \
+  -V parvicapture.all.biallelic.snp.intermediate.vcf.gz \
+  --exclude-filtered \
+  -O parvicapture.all.biallelic.snp.filtered.vcf.gz
+gatk IndexFeatureFile -F parvicapture.all.biallelic.snp.filtered.vcf.gz
+module load bioinfo/bcftools-1.8
+bcftools stats --threads 8 parvicapture.all.biallelic.snp.filtered.vcf.gz
+```
 
-<!-- We filtered the biallelic snp vcf with following filters (name, filter, description), resulting in 15 531 866 filtered biallelic snps,  using next histograms to set and test parameters values : -->
+## Missing data
 
-<!-- * __Quality ([QUAL](https://software.broadinstitute.org/gatk/documentation/article?id=7258))__ `QUAL < 30`: represents the likelihood of the site to be homozygote across all samples, we filter out variants having a low quality score (\@ref(fig:filtersR)) -->
-<!-- * __Quality depth ([QD](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_QualByDepth.php))__ `QD < 2`: filter out variants with low variant confidence (\@ref(fig:filtersR)) -->
-<!-- * __Fisher strand bias ([FS](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_FisherStrand.php))__ `FS > 60`: filter out variants based on Phred-scaled p-value using Fisher's exact test to detect strand bias (\@ref(fig:filtersR)) -->
-<!-- * __Strand odd ratio ([SOR](https://software.broadinstitute.org/gatk/documentation/tooldocs/3.8-0/org_broadinstitute_gatk_tools_walkers_annotator_StrandOddsRatio.php))__ `SOR < 3`: filter out variants based on Phred-scaled p-value used to detect strand bias (\@ref(fig:filtersR)) -->
+Missing data filtering is a bit more tricky because missing data of SNPs and individuals are related, *e.g.* removing individuals with a lot of missing data result in the decrease of SNPs. Ideally, we would want to keep all individuals, but this would result in a lot of SNP loss because of least represented individuals. So we need to chose a threshold for missing data for individuals `--mind` and SNPs `--geno`.
 
-<!-- ```{bash filters, eval=F, echo=T} -->
-<!-- vcftools --gzvcf reference.sequences_00.vcf.gz --missing-indv -c -->
-<!-- vcftools --gzvcf reference.sequences_00.vcf.gz --missing-site -c > missing.txt -->
-<!-- vcftools --gzvcf reference.sequences_00.vcf.gz --site-quality -c > QUAL.txt -->
-<!-- vcftools --gzvcf reference.sequences_00.vcf.gz \ -->
-<!--   --get-INFO AC \ -->
-<!--   --get-INFO AF \ -->
-<!--   --get-INFO QD \ -->
-<!--   --get-INFO FS \ -->
-<!--   --get-INFO SOR \ -->
-<!--   -c > INFO.txt -->
-<!-- ``` -->
+```{bash missing, eval=F, echo=T}
+module load bioinfo/plink_high_contig_20190905
+module load bioinfo/plink2_high_contig_20190905
+mkdir filtered
+plink2 --threads 8 --memory 20000 \
+  --vcf parvicapture.all.biallelic.snp.filtered.vcf.gz \
+  --allow-extra-chr \
+  --make-bed --out filtered/parvicapture.biallelic.snp.filtered
+  --missing --het --freq --pca
+```
 
-<!-- ```{r filtersR, fig.cap="Quality, quality by depth, fisher strand and strand odd ratios per biallelic SNPs."} -->
-<!-- filtering <- left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "missing.txt")), -->
-<!--           read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "QUAL.txt"))) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "symcapture.vcf.stats", "INFO.txt"))) %>%  -->
-<!--   mutate(QD = as.numeric(QD)) %>%  -->
-<!--   mutate(AF = as.numeric(AF)) %>%  -->
-<!--   sample_n(1000) # for tests -->
-<!-- QUALthresh <- 30 -->
-<!-- g.qual <- ggplot(filtering, aes(QUAL)) +  -->
-<!--   geom_rect(xmin = 0, xmax = log10(QUALthresh), ymin = 0, ymax = 100, col = "grey", alpha = 0.4) + -->
-<!--   geom_density(fill = "blue", alpha = 0.4, col = NA) + -->
-<!--   geom_vline(xintercept = QUALthresh, col = "red", linetype = "dashed") + -->
-<!--   xlab("Quality") + -->
-<!--   ylab("Biallelic SNPs") + -->
-<!--   scale_x_log10() + -->
-<!--   ggtitle(paste0("QUAL: ", round(nrow(filter(filtering, QUAL > QUALthresh))/nrow(filtering)*100, 2), -->
-<!--                  "% (", nrow(filter(filtering, QUAL > QUALthresh)),  -->
-<!--                  " / ", nrow(filtering), ") variant above ", QUALthresh)) -->
-<!-- QDthresh <- 2 -->
-<!-- g.qd <- ggplot(filtering, aes(QD)) +  -->
-<!--   geom_rect(xmin = 0, xmax = QDthresh, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) + -->
-<!--   geom_density(fill = "blue", alpha = 0.4, col = NA) + -->
-<!--   geom_vline(xintercept = QDthresh, col = "red", linetype = "dashed") + -->
-<!--   xlab("Quality depth") + -->
-<!--   ylab("Biallelic SNPs") + -->
-<!--   ggtitle(paste0("QD: ", round(nrow(filter(filtering, QD > QDthresh))/nrow(filtering)*100, 2), -->
-<!--                  "% (", nrow(filter(filtering, QD > QDthresh)),  -->
-<!--                  " / ", nrow(filtering), ") variant above ", QDthresh)) -->
-<!-- FSthresh <- 60 -->
-<!-- g.fs <- ggplot(filtering, aes(FS)) +  -->
-<!--   geom_rect(xmin = FSthresh, xmax = 1000, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) + -->
-<!--   geom_density(fill = "blue", alpha = 0.4, col = NA) + -->
-<!--   geom_vline(xintercept = FSthresh, col = "red", linetype = "dashed") + -->
-<!--   xlab("Fisher Strand Ratio") + -->
-<!--   ylab("Biallelic SNPs") + -->
-<!--   ggtitle(paste0("FS: ", round(nrow(filter(filtering, FS < FSthresh))/nrow(filtering)*100, 2), -->
-<!--                  "% (", nrow(filter(filtering, FS < FSthresh)),  -->
-<!--                  " / ", nrow(filtering), ") variant above ", FSthresh)) -->
-<!-- SORthresh <- 3 -->
-<!-- g.sor <- ggplot(filtering, aes(SOR)) +  -->
-<!--   geom_rect(xmin = SORthresh, xmax = 100, ymin = 0, ymax = 100, col = "grey", alpha = 0.4) + -->
-<!--   geom_density(fill = "blue", alpha = 0.4, col = NA) + -->
-<!--   geom_vline(xintercept = SORthresh, col = "red", linetype = "dashed") + -->
-<!--   xlab("Strand Odd Ratio") + -->
-<!--   ylab("Biallelic SNPs") + -->
-<!--   ggtitle(paste0("SOR: ", round(nrow(filter(filtering, SOR < SORthresh))/nrow(filtering)*100, 2), -->
-<!--                  "% (", nrow(filter(filtering, SOR < SORthresh)),  -->
-<!--                  " / ", nrow(filtering), ") variant below ", SORthresh)) -->
-<!-- cowplot::plot_grid(g.qual, g.qd, g.fs, g.sor) -->
-<!-- ``` -->
-
-<!-- ```{bash filters2, eval=F, echo=T} -->
-<!-- module load bioinfo/gatk-4.1.2.0 -->
-<!-- gatk VariantFiltration \ -->
-<!--   -V symcapture.all.biallelic.snp.vcf.gz \ -->
-<!--   --filter-expression "QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0" \ -->
-<!--   --filter-name "FAIL" \ -->
-<!--   -O symcapture.all.biallelic.snp.intermediate.vcf.gz -->
-<!-- gatk SelectVariants \ -->
-<!--   -V symcapture.all.biallelic.snp.intermediate.vcf.gz \ -->
-<!--   --exclude-filtered \ -->
-<!--   -O symcapture.all.biallelic.snp.filtered.vcf.gz -->
-<!-- module load bioinfo/bcftools-1.8 -->
-<!-- bcftools stats --threads 8 symcapture.all.biallelic.snp.filtered.vcf.gz -->
-<!-- gatk IndexFeatureFile \ -->
-<!--   -F symcapture.all.biallelic.snp.filtered.vcf.gz -->
-<!-- ``` -->
-
-<!-- ## Missing data -->
-
-<!-- Missing data filtering is a bit more tricky because missing data of SNPs and individuals are related, *e.g.* removing individuals with a lot of missing data result in the decrease of SNPs. Ideally, we would want to keep all individuals, but this would result in a lot of SNP loss because of least represented individuals. So we need to chose a threshold for missing data for individuals `--mind` and SNPs `--geno`. -->
-
-<!-- ```{bash missing, eval=F, echo=T} -->
-<!-- module load bioinfo/plink_high_contig_20190905 -->
-<!-- module load bioinfo/plink2_high_contig_20190905 -->
-<!-- mkdir filtered -->
-<!-- plink2 --threads 8 --memory 80000 \ -->
-<!--   --vcf symcapture.all.biallelic.snp.filtered.vcf.gz \ -->
-<!--   --allow-extra-chr \ -->
-<!--   --make-bed --out filtered/symcapture.all.biallelic.snp.filtered -->
-<!-- cd filtered -->
-<!-- plink --threads 8 --memory 80000 \ -->
-<!--   --bfile symcapture.all.biallelic.snp.filtered \ -->
-<!--   --allow-extra-chr --missing --het --freq --pca --freqx \ -->
-<!--   --out symcapture.all.biallelic.snp.filtered -->
-<!-- ``` -->
+```{r missingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP before missing data filtering per individual."}
+g.het_imiss <- read_delim(file.path(path, "Sequences", "calling", "filtered",
+                                    "parvicapture.biallelic.snp.filtered.imiss"), delim = " ") %>%
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
+  mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", IID)) %>%
+  mutate(IdGenetic = gsub(" ", "", IdGenetic)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(F_MISS, fill = paste(Genus, Species))) +
+  geom_histogram(position = "dodge") +
+  scale_x_log10() +
+  scale_fill_discrete("Species", guide = "none") +
+  xlab("Proportion of missing SNPs per individual")
+g.pca <- read_delim(file.path(path, "Sequences", "calling", "filtered",
+                              "parvicapture.biallelic.snp.filtered.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species))) +
+  geom_point(size=2) +
+  stat_ellipse(level = 0.95, size = 1) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species")
+cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2))
+```
 
 
-<!-- ```{r missingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP before missing data filtering per individual."} -->
-<!-- g.het_imiss <- read_delim(file.path(path, "Sequences", "variantCalling", "filtered",  -->
-<!--                                     "symcapture.all.biallelic.snp.filtered.imiss"), delim = " ") %>% -->
-<!--   dplyr::rename_all(funs(gsub(" ", "", .))) %>%  -->
-<!--   mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", IID)) %>%  -->
-<!--   mutate(Ind = gsub(" ", "", Ind)) %>%  -->
-<!--   left_join( googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop")) %>%  -->
-<!--   ggplot(aes(F_MISS, fill = Pop2)) + -->
-<!--   geom_histogram(position = "dodge") + -->
-<!--   scale_x_log10() + -->
-<!--   xlab("Proportion of missing SNPs per individual") -->
-<!-- g.pca <- read_delim(file.path(path, "Sequences", "variantCalling", "filtered",  -->
-<!--                               "symcapture.all.biallelic.snp.filtered.eigenvec"),  -->
-<!--            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", Sample)) %>%  -->
-<!--   left_join( googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop")) %>%  -->
-<!--   filter(Pop2 != "O") %>% -->
-<!--   ggplot(aes(x = PCA1, y = PCA2, col = Pop)) +  -->
-<!--   geom_point(size=2) + -->
-<!--   stat_ellipse(level = 0.95, size = 1) + -->
-<!--   geom_hline(yintercept = 0) + -->
-<!--   geom_vline(xintercept = 0) -->
-<!-- cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2)) -->
-<!-- ``` -->
+```{r missingSNP, fig.cap="Missing data statistics for filtered biallelic SNP before missing data filtering per SNP."}
+read_delim(file.path(path, "Sequences", "calling", "filtered",
+                                "parvicapture.biallelic.snp.filtered.lmiss"), delim = " ") %>%
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
+  dplyr::rename(contig = CHR) %>%
+  mutate(type = ifelse(grepl("TRINITY", contig), "functional", "neutral")) %>% 
+  mutate(F_MISS = as.numeric(F_MISS)) %>%
+  ggplot(aes(F_MISS)) +
+  geom_histogram(position = "dodge") +
+  facet_wrap(~ type, scales = "free") +
+  xlab("Proportion of missing data") +
+  ylab("SNP count") +
+  scale_y_sqrt() +
+  scale_x_sqrt() +
+  geom_vline(xintercept = c(0.15, 0.05), col = "red", linetype = "dashed")
+```
 
 
-<!-- ```{r missingSNP, fig.cap="Missing data statistics for filtered biallelic SNP before missing data filtering per SNP."} -->
-<!-- read_delim(file.path(path, "Sequences", "variantCalling", "filtered",  -->
-<!--                                 "symcapture.all.biallelic.snp.filtered.lmiss"), delim = " ") %>%  -->
-<!--   dplyr::rename_all(funs(gsub(" ", "", .))) %>%   -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "genes.list"), -->
-<!--                      col_names = "contig") %>%  -->
-<!--               mutate(type = "functional") %>%  -->
-<!--               bind_rows(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "neutral.list"), -->
-<!--                                  col_names = "contig") %>%  -->
-<!--                           mutate(type = "neutral"))) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "genes.targets.list"), -->
-<!--                      col_names = "contig") %>%  -->
-<!--               mutate(type = "functional") %>%  -->
-<!--               separate(contig, c("transcript", "contig"), sep = "_on_") %>%  -->
-<!--               dplyr::select(-transcript) %>%  -->
-<!--               bind_rows(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "neutral.targets.list"), -->
-<!--                                  col_names = "contig") %>%  -->
-<!--                           mutate(type = "neutral")) %>%  -->
-<!--               mutate(target = 1)) %>%  -->
-<!--   mutate(target = ifelse(is.na(target), 0, target)) %>%  -->
-<!--   mutate(F_MISS = as.numeric(F_MISS)) %>%  -->
-<!--   ggplot(aes(F_MISS)) + -->
-<!--   geom_histogram(position = "dodge") + -->
-<!--   facet_grid(target ~ type,  -->
-<!--              labeller = "label_both", scales = "free") + -->
-<!--   xlab("Proportion of missing data") + -->
-<!--   ylab("SNP count") + -->
-<!--   scale_y_sqrt() + -->
-<!--   scale_x_sqrt() -->
-<!-- ``` -->
+### Normal filter
 
+With a maximum of 95% of missing data per individual `--mind 0.95`, a maximum of 15% of missing data per SNP `-geno 0.15` and a minimum allele frequency of 10% `-maf 0.1`, we obtained **4964** biallelic filtered snps for **435** individuals (3 lost).
 
-<!-- ### Normal filter -->
+```{bash nonmissing, eval=F, echo=T}
+module load bioinfo/plink_high_contig_20190905
+module load bioinfo/plink2_high_contig_20190905
+rm -r nonmissing
+mkdir nonmissing
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --mind 0.95 --geno 0.15 -maf 0.1 \
+  --make-bed --out nonmissing/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile nonmissing/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out nonmissing/parvicapture.biallelic.snp.filtered.nonmissing
+```
 
-<!-- With a maximum of 95% of missing data per individual `--mind 0.95` and a maximum of 15% of missing data per SNP `-geno 0.15`, we obtained **454 262** biallelic filtered snps for **406** individuals. -->
+```{r nonmissingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.het_imiss <- read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
+                                    "parvicapture.biallelic.snp.filtered.nonmissing.imiss"), delim = " ") %>%
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
+  mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", IID)) %>%
+  mutate(IdGenetic = gsub(" ", "", IdGenetic)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(F_MISS, fill = paste(Genus, Species))) +
+  geom_histogram(position = "dodge") +
+  scale_fill_discrete("Species", guide = "none") +
+  xlab("Proportion of missing SNPs per individual")
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  filter(Species != "congestiflora") %>% 
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species))) +
+  geom_point(size=2) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species")
+cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2))
+```
 
-<!-- ```{bash nonmissing, eval=F, echo=T} -->
-<!-- module load bioinfo/plink_high_contig_20190905 -->
-<!-- module load bioinfo/plink2_high_contig_20190905 -->
-<!-- mkdir nonmissing -->
-<!-- plink2 --threads 8 --memory 80000 \ -->
-<!--   --bfile filtered/symcapture.all.biallelic.snp.filtered \ -->
-<!--   --allow-extra-chr \ -->
-<!--   --mind 0.95 --geno 0.15 \ -->
-<!--   --make-bed --out nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing -->
-<!-- cd nonmissing -->
-<!-- plink --threads 8 --memory 80000 \ -->
-<!--   --bfile symcapture.all.biallelic.snp.filtered.nonmissing \ -->
-<!--   --allow-extra-chr --missing --het --freqx --pca \ -->
-<!--   --out symcapture.all.biallelic.snp.filtered.nonmissing -->
-<!-- ``` -->
+```{r nonmissingSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."}
+read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
+                                "parvicapture.biallelic.snp.filtered.nonmissing.lmiss"), delim = " ") %>%
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
+  dplyr::rename(contig = CHR) %>%
+  mutate(type = ifelse(grepl("TRINITY", contig), "functional", "neutral")) %>% 
+  mutate(F_MISS = as.numeric(F_MISS)) %>%
+  ggplot(aes(F_MISS)) +
+  geom_histogram(position = "dodge") +
+  facet_grid(~ type) +
+  xlab("Proportion of missing data") +
+  ylab("SNP count") +
+  scale_y_sqrt() +
+  scale_x_sqrt()
+```
 
-<!-- ```{r nonmissingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."} -->
-<!-- g.het_imiss <- read_delim(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!--                                     "symcapture.all.biallelic.snp.filtered.nonmissing.imiss"), delim = " ") %>% -->
-<!--   dplyr::rename_all(funs(gsub(" ", "", .))) %>%  -->
-<!--   mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", IID)) %>%  -->
-<!--   mutate(Ind = gsub(" ", "", Ind)) %>%  -->
-<!--   left_join( googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop")) %>%  -->
-<!--   ggplot(aes(F_MISS, fill = Pop2)) + -->
-<!--   geom_histogram(position = "dodge") + -->
-<!--   scale_x_log10() + -->
-<!--   xlab("Proportion of missing SNPs per individual") -->
-<!-- g.pca <- read_delim(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!--                               "symcapture.all.biallelic.snp.filtered.nonmissing.eigenvec"),  -->
-<!--            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", Sample)) %>%  -->
-<!--   left_join( googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop")) %>%  -->
-<!--   filter(Pop2 != "O") %>% -->
-<!--   ggplot(aes(x = PCA1, y = PCA2, col = Pop)) +  -->
-<!--   geom_point(size=2) + -->
-<!--   stat_ellipse(level = 0.95, size = 1) + -->
-<!--   geom_hline(yintercept = 0) + -->
-<!--   geom_vline(xintercept = 0) -->
-<!-- cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2)) -->
-<!-- ``` -->
+## Parvifolia
 
-<!-- ```{r nonmissingSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."} -->
-<!-- read_delim(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!--                                 "symcapture.all.biallelic.snp.filtered.nonmissing.lmiss"), delim = " ") %>%  -->
-<!--   dplyr::rename_all(funs(gsub(" ", "", .))) %>%   -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "genes.list"), -->
-<!--                      col_names = "contig") %>%  -->
-<!--               mutate(type = "functional") %>%  -->
-<!--               bind_rows(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "neutral.list"), -->
-<!--                                  col_names = "contig") %>%  -->
-<!--                           mutate(type = "neutral"))) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "genes.targets.list"), -->
-<!--                      col_names = "contig") %>%  -->
-<!--               mutate(type = "functional") %>%  -->
-<!--               separate(contig, c("transcript", "contig"), sep = "_on_") %>%  -->
-<!--               dplyr::select(-transcript) %>%  -->
-<!--               bind_rows(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "neutral.targets.list"), -->
-<!--                                  col_names = "contig") %>%  -->
-<!--                           mutate(type = "neutral")) %>%  -->
-<!--               mutate(target = 1)) %>%  -->
-<!--   mutate(target = ifelse(is.na(target), 0, target)) %>%  -->
-<!--   mutate(F_MISS = as.numeric(F_MISS)) %>%  -->
-<!--   ggplot(aes(F_MISS)) + -->
-<!--   geom_histogram(position = "dodge") + -->
-<!--   facet_grid(target ~ type,  -->
-<!--              labeller = "label_both") + -->
-<!--   xlab("Proportion of missing data") + -->
-<!--   ylab("SNP count") + -->
-<!--   scale_y_sqrt() + -->
-<!--   scale_x_sqrt() -->
-<!-- ``` -->
+Finally, we subseted the filtered and biallelic snp from the Parvifolia clade, resulting in **X** remaining individuals.
 
-<!-- ```{r nonmissingHeterozigosity, fig.cap="Heterozigosity statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."} -->
-<!-- g.het.dens <- read_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!--                                  "symcapture.all.biallelic.snp.filtered.nonmissing.frqx")) %>%  -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   dplyr::rename(het = `C(HET)`, homA1 = `C(HOM A1)`, homA2 = `C(HOM A2)`) %>%  -->
-<!--   mutate(heterozigosity = het/(homA1+homA2+het)) %>%  -->
-<!--   ggplot(aes(heterozigosity)) + -->
-<!--   geom_density() + -->
-<!--   scale_y_sqrt() -->
-<!-- # read_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!-- #                                 "symcapture.all.biallelic.snp.filtered.nonmissing.frqx")) %>%  -->
-<!-- #   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!-- #                                 "symcapture.all.biallelic.snp.filtered.nonmissing.bim"), -->
-<!-- #          col_names = c("CHR", "SNP", "POScenti", "POS", "A1", "A2"))) %>%  -->
-<!-- #   dplyr::rename(contig = CHR) %>%  -->
-<!-- #   filter(contig %in% unique(g.het.dens$data$contig)[1:250]) %>% -->
-<!-- #   rename(het = `C(HET)`, homA1 = `C(HOM A1)`, homA2 = `C(HOM A2)`) %>%  -->
-<!-- #   mutate(heterozigosity = het/(homA1+homA2+het)) %>%  -->
-<!-- #   mutate(CHR = as.numeric(as.factor(contig))) %>%  -->
-<!-- #   select(CHR, POS, heterozigosity) %>%  -->
-<!-- #   filter(!is.na(POS)) %>%  -->
-<!-- #   qqman::manhattan(chr = "CHR", bp = "POS", p = "heterozigosity", logp = F, -->
-<!-- #                    xlab = "First 1k contigs", ylab = "Heterozigosity") -->
-<!-- g.snp.dens <- read_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!--                                 "symcapture.all.biallelic.snp.filtered.nonmissing.frqx")) %>%  -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   group_by(contig) %>%  -->
-<!--   summarise(N = n()) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "reference", "reference.fasta.fai"),  -->
-<!--                      col_names = c("contig", "length", "byteIndex", "bases", "bytes"))) %>%  -->
-<!--   ggplot(aes(N/length*1000)) + -->
-<!--   geom_histogram() + -->
-<!--   scale_x_log10() + -->
-<!--   xlab("SNPs per 1000 bp per contig") -->
-<!-- cowplot::plot_grid(g.het.dens, g.snp.dens, nrow = 2) -->
-<!-- ``` -->
-
-<!-- ### Hard filter -->
-
-<!-- With a maximum of 95% of missing data per individual `--mind 0.95` and a maximum of 5% of missing data per SNP `-geno 0.05`, we obtained **180 217** biallelic filtered snps for **406** individuals. -->
-
-<!-- ```{bash hardFilter, eval=F, echo=T} -->
-<!-- module load bioinfo/plink_high_contig_20190905 -->
-<!-- module load bioinfo/plink2_high_contig_20190905 -->
-<!-- mkdir hardFilter -->
-<!-- plink2 --threads 8 --memory 80000 \ -->
-<!--   --bfile filtered/symcapture.all.biallelic.snp.filtered \ -->
-<!--   --allow-extra-chr \ -->
-<!--   --mind 0.95 --geno 0.05 \ -->
-<!--   --make-bed --out hardFilter/symcapture.all.biallelic.snp.filtered.hardfiltered -->
-<!-- cd hardFilter -->
-<!-- plink --threads 8 --memory 80000 \ -->
-<!--   --bfile symcapture.all.biallelic.snp.filtered.hardfiltered \ -->
-<!--   --allow-extra-chr --missing --het --freq --pca \ -->
-<!--   --out symcapture.all.biallelic.snp.filtered.hardfiltered -->
-<!-- ``` -->
-
-<!-- ```{r hardIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 5% for SNPs) per individual."} -->
-<!-- g.het_imiss <- read_delim(file.path(path, "Sequences", "variantCalling", "hardFilter",  -->
-<!--                                     "symcapture.all.biallelic.snp.filtered.hardfiltered.imiss"), delim = " ") %>% -->
-<!--   dplyr::rename_all(funs(gsub(" ", "", .))) %>%  -->
-<!--   mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", IID)) %>%  -->
-<!--   mutate(Ind = gsub(" ", "", Ind)) %>%  -->
-<!--   left_join( googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop")) %>%  -->
-<!--   ggplot(aes(F_MISS, fill = Pop2)) + -->
-<!--   geom_histogram(position = "dodge") + -->
-<!--   scale_x_log10() + -->
-<!--   xlab("Proportion of missing SNPs per individual") -->
-<!-- g.pca <- read_delim(file.path(path, "Sequences", "variantCalling", "hardFilter",  -->
-<!--                               "symcapture.all.biallelic.snp.filtered.hardfiltered.eigenvec"),  -->
-<!--            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", Sample)) %>%  -->
-<!--   left_join( googlesheets::gs_title("Symcapture") %>%  -->
-<!--               googlesheets::gs_read("Pop")) %>%  -->
-<!--   filter(Pop2 != "O") %>% -->
-<!--   ggplot(aes(x = PCA1, y = PCA2, col = Pop)) +  -->
-<!--   geom_point(size=2) + -->
-<!--   stat_ellipse(level = 0.95, size = 1) + -->
-<!--   geom_hline(yintercept = 0) + -->
-<!--   geom_vline(xintercept = 0) -->
-<!-- cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2)) -->
-<!-- ``` -->
-
-<!-- ```{r hardSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (90% for individuals and 15% for SNPs) per SNP."} -->
-<!-- read_delim(file.path(path, "Sequences", "variantCalling", "hardFilter",  -->
-<!--                                 "symcapture.all.biallelic.snp.filtered.hardfiltered.lmiss"), delim = " ") %>%  -->
-<!--   dplyr::rename_all(funs(gsub(" ", "", .))) %>%   -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "genes.list"), -->
-<!--                      col_names = "contig") %>%  -->
-<!--               mutate(type = "functional") %>%  -->
-<!--               bind_rows(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "neutral.list"), -->
-<!--                                  col_names = "contig") %>%  -->
-<!--                           mutate(type = "neutral"))) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "genes.targets.list"), -->
-<!--                      col_names = "contig") %>%  -->
-<!--               mutate(type = "functional") %>%  -->
-<!--               separate(contig, c("transcript", "contig"), sep = "_on_") %>%  -->
-<!--               dplyr::select(-transcript) %>%  -->
-<!--               bind_rows(read_tsv(file.path(path, "Sequences", "variantCalling", "annotation", "neutral.targets.list"), -->
-<!--                                  col_names = "contig") %>%  -->
-<!--                           mutate(type = "neutral")) %>%  -->
-<!--               mutate(target = 1)) %>%  -->
-<!--   mutate(target = ifelse(is.na(target), 0, target)) %>%  -->
-<!--   mutate(F_MISS = as.numeric(F_MISS)) %>%  -->
-<!--   ggplot(aes(F_MISS)) + -->
-<!--   geom_histogram(position = "dodge") + -->
-<!--   facet_grid(target ~ type,  -->
-<!--              labeller = "label_both") + -->
-<!--   xlab("Proportion of missing data") + -->
-<!--   ylab("SNP count") + -->
-<!--   scale_y_sqrt() + -->
-<!--   scale_x_sqrt() -->
-<!-- ``` -->
-
-<!-- ```{r hardHeterozigosity, fig.cap="Heterozigosity statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 5% for SNPs) per SNP."} -->
-<!-- g.het.dens <- read_tsv(file.path(path, "Sequences", "variantCalling", "hardFilter",  -->
-<!--                                  "symcapture.all.biallelic.snp.filtered.hardfiltered.frqx")) %>%  -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   dplyr::rename(het = `C(HET)`, homA1 = `C(HOM A1)`, homA2 = `C(HOM A2)`) %>%  -->
-<!--   mutate(heterozigosity = het/(homA1+homA2+het)) %>%  -->
-<!--   ggplot(aes(heterozigosity)) + -->
-<!--   geom_density() + -->
-<!--   scale_y_sqrt() -->
-<!-- # read_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!-- #                                 "symcapture.all.biallelic.snp.filtered.nonmissing.frqx")) %>%  -->
-<!-- #   left_join(read_tsv(file.path(path, "Sequences", "variantCalling", "nonmissing",  -->
-<!-- #                                 "symcapture.all.biallelic.snp.filtered.nonmissing.bim"), -->
-<!-- #          col_names = c("CHR", "SNP", "POScenti", "POS", "A1", "A2"))) %>%  -->
-<!-- #   dplyr::rename(contig = CHR) %>%  -->
-<!-- #   filter(contig %in% unique(g.het.dens$data$contig)[1:250]) %>% -->
-<!-- #   rename(het = `C(HET)`, homA1 = `C(HOM A1)`, homA2 = `C(HOM A2)`) %>%  -->
-<!-- #   mutate(heterozigosity = het/(homA1+homA2+het)) %>%  -->
-<!-- #   mutate(CHR = as.numeric(as.factor(contig))) %>%  -->
-<!-- #   select(CHR, POS, heterozigosity) %>%  -->
-<!-- #   filter(!is.na(POS)) %>%  -->
-<!-- #   qqman::manhattan(chr = "CHR", bp = "POS", p = "heterozigosity", logp = F, -->
-<!-- #                    xlab = "First 1k contigs", ylab = "Heterozigosity") -->
-<!-- g.snp.dens <- read_tsv(file.path(path, "Sequences", "variantCalling", "hardFilter",  -->
-<!--                                 "symcapture.all.biallelic.snp.filtered.hardfiltered.frqx")) %>%  -->
-<!--   dplyr::rename(contig = CHR) %>%  -->
-<!--   group_by(contig) %>%  -->
-<!--   summarise(N = n()) %>%  -->
-<!--   left_join(read_tsv(file.path(path, "Sequences", "reference", "reference.fasta.fai"),  -->
-<!--                      col_names = c("contig", "length", "byteIndex", "bases", "bytes"))) %>%  -->
-<!--   ggplot(aes(N/length*1000)) + -->
-<!--   geom_histogram() + -->
-<!--   scale_x_log10() + -->
-<!--   xlab("SNPs per 1000 bp per contig") -->
-<!-- cowplot::plot_grid(g.het.dens, g.snp.dens, nrow = 2) -->
-<!-- ``` -->
-
-<!-- ## Parvifolia -->
-
-<!-- Finally, we subseted the filtered and biallelic snp from Paracou individuals, resulting in **385** remaining individuals (**17 lost !**). -->
-
-<!-- ```{bash paracou, eval=F, echo=T} -->
-<!-- module load bioinfo/plink2-v2.0_alpha2 -->
-<!-- mkdir paracou -->
-<!-- plink2 \ -->
-<!--   --bfile nonmissing/symcapture.all.biallelic.snp.filtered.nonmissing \ -->
-<!--   --allow-extra-chr \ -->
-<!--   --keep Paracou.fam \ -->
-<!--   --make-bed --out paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou -->
-<!--   # --recode vcf-iid -->
-<!-- ``` -->
+```{bash hard, eval=F, echo=T}
+module load bioinfo/plink_high_contig_20190905
+module load bioinfo/plink2_high_contig_20190905
+rm -r parvifolia
+mkdir parvifolia
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --keep Parvifolia.fam \
+  --mind 0.50 --geno 0.0 \
+  --make-bed --out parvifolia/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile parvifolia/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out parvifolia/parvicapture.biallelic.snp.filtered.nonmissing
+```

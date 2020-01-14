@@ -1,3 +1,7 @@
+# PhD 0.1.9159
+* parvicapture: SNP filtering
+* symcapture: Animal with pop var
+
 # PhD 0.1.9158
 * parvicapture: sequences delivery, quality, trimming, mapping, and SNP calling
 * symcapture: synonymy, TWI outlier

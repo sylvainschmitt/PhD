@@ -255,47 +255,69 @@ The TWI-associated SNP is a putative hitchiker located at 305 bp of gene coding 
 
 ### Proportion of Variance Explained
 
-```{r TWIPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic with Topographic Wetness Index (TWI)."}
+#### Animal
+
+$$y_i \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
+$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
+
+```{r TWIAnimal, fig.cap="Proportion of Variance Explained (PVE) by TWI."}
 Y <- trees %>%
-  # filter(pop == "globuliferaTypeParacou") %>% # to test within populations
-  dplyr::select(FID, IID, TWI) %>%
-  mutate(TWI = RNOmni::rankNorm(TWI)) %>%
-  arrange(IID)
-fam <- read_delim(file.path(path, "gemma", "Gmax", "paracou3pop.fam"), delim = " ", 
+  mutate(popNum = as.numeric(as.factor(pop))) %>%
+  dplyr::select(FID, IID, TWI, pop, popNum) %>%
+  mutate(TWI = TWI/sd(TWI))
+fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
                   col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-K <- read_tsv(file.path(path, "gemma", "Gmax", "paracou3pop.kinship.sXX.txt"), 
+K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
               col_names = fam$IID) %>% 
   mutate(IID = fam$IID) %>% 
   column_to_rownames(var = "IID") %>% 
   as.matrix()
-K <- K - min(K)
-# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
-# fitsAnimal$TWI <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$TWI, K = K[Y$IID,Y$IID]), save_warmup = F)
+# Yl <- list(paracou3pop = Y, sp1 = filter(Y, pop == "sp1"),
+#           globuliferaTypeParacou = filter(Y, pop == "globuliferaTypeParacou"),
+#           globuliferaTypeRegina = filter(Y, pop == "globuliferaTypeRegina"))
+# model <- stan_model("./symcapture_models/Animal.stan")
+# fitsAnimal$TWI <- lapply(Yl, function(pop)
+#   sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
+#            control = list(adapt_delta = 0.99),
+#            data = list(N = nrow(pop), Y = pop$TWI, K = K[pop$IID,pop$IID])))
 # save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
 load(file.path("symcapture_save", 'AnimalModels.Rdata'))
-g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "TWI") %>% 
-                 dplyr::select(TWI), 
-               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
-  ggplot(aes(Kinship, TWI)) + geom_point(alpha = 0.1)
-g.sigma <- mcmc_combo(as.array(fitsAnimal$TWI ,  pars = c("sigmaG", "sigmaE")))
-# mcmc_pairs(as.array(fitsAnimal$TWI,  pars = c("sigma_G", "sigma_E")))
-g.breed <- mcmc_intervals_data(as.array(fitsAnimal$TWI ,  pars = "u_tilde")) %>% 
-  mutate(IID = Y$IID) %>% 
-  left_join(dplyr::select(trees, IID, pop)) %>%
-  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
-             xend = datatools::reorder_within(IID, m, pop)),
-         col = "lightgrey") +
-  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.2) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
-  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
-  ylab("Breeding value") +
-  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
-        axis.ticks.x = element_blank(), axis.text.x = element_blank())
-gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
-                        layout_matrix = rbind(c(1,2), c(3,2)))
+cowplot::plot_grid(plotlist = lapply(fitsAnimal$TWI, mcmc_combo, pars = c("sigmaG", "sigmaR")), 
+                   labels = names(fitsAnimal$TWI))
+lapply(fitsAnimal$TWI, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T, estimate.method = "median") %>% 
+  bind_rows(.id = "Population")
+```
+
+#### Animal Pop Mean Var
+
+$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
+$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
+
+```{r TWIAnimalPopMeanVar, fig.cap="Proportion of Variance Explained (PVE) by TWI."}
+# Karray <- sapply(1:max(Y$popNum), function(p){
+#   Kp = K[Y$IID,Y$IID]
+#   for(n in 1:nrow(Y)) {
+#     if(Y$popNum[n] != p) {
+#       Kp[,n] = 10^-6
+#       Kp[n,] = 10^-6
+#     }
+#   }
+#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
+# })
+# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
+# sigmaY <- group_by(Y, popNum) %>%
+#   summarise(sigmaY = var(TWI)) %>%
+#   dplyr::select(sigmaY) %>% unlist()
+# model <- stan_model("./symcapture_models/AnimalPopMeanVar.stan")
+# fitsAnimal$TWI <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
+#                             control = list(adapt_delta = 0.9),
+#                             data = list(J = 1, N = nrow(Y), Y = Y$TWI, sigmaY = sigmaY,
+#                                         K = aperm(Karray, c(3,1,2)),
+#                                         P = max(Y$popNum), pop = Y$popNum))
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
+mcmc_combo(as.array(fitsAnimal$TWI ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
+broom::tidyMCMC(fitsAnimal$TWI,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
 ```
 
 ### Major effect SNPs
@@ -435,39 +457,69 @@ Neighbor crowding index (NCI) is a strong environmental factor of genomic variat
 
 ### Proportion of Variance Explained
 
-```{r NCIPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic with Neighbor Crowding Index (NCI)."}
+#### Animal
+
+$$y_i \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
+$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
+
+```{r NCIAnimal, fig.cap="Proportion of Variance Explained (PVE) by NCI"}
 Y <- trees %>%
-  dplyr::select(FID, IID, NCI) %>%
-  mutate(NCI = RNOmni::rankNorm(NCI)) %>%
-  arrange(IID)
-# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
-# fitsAnimal$NCI <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$NCI, K = K[Y$IID,Y$IID]), save_warmup = F)
+  mutate(popNum = as.numeric(as.factor(pop))) %>%
+  dplyr::select(FID, IID, NCI, pop, popNum) %>%
+  mutate(NCI = NCI/sd(NCI))
+fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
+              col_names = fam$IID) %>% 
+  mutate(IID = fam$IID) %>% 
+  column_to_rownames(var = "IID") %>% 
+  as.matrix()
+# Yl <- list(paracou3pop = Y, sp1 = filter(Y, pop == "sp1"),
+#           globuliferaTypeParacou = filter(Y, pop == "globuliferaTypeParacou"),
+#           globuliferaTypeRegina = filter(Y, pop == "globuliferaTypeRegina"))
+# model <- stan_model("./symcapture_models/Animal.stan")
+# fitsAnimal$NCI <- lapply(Yl, function(pop)
+#   sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
+#            control = list(adapt_delta = 0.99),
+#            data = list(N = nrow(pop), Y = pop$NCI, K = K[pop$IID,pop$IID])))
 # save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
 load(file.path("symcapture_save", 'AnimalModels.Rdata'))
-g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "NCI") %>% 
-                 dplyr::select(NCI), 
-               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
-  ggplot(aes(Kinship, NCI)) + geom_point(alpha = 0.1)
-g.sigma <- mcmc_combo(as.array(fitsAnimal$NCI ,  pars = c("sigmaG", "sigmaE")))
-# mcmc_pairs(as.array(fitsAnimal$NCI,  pars = c("sigma_G", "sigma_E")))
-g.breed <- mcmc_intervals_data(as.array(fitsAnimal$NCI ,  pars = "u_tilde")) %>% 
-            mutate(IID = Y$IID) %>% 
-            left_join(dplyr::select(trees, IID, pop)) %>% 
-  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
-             xend = datatools::reorder_within(IID, m, pop)),
-         col = "lightgrey") +
-  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.2) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
-  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
-  ylab("Breeding value") +
-  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
-        axis.ticks.x = element_blank(), axis.text.x = element_blank())
-gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
-                        layout_matrix = rbind(c(1,2), c(3,2)))
-# broom::tidyMCMC(fitsAnimal$NCI, "sigmaG", conf.int = T)
+cowplot::plot_grid(plotlist = lapply(fitsAnimal$NCI, mcmc_combo, pars = c("sigmaG", "sigmaR")), 
+                   labels = names(fitsAnimal$NCI))
+lapply(fitsAnimal$NCI, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T, estimate.method = "median") %>% 
+  bind_rows(.id = "Population")
+```
+
+#### Animal Pop Mean Var
+
+$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
+$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
+
+```{r NCIAnimalPopMeanVar, fig.cap="Proportion of Variance Explained (PVE) by NCI"}
+# Karray <- sapply(1:max(Y$popNum), function(p){
+#   Kp = K[Y$IID,Y$IID]
+#   for(n in 1:nrow(Y)) {
+#     if(Y$popNum[n] != p) {
+#       Kp[,n] = 10^-6
+#       Kp[n,] = 10^-6
+#     }
+#   }
+#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
+# })
+# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
+# sigmaY <- group_by(Y, popNum) %>%
+#   summarise(sigmaY = var(NCI)) %>%
+#   dplyr::select(sigmaY) %>% unlist()
+# model <- stan_model("./symcapture_models/AnimalPopMeanVar.stan")
+# fitsAnimal$NCI <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
+#                             control = list(adapt_delta = 0.9),
+#                             data = list(J = 1, N = nrow(Y), Y = Y$NCI, sigmaY = sigmaY,
+#                                         K = aperm(Karray, c(3,1,2)),
+#                                         P = max(Y$popNum), pop = Y$popNum))
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
+mcmc_combo(as.array(fitsAnimal$NCI ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
+broom::tidyMCMC(fitsAnimal$NCI,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
 ```
 
 ### Major effect SNPs
@@ -560,38 +612,69 @@ Annual Neighbor Crowding Rate (ANCR) was not significantly related to genetic va
 
 ### Proportion of Variance Explained
 
-```{r ANCRPVE, fig.cap="Proportion of Variance Explained (PVE) by genetic with Annual Neighbor Crowding Rate (ANCR)."}
+#### Animal
+
+$$y_i \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
+$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
+
+```{r ANCRAnimal, fig.cap="Proportion of Variance Explained (PVE) by ANCR"}
 Y <- trees %>%
-  dplyr::select(FID, IID, ANCR) %>%
-  mutate(ANCR = RNOmni::rankNorm(ANCR)) %>%
-  arrange(IID)
-# model <- stan_model(paste0("./symcapture_models/Animal.stan"))
-# fitsAnimal$ANCR <- sampling(model, chains = 2, data = list(J = 1, N = nrow(Y), Y = Y$ANCR, K = K[Y$IID,Y$IID]), save_warmup = F)
+  mutate(popNum = as.numeric(as.factor(pop))) %>%
+  dplyr::select(FID, IID, ANCR, pop, popNum) %>%
+  mutate(ANCR = ANCR/sd(ANCR))
+fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
+              col_names = fam$IID) %>% 
+  mutate(IID = fam$IID) %>% 
+  column_to_rownames(var = "IID") %>% 
+  as.matrix()
+# Yl <- list(paracou3pop = Y, sp1 = filter(Y, pop == "sp1"),
+#           globuliferaTypeParacou = filter(Y, pop == "globuliferaTypeParacou"),
+#           globuliferaTypeRegina = filter(Y, pop == "globuliferaTypeRegina"))
+# model <- stan_model("./symcapture_models/Animal.stan")
+# fitsAnimal$ANCR <- lapply(Yl, function(pop)
+#   sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
+#            control = list(adapt_delta = 0.99),
+#            data = list(N = nrow(pop), Y = pop$ANCR, K = K[pop$IID,pop$IID])))
 # save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
 load(file.path("symcapture_save", 'AnimalModels.Rdata'))
-g.rel <- cbind(reshape2::melt(as.matrix(dist(Y)), id.vars = NULL, value.name = "ANCR") %>% 
-                 dplyr::select(ANCR), 
-               reshape2::melt(K[Y$IID,Y$IID], id.vars = NULL, value.name = "Kinship")) %>% 
-  ggplot(aes(Kinship, ANCR)) + geom_point(alpha = 0.1)
-g.sigma <- mcmc_combo(as.array(fitsAnimal$ANCR ,  pars = c("sigmaG", "sigmaE")))
-# mcmc_pairs(as.array(fitsAnimal$ANCR,  pars = c("sigma_G", "sigma_E")))
-g.breed <- mcmc_intervals_data(as.array(fitsAnimal$ANCR ,  pars = "u_tilde")) %>% 
-            mutate(IID = Y$IID) %>% 
-            left_join(dplyr::select(trees, IID, pop)) %>% 
-  ggplot(aes(x = datatools::reorder_within(IID, m, pop), 
-             xend = datatools::reorder_within(IID, m, pop)),
-         col = "lightgrey") +
-  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.2,) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.2) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.2) +
-  facet_wrap(~ pop, labeller = label_parsed, scales = "free_x", nrow = 3) +
-  ylab("Breeding value") +
-  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
-        axis.ticks.x = element_blank(), axis.text.x = element_blank())
-gridExtra::grid.arrange(g.rel, g.breed, g.sigma,
-                        layout_matrix = rbind(c(1,2), c(3,2)))
+cowplot::plot_grid(plotlist = lapply(fitsAnimal$ANCR, mcmc_combo, pars = c("sigmaG", "sigmaR")), 
+                   labels = names(fitsAnimal$ANCR))
+lapply(fitsAnimal$ANCR, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T, estimate.method = "median") %>% 
+  bind_rows(.id = "Population")
+```
+
+#### Animal Pop Mean Var
+
+$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
+$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
+
+```{r ANCRAnimalPopMeanVar, fig.cap="Proportion of Variance Explained (PVE) by ANCR"}
+# Karray <- sapply(1:max(Y$popNum), function(p){
+#   Kp = K[Y$IID,Y$IID]
+#   for(n in 1:nrow(Y)) {
+#     if(Y$popNum[n] != p) {
+#       Kp[,n] = 10^-6
+#       Kp[n,] = 10^-6
+#     }
+#   }
+#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
+# })
+# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
+# sigmaY <- group_by(Y, popNum) %>%
+#   summarise(sigmaY = var(ANCR)) %>%
+#   dplyr::select(sigmaY) %>% unlist()
+# model <- stan_model("./symcapture_models/AnimalPopMeanVar.stan")
+# fitsAnimal$ANCR <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
+#                             control = list(adapt_delta = 0.9),
+#                             data = list(J = 1, N = nrow(Y), Y = Y$ANCR, sigmaY = sigmaY,
+#                                         K = aperm(Karray, c(3,1,2)),
+#                                         P = max(Y$popNum), pop = Y$popNum))
+# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
+load(file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
+mcmc_combo(as.array(fitsAnimal$ANCR ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
+broom::tidyMCMC(fitsAnimal$ANCR,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
 ```
 
 ### Major effect SNPs

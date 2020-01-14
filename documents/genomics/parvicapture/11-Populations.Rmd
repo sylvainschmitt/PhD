@@ -1,0 +1,360 @@
+```{r setup_popstr, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(pophelper)
+library(dendextend)
+library(ggtree)
+library(ggdendro)
+library(raster)
+library(leaflet)
+library(introgress)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+# Population structure
+
+We explored population structure of individuals. Then, we quickly looked at th spatial and environmental distribution of the different gene pools and individual mismatch (before association genomic analyses).
+
+* __Structure__ population structure of all *Symphonia* individuals from Paracou with `admixture`
+* __Spatial__ spatial distribution of *Symphonia* gene pools in Paracou
+* __Mismatch__ spatial distribution of *Symphonia* gene pools in Paracou
+* __Environmental__ environmental distribution of *Symphonia* gene pools in Paracou along the topgraphic wetness index
+* __Kinship__ individuals kinship
+
+## Structure
+
+```{r}
+clades <- rbind(
+  data.frame(Clade = "Parvifolia",
+             Species = c("sagotiana", "coriacea", "decolorans", "pedicellata", "wachenheimii", "grandiflora",
+                         "grandiflora_form2")),
+  data.frame(Clade = "Chartacea",
+             Species = c("congestiflora", "simiorum"))
+)
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit() %>% 
+  left_join(clades)
+```
+
+```{bash admixture, eval=F, echo=T}
+module load bioinfo/admixture_linux-1.3.0
+module load bioinfo/plink-v1.90b5.3
+# read_tsv(file.path(pathCluster, "Sequences", "calling", "nonmissing", "parvicapture.biallelic.snp.filtered.nonmissing.bim"),
+#          col_names = F) %>%
+#   mutate(X1 = as.numeric(as.factor(X1))) %>%
+#   write_tsv(file.path(pathCluster, "Sequences", "calling", "nonmissing", "renamed",
+#                       "parvicapture.biallelic.snp.filtered.nonmissing.bim"),
+#             col_names = F)
+for k in $(seq 14) ; do echo "module load bioinfo/admixture_linux-1.3.0 ; admixture --cv ../../calling/nonmissing/renamed/parvicapture.biallelic.snp.filtered.nonmissing.bed $k | tee log$k.out" ; done > admixture.sh
+sarray -J admixture -o out/%j.admixture.out -e out/%j.admixture.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL admixture.sh
+grep -h CV log*.out > CV.out
+mkdir matrices
+for file in $(ls log*.out) ; do  grep "Fst divergences between estimated populations:" -A 20 $file | head -n -2 > matrices/$file ; done
+```
+
+```{r admixtureCV, fig.cap="Cross-validation for the clustering of Eschweilera individuals. Y axis indicates corss-validation mean error, suggesting that 8 groups represent the best populations structure."}
+read_delim(file.path(pathCluster, "admixture", "CV.out"), delim = " ", col_names = F) %>% 
+  dplyr::select(X3, X4) %>% 
+  dplyr::rename(K = X3, CV = X4) %>% 
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>% 
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(5, 10), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error")
+```
+
+```{r admixtureG, fig.cap="Population structure of ..."}
+fam <- read_tsv(file.path(pathCluster, "..", "calling", "nonmissing",
+                          "parvicapture.biallelic.snp.filtered.nonmissing.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(IdGenetic = gsub(".g.vcf", "", IID))
+admix <- readQ(list.files(file.path(pathCluster, "admixture"), full.names = T, pattern = ".Q"), indlabfromfile = F)
+admix <- lapply(admix, "rownames<-", fam$Ind)
+admix <- alignK(admix)
+p <- plotQ(admix[2:10], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:10),
+           showindlab = F, useindlab = F, linesize = 0.8, pointsize = 4, sortind = 'all', sharedindlab = F,
+           grplab = left_join(fam, individuals) %>% dplyr::select(Species), selgrp = "Species", ordergrp = T,
+           grplabangle = 0, grplabface = "italic", grplabsize = 3)
+gridExtra::grid.arrange(p$plot[[1]]) 
+```
+
+```{r admixture8, fig.height=8, fig.width=15, fig.cap="Population structure of Paracou individuals for K = 8."}
+p <- plotQMultiline(qlist = admix[5], exportplot = F, returnplot = T, useindlab = T, ordergrp=T, grplab = left_join(fam, individuals) %>% dplyr::select(Species), sortind = "Cluster1")
+gridExtra::grid.arrange(p$plot[[1]][[1]]) 
+```
+
+```{r admixtureParacouFst, fig.cap="Clusters Fst relations for K=14."}
+admixture.matrix <- lapply(list.files(file.path(pathCluster, "admixture", "matrices"), 
+                                       full.names = T, pattern = "log"), read_tsv, skip = 1)
+names(admixture.matrix) <- unlist(lapply(admixture.matrix, nrow))
+g.matrix <- admixture.matrix$`14` %>% 
+  dplyr::rename(C1 = X1) %>% 
+  reshape2::melt(id.vars = "C1", variable.name = "C2", value.name = "Fst") %>% 
+  filter(!is.na(Fst)) %>% 
+  ggplot(aes(C1, C2, fill = Fst)) +
+  geom_tile() +
+  coord_fixed() +
+  scale_fill_gradient(name = "Fst",
+                      low = "#FFFFFF",
+                      high = "#012345") +
+  theme(axis.text.x = element_text(angle = -90),
+        legend.position = "bottom", axis.title = element_blank())
+m <- as.matrix(admixture.matrix$`14`[c(-1, -15)])
+rownames(m) <- unlist(admixture.matrix$`14`[1])
+g.tree <- ggdendrogram(data = as.dendrogram(hclust(as.dist(m))), rotate = T)
+cowplot::plot_grid(g.matrix, g.tree)
+```
+
+```{r admixture2, fig.cap="Population structure of ..."}
+p <- plotQ(admix[2:14], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:14),
+           showindlab = F, useindlab = F, linesize = 0.8, pointsize = 4, sortind = 'all', sharedindlab = F)
+gridExtra::grid.arrange(p$plot[[1]]) 
+```
+
+<!-- ## Spatial -->
+
+<!-- Gene pools spatial distribution didn't revealed much. Few individuals with a morphotype associated to the wrong ecotype have been reassigned with their gene pool the gene pool corresponding to the "good" ecotype (*e.g.* P13-4-361 previously presented as the *S. globulifera* morphotype living in plateau belong to the *S. sp1* gene pool). But we still have individual with ecotypes not matching their gene pool, especially in subplot1 1 of plot 1 where there is a mix of gene pools in the bottomland but with a lot of hybridization ! In a nutshell, there are interessant patterns that deserve further detailed investigations (to be continued in association genomics). -->
+
+<!-- ```{r trees} -->
+<!-- trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", -->
+<!--                               "trees", "Paracou.sqlite")) %>%  -->
+<!--   tbl("Paracou") %>%  -->
+<!--   filter(Genus == "Symphonia") %>%  -->
+<!--   filter(CensusYear == 2015) %>%  -->
+<!--   filter(CodeAlive == 1) %>%  -->
+<!--   filter(CodeMeas == 0) %>%  -->
+<!--   filter(Plot != 18) %>%  -->
+<!--   collect() %>%  -->
+<!--   mutate(treatment = c(c('C', 'T1', 'T2', 'T3',  -->
+<!--                          'T2', 'C', 'T1', 'T3', -->
+<!--                          'T1', 'T2', 'C', 'T3'),  -->
+<!--                        rep('B', 4))[Plot]) -->
+<!-- fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou", -->
+<!--                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"), -->
+<!--          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>%  -->
+<!--   mutate(Ind = gsub(".g.vcf", "", IID)) -->
+<!-- trees <- readQ(file.path(path, "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.3.Q"))[[1]] %>%  -->
+<!--   mutate(Ind = fam$Ind) %>%  -->
+<!--   dplyr::rename(Ssp1 = Cluster1, SgParacou = Cluster2, SgRegina = Cluster3) %>%  -->
+<!--   mutate(type = "admixed") %>%  -->
+<!--   mutate(type = ifelse(Ssp1 > 0.9, "Ssp1", type)) %>%  -->
+<!--   mutate(type = ifelse(SgParacou > 0.9, "SgParacou", type)) %>%  -->
+<!--   mutate(type = ifelse(SgRegina > 0.9, "SgRegina", type)) %>%  -->
+<!--   left_join(pop) %>%  -->
+<!--   mutate(X = gsub("P", "", Ind)) %>%  -->
+<!--   separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>%  -->
+<!--   left_join(trees) -->
+<!-- # trees <- filter(trees, sp1 > 0.1, sp1 < 0.9) -->
+<!-- treesXY <- na.omit(trees) -->
+<!-- coordinates(treesXY) <- ~Xutm + Yutm -->
+<!-- proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0' -->
+<!-- treesXY <- spTransform(treesXY, CRSobj = crs) -->
+<!-- treesPal <- colorFactor(palette = "Set3", levels = c("Ssp1", "SgParacou", "SgRegina")) -->
+<!-- # trees %>%  -->
+<!-- #   dplyr::select(Ind, Species, Pop2, type) %>%  -->
+<!-- #   dplyr::rename(MtBD = Species, MtF = Pop2, GP = type) %>%  -->
+<!-- #   write_tsv("./symcapture_save/gp.tsv") -->
+<!-- ``` -->
+
+<!-- ```{r popStrSpace, fig.cap="Membership to the *Symphonia globulifera* gene pool for Paracou individuals."} -->
+<!-- limits <- shapefile(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",  -->
+<!--                               "limits", "OverallPlots.shp")) -->
+<!-- limits <- spTransform(limits, CRSobj = crs) -->
+<!-- wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",  -->
+<!--                             "topography", "TWI_1m.tif")) -->
+<!-- relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",  -->
+<!--                             "topography", "RelativeElevation_1m.tif")) -->
+<!-- dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", -->
+<!--                         "topography", "DEM_1m_2015.tif")) # for CRS -->
+<!-- projection(wetness) <- projection(dem) -->
+<!-- projection(relele) <- projection(dem) -->
+<!-- wetness <- projectRaster(wetness, crs = crs) -->
+<!-- relele <- projectRaster(relele, crs = crs) -->
+<!-- treesXY$TWI <- raster::extract(wetness, treesXY) -->
+<!-- treesXY$RelativeElevation <- raster::extract(relele, treesXY) -->
+<!-- treesXY$DEM <- raster::extract(dem, treesXY) -->
+<!-- leaflet() %>% -->
+<!--   addRasterImage(aggregate(wetness, 4),  group = "TWI",  -->
+<!--                  colors = colorBin("Greys", domain = NULL, bins = 5, na.color = "transparent")) %>%  -->
+<!--   leaflet.minicharts::addMinicharts( -->
+<!--     treesXY$Xutm, treesXY$Yutm, -->
+<!--     type = "pie", -->
+<!--     chartdata = treesXY@data[, c("Ssp1", "SgParacou", "SgRegina")],  -->
+<!--     colorPalette = c("#CD2626", "#1E90FF", "#0000EE"),  -->
+<!--     width = treesXY$CircCorr/pi/2, -->
+<!--     transitionTime = 0, -->
+<!--     labelText = treesXY$Ind, -->
+<!--     opacity = 0.5 -->
+<!--   ) -->
+<!-- ``` -->
+
+<!-- ## Mismatch -->
+
+<!-- Looking into detail for *S. globulifera* 2 commonly described morphotypes (Fig. \@ref(fig:admixtureParacou2)), we have 32 individuals belonging to *S. sp1* phenotype, 5 admixed individuals and finally 113 individuals with matching morhpotype and cluster (70%). Whereas for *S. sp1* morphotype, we have 20 individuals belonging to *S. globulifera* phenotype, 7 admixed individuals and finally 180 individuals with matching morhpotype and cluster (88%). And last but not least, individuals identified as mixed morphotype on the field included 9 *S. globulifera* cluster and 19 *S. sp1* cluster. Consequently including admixed indivduals we have 146 individuals in the *S. globulifera* cluster against 239 in the *S. sp1* cluster. -->
+
+<!-- We doubled checked (i) individuals with a mismatch between morphotype in Paracou data base (Pascal Petronelli identification) and gene pool attribution, (ii) *Symphonia globulifera type Regina* individuals, and (iii) admixed individuals with a blind-identification on the field. Most of them were failed first-identification and not an issue with gene pool attribution ([Field result](https://docs.google.com/spreadsheets/d/1mHiaCRBHhTjXauyHshzrl8owyRkPHjChlP4EzOq6fc4/edit?usp=sharing)). Among 68 individuals, 59 were correct with blind-identification (87%) and 9 could be a possible error (13% of mismatch, 2% of the total number of sampled individuals). -->
+
+<!-- ```{r mismatch, eval=T, fig.cap="Membership to the *Symphonia globulifera* gene pool for mismatch."} -->
+<!-- wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",  -->
+<!--                             "topography", "TWI_1m.tif")) -->
+<!-- dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", -->
+<!--                         "topography", "DEM_1m_2015.tif")) # for CRS -->
+<!-- projection(wetness) <- projection(dem) -->
+<!-- wetness <- projectRaster(wetness, crs = crs) -->
+<!-- mismatch <- trees %>%  -->
+<!--   dplyr::select(-Pop2) %>%  -->
+<!--   mutate(MorphotypeDB = toupper(substr(Species, 1, 1))) %>%  -->
+<!--   dplyr::rename(MorphotypeField = Pop) %>%  -->
+<!--   mutate(Genotype = "A") %>%  -->
+<!--   mutate(Genotype = ifelse(Ssp1 > 0.9, "S", Genotype)) %>%  -->
+<!--   mutate(Genotype = ifelse(SgParacou > 0.9, "G", Genotype)) %>%  -->
+<!--   mutate(Genotype = ifelse(SgRegina > 0.9, "G", Genotype)) %>%  -->
+<!--   filter(Genotype != "A") %>%  -->
+<!--   filter(MorphotypeDB != "I") %>%  -->
+<!--   filter(Genotype != MorphotypeDB) -->
+<!-- coordinates(mismatch) <- ~Xutm + Yutm -->
+<!-- proj4string(mismatch) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0' -->
+<!-- mismatch <- spTransform(mismatch, CRSobj = crs) -->
+<!-- leaflet() %>% -->
+<!--   addRasterImage(aggregate(wetness, 4),  group = "TWI",  -->
+<!--                  colors = colorBin("Greys", domain = NULL, bins = 5, na.color = "transparent")) %>%  -->
+<!--   leaflet.minicharts::addMinicharts( -->
+<!--     mismatch$Xutm, mismatch$Yutm, -->
+<!--     type = "pie", -->
+<!--     chartdata = mismatch@data[, c("Ssp1", "SgParacou", "SgRegina")],  -->
+<!--     colorPalette = c("#CD2626", "#1E90FF", "#0000EE"),  -->
+<!--     width = mismatch$CircCorr/pi/2, -->
+<!--     transitionTime = 0, -->
+<!--     opacity = 0.5 -->
+<!--   ) -->
+<!-- ``` -->
+
+<!-- ## Environmental -->
+
+<!-- Gene pools distribution along topographic wetness index and relative elevation is similar to morphotype distribution, revealing the two classical and clear morphotype-ecotype assocaitions of *S. sp1* and *S. globulifera*. Nevertheless, we can noticed that *S. globulifera type Régina* grows in habitats even wetter than *S. globulifera type Paracou* as revealed by the topographic wetness index and not the relative elevation (so the position in the watershed matters). Gene pools association to the environment will be further explored with environmental genomics, to identify SNPs specifically associated to the topographic association.  -->
+
+<!-- ```{r wetness, fig.cap="Gene pools distribution along topgraphic wetness index and relative elevation for Paracou individuals."} -->
+<!-- treesXY@data %>%  -->
+<!--   dplyr::select(type, Pop, RelativeElevation, TWI) %>% -->
+<!--   reshape2::melt(id.vars = c("type", "Pop")) %>%  -->
+<!--   ggplot(aes(value, fill = type, color = type)) + -->
+<!--   geom_density(alpha = 0.3) + -->
+<!--   facet_wrap(~ variable, scales = "free", nrow = 2) + -->
+<!--   scale_x_sqrt() + -->
+<!--   scale_color_discrete("Genotype", labels = c("Admixed", "S. globulifera\ntype Paracou", -->
+<!--                                      "S. globulifera\ntype Regina", "S. sp1")) + -->
+<!--   scale_fill_discrete("Genotype", labels = c("Admixed", "S. globulifera\ntype Paracou", -->
+<!--                                      "S. globulifera\ntype Regina", "S. sp1")) -->
+<!-- ``` -->
+
+<!-- ## Kinship -->
+
+<!-- We calculated kinship matrix (Fig. \@ref(fig:kinship)) for every individuals to be used in genomic scan to control for population structure. 19 individual, belonging to all gene pools, had only negative kinship values (Fig \@ref(fig:NegkinshipGraph)). After investigation it seems that these individuals are individuals without family in Paracou with null kinship with other individuals of their gene pools and negative values  with other individuals of other gene pools. Interestingly though individuals with only null or negative kinship were all located on the limit of Paracou plots (Fig \@ref(fig:Negkinshipmap)). -->
+
+<!-- ```{bash relatedness, eval=F, echo=T} -->
+<!-- module load bioinfo/plink-v1.90b5.3 -->
+<!-- plink \ -->
+<!--   --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou \ -->
+<!--   --allow-extra-chr \ -->
+<!--   --recode vcf-iid \ -->
+<!--   --out symcapture.all.biallelic.snp.filtered.nonmissing.paracou -->
+<!-- vcftools --gzvcf  symcapture.all.biallelic.snp.filtered.nonmissing.paracou.vcf.gz  --relatedness2 -->
+<!-- # an estimated kinship coefficient range >0.354, [0.177, 0.354], [0.0884, 0.177] and [0.0442, 0.0884] corresponds to duplicate/MZ twin, 1st-degree, 2nd-degree, and 3rd-degree relationships respectively -->
+<!-- ``` -->
+
+<!-- ```{r kinship, fig.cap="Individuals kinship matrix."} -->
+<!-- read_tsv(file.path(path, "..", "variantCalling", "paracou", "out.relatedness2")) %>%  -->
+<!--   left_join(symcapture.admix[[2]] %>%  -->
+<!--               dplyr::select(Cluster1) %>%  -->
+<!--               dplyr::rename(Cl1Ind1 = Cluster1) %>%  -->
+<!--               mutate(INDV1 = paste0(row.names(.), ".g.vcf"))) %>%  -->
+<!--     left_join(symcapture.admix[[2]] %>%  -->
+<!--               dplyr::select(Cluster1) %>%  -->
+<!--               dplyr::rename(Cl1Ind2 = Cluster1) %>%  -->
+<!--               mutate(INDV2 = paste0(row.names(.), ".g.vcf"))) %>%  -->
+<!--   ggplot(aes(reorder(INDV1, Cl1Ind1),  -->
+<!--              reorder(INDV2, Cl1Ind2),  -->
+<!--              fill = RELATEDNESS_PHI)) + -->
+<!--     geom_tile() + -->
+<!--   scale_fill_gradient2("kinship", low = scales::muted("blue"), high = scales::muted("red")) + -->
+<!--   theme(axis.title = element_blank(), -->
+<!--         axis.text = element_blank(), -->
+<!--         axis.ticks = element_blank(), -->
+<!--         axis.line = element_blank()) -->
+
+<!-- read_tsv(file.path(path, "..", "variantCalling", "paracou", "out.relatedness2")) %>%  -->
+<!--   left_join(symcapture.admix[[2]] %>%  -->
+<!--               dplyr::select(Cluster1) %>%  -->
+<!--               dplyr::rename(Cl1Ind1 = Cluster1) %>%  -->
+<!--               mutate(INDV1 = paste0(row.names(.), ".g.vcf"))) %>%  -->
+<!--   left_join(symcapture.admix[[2]] %>%  -->
+<!--               dplyr::select(Cluster1) %>%  -->
+<!--               dplyr::rename(Cl1Ind2 = Cluster1) %>%  -->
+<!--               mutate(INDV2 = paste0(row.names(.), ".g.vcf"))) %>%  -->
+<!--   mutate(relation = cut(RELATEDNESS_PHI,  -->
+<!--                         breaks = c(0.0442, 0.0884, 0.177, 0.354, Inf),  -->
+<!--                         labels = c("3rd", "2nd", "1st", "twin"))) %>%  -->
+<!--   na.omit(relation) %>% -->
+<!--   ggplot(aes(reorder(INDV1, Cl1Ind1),  -->
+<!--              reorder(INDV2, Cl1Ind2),  -->
+<!--              fill = relation)) + -->
+<!--   geom_tile() + -->
+<!--   theme(axis.title = element_blank(), -->
+<!--         axis.text = element_blank(), -->
+<!--         axis.ticks = element_blank(), -->
+<!--         axis.line = element_blank()) -->
+<!-- ``` -->
+
+<!-- ```{r NegkinshipGraph, fig.cap="Kinship distribution for individuals with only null or negative kinship."} -->
+<!-- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all.relatedness2")) %>%  -->
+<!--   filter(INDV1 != INDV2) %>%  -->
+<!--   mutate(kinPos = as.numeric(RELATEDNESS_PHI > 0)) %>%  -->
+<!--   group_by(INDV1) %>%  -->
+<!--   filter(sum(kinPos) == 0) %>%  -->
+<!--   ungroup() %>%  -->
+<!--   mutate(INDV1 = gsub(".g.vcf", "", INDV1)) %>%  -->
+<!--   mutate(Ind = gsub(".g.vcf", "", INDV2)) %>%  -->
+<!--   left_join(trees) %>%  -->
+<!--   ggplot(aes(RELATEDNESS_PHI, fill = type)) + -->
+<!--   geom_histogram(position = "dodge") + -->
+<!--   geom_vline(xintercept = 0, color = "lightgrey", linetype = "dashed") + -->
+<!--   facet_wrap(~ INDV1) + -->
+<!--   xlab("Kinship") + -->
+<!--   theme(legend.position = c(0.9, 0.05)) -->
+<!-- ``` -->
+
+<!-- ```{r Negkinshipmap, fig.cap="Map of individuals with only null or negative kinship."} -->
+<!-- kinship <- read_tsv(file.path(path, "..", "variantCalling", "paracou3pop", "paracou3pop.all.relatedness2")) %>%  -->
+<!--   filter(INDV1 != INDV2) %>%  -->
+<!--   mutate(kinPos = as.numeric(RELATEDNESS_PHI > 0)) %>%  -->
+<!--   group_by(INDV1) %>%  -->
+<!--   summarise(kinPos = sum(kinPos)) %>%  -->
+<!--   arrange(kinPos) %>%  -->
+<!--   filter(kinPos == 0) %>%  -->
+<!--   mutate(Ind = gsub(".g.vcf", "", INDV1)) %>%  -->
+<!--   left_join(trees) -->
+<!-- coordinates(kinship) <- ~Xutm + Yutm -->
+<!-- proj4string(kinship) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0' -->
+<!-- kinship <- spTransform(kinship, CRSobj = crs) -->
+<!-- leaflet() %>% -->
+<!--   addRasterImage(aggregate(wetness, 4),  group = "TWI", -->
+<!--                  colors = colorBin("Greys", domain = NULL, bins = 5, na.color = "transparent")) %>% -->
+<!--   addCircles(data = kinship, radius =  ~CircCorr/pi, color = colorFactor("viridis", kinship$type)(kinship$type), -->
+<!--              label = kinship$Ind) %>%  -->
+<!--   addLegend(pal = colorFactor("viridis", kinship$type), values = kinship$type, title = 'Gene Pool') -->
+<!-- ``` -->
