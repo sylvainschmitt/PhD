@@ -1,3 +1,6 @@
+# PhD 0.1.9160
+* symcapture: Animal in growth model
+
 # PhD 0.1.9159
 * parvicapture: SNP filtering
 * symcapture: Animal with pop var

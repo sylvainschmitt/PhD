@@ -165,6 +165,13 @@ trees <- trees %>%
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
 treesSub <- filter(trees, Plot == 16) %>% # for test purposes
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
+fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
+              col_names = fam$IID) %>% 
+  mutate(IID = fam$IID) %>% 
+  column_to_rownames(var = "IID") %>% 
+  as.matrix()
 mdata <- function(data) list(N = nrow(data),
                              I = length(unique(data$Ind)),
                              G = length(unique(data$pop)),
@@ -175,12 +182,13 @@ mdata <- function(data) list(N = nrow(data),
                              NCI = as.vector(scale(data$NCI, center = F)),
                              ind = data$IndNum,
                              gp = data$popNum,
-                             indingp = unique(arrange(data, IndNum)[c("IndNum", "popNum")])$popNum)
+                             indingp = unique(arrange(data, IndNum)[c("IndNum", "popNum")])$popNum,
+                             K = dplyr::select(data, IID, IndNum) %>% 
+                               unique() %>% arrange(IndNum) %>% 
+                               dplyr::select(IID) %>% unlist() %>% K[.,.])
 ```
 
-## Growth
-
-### Growth & Ontogeny
+## Growth & Ontogeny
 
 We integrated population structure and individual varition in the growth model used in @Herault2011 to explain individual growth with ontogeny. We used the following form of hierachical model to explain the logarithm of Annual Growth Rate $AGR_{t,i,g}$ with Diameter at Breast Height $DBH_{t,i,g}$ at year $t$ for individual $i$ in genepool $gp$:
 
@@ -295,7 +303,7 @@ filter(trees, Plot == 3) %>%
   theme(legend.position = "bottom") 
 ``` 
 
-### Growth & Environment
+## Growth & Environment
 
 We then integrated environmental effects in the previous model of individual growth explained with ontogeny, including topography (TWI), climate (AREW), and neighbors interaction (NCI). We used the following form of model to explain the logarithm of Annual Growth Rate $AGR_{t,i,g}$ with Diameter at breast Height $DBH_{t,i,g}$, Topographic Wetness Index $TWI_{i,g}$, Area Under the Curve of Relative Extractible Water Content $AREW_{t}$, and Neighbor Crowding Index $NCI_{t,i,g}$, at year $t$ for individual $i$ in genepool $gp$:
 
@@ -330,23 +338,58 @@ mcmc_dens(as.array(fitGrowthEnv, pars = c("betaTWI", "sigmaTWIg", "betaTWIg",
                                           "betaNCI",  "sigmaNCIg",  "betaNCIg", "sigmaNCIi"))) 
 ```
 
-### Growth & Kinship
+## Growth & Kinship
 
-$$log(AGR_{t,g,i|g}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{t,g,i}}{Dopt_i})}{Ks_i}]^2)+u, \sigma_R)$$
-$$u \sim \mathcal{MVN}(0,\sigma_gK)$$
-$$\begin{bmatrix} Gmax_i \\ Dopt_i \\ Ks_i \end{bmatrix} \sim \mathcal N ^3(\begin{bmatrix} Gmax_g \\ Dopt_g \\ Ks_g \end{bmatrix},\begin{bmatrix} \sigma_{Gmax_i} \\ \sigma_{Dopt_i} \\ \sigma_{Ks_i} \end{bmatrix} )$$
-$$\begin{bmatrix} Gmax_g \\ Dopt_g \\ Ks_g \end{bmatrix} \sim \mathcal N ^3(\begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix},\begin{bmatrix} \sigma_{Gmax_g} \\ \sigma_{Dopt_g} \\ \sigma_{Ks_g} \end{bmatrix} )$$
+Model:
 
+$$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma^2)$$
+$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p + a_{\theta}, \sigma^2_{R_{\theta}})  \\ \theta_p \sim \mathcal N (\theta, \sigma^2_{P_{\theta}}) \\ a_{\theta} \sim \mathcal{MVN} (0, \sigma^2_{G_{\theta}}.K) \end{align}$$
+
+Derivate:
+
+$$h^2 = \frac{\sigma^2_{G}}{\sigma^2_{P} + \sigma^2_{G} + \sigma^2_{R}}$$
+
+$$h^2_p = \frac{\sigma^2_{P} + \sigma^2_{G}}{\sigma_{P} + \sigma^2_{G} + \sigma^2_{R}}$$
+
+$$Q_{ST} = \frac{\sigma^2_{P}}{\sigma^2_{P} + 2.\sigma^2_{G}}$$
 
 ```{r growthKinshipTab}
-# growth <- stan_model("./symcapture_models/Growth.stan")
-# fitGrowth <- sampling(growth, chains = 2, data = mdata(trees), save_warmup = F)
-# save(fitGrowth, file = file.path("symcapture_save", 'growth.Rdata'))
-load(file.path("symcapture_save", 'growth.Rdata'))
-broom::tidyMCMC(fitGrowth, c("Gmax", "Gmaxg", "sigmaGmaxg", "sigmaGmaxi",
-                             "Dopt", "Doptg", "sigmaDoptg", "sigmaDopti",
-                             "Ks", "Ksg", "sigmaKsg", "sigmaKsi",
-                             "sigma", "lp__"), droppars = NULL, rhat = T) %>% 
+growth <- stan_model("./symcapture_models/GrowthAnimal.stan")
+fitGrowthKin <- sampling(growth, chains = 2, save_warmup = F, include = F, pars = c("a"),
+                         control = list(adapt_delta = 0.9, max_treedepth = 12), data = mdata(treesSub))
+save(fitGrowthKin, file = file.path("symcapture_save", 'growthkin.Rdata'))
+load(file.path("symcapture_save", 'growthkin.Rdata'))
+broom::tidyMCMC(fitGrowthKin, c("Gmax", "Dopt", "Ks",
+                                "sigmaP", "sigmaG", "sigmaR", 
+                                "sigma", "lp__",
+                                "h2", "h2p", "Qst"), droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the ontogenic growth model")
+mcmc_intervals_data(fitGrowthKin, regex_pars = c("h2", "h2p", "Qst")) %>% 
+  separate(parameter, c("index", "parameter"), "[:punct:]") %>% 
+  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
+  mutate(index = recode(index, "h2" = "h^2 == frac(sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)", 
+                        "h2p" = "h[p]^2 == frac(sigma[P]^2+sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)", 
+                        "Qst" = "Q[st] == frac(sigma[P]^2,sigma[P]^2+2*sigma[G]^2)")) %>% 
+  ggplot(aes(x = parameter, xend = parameter, col = parameter, fill = parameter)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ index, labeller = label_parsed) +
+  xlab("") + ylab("") + 
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r}
+load(file.path("symcapture_save", 'growthkin3.Rdata'))
+fitGrowthKin@stanmodel
+broom::tidyMCMC(fitGrowthKin, c("Gmax", "Dopt", "Ks",
+                                "sigmaGmaxg", "sigmaDoptg", "sigmaKsg", 
+                                "sigmaG", 
+                                "sigmaGmaxi", "sigmaDopti", "sigmaKsi", 
+                                "sigma", "lp__"), droppars = NULL, rhat = T) %>% 
   kable(caption = "Summary table of the ontogenic growth model")
 ```
 
@@ -381,6 +424,16 @@ for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.BSLMM.Gmax ;
 ```
 
 Individual maximum growth potential is mainly explained by genetic variation ($\sigma_G=0.72\pm0.16$, Fig. \@ref(fig:GmaxPVE)). $Gmax$ is thus an ontogenetic factor as it controls the shape of the growth response to ontogeny and its controlled by genetics ! Individual growth potential wasn't significantly associated to any  major effect SNPs (Fig. \@ref(fig:GmaxAssocMLM)). The polygenic model indicated 0.17% [0-0.56] of the genome to be related to Gmax corresponding to 55 [0-177] SNPs, but the model didn’t identified specific SNPs in our dataset (no $\gamma>0.5$).
+
+
+<!-- ```{r} -->
+<!-- left_join(parsi, trees) %>% -->
+<!--   dplyr::select(IID, Gmaxi_m, pop, TWI) %>% -->
+<!--   unique() %>% -->
+<!--   mutate(Gmax = Gmaxi_m/sd(Gmaxi_m)) %>%  -->
+<!--   ggplot(aes(TWI, Gmax, col = pop)) + -->
+<!--   geom_point() -->
+<!-- ``` -->
 
 ### Proportion of Variance Explained
 
@@ -419,56 +472,7 @@ lapply(fitsAnimal$Gmax, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T
 ```
 
 
-#### Animal Pop Mean
-
-$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
-
-```{r GmaxAnimalPopMean, fig.cap="Proportion of Variance Explained (PVE) by genetic in individual growth potential $Gmax$."}
-# model <- stan_model("./symcapture_models/AnimalPopMean.stan")
-# fitsAnimal$Gmax <- sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
-#                             control = list(adapt_delta = 0.99),
-#                             data = list(J = 1, N = nrow(Y), Y = Y$Gmax, K = K[Y$IID,Y$IID],
-#                                         P = max(Y$popNum), pop = Y$popNum))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalPopMeanModels.Rdata'))
-mcmc_combo(as.array(fitsAnimal$Gmax ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
-broom::tidyMCMC(fitsAnimal$Gmax,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
-```
-
-#### Animal Pop Var
-
-$$y_{p,i} \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
-
-```{r GmaxAnimalPopVar, fig.cap="Proportion of Variance Explained (PVE) by genetic in individual growth potential $Gmax$."}
-# Karray <- sapply(1:max(Y$popNum), function(p){
-#   Kp = K[Y$IID,Y$IID]
-#   for(n in 1:nrow(Y)) {
-#     if(Y$popNum[n] != p) {
-#       Kp[,n] = 10^-6
-#       Kp[n,] = 10^-6
-#     }
-#   }
-#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
-# })
-# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
-# sigmaY <- group_by(Y, popNum) %>%
-#   summarise(sigmaY = var(Gmax)) %>%
-#   dplyr::select(sigmaY) %>% unlist()
-# model <- stan_model("./symcapture_models/AnimalPopVar.stan")
-# fitsAnimal$Gmax <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
-#                             control = list(adapt_delta = 0.99),
-#                             data = list(J = 1, N = nrow(Y), Y = Y$Gmax, sigmaY = sigmaY,
-#                                         K = aperm(Karray, c(3,1,2)),
-#                                         P = max(Y$popNum), pop = Y$popNum))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopVarModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalPopVarModels.Rdata'))
-mcmc_combo(as.array(fitsAnimal$Gmax ,  pars = c("sigmaG", "sigmaR")))
-broom::tidyMCMC(fitsAnimal$Gmax,  pars = c("h2"), conf.int = T, rhat = T)
-```
-
-#### Animal Pop Mean Var
+  #### Animal Pop Mean Var
 
 $$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
 $$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
