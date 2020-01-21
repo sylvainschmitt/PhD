@@ -7,11 +7,12 @@ data {
   int<lower=1, upper=I> ind[N] ; // individual
   int<lower=1, upper=G> gp[N] ; // gene pools
   int<lower=1, upper=G> indingp[I] ; // individuals in gene pools
-  cov_matrix[I] K ; // kinship covariance matrix
+  cov_matrix[I] K[G] ; // population kinship covariance matrices
 }
 transformed data{
-  matrix[I, I] A ; // cholesky-decomposed kinship
-  A = cholesky_decompose(K) ;
+  matrix[I, I] A[G] ; // cholesky-decomposed kinship
+  for(p in 1:G)
+    A[p] = cholesky_decompose(K[p]) ;
 }
 parameters {
   vector<lower=0>[I] Gmaxi ; // individual maximum growth potential
@@ -26,34 +27,44 @@ parameters {
   real<lower=0, upper=200> Dopt ; // complex optimal growth diameter
   real<lower=0.1, upper=3> Ks ; // complex growth kurtosis
   
-  vector[I]  a[3] ; // breeding values
+  matrix[I,3]  a[G] ; // breeding values
   vector<lower=0>[3] sigmaP ; // population variances
-  vector<lower=0>[3] sigmaG ; // genetic variances
+  vector<lower=0>[3] sigmaG[G] ; // genetic variances
   vector<lower=0>[3] sigmaR ; // residual variances
   real<lower=0,upper=2> sigma ; // final residual variance
 }
 model {
+  vector[I] aAsum[3] ; // genetic additive effects
+    
   log(AGR+1) ~ normal(Gmaxi[ind] .* exp(-0.5*(log(DBH ./ Dopti[ind]) ./ Ksi[ind]).*(log(DBH ./ Dopti[ind]) ./ Ksi[ind])), sigma) ; // likelihood
   
-  for(i in 1:3)
-    a[i] ~ normal(0, sqrt(sigmaG[i])) ; // individual random effects
-  
-  Gmaxi ~ normal(Gmaxp[indingp] + A*a[1], sigmaR[1]) ; // population random effects
-  Dopti ~ normal(Doptp[indingp] + A*a[2], sigmaR[2]) ;
-  Ksi ~ normal(Ksp[indingp] + A*a[3], sigmaR[3]) ;
+  for(i in 1:3){
+    aAsum[i] = rep_vector(0, I) ; 
+    for(g in 1:G) {
+      aAsum[i] += A[g]*a[g][,i] ;
+      a[g][,i] ~ normal(0, sqrt(sigmaG[g][i])) ;  // individual random effects
+    }
+  }
+
+  Gmaxi ~ normal(Gmaxp[indingp] + aAsum[1], sigmaR[1]) ; // population random effects
+  Dopti ~ normal(Doptp[indingp] + aAsum[2], sigmaR[2]) ;
+  Ksi ~ normal(Ksp[indingp] + aAsum[3], sigmaR[3]) ;
   
   Gmaxp ~ normal(Gmax, sigmaP[1]) ; // complex random effects
   Doptp ~ normal(Dopt, sigmaP[2]) ;
   Ksp ~ normal(Ks, sigmaP[3]) ;
   
-  sigmaG ~ lognormal(0, 1) ;
+  for(g in 1:G)
+    sigmaG[g] ~ lognormal(0, 1) ;
   sigma ~ student_t(4, 0, 1) ;
 }
 generated quantities{
-  vector<lower=0>[3] h2 ; // strict heritabilities
-  vector<lower=0>[3] h2p ; // broad heritabilities
-  vector<lower=0>[3] Qst ; // quantitative genetic differentiations
-  h2 = sigmaG ./ (sigmaP + sigmaG + sigmaR) ;
-  h2p = (sigmaG + sigmaP) ./ (sigmaP + sigmaG + sigmaR) ;
-  Qst = sigmaP ./ (sigmaP + 2*sigmaG) ;
+  vector<lower=0>[3] h2[G] ; // strict heritabilities
+  vector<lower=0>[3] h2p[G] ; // broad heritabilities
+  vector<lower=0>[3] Qst[G] ; // quantitative genetic differentiations
+  for(g in 1:G) {
+    h2[g] = sigmaG[g] ./ (sigmaP + sigmaG[g] + sigmaR) ;
+    h2p[g] = (sigmaG[g] + sigmaP) ./ (sigmaP + sigmaG[g] + sigmaR) ;
+    Qst[g] = sigmaP ./ (sigmaP + 2*sigmaG[g]) ;
+  }
 }

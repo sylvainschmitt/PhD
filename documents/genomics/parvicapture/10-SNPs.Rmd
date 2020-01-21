@@ -35,7 +35,12 @@ individuals %>%
   filter(Clade == "Parvifolia") %>% 
   mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
   dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
-  write_tsv(path = file.path(path, "Sequences", "calling", "Parvifolia.fam"), col_names = F)
+  write_tsv(path = file.path(pathCluster, "Sequences", "calling", "Parvifolia.fam"), col_names = F)
+individuals %>% 
+  filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>% 
+  mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
+  dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
+  write_tsv(path = file.path(pathCluster, "Sequences", "calling", "3sp.fam"), col_names = F)
 ```
 
 # SNPs
@@ -219,7 +224,7 @@ read_delim(file.path(path, "Sequences", "calling", "filtered",
 ```
 
 
-### Normal filter
+## Normal filter
 
 With a maximum of 95% of missing data per individual `--mind 0.2`, a maximum of 15% of missing data per SNP `-geno 0.15`, we obtained **4964** biallelic filtered snps for **435** individuals (3 lost).
 
@@ -230,7 +235,8 @@ rm -r nonmissing
 mkdir nonmissing
 plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
   --allow-extra-chr \
-  --mind 0.95 --geno 0.15 -maf 0.1 \
+  --remove Outliers.fam \
+  --mind 0.95 --geno 0.15 \
   --make-bed --out nonmissing/parvicapture.biallelic.snp.filtered.nonmissing
 plink --bfile nonmissing/parvicapture.biallelic.snp.filtered.nonmissing \
   --allow-extra-chr --missing --het --freqx --pca \
@@ -238,28 +244,18 @@ plink --bfile nonmissing/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r nonmissingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.het_imiss <- read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
-                                    "parvicapture.biallelic.snp.filtered.nonmissing.imiss"), delim = " ") %>%
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
-  mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%
-  mutate(IdGenetic = gsub(".g.vcf", "", IID)) %>%
-  mutate(IdGenetic = gsub(" ", "", IdGenetic)) %>%
-  left_join(individuals) %>%
-  ggplot(aes(F_MISS, fill = paste(Genus, Species))) +
-  geom_histogram(position = "dodge") +
-  scale_fill_discrete("Species", guide = "none") +
-  xlab("Proportion of missing SNPs per individual")
 g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
   left_join(individuals) %>%
-  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species))) +
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_label() +
   geom_point(size=2) +
   geom_hline(yintercept = 0) +
   geom_vline(xintercept = 0) +
   scale_color_discrete("Species")
-cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2))
+plotly::ggplotly(g.pca)
 ```
 
 ```{r nonmissingSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."}
@@ -278,7 +274,7 @@ read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
   scale_x_sqrt()
 ```
 
-### Hard filter
+## Hard filter
 
 With a maximum of 95% of missing data per individual `--mind 0.95`, a maximum of 15% of missing data per SNP `-geno 0.15` and a minimum allele frequency of 10% `-maf 0.1`, we obtained **4964** biallelic filtered snps for **435** individuals (3 lost).
 
@@ -289,7 +285,7 @@ rm -r hard
 mkdir hard
 plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
   --allow-extra-chr \
-  --mind 0.95 --geno 0.15 \
+  --mind 0.5 --geno 0.0 \
   --make-bed --out hard/parvicapture.biallelic.snp.filtered.nonmissing
 plink --bfile hard/parvicapture.biallelic.snp.filtered.nonmissing \
   --allow-extra-chr --missing --het --freqx --pca \
@@ -313,12 +309,13 @@ g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "hard",
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
   left_join(individuals) %>%
-  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species))) +
-  geom_point(size=2) +
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
   geom_hline(yintercept = 0) +
   geom_vline(xintercept = 0) +
   scale_color_discrete("Species")
 cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2))
+g.pca
 ```
 
 ```{r hardSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."}
@@ -354,4 +351,35 @@ plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
 plink --bfile parvifolia/parvicapture.biallelic.snp.filtered.nonmissing \
   --allow-extra-chr --missing --het --freqx --pca \
   --out parvifolia/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+## 3 species
+
+```{bash 3sp, eval=F, echo=T}
+module load bioinfo/plink_high_contig_20190905
+module load bioinfo/plink2_high_contig_20190905
+rm -r 3sp
+mkdir 3sp
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --keep nonoutliers3sp.fam \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out 3sp/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile 3sp/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out 3sp/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r hardIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "3sp",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = -PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species")
+g.pca
 ```

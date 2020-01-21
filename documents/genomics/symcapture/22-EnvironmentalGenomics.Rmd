@@ -22,19 +22,11 @@ load(file.path("symcapture_save", 'AnimalModels.Rdata'))
 
 # Environmental genomics
 
-We explored and selected environmental descriptors to be used in environmental genomics. We then described the three methods used to explore the link between variable environemental variation and individual SNP and kinship variation with:
+We explored and selected environmental descriptors to be used in environmental genomics. We then used the three methods to quantify and explore the link between variable environemental variation and individual SNP and kinship variation with:
 
 * the modele Animal to explore genetic variance associated to the environemntal variable 
 * linear mixed models (LMM) used to identify major effect SNPs  associated to the environemntal variable 
 * bayesian sparse linear mixed models (BSLMM) used to identify the polygenic architecture  associated to the environemntal variable 
-
-Finally we used the three methods for every selected environmental descriptors, e.g. Topographic Wetness Index (TWI), Neighbor Crowding Index (NCI) and Annual Neighbor Crowding Index (ANCR), investigating selected SNPs, associated annotation, and ontogenetic term (GO) possible enrichment.
-
-* __Descriptors__ environmental descriptors definition and selection based on multicolinearity and eco-evolutionary meaningfulness
-* __Methods__ association methods for genetic variance, major effect SNPs and polygenic signal
-* __Topographic Wetness Index (TWI)__ relation to individuals kinship and SNP variation
-* __Neighbor Crowding Index (NCI)__ relation to individuals kinship and SNP variation
-* __Annual Neighbor Crowding Rate (ANCR)__ relation to individuals kinship and SNP variation
 
 ## Descriptors
 
@@ -49,9 +41,7 @@ The Annual Neighborhood Crowding Rate $ANCR_i$ from tree individual $i$ was calc
 
 $$ANCR_i = \int_{t_0+1} ^{2015} \frac{ NCI_{i,t} - NCI_{i,t-1} }{\Delta t}  .dt$$
 
-with the same parameters as $NCI_i$. $ANCR$ represents the dynamic of biotic asymmetric competition through tree neighborhood over time (derivate of $NCI_i$). Both NCI and ANCR were calculated among heterospecific and conspecific neighbors and with all enighbors confounded.
-
-Both correlations and principal component analyses showed non colinear TWI, NCI and ANCR that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom) and Fig. \@ref(fig:pca12EnvGenom)).
+with the same parameters as $NCI_i$. $ANCR$ represents the dynamic of biotic asymmetric competition through tree neighborhood over time (derivate of $NCI_i$). Both NCI and ANCR were calculated among heterospecific and conspecific neighbors and with all enighbors confounded. Both correlations and principal component analyses showed non colinear TWI, NCI and ANCR that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom)).
 
 ```{r DataEnvGenom, eval=F}
 trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
@@ -147,24 +137,172 @@ trees %>%
   corrplot::corrplot.mixed()
 ```
 
-```{r pca12EnvGenom, fig.cap="Environmental descriptors principal component analysis."}
-factoextra::fviz_pca_var(princomp(~ TWI + NCI + NCIcon + NCIhetero + ANCR + ANCRcon + ANCRhetero, trees, cor = T),
-                         axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```{r Envmdata}
+trees <- trees %>% 
+  mutate(popNum = as.numeric(as.factor(pop)))
+fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
+K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
+              col_names = fam$IID) %>% 
+  mutate(IID = fam$IID) %>% 
+  column_to_rownames(var = "IID") %>% 
+  as.matrix()
+mdata <- function(data, variable) 
+  list(N = nrow(data),
+       P = length(unique(data$pop)),
+       Y = unlist(data[variable])/sd(unlist(data[variable])),
+       population = data$popNum,
+       K = K[data$IID, data$IID])
+dplyr::select(trees, FID, IID, TWI, NCI, ANCR) %>%
+  write_tsv(file.path(path, "gemma", "env", "env.phenotype"), col_names = F)
 ```
 
-## Methods
-
-### Genetic variance ($V_G$) with the Animal model
+## Genetic variance
 
 We used between individual kinship and the Animal model [@Wilson2010] to estimate genetic variance associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. Animal model is calculated for the environemental values $y$ of the $N$ individuals with following formula:
 
-$$y \sim \mathcal N(\mu + Zu,\sigma_E)$$
-$$u \sim \mathcal{MVN_N}(0,\sigma_GK)$$
-$$\sigma_P = \sigma_G + \sigma_E$$
+$$y \sim \mathcal N(\mu_{Population} + a,\sigma_R)$$
+$$a \sim \mathcal{MVN_N}(0,\sigma_GK)$$
+$$\mu_{Population} \sim \mathcal{N}(\mu,\sigma_P)$$
 
-where $N$ is the number of individuals, $y$ is the vector of environmental variable values for the $N$ individual, $\mu$ is the intercept representing the mean environmental variable, $Z$ is the loading matrix (computed with Cholesky decomposition of $K$) and $u$ is the vector of random effects corresponding to individuals kinship relations ($u$ thus represents individuals breeding values), $u$ values are centered on 0, covary with known kinship matrix $K$ with an associated genetic variance $\sigma_G$, $\sigma_E$ is the residual variance, and the sum of residual $\sigma_E$ and genetic $\sigma_G$ variances is equal to the phenotypic variance $\sigma_P$.
+where individual is defined as a normal law centered on the sum of population mean environments $\mu_{Population}$ and additive gentic variance $a$ with associated individual variance $\sigma_R$. Additive genetic variance $a$ follow a multivariate normal law centered on 0 of covariance $\sigma_G K$. Population mean environments $\mu_{Population}$ were defined as random effects on genus level mean environment with associated population variance $\sigma_P$.
 
-### Major effect SNPs with Linear Mixed Models (LMM)
+Most of the variability for topography was explained by the population (58%) and around 30% of the remaining variability was explained by the genotype. On the opposite, most of the variability for competition was explained by the genotype (40-50%) and around 37% of the remaining variability was explained by the population (Tab. \@ref(tab:EnvAnimal) and Fig. \@ref(fig:envKinshipG1) and \@ref(fig:envKinshipG2)). Kinship and population explain more than 80% of the variation from neighboring crowding, so there is a within population adaptation to competition and light access. Variation with topgraphy was more differentiated between population than random genetic variation ($Qst>>Fst$), highlighting a local adptation of *Symphonia* populations to topography.
+
+```{r EnvAnimal, fig.cap="Genetic variance modelling for environmental variables."}
+# animal <- stan_model("./symcapture_models/Animal.stan")
+# fitEnvKin <- lapply(c("TWI", "NCI", "ANCR"), function(var)
+#   sampling(animal, chains = 2, data = mdata(trees, var), save_warmup = F,
+#            include = F, pars = "a", control = list(adapt_delta = 0.99)))
+# names(fitEnvKin) <- c("TWI", "NCI", "ANCR")
+# save(fitEnvKin, file = file.path("symcapture_save", 'envkin.Rdata'))
+load(file.path("symcapture_save", 'envkin.Rdata'))
+lapply(fitEnvKin, broom::tidyMCMC, c("muP", "sigmaP", "sigmaG", "sigmaR"), 
+       droppars = NULL, rhat = T) %>% 
+  bind_rows(.id = "Variable") %>% 
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(population = ifelse(is.na(population), "", population)) %>% 
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Variable", "Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```
+
+```{r envKinshipG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for environmental variables."}
+lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("h2", "h2p", "Qst")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(index = recode(parameter, "h2" = "h^2 == frac(sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
+                        "h2p" = "h[p]^2 == frac(sigma[P]^2+sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
+                        "Qst" = "Q[st] == frac(sigma[P]^2,sigma[P]^2+2*sigma[G]^2)")) %>%
+  ggplot(aes(x = variable, xend = variable, col = variable, fill = variable)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ index, labeller = label_parsed) +
+  xlab("") + ylab("") +
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r envKinshipG2, fig.cap="Genetic variance partitionning for environmental variables."}
+lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(parameter = recode(parameter, "sigmaP" = "Population", "sigmaG" = "Genotype", "sigmaR" = "Residual")) %>% 
+  group_by(variable) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = variable, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))
+```
+
+## Population genetic variance
+
+We used within-population between-individual kinship and the Animal model [@Wilson2010] to estimate genetic variance associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. Animal model is calculated for the environemental values $y$ of the $N$ individuals with following formula:
+
+$$y \sim \mathcal N(\mu_{Population} + a,\sigma_R)$$
+$$a \sim \mathcal{MVN_N}(0,\sum^{Population}\sigma_{Gpopulation}K_{Population})$$
+$$\mu_{Population} \sim \mathcal{N}(\mu,\sigma_P)$$
+
+where individual is defined as a normal law centered on the sum of population mean environments $\mu_{Population}$ and additive gentic variance $a$ with associated individual variance $\sigma_R$. Additive gentic variance $a$ follow a multivariate normal law centered on 0 of covariance defined as the sum of populations genetic additive variance $\sigma_{Gpopulation}$ multiplied by within-population kinship $K_{Population}$. Population mean environments $\mu_{Population}$ were defined as random effects on genus level mean environment with associated population variance $\sigma_P$.
+
+Results are similar to the previous paragraph, they onlyt inform a little bit on within-population genetic variation. Globally the genetic variances are not significantly different exceot for *S. sp1* with an increased genotypic variability with ANCR but decreased with TWI. I'm not sure I will use these results, so they aren't discussed for the moment.
+
+```{r EnvAnimalPop, fig.cap="Genetic variance modelling for environmental variables."}
+# animal <- stan_model("./symcapture_models/AnimalPop.stan")
+# Karray <- sapply(1:max(trees$popNum), function(p){
+#   Kp = K[trees$IID,trees$IID]
+#   for(n in 1:nrow(trees)) {
+#     if(trees$popNum[n] != p) {
+#       Kp[,n] = 10^-6
+#       Kp[n,] = 10^-6
+#     }
+#   }
+#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
+# })
+# dim(Karray) <- c(nrow(trees), nrow(trees), max(trees$popNum))
+# Y <- lapply(c("TWI", "NCI", "ANCR"), function(var){
+#  y <- mdata(trees, var) ; y$K <- aperm(Karray, c(3,1,2)) ; return(y)})
+# fitEnvPop <- lapply(Y, function(y) sampling(animal, chains = 2, data = y, save_warmup = F,
+#            include = F, pars = "a", control = list(adapt_delta = 0.99)))
+# names(fitEnvPop) <- c("TWI", "NCI", "ANCR")
+# save(fitEnvPop, file = file.path("symcapture_save", 'envpop.Rdata'))
+load(file.path("symcapture_save", 'envpop.Rdata'))
+lapply(fitEnvPop, broom::tidyMCMC, c("muP", "sigmaP", "sigmaG", "sigmaR"),
+       droppars = NULL, rhat = T) %>%
+  bind_rows(.id = "Variable") %>%
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>%
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>%
+  mutate(population = ifelse(is.na(population), "", population)) %>%
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Variable", "Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```
+
+```{r envPopG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for environmental variables per population."}
+lapply(fitEnvPop, mcmc_intervals_data, regex_pars = c("h2", "h2p", "Qst")) %>% 
+  bind_rows(.id = "variable") %>% 
+  separate(parameter, c("parameter", "population"), "[:punct:]", convert = T) %>%
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(index = recode(parameter, "h2" = "h^2 == frac(sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
+                        "h2p" = "h[p]^2 == frac(sigma[P]^2+sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
+                        "Qst" = "Q[st] == frac(sigma[P]^2,sigma[P]^2+2*sigma[G]^2)")) %>%
+  ggplot(aes(x = population, xend = population, col = population, fill = population)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(variable ~ index, labeller = label_parsed) +
+  xlab("") + ylab("") +
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r envPopG2, fig.cap="Genetic variance partitionning for environmental variables per population."}
+lapply(fitEnvPop, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>% 
+  bind_rows(.id = "variable") %>% 
+  separate(parameter, c("parameter", "population"), "[:punct:]", convert = T) %>%
+  mutate(population = ifelse(is.na(population), "1,2,3", population)) %>% 
+  separate_rows(population, sep = ",") %>% 
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(parameter = recode(parameter, "sigmaP" = "Population", "sigmaG" = "Genotype", "sigmaR" = "Residual")) %>% 
+  mutate(parameter = factor(parameter, levels = c("Population", "Genotype", "Residual"))) %>% 
+  group_by(variable, population) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = population, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free", nrow = 3) +
+  coord_flip() +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))
+```
+
+## Major effect SNPs
 
 We used per SNP linear mixed models implemented in `GEMMA` [Genome-wide Efficient Mixed Model Analysis, @Zhou2012a] to identify major effect SNPs. Linear mixed models are calculated for the environemental values $y$ of the $N$ individuals with following formula:
 
@@ -174,7 +312,53 @@ $$\sigma_P = \sigma_G + \sigma_E$$
 
 where $N$ is the number of individuals, $y$ is the vector of environmental variable values for the $N$ individual, $\mu$ is the intercept representing the mean environmental variable, $x$ is a SNP, $\beta$ is the effect size of the SNP, $Z$ is the loading matrix (computed with Cholesky decomposition of $K$) and $u$ is the vector of random effects corresponding to individuals kinship relations ($u$ thus represents individuals breeding values), $u$ values are centered on 0, covary with known kinship matrix $K$ with an associated genetic variance $\sigma_G$, $\sigma_E$ is the residual variance, and the sum of residual $\sigma_E$ and genetic $\sigma_G$ variances is equal to the phenotypic variance $\sigma_P$. $\beta$ significance is calculated with Wald test. And p-values are corrected for multiple testing with false discovery rate, resulting in q-values. 
 
-### Polygenic structure with Bayesian Sparse Linear Mixed Models (BSLMM)
+We detected 3 outlier SNPs for ANCR (2 hitchhikers and 1 anonymous) and 15 for TWI (3 genic, 10 hitchhikers and 2 anonymous, 
+Fig. \@ref(fig:envMLM)).
+
+```{bash EnvGemma, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/gemma-v0.97
+cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
+for par in $(seq 1 3) ; do plink \
+  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
+  --allow-extra-chr --keep paracou3pop.fam \
+  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
+  --maf 0.05 --pheno env.phenotype --mpheno $par --out paracou3pop.$par --make-bed ; done
+gemma -bfile paracou3pop.1 -gk 1 -o kinship
+for par in $(seq 1 3) ; do  gemma -bfile paracou3pop.$par -k output/kinship.cXX.txt -lmm 1 -o LMM.$par & done
+for par in $(seq 1 3) ; do  gemma -bfile paracou3pop.$par -k -bslmm 1  -o BSLMM.$par & done
+cat LMM.snps | cut -f1 > snps.list
+plink --bfile paracou3pop.1 --allow-extra-chr --extract snps.list --out outliers --recode A
+```
+
+```{r envMLM, fig.cap="q-value of major effect SNPs associated to environmental variables. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+lmm <- lapply(list.files(file.path(path, "gemma", "env"), pattern = ".assoc.txt$", full.names = T), read_tsv)%>% 
+  bind_rows(.id = "parameter") %>% 
+  mutate(parameter = recode(parameter, "1" = "TWI",  "2" = "NCI",  "3" = "ANCR")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval) %>% 
+  mutate(model = "LMM")
+filter(lmm , qval < 0.05) %>% 
+  dplyr::select(rs, parameter) %>% 
+  write_tsv(file.path(path, "gemma", "env", "LMM.snps"), col_names = F)
+ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ggrepel::geom_text_repel(data = lmm[lmm$qval < 0.05,]) +
+  ylab(expression(-log[10]("q-value"))) +
+  facet_wrap(~ parameter) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type")
+```
+
+## Polygenic structure
 
 We used Bayesian Sparse Linear Mixed Models [BSLMM, @Zhou2013] implemented in `GEMMA` to identify polygenic structure associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. The objective of BSLMM is to merge the hypothesis of Bayesian Variable Sparse Regression (BVSR), which assume few SNPs with large effects, with the hypothesis of Linear Mixed Models (LMM), which assume numerous small effects SNPs, because a priori knowledge of the genomic structure associated to our studied variable is not obvious. Bayesian Sparse Linear Mixed Models is calculated for the environemental values $y$ of the $N$ individuals with following formula:
 
@@ -225,202 +409,51 @@ In summary, to interpret subsequent BSLMM results, we should remember that:
 
 </div>
 
-## Topographic Wetness Index (TWI)
+We detected only 1 anonymous outlier SNP for NCI (Fig. \@ref(fig:envBSLMM)). Moreover, polygenic modelling with bayesian sparse linear mixed models (BSLMM) didn’t converged due to a small number of individuals (Fig. \@ref(fig:envBSLMMConvergence)).
 
-```{bash TWIgemma, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/gemma-v0.97
-cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
-pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
-for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
-pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
-for pop in "${pops[@]}" ; do  
-  plink --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
-  --allow-extra-chr --keep $pop.fam \
-  --extract ../../../variantCalling/paracou3pop/LD.prune.in --maf 0.05 \
-  --pheno TWI.env --out $pop --make-bed &
-done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship ; done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.LMM.TWI & done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.BSLMM.TWI & done
-cat TWI.LMM.snps | cut -f1 > TWI.snps.list
-plink --bfile paracou3pop --allow-extra-chr --extract TWI.snps.list --out TWI.snps --recode A
-plink --bfile ../../../variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
-  --allow-extra-chr --extract TWI.snps.list --out TWI.snps.paracou --recode A
+```{r envBSLMMConvergence, fig.cap="Traceplot of hyper-parameters chain for Baysian Sparse Linear Mixed Model (BSLMM)."}
+cowplot::plot_grid(plotlist = lapply(list.files(file.path(path, "gemma", "growth"), pattern = ".hyp.txt$", full.names = T), 
+       function(file) read_tsv(file) %>% 
+         dplyr::select(pge, n_gamma) %>% 
+         dplyr::rename(PGE = pge, `n[gamma]` = n_gamma) %>% 
+         mutate(iteration = 1:n()) %>% 
+         filter(row_number() %% 100 == 0) %>% 
+         dplyr::select(-iteration) %>% 
+         mcmc_combo()), labels = c("TWI", "NCI", "ANCR"), nrow = 3)  
 ```
 
-Topographic wetness index (TWI) is a major environmental factor of genomic variation ($\sigma_G=0.79\pm0.13$, Fig. \@ref(fig:TWIPVE)). TWI was significantly associated only to one major effect SNPs across genepools (Fig. \@ref(fig:TWIassocMLM)), with an advantage of the major allele A in wet areas (Fig. \@ref(fig:TWIoutliersHist)). The polygenic model indicated 0.1% [0-0.45] of the genome to be related to TWI corresponding to 34 [0-146] SNPs, but the model didn't identified specific SNPs in our dataset (no $\gamma > 0.5$).
-
-The TWI-associated SNP is a putative hitchiker located at 305 bp of gene coding for Pentatricopeptide repeat-containing protein At3g22470 implicated in mitochondrial communication.
-
-### Proportion of Variance Explained
-
-#### Animal
-
-$$y_i \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
-
-```{r TWIAnimal, fig.cap="Proportion of Variance Explained (PVE) by TWI."}
-Y <- trees %>%
-  mutate(popNum = as.numeric(as.factor(pop))) %>%
-  dplyr::select(FID, IID, TWI, pop, popNum) %>%
-  mutate(TWI = TWI/sd(TWI))
-fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
-                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
-              col_names = fam$IID) %>% 
-  mutate(IID = fam$IID) %>% 
-  column_to_rownames(var = "IID") %>% 
-  as.matrix()
-# Yl <- list(paracou3pop = Y, sp1 = filter(Y, pop == "sp1"),
-#           globuliferaTypeParacou = filter(Y, pop == "globuliferaTypeParacou"),
-#           globuliferaTypeRegina = filter(Y, pop == "globuliferaTypeRegina"))
-# model <- stan_model("./symcapture_models/Animal.stan")
-# fitsAnimal$TWI <- lapply(Yl, function(pop)
-#   sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
-#            control = list(adapt_delta = 0.99),
-#            data = list(N = nrow(pop), Y = pop$TWI, K = K[pop$IID,pop$IID])))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalModels.Rdata'))
-cowplot::plot_grid(plotlist = lapply(fitsAnimal$TWI, mcmc_combo, pars = c("sigmaG", "sigmaR")), 
-                   labels = names(fitsAnimal$TWI))
-lapply(fitsAnimal$TWI, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T, estimate.method = "median") %>% 
-  bind_rows(.id = "Population")
-```
-
-#### Animal Pop Mean Var
-
-$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
-
-```{r TWIAnimalPopMeanVar, fig.cap="Proportion of Variance Explained (PVE) by TWI."}
-# Karray <- sapply(1:max(Y$popNum), function(p){
-#   Kp = K[Y$IID,Y$IID]
-#   for(n in 1:nrow(Y)) {
-#     if(Y$popNum[n] != p) {
-#       Kp[,n] = 10^-6
-#       Kp[n,] = 10^-6
-#     }
-#   }
-#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
-# })
-# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
-# sigmaY <- group_by(Y, popNum) %>%
-#   summarise(sigmaY = var(TWI)) %>%
-#   dplyr::select(sigmaY) %>% unlist()
-# model <- stan_model("./symcapture_models/AnimalPopMeanVar.stan")
-# fitsAnimal$TWI <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
-#                             control = list(adapt_delta = 0.9),
-#                             data = list(J = 1, N = nrow(Y), Y = Y$TWI, sigmaY = sigmaY,
-#                                         K = aperm(Karray, c(3,1,2)),
-#                                         P = max(Y$popNum), pop = Y$popNum))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
-mcmc_combo(as.array(fitsAnimal$TWI ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
-broom::tidyMCMC(fitsAnimal$TWI,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
-```
-
-### Major effect SNPs
-
-```{r TWIassocMLM, fig.cap="q-value of major effect SNPs associated to topographic wetness index (TWI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-t <- lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
-  read_tsv(file.path(path, "gemma", "TWI", paste0(pop,".LMM.TWI.assoc.txt"))) %>% 
-    mutate(pop = pop)) %>% 
-  bind_rows() %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.))
-filter(t , qval < 0.05) %>% 
-  mutate(model = "LMM") %>% 
-  filter(pop == "paracou3pop") %>% # for the moment
-  dplyr::select(rs, pop, model) %>% 
-  write_tsv(file.path(path, "gemma", "TWI", "TWI.LMM.snps"), col_names = F)
-ggplot(t, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
-  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
-  geom_point() +
-  ggrepel::geom_text_repel(data = t[t$qval < 0.05,]) +
-  ylab(expression(-log[10]("q-value"))) +
-  scale_alpha_discrete(guide = "none") +
-  scale_y_sqrt() +
-  xlab("SNP number") +
-  scale_color_discrete("SNP type") +
-  facet_wrap(~ pop) 
-```
-
-### Polygenic signal
-
-```{r BSLMMTWIConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
-lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
-  read_tsv(file.path(path, "gemma", "TWI", paste0(pop,".BSLMM.TWI.hyp.txt"))) %>% 
-    mutate(Population = pop)) %>% 
-  bind_rows()  %>% 
-  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  group_by(Population) %>% 
-  mutate(iteration = 1:n()) %>% 
-  filter(row_number() %% 100 == 0) %>% 
-  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
-  ggplot(aes(iteration, value)) +
-  geom_line() +
-  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
-  theme(axis.text.x = element_text(angle = 45))
-```
-
-```{r BSLMMTWIHypPar}
-read_tsv(file.path(path, "gemma", "TWI", paste0("paracou3pop",".BSLMM.TWI.hyp.txt"))) %>% 
-  dplyr::select(pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  broom::tidyMCMC(conf.int = T) %>% 
-  kable(caption = "BSLMM hyper-parameters distribution for the whole genus.")
-```
-
-```{r TWIAssocBSLMM, fig.cap="Effect of SNPs associated to topographic wetness index (TWI) with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype.", eval=F}
-read_tsv(file.path(path, "gemma", "TWI", paste0("paracou3pop",".BSLMM.TWI.param.txt"))) %>% 
-  mutate(Population = "paracou3pop") %>% 
+```{r envBSLMM, fig.cap="Effect of SNPs associated to environmental variables with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype."}
+bslmm <- lapply(list.files(file.path(path, "gemma", "growth"), pattern = ".param.txt$", full.names = T), read_tsv) %>% 
+  bind_rows(.id = "parameter") %>% 
+  mutate(parameter = recode(parameter, "1" = "TWI",  "2" = "NCI",  "3" = "ANCR")) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   arrange(chr, ps) %>% 
   mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.5)) +
+  mutate(model = "BSLMM")
+filter(bslmm , gamma > 0.5) %>% 
+  dplyr::select(rs, parameter) %>% 
+  write_tsv(file.path(path, "gemma", "env", "BSLMM.snps"), col_names = F)
+ggplot(bslmm, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.5)) +
   geom_point() +
+  ggrepel::geom_text_repel(data = bslmm[bslmm$gamma > 0.5,]) +
   scale_y_continuous(trans="S_sqrt") +
+  facet_wrap(~ parameter) +
   ylab(expression(beta*gamma))
 ```
 
-### Outliers
+## Outliers
 
-```{r TWIoutliersHist, fig.cap="Distribution of alleles along topographic wetness index for significantly associated SNPs."}
-read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
-  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
-  dplyr::rename(TWI = PHENOTYPE) %>% 
-  reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
-  na.omit(Allele) %>% 
-  mutate(Allele = as.factor(Allele)) %>% 
-  left_join(trees, by = "IID", suffix = c("", ".trees")) %>% 
-  ggplot(aes(pop, TWI, fill = Allele)) +
-  geom_boxplot() +
-  facet_wrap(~ SNP) +
-  coord_flip() +
-  ylab("Topographic wetness index") +
-  xlab("Population") +
-  scale_fill_discrete("Number of copies\nof the major allele")
-```
+Only one gene associated to outliers SNPs had a significant enrichment of a gene ontology ($qval=0.03244626$), the hitchhiker SNP of ANCR was significantly enriched in a gene implicated in the regulation of flower development (Fig. \@ref(fig:envGO)).
 
-```{r TWIoutliersGO, eval=F}
-snp <- read_delim(file.path(path, "gemma", "TWI", "TWI.snps.raw"), delim = " ") %>% 
-  dplyr::select(-FID, -PAT, -MAT, -SEX) %>% 
-  dplyr::rename(TWI = PHENOTYPE) %>% 
-  reshape2::melt(id.vars = c("IID", "TWI"), variable.name = "SNP", value.name = "Allele") %>% 
-  na.omit(Allele) %>% 
-  mutate(Allele = as.factor(Allele)) %>% 
-  left_join(trees, by = "IID", suffix = c("", ".trees"))
+```{r envGO, fig.cap="Term enrichment of Gene Ontology (GO) for outliers genes."}
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
+              dplyr::select(scf, snp, trsc) %>% 
+  bind_rows(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% # inclusion to be discussed
+  unique() %>% 
+  inner_join(dplyr::rename(lmm, snpNum = snp, snp = rs), .)
 
-trsc <- read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation")) %>% 
-  filter(snp == "Olsson_2017_scf7180005379595_snp1055")
-go <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
                      "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
   tbl("Transcript") %>% 
   filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
@@ -428,354 +461,41 @@ go <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Nikla
   dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
   collect() %>% 
   separate(annotation, paste0("X", 1:16), "\t") %>% 
-  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13)
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
+  dplyr::select(trsc, gene, orf, GO) %>% 
+  filter(GO != ".") %>% 
+  left_join(trsc) %>% 
+  group_by(model, parameter, gene, GO) %>% 
+  summarise(qval = min(qval)) %>% 
+  ungroup() %>% 
+  dplyr::select(model, parameter, gene, qval, GO) %>% 
+  separate_rows(GO, sep = "`") %>% 
+  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
+
+enrichment <- function(x) {
+  y <- clusterProfiler::enricher(unique(filter(x, qval < 0.05)$gene),
+                                            pvalueCutoff = 0.2, 
+                                            pAdjustMethod = "BH",
+                                            unique(x$gene),
+                                            minGSSize = 10, 
+                                            maxGSSize = 500, 
+                                            qvalueCutoff = 0.2, 
+                                            dplyr::select(x, GOid, gene),
+                                            TERM2NAME = dplyr::select(x, GOid, GOname))
+  if(is.null(y)){
+    data.frame()
+  } else {
+    y@result
+  }
+}
+
+group_by(GO, model, parameter) %>% 
+  do(enrichment(.)) %>% 
+  filter(qvalue < 0.8) %>% 
+  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ model + parameter, labeller = "label_both", nrow = 2, scales = "free") +
+  viridis::scale_fill_viridis() +
+  theme(axis.title = element_blank())
 ```
-
-## Neighbor Crowding Index (NCI)
-
-```{bash NCIgemma, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/gemma-v0.97
-cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
-pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
-for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
-pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
-for pop in "${pops[@]}" ; do  
-  plink --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
-  --allow-extra-chr --keep $pop.fam \
-  --extract ../../../variantCalling/paracou3pop/LD.prune.in --maf 0.05 \
-  --pheno NCI.env --out $pop --make-bed &
-done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship ; done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.LMM.NCI & done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.BSLMM.NCI & done
-cat NCI.LMM.snps TWI.BSLMM.snps | cut -f1 > NCI.snps.list
-plink --bfile paracou3pop --allow-extra-chr --extract NCI.snps.list --out NCI.snps --recode A
-```
-
-Neighbor crowding index (NCI) is a strong environmental factor of genomic variation ($\sigma_G=0.59\pm0.17$, Fig. \@ref(fig:NCIPVE)). NCI wasn't significantly associated to any  major effect SNPs across genepools (Fig. \@ref(fig:NCIassocMLM)). The polygenic model indicated 0.17% [0-0.61] of the genome to be related to NCI corresponding to 52 [0-192] SNPs, but the model didn't identified specific SNPs in our dataset (no $\gamma > 0.5$).
-
-### Proportion of Variance Explained
-
-#### Animal
-
-$$y_i \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
-
-```{r NCIAnimal, fig.cap="Proportion of Variance Explained (PVE) by NCI"}
-Y <- trees %>%
-  mutate(popNum = as.numeric(as.factor(pop))) %>%
-  dplyr::select(FID, IID, NCI, pop, popNum) %>%
-  mutate(NCI = NCI/sd(NCI))
-fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
-                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
-              col_names = fam$IID) %>% 
-  mutate(IID = fam$IID) %>% 
-  column_to_rownames(var = "IID") %>% 
-  as.matrix()
-# Yl <- list(paracou3pop = Y, sp1 = filter(Y, pop == "sp1"),
-#           globuliferaTypeParacou = filter(Y, pop == "globuliferaTypeParacou"),
-#           globuliferaTypeRegina = filter(Y, pop == "globuliferaTypeRegina"))
-# model <- stan_model("./symcapture_models/Animal.stan")
-# fitsAnimal$NCI <- lapply(Yl, function(pop)
-#   sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
-#            control = list(adapt_delta = 0.99),
-#            data = list(N = nrow(pop), Y = pop$NCI, K = K[pop$IID,pop$IID])))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalModels.Rdata'))
-cowplot::plot_grid(plotlist = lapply(fitsAnimal$NCI, mcmc_combo, pars = c("sigmaG", "sigmaR")), 
-                   labels = names(fitsAnimal$NCI))
-lapply(fitsAnimal$NCI, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T, estimate.method = "median") %>% 
-  bind_rows(.id = "Population")
-```
-
-#### Animal Pop Mean Var
-
-$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
-
-```{r NCIAnimalPopMeanVar, fig.cap="Proportion of Variance Explained (PVE) by NCI"}
-# Karray <- sapply(1:max(Y$popNum), function(p){
-#   Kp = K[Y$IID,Y$IID]
-#   for(n in 1:nrow(Y)) {
-#     if(Y$popNum[n] != p) {
-#       Kp[,n] = 10^-6
-#       Kp[n,] = 10^-6
-#     }
-#   }
-#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
-# })
-# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
-# sigmaY <- group_by(Y, popNum) %>%
-#   summarise(sigmaY = var(NCI)) %>%
-#   dplyr::select(sigmaY) %>% unlist()
-# model <- stan_model("./symcapture_models/AnimalPopMeanVar.stan")
-# fitsAnimal$NCI <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
-#                             control = list(adapt_delta = 0.9),
-#                             data = list(J = 1, N = nrow(Y), Y = Y$NCI, sigmaY = sigmaY,
-#                                         K = aperm(Karray, c(3,1,2)),
-#                                         P = max(Y$popNum), pop = Y$popNum))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
-mcmc_combo(as.array(fitsAnimal$NCI ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
-broom::tidyMCMC(fitsAnimal$NCI,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
-```
-
-### Major effect SNPs
-
-```{r NCIassocMLM, fig.cap="q-value of major effect SNPs associated to neighbor competition index (NCI). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
-  read_tsv(file.path(path, "gemma", "NCI", paste0(pop,".LMM.NCI.assoc.txt"))) %>% 
-    mutate(pop = pop)) %>% 
-  bind_rows() %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type)) +
-  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
-  geom_point() +
-  ylab(expression(-log[10]("q-value"))) +
-  scale_alpha_discrete(guide = "none") +
-  scale_y_sqrt() +
-  xlab("SNP number") +
-  scale_color_discrete("SNP type") +
-  facet_wrap(~ pop) 
-```
-
-### Polygenic signal
-
-```{r BSLMMNCItConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
-lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
-  read_tsv(file.path(path, "gemma", "NCI", paste0(pop,".BSLMM.NCI.hyp.txt"))) %>% 
-    mutate(Population = pop)) %>% 
-  bind_rows()  %>% 
-  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  group_by(Population) %>% 
-  mutate(iteration = 1:n()) %>% 
-  filter(row_number() %% 100 == 0) %>% 
-  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
-  ggplot(aes(iteration, value)) +
-  geom_line() +
-  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
-  theme(axis.text.x = element_text(angle = 45))
-```
-
-```{r BSLMMNCIHypPar}
-read_tsv(file.path(path, "gemma", "NCI", paste0("paracou3pop",".BSLMM.NCI.hyp.txt"))) %>% 
-  dplyr::select(pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  broom::tidyMCMC(conf.int = T) %>% 
-  kable(caption = "BSLMM hyper-parameters distribution for the whole genus.")
-```
-
-```{r NCIAssocBSLMM, fig.cap="Effect of SNPs associated to neighbor crowding index (NCI) with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype.", eval=F}
-read_tsv(file.path(path, "gemma", "NCI", paste0("paracou3pop",".BSLMM.NCI.param.txt"))) %>% 
-  mutate(Population = "paracou3pop") %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.5)) +
-  geom_point() +
-  scale_y_continuous(trans="S_sqrt") +
-  ylab(expression(beta*gamma))
-```
-
-## Annual Neighbor Crowding Rate (ANCR)
-
-```{bash ANCRgemma, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/gemma-v0.97
-cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
-pops=(sp1 globuliferaTypeParacou globuliferaTypeRegina)
-for pop in "${pops[@]}" ; do  grep $pop paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > $pop.fam ; done
-pops=(paracou3pop sp1 globuliferaTypeParacou globuliferaTypeRegina)
-for pop in "${pops[@]}" ; do  
-  plink --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
-  --allow-extra-chr --keep $pop.fam \
-  --extract ../../../variantCalling/paracou3pop/LD.prune.in --maf 0.05 \
-  --pheno ANCR.env --out $pop --make-bed &
-done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -gk 1 -o $pop.kinship ; done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -k output/$pop.kinship.cXX.txt -lmm 1 -o $pop.LMM.ANCR & done
-for pop in "${pops[@]}" ; do  gemma -bfile $pop -k -bslmm 1 -o $pop.BSLMM.ANCR ; done
-cat ANCR.LMM.snps ANCR.BSLMM.snps | cut -f1 > ANCR.snps.list
-plink --bfile paracou3pop --allow-extra-chr --extract ANCR.snps.list --out ANCR.snps --recode A
-```
-
-Annual Neighbor Crowding Rate (ANCR) was not significantly related to genetic variation $\sigma_G=0.11\pm0.11$, Fig. \@ref(fig:ANCRPVE)). Thus unsurisingly, ANCR was associated to any major effect SNPs and din't show a polygenic signal.
-
-### Proportion of Variance Explained
-
-#### Animal
-
-$$y_i \sim \mathcal{N}(\mu + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sigma_GK)$$
-
-```{r ANCRAnimal, fig.cap="Proportion of Variance Explained (PVE) by ANCR"}
-Y <- trees %>%
-  mutate(popNum = as.numeric(as.factor(pop))) %>%
-  dplyr::select(FID, IID, ANCR, pop, popNum) %>%
-  mutate(ANCR = ANCR/sd(ANCR))
-fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
-                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
-              col_names = fam$IID) %>% 
-  mutate(IID = fam$IID) %>% 
-  column_to_rownames(var = "IID") %>% 
-  as.matrix()
-# Yl <- list(paracou3pop = Y, sp1 = filter(Y, pop == "sp1"),
-#           globuliferaTypeParacou = filter(Y, pop == "globuliferaTypeParacou"),
-#           globuliferaTypeRegina = filter(Y, pop == "globuliferaTypeRegina"))
-# model <- stan_model("./symcapture_models/Animal.stan")
-# fitsAnimal$ANCR <- lapply(Yl, function(pop)
-#   sampling(model, chains = 2, save_warmup = F, include = F, pars = "a",
-#            control = list(adapt_delta = 0.99),
-#            data = list(N = nrow(pop), Y = pop$ANCR, K = K[pop$IID,pop$IID])))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalModels.Rdata'))
-cowplot::plot_grid(plotlist = lapply(fitsAnimal$ANCR, mcmc_combo, pars = c("sigmaG", "sigmaR")), 
-                   labels = names(fitsAnimal$ANCR))
-lapply(fitsAnimal$ANCR, broom::tidyMCMC,  pars = c("h2"), conf.int = T, rhat = T, estimate.method = "median") %>% 
-  bind_rows(.id = "Population")
-```
-
-#### Animal Pop Mean Var
-
-$$y_{p,i} \sim \mathcal{N}(\mu_p + u_i, \sigma_R)$$
-$$u \sim \mathcal{N}_N(0, \sum _p \sigma_{G_p} K_p)$$
-
-```{r ANCRAnimalPopMeanVar, fig.cap="Proportion of Variance Explained (PVE) by ANCR"}
-# Karray <- sapply(1:max(Y$popNum), function(p){
-#   Kp = K[Y$IID,Y$IID]
-#   for(n in 1:nrow(Y)) {
-#     if(Y$popNum[n] != p) {
-#       Kp[,n] = 10^-6
-#       Kp[n,] = 10^-6
-#     }
-#   }
-#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
-# })
-# dim(Karray) <- c(nrow(Y), nrow(Y), max(Y$popNum))
-# sigmaY <- group_by(Y, popNum) %>%
-#   summarise(sigmaY = var(ANCR)) %>%
-#   dplyr::select(sigmaY) %>% unlist()
-# model <- stan_model("./symcapture_models/AnimalPopMeanVar.stan")
-# fitsAnimal$ANCR <- sampling(model, chains = 2, save_warmup = F, include = F, pars = c("a", "G"),
-#                             control = list(adapt_delta = 0.9),
-#                             data = list(J = 1, N = nrow(Y), Y = Y$ANCR, sigmaY = sigmaY,
-#                                         K = aperm(Karray, c(3,1,2)),
-#                                         P = max(Y$popNum), pop = Y$popNum))
-# save(fitsAnimal, file = file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
-load(file.path("symcapture_save", 'AnimalPopMeanVarModels.Rdata'))
-mcmc_combo(as.array(fitsAnimal$ANCR ,  pars = c("sigmaP", "sigmaG", "sigmaR")))
-broom::tidyMCMC(fitsAnimal$ANCR,  pars = c("sigmaP", "h2"), conf.int = T, rhat = T)
-```
-
-### Major effect SNPs
-
-```{r ANCRassocMLM, fig.cap="q-value of major effect SNPs associated to annual neighbor crowding rate (ANCR). SNP were detected using linear mixed models with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
-  read_tsv(file.path(path, "gemma", "ANCR", paste0(pop,".LMM.ANCR.assoc.txt"))) %>% 
-    mutate(pop = pop)) %>% 
-  bind_rows() %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  mutate(qval = p.adjust(p_wald, "fdr")) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, -log10(qval), alpha = qval < 0.05, col = type, label = snp)) +
-  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
-  geom_point() +
-  ylab(expression(-log[10]("q-value"))) +
-  scale_alpha_discrete(guide = "none") +
-  scale_y_sqrt() +
-  xlab("SNP number") +
-  scale_color_discrete("SNP type") +
-  facet_wrap(~ pop) 
-```
-
-### Polygenic signal
-
-```{r BSLMMANCRConvergence, fig.cap="traceplot of BSLMM hyper-parameters chain."}
-lapply(c("paracou3pop", "sp1", "globuliferaTypeParacou", "globuliferaTypeRegina"), function(pop) 
-  read_tsv(file.path(path, "gemma", "ANCR", paste0(pop,".BSLMM.ANCR.hyp.txt"))) %>% 
-    mutate(Population = pop)) %>% 
-  bind_rows()  %>% 
-  dplyr::select(Population, pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  group_by(Population) %>% 
-  mutate(iteration = 1:n()) %>% 
-  filter(row_number() %% 100 == 0) %>% 
-  reshape2::melt(id.vars = c("Population", "iteration"), variable.name = "parameter") %>% 
-  ggplot(aes(iteration, value)) +
-  geom_line() +
-  facet_grid(parameter ~ Population, scales = "free", labeller = "label_parsed") +
-  theme(axis.text.x = element_text(angle = 45))
-```
-
-```{r BSLMMANCRHypPar}
-read_tsv(file.path(path, "gemma", "ANCR", paste0("paracou3pop",".BSLMM.ANCR.hyp.txt"))) %>% 
-  dplyr::select(pve, pge, pi, n_gamma) %>% 
-  dplyr::rename(PVE = pve, PGE = pge, `n[gamma]` = n_gamma) %>% 
-  broom::tidyMCMC(conf.int = T) %>% 
-  kable(caption = "BSLMM hyper-parameters distribution for the whole genus.")
-```
-
-```{r ANCRssocBSLMM, fig.cap="Effect of SNPs associated to annual neighbor crowding rate (ANCR) with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype.", eval=F}
-read_tsv(file.path(path, "gemma", "ANCR", paste0("paracou3pop",".BSLMM.ANCR.param.txt"))) %>% 
-  mutate(Population = "paracou3pop") %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  ggplot(aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.5)) +
-  geom_point() +
-  scale_y_continuous(trans="S_sqrt") +
-  ylab(expression(beta*gamma))
-```
-
-## SNP imputation
-
-> Unused, I let the code here in case of need. But I prefer using the ca 40k SNPs without missing information instead of 70k imputed SNPs for the moment.
-
-We used `beagle` to impute missing data in SNPs. `beagle` doesn't work with scaffolds including less than 3 SNPs, wo we removed the 1849 corresponding SNPs.
-
-```{bash beagle, eval=F, echo=T}
-module load bioinfo/plink-v1.90b5.3
-module load bioinfo/Beagle_v5.0
-plink \
-  --bfile ../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
-  --allow-extra-chr \
-  --extract ../../variantCalling/paracou3pop/LD.prune.in \
-  --maf 0.05 \
-  --out paracou3pop.raw \
-  --make-bed
-# read_tsv(file.path(path, "beagle", "paracou3pop.raw.bim"), col_names = F) %>%
-#   group_by(X1) %>% filter(n() < 3) %>%  ungroup() %>%  dplyr::select(X2) %>% 
-#   write_tsv(file.path(path, "beagle", "snp.lowsnpscf.list"), col_names = F)
-plink \
-  --bfile paracou3pop.raw \
-  --allow-extra-chr \
-  --out paracou3pop.raw \
-  --recode vcf-iid \
-  --exclude snp.lowsnpscf.list
-java -Xmx4g -jar $BEAGLE   gt=paracou3pop.raw.vcf out=paracou3pop.imputed nthreads=10
-plink \
-  --vcf paracou3pop.imputed.vcf.gz \
-  --allow-extra-chr \
-  --out paracou3pop.imputed \
-  --make-bed
-```
-
-## Conclusion
-
-> Results among populations, they totally differ within populations.
-
-Whereas topographic wetness index (TWI) and neighbor crowding index (NCI) were identified as major environmental factors of genomic varition ($\sigma_G=0.79\pm0.13$ and $\sigma_G=0.59\pm0.17$ respectively), annual neighbor crowding rate (ANCR) was not significantly related to genetic variation ($\sigma_G=0.11\pm0.11$). Both TWI and ANCR were slightly polygenic with respectively 0.1% [0-0.45] and 0.17% [0-0.61] of the genome related to the environmental variable representing respectively 34 [0-146] and 52 [0-192] SNPs. Finally, only TWI was associated to one major effect SNP, being an hitchhiker SNP with an advantage in wet areas with the allele A, already highlighted as a population specific SNP (see previous chapter).
