@@ -224,6 +224,23 @@ leaflet() %>%
   )
 ```
 
+```{r MscFig1, eval=F}
+TWI <- as(aggregate(wetness, 4), "SpatialPixelsDataFrame")
+TWI <- as.data.frame(TWI)
+colnames(TWI) <- c("TWI", "x", "y")
+ggplot() +  
+  geom_tile(data = TWI, aes(x = x, y = y, col = TWI),  alpha = 0.6) +
+  scale_color_distiller("Topography\nWetness\nIndex", palette = "Greys", direction = 1) +
+  scatterpie::geom_scatterpie(aes(x = Xutm, y = Yutm, group = Ind, r = Circ/(3*10^5)),
+                              cols = c("Ssp1", "SgParacou", "SgRegina"),
+                              data = as.data.frame(treesXY)) +
+  scale_fill_manual("Population", values = c("#1E90FF", "#0000EE", "#CD2626"),
+                    labels = c("S. Paracou", "S. Regina", "S. sp1")) +
+  coord_equal() +
+  cowplot::theme_map() +
+  ggsave(filename = "symcapture_manuscripts/figures/Fig1.png")
+```
+
 ## Mismatch
 
 Looking into detail for *S. globulifera* 2 commonly described morphotypes (Fig. \@ref(fig:admixtureParacou2)), we have 32 individuals belonging to *S. sp1* phenotype, 5 admixed individuals and finally 113 individuals with matching morhpotype and cluster (70%). Whereas for *S. sp1* morphotype, we have 20 individuals belonging to *S. globulifera* phenotype, 7 admixed individuals and finally 180 individuals with matching morhpotype and cluster (88%). And last but not least, individuals identified as mixed morphotype on the field included 9 *S. globulifera* cluster and 19 *S. sp1* cluster. Consequently including admixed indivduals we have 146 individuals in the *S. globulifera* cluster against 239 in the *S. sp1* cluster.
@@ -281,6 +298,41 @@ treesXY@data %>%
                                      "S. globulifera\ntype Regina", "S. sp1")) +
   scale_fill_discrete("Genotype", labels = c("Admixed", "S. globulifera\ntype Paracou",
                                      "S. globulifera\ntype Regina", "S. sp1"))
+```
+
+```{r MscFig2, eval=F}
+
+  # ggsave(filename = "symcapture_manuscripts/figures/Fig2raw.png")
+g.TWI <- ggplot(filter(treesXY@data, type != "admixed"), 
+       aes(TWI, fill = type, color = type)) +
+  geom_density(alpha = 0.3) +
+  scale_x_sqrt() +
+  scale_fill_manual("Population", values = c("#1E90FF", "#0000EE", "#CD2626"),
+                    labels = c( "S. Paracou", "S. Regina", "S. sp1")) +
+  scale_color_manual("Population", values = c("#1E90FF", "#0000EE", "#CD2626"),
+                     labels = c( "S. Paracou", "S. Regina", "S. sp1")) +
+  xlab("Topographic Wetness Index")
+
+g.admix <- dplyr::select(treesXY@data, Ind, TWI, Ssp1, SgParacou, SgRegina) %>% 
+  arrange(desc(Ssp1), desc(SgParacou), TWI) %>% 
+  mutate(order = 1:nrow(.)) %>% 
+  reshape2::melt(id.vars = c("order", "Ind", "TWI"), variable.name = "pop") %>% 
+  ggplot(aes(reorder(Ind, order), value, fill = pop), col = NA) + 
+  geom_col() +
+  scale_fill_manual("Population", values = c("#CD2626", "#1E90FF", "#0000EE"),
+                    labels = c("S. sp1", "S. Paracou", "S. Regina")) +
+  ylab("Admixture coefficient") +
+  theme(axis.title.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank(), axis.text.x = element_blank())
+
+g.morpho <- qplot(1:10, 1:10, geom="blank") +
+  theme(axis.title.x = element_blank(), axis.line = element_blank(), 
+        axis.ticks = element_blank(), axis.text = element_blank()) +
+  ylab("Morphotype")
+
+cowplot::plot_grid(g.TWI, g.admix, g.morpho, nrow = 3) %>% 
+  cowplot::save_plot(filename = "symcapture_manuscripts/figures/Fig2raw.png", plot = ., base_aspect_ratio = 1.5)
+
 ```
 
 ## Kinship

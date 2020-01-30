@@ -1,5 +1,5 @@
 ---
-title: "Ontogenetic growth trajectory between and within populations: evidence for local adaptation to topography and competition in a Neotropical tree species complexes"
+title: "Genetic adaptations to topography and competition are strong predictors of tree growth in a Neotropical complex"
 date: '`r Sys.Date()`'
 output:
   bookdown::html_document2:
@@ -19,6 +19,14 @@ csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
+
+```{r config, message=FALSE, warning=FALSE, include=FALSE}
+rm(list = ls()); invisible(gc())
+library(knitr)
+opts_chunk$set(echo = F, message = F, warning = F, 
+               fig.height = 8, fig.width = 8,
+               cache = T, cache.lazy = F)
+```
 
 1. Sylvain Schmitt
     - Corresponding author
@@ -52,19 +60,41 @@ key ;
 
 # Introduction 
 
-
+...  to address the following questions: 
+(1) how is genetic diversity structured in a Neotropical forest?
+(2) how does abiotic and biotic habitat affect population genetic diversity and structure?
+(3) what are the consequences of genetic diversity and structure for individual tree growth?
 
 # Material and Methods
 
 ## Study site
 
-The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
-
+The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. 
+The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. 
+Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
 The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
 
-## Species complexes
+## Plant material
+
+402 individuals from *Symphonia globulifera* (Clusiaceae), an Amazonian hyperdominant tree species [@TerSteege2013], were sampled in 2017 during the dry season (from September to December) in Paracou.
+*Symphonia globulifera* L.f (Clusiaceae) was previoulsy recognized as composed of two morphotypes in French Guiana [@Sabatier1997], *S. globulifera sensu stricto* and *Symphonia sp.1*, occurring in sympatry but in differentiated habitats, with *S. globulifera* preferentially growing in valley bottoms and *S. sp1* preferentially exploiting a variety of drier habitats [@Allie2015; Schmitt et al., in prep]. 
+The genus *Symphonia* has been highlighted as a species complexe with low phylogenetic resolution and high levels of plastid DNA sharing among sister species [@baraloto_using_2012-1; @Caron2019; @Gonzalez2009; @Torroba-Balmori2017]. 
+In addition, outgroup were built with 13 individuals of *Symphonia globulifera* from Africa (Sao Tome, Gabon, Cameroun, Congo, Benin, Liberia, Ivory Coast, and Gana), 7 from South America (Brazil, Costa Rica and Panama), 2 *Symphonia nectarifera* from Madagascar, 2 *Symphonia urophylla* from Madagascar, 5 *Pentadesma butyracea* from Benin and Cameroun and 1 *Pentadesma grandifolia* from Cameroun.
+Leaves were collected from the 432 (402 + 30) individuals and desicated using silica gel. 
+
+## Genomic data production
+
+Genomic DNA was extracted from dried leaf tissue with a CTAB protocol described by @Doyle1987 and libraries were prepared using the NEBNext Ultra II FS DNA Library Prep kit (new England Biolabs Inc, UK), before pooling in equimolar amounts to be captured by hybridization. 
 
 ## Analysis
+
+### Q1: Admixture, pi, ...
+
+### Q2: Genotype by Environment association (no ANCR)
+
+### Q3: Main focus on the growth model describing correctly and friendly the “hierarchy of models” 
+
+### Outlier tests, GO-terms, major effects, polygenicity
 
 # Results
 
@@ -90,4 +120,27 @@ __Table \@ref(tab:)__
 
 ## Figure captions
 
-__Figure \@ref(fig:)__ 
+__Figure \@ref(fig:map)__ Map of sampled Symphonia individuals. Every individual is represented by a pie chart representing population admixture with a radius proportional to the individual circonference in 2015. Grey level represent topographic wetness index.
+
+__Figure \@ref(fig:admixture)__ Admixture plot of Symphonia individuals for K=3 with population distribution along topographic wetness index and associated trunk morphology. The three morphotypes are identified with their bark with S. sp1 having a light grey thin and smooth bark, the S. globulifera type Paracou having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of S. globulifera type Regina.
+
+__Figure \@ref(fig:Epart)__ Variance partitioning for environmental variables. Individuals environmental variations have been partitioned into between-population, between-genotype (within-population) and residual variation for Neighbor Crowding Index (NCI) and Topographic Wetness Index (TWI).
+
+__Figure \@ref(fig:Ppart)__ Variance partitioning for parameters of growth ontogenetic-trajectory. Individuals variations for parameters of growth ontogenetic-trajectory have been partitioned into between-population, between-genotype (within-population) and residual variation for optimal diameter (Dopt), maximum growth potential (Gmax)  and growth kurtosis (Ks).
+
+```{r map, fig.cap="Map of sampled Symphonia individuals. Every individual is represented by a pie chart representing population admixture with a radius proportional to the individual circonference in 2015. Grey level represent topographic wetness index."}
+include_graphics("figures/Fig1.png")
+```
+
+```{r admixture, fig.cap="Admixture plot of Symphonia individuals for K=3 with population distribution along topographic wetness index and associated trunk morphology. The three morphotypes are identified with their bark with S. sp1 having a light grey thin and smooth bark, the S. globulifera type Paracou having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of S. globulifera type Regina."}
+include_graphics("figures/Fig2.png")
+```
+
+```{r Epart, fig.cap="Variance partitioning for environmental variables. Individuals environmental variations have been partitioned into between-population, between-genotype (within-population) and residual variation for Neighbor Crowding Index (NCI) and Topographic Wetness Index (TWI)."}
+include_graphics("figures/Fig3.png")
+```
+
+```{r Ppart, fig.cap="Variance partitioning for parameters of growth ontogenetic-trajectory. Individuals variations for parameters of growth ontogenetic-trajectory have been partitioned into between-population, between-genotype (within-population) and residual variation for optimal diameter (Dopt), maximum growth potential (Gmax)  and growth kurtosis (Ks)."}
+include_graphics("figures/Fig4.png")
+```
+

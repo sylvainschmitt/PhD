@@ -223,88 +223,24 @@ read_delim(file.path(path, "Sequences", "calling", "filtered",
   geom_vline(xintercept = c(0.15, 0.05), col = "red", linetype = "dashed")
 ```
 
+## Neutral vs functional
 
-## Normal filter
-
-With a maximum of 95% of missing data per individual `--mind 0.2`, a maximum of 15% of missing data per SNP `-geno 0.15`, we obtained **4964** biallelic filtered snps for **435** individuals (3 lost).
-
-```{bash nonmissing, eval=F, echo=T}
-module load bioinfo/plink_high_contig_20190905
-module load bioinfo/plink2_high_contig_20190905
-rm -r nonmissing
-mkdir nonmissing
+```{bash neutral, eval=F, echo=T}
+cat filtered/parvicapture.biallelic.snp.filtered.bim | grep nuc > neutral.bim
+rm -r neutral
+mkdir neutral
 plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
   --allow-extra-chr \
-  --remove Outliers.fam \
+  --extract neutral.bim \
   --mind 0.95 --geno 0.15 \
-  --make-bed --out nonmissing/parvicapture.biallelic.snp.filtered.nonmissing
-plink --bfile nonmissing/parvicapture.biallelic.snp.filtered.nonmissing \
+  --make-bed --out neutral/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile neutral/parvicapture.biallelic.snp.filtered.nonmissing \
   --allow-extra-chr --missing --het --freqx --pca \
-  --out nonmissing/parvicapture.biallelic.snp.filtered.nonmissing
+  --out neutral/parvicapture.biallelic.snp.filtered.nonmissing
 ```
 
-```{r nonmissingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
-                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
-           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
-  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
-  left_join(individuals) %>%
-  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
-  geom_label() +
-  geom_point(size=2) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  scale_color_discrete("Species")
-plotly::ggplotly(g.pca)
-```
-
-```{r nonmissingSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."}
-read_delim(file.path(pathCluster, "Sequences", "calling", "nonmissing",
-                                "parvicapture.biallelic.snp.filtered.nonmissing.lmiss"), delim = " ") %>%
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
-  dplyr::rename(contig = CHR) %>%
-  mutate(type = ifelse(grepl("TRINITY", contig), "functional", "neutral")) %>% 
-  mutate(F_MISS = as.numeric(F_MISS)) %>%
-  ggplot(aes(F_MISS)) +
-  geom_histogram(position = "dodge") +
-  facet_grid(~ type) +
-  xlab("Proportion of missing data") +
-  ylab("SNP count") +
-  scale_y_sqrt() +
-  scale_x_sqrt()
-```
-
-## Hard filter
-
-With a maximum of 95% of missing data per individual `--mind 0.95`, a maximum of 15% of missing data per SNP `-geno 0.15` and a minimum allele frequency of 10% `-maf 0.1`, we obtained **4964** biallelic filtered snps for **435** individuals (3 lost).
-
-```{bash hard, eval=F, echo=T}
-module load bioinfo/plink_high_contig_20190905
-module load bioinfo/plink2_high_contig_20190905
-rm -r hard
-mkdir hard
-plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
-  --allow-extra-chr \
-  --mind 0.5 --geno 0.0 \
-  --make-bed --out hard/parvicapture.biallelic.snp.filtered.nonmissing
-plink --bfile hard/parvicapture.biallelic.snp.filtered.nonmissing \
-  --allow-extra-chr --missing --het --freqx --pca \
-  --out hard/parvicapture.biallelic.snp.filtered.nonmissing
-```
-
-```{r hardIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.het_imiss <- read_delim(file.path(pathCluster, "Sequences", "calling", "hard",
-                                    "parvicapture.biallelic.snp.filtered.nonmissing.imiss"), delim = " ") %>%
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
-  mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%
-  mutate(IdGenetic = gsub(".g.vcf", "", IID)) %>%
-  mutate(IdGenetic = gsub(" ", "", IdGenetic)) %>%
-  left_join(individuals) %>%
-  ggplot(aes(F_MISS, fill = paste(Genus, Species))) +
-  geom_histogram(position = "dodge") +
-  scale_fill_discrete("Species", guide = "none") +
-  xlab("Proportion of missing SNPs per individual")
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "hard",
+```{r neutralInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "neutral",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -313,32 +249,229 @@ g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "hard",
   geom_point(size=2, alpha = 0.5) +
   geom_hline(yintercept = 0) +
   geom_vline(xintercept = 0) +
-  scale_color_discrete("Species")
-cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2))
-g.pca
+  scale_color_discrete("Species") +
+  ggtitle("Neutral --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
 ```
 
-```{r hardSNP, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per SNP."}
-read_delim(file.path(pathCluster, "Sequences", "calling", "hard",
-                                "parvicapture.biallelic.snp.filtered.nonmissing.lmiss"), delim = " ") %>%
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>%
-  dplyr::rename(contig = CHR) %>%
-  mutate(type = ifelse(grepl("TRINITY", contig), "functional", "neutral")) %>% 
-  mutate(F_MISS = as.numeric(F_MISS)) %>%
-  ggplot(aes(F_MISS)) +
-  geom_histogram(position = "dodge") +
-  facet_grid(~ type) +
-  xlab("Proportion of missing data") +
-  ylab("SNP count") +
-  scale_y_sqrt() +
-  scale_x_sqrt()
+```{bash functional, eval=F, echo=T}
+cat filtered/parvicapture.biallelic.snp.filtered.bim | grep TRINITY > functional.bim
+rm -r functional
+mkdir functional
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --extract functional.bim \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out functional/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile functional/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out functional/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r functionalInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "functional",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("Functional --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
+```
+
+## 1k
+
+```{bash 1k, eval=F, echo=T}
+rm -r 1k
+mkdir 1k
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --thin-count 1000 \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out 1k/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile 1k/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out 1k/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r 1kInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "1k",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("Neutral --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
+```
+
+## Unique vs Repeated
+
+```{r repeatedR, echo=T}
+googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  group_by(IdGenetic) %>% 
+  filter(n() > 1) %>% 
+  dplyr::select(IdGenetic) %>% 
+  unique() %>% ungroup() %>% 
+  mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
+  dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
+  write_tsv(path = file.path(pathCluster, "Sequences", "calling", "Repeated.fam"), col_names = F)
+googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  group_by(IdGenetic) %>% 
+  filter(n() < 2) %>% 
+  dplyr::select(IdGenetic) %>% 
+  unique() %>% ungroup() %>% 
+  mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
+  dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
+  write_tsv(path = file.path(pathCluster, "Sequences", "calling", "Unique.fam"), col_names = F)
+```
+
+
+```{bash repeated, eval=F, echo=T}
+rm -r repeated
+mkdir repeated
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --keep Repeated.fam \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out repeated/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile repeated/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out repeated/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r repeatedInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "repeated",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("Repeated --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
+```
+
+```{bash unique, eval=F, echo=T}
+rm -r unique
+mkdir unique
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --keep Unique.fam \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out unique/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile unique/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out unique/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r uniqueInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "unique",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("Unique --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
+```
+
+## Outliers
+
+```{bash outliers, eval=F, echo=T}
+rm -r outliers
+mkdir outliers
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out outliers/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile outliers/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out outliers/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r outliersInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "outliers",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("All --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
+```
+
+```{r outliersProperties}
+outliers <- filter(g.pca$data, abs(PCA1) > 0.1 | abs(PCA2) > 10^-1)
+googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  filter(IdGenetic %in% gsub(".g.vcf", "", outliers$Sample)) %>% 
+  left_join(googlesheets::gs_title("Parvicapture") %>% 
+              googlesheets::gs_read("Reamplification") %>% 
+              filter(IdGenetic %in% gsub(".g.vcf", "", outliers$Sample))) %>% 
+  mutate(Species = paste(Genus, Species)) %>% 
+  mutate(Reamplifcation = ifelse(is.na(Reamplifcation), 0, 1)) %>% 
+  filter(!is.na(Seq)) %>% 
+  dplyr::select(IdGenetic, Plate_extraction, Species, Plot, Repeat, Seq, Reamplifcation) %>% 
+  reshape2::melt("IdGenetic") %>% 
+  ggplot(aes(value)) + geom_bar() + facet_wrap(~ variable, scales = "free") + coord_flip()
+```
+
+## Test
+
+```{bash test, eval=F, echo=T}
+rm -r test
+mkdir test
+plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
+  --allow-extra-chr \
+  --mind 0.1 --geno 0.15 \
+  --make-bed --out test/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile test/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out test/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+```{r testInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "test",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("All --mind 0.1 --geno 0.15")
+plotly::ggplotly(g.pca)
 ```
 
 ## Parvifolia
 
 Finally, we subseted the filtered and biallelic snp from the Parvifolia clade, resulting in **X** remaining individuals.
 
-```{bash hard, eval=F, echo=T}
+```{bash parvifolia, eval=F, echo=T}
 module load bioinfo/plink_high_contig_20190905
 module load bioinfo/plink2_high_contig_20190905
 rm -r parvifolia
@@ -351,35 +484,4 @@ plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
 plink --bfile parvifolia/parvicapture.biallelic.snp.filtered.nonmissing \
   --allow-extra-chr --missing --het --freqx --pca \
   --out parvifolia/parvicapture.biallelic.snp.filtered.nonmissing
-```
-
-## 3 species
-
-```{bash 3sp, eval=F, echo=T}
-module load bioinfo/plink_high_contig_20190905
-module load bioinfo/plink2_high_contig_20190905
-rm -r 3sp
-mkdir 3sp
-plink2 --bfile filtered/parvicapture.biallelic.snp.filtered \
-  --allow-extra-chr \
-  --keep nonoutliers3sp.fam \
-  --mind 0.95 --geno 0.15 \
-  --make-bed --out 3sp/parvicapture.biallelic.snp.filtered.nonmissing
-plink --bfile 3sp/parvicapture.biallelic.snp.filtered.nonmissing \
-  --allow-extra-chr --missing --het --freqx --pca \
-  --out 3sp/parvicapture.biallelic.snp.filtered.nonmissing
-```
-
-```{r hardIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "3sp",
-                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
-           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
-  mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
-  left_join(individuals) %>%
-  ggplot(aes(x = PCA1, y = -PCA2, col = paste(Genus, Species), label = IdGenetic)) +
-  geom_point(size=2, alpha = 0.5) +
-  geom_hline(yintercept = 0) +
-  geom_vline(xintercept = 0) +
-  scale_color_discrete("Species")
-g.pca
 ```

@@ -220,6 +220,23 @@ lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigma
   scale_fill_discrete(expression(sigma^2))
 ```
 
+```{r MscFig3, eval=F}
+lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>% 
+  bind_rows(.id = "variable") %>% 
+  filter(variable != "ANCR") %>% 
+  mutate(parameter = recode(parameter, "sigmaP" = "Population", "sigmaG" = "Genotype", "sigmaR" = "Residual")) %>% 
+  group_by(variable) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = variable, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) + 
+  ggsave(filename = "symcapture_manuscripts/figures/Fig3.png")
+```
+
 ## Population genetic variance
 
 We used within-population between-individual kinship and the Animal model [@Wilson2010] to estimate genetic variance associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. Animal model is calculated for the environemental values $y$ of the $N$ individuals with following formula:

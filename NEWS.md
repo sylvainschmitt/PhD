@@ -1,3 +1,7 @@
+# PhD 0.1.9162
+* parvicapture: raw2vcf script & error search
+* symcapture: msc growth begins
+
 # PhD 0.1.9161
 * symcapture: env & growth genomics v2
 

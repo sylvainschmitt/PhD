@@ -158,7 +158,13 @@ mdata <- function(data) list(N = nrow(data),
                              G = length(unique(data$pop)),
                              AGR = data$AGR,
                              DBH = data$DBH,
-                             TWI = as.vector(scale(data$TWI, center = F)),
+                             TWIi = dplyr::select(treesSub, IndNum, TWI) %>% unique() %>% 
+                               mutate(TWI = scale(TWI, center = F)) %>% arrange(IndNum) %>% 
+                               dplyr::select(TWI) %>% unlist(),
+                             TWIp = dplyr::select(treesSub, popNum, TWI) %>% unique() %>% 
+                               mutate(TWI = scale(TWI, center = F)) %>% group_by(popNum) %>% 
+                               summarise_all(mean) %>% arrange(popNum) %>% 
+                               dplyr::select(TWI) %>% unlist(),
                              AREW = as.vector(scale(data$AREW, center = F)),
                              NCI = as.vector(scale(data$NCI, center = F)),
                              ind = data$IndNum,
@@ -452,6 +458,7 @@ broom::tidyMCMC(fitGrowthKin, c("sigmaP", "sigmaG", "sigmaR",
         col.names = c("Parameter", "$\\theta$", "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
+
 ```{r growthKinshipG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for ontogenetic parameters."}
 mcmc_intervals_data(fitGrowthKin, regex_pars = c("h2", "h2p", "Qst")) %>% 
   separate(parameter, c("index", "parameter"), "[:punct:]") %>% 
@@ -486,6 +493,24 @@ mcmc_intervals_data(fitGrowthKin, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) 
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
   scale_fill_discrete(expression(sigma^2))
+```
+
+```{r MscFig4, eval=F}
+mcmc_intervals_data(fitGrowthKin, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>%
+  separate(parameter, c("sigma", "parameter"), "[:punct:]") %>% 
+  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
+  mutate(sigma = recode(sigma, "sigmaP" = "Population", "sigmaG" = "Genotype", "sigmaR" = "Residual")) %>% 
+  mutate(sigma = factor(sigma, levels = c("Population", "Genotype", "Residual"))) %>% 
+  group_by(parameter) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>% 
+  ggplot(aes(x = parameter, fill = sigma)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ parameter, scales = "free") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) + 
+  ggsave(filename = "symcapture_manuscripts/figures/Fig4.png")
 ```
 
 ## Growth & Populations

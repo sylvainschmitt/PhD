@@ -1,0 +1,330 @@
+```{r setup_sequencesTest, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
+```
+
+
+```{r}
+googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit() %>% 
+  filter(Species %in% c("sagotiana", "coriacea", "decolorans", "persistens", "simiorum")) %>% 
+  group_by(Species) %>% 
+  sample_n(10, replace = T) %>% 
+  ungroup() %>% 
+  dplyr::select(IdGenetic) %>% 
+  unique() %>% 
+  write_tsv(path = file.path(pathCluster, "Sequences", "individuals_test.txt"), col_names = F)
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique()
+```
+
+# Sequences
+
+## Haplotyping
+
+```{bash raw2haplo, eval=F, echo=T}
+#!/bin/bash    
+
+# variable
+file=$1
+echo "File: $file"
+
+# modules
+module load bioinfo/Trimmomatic-0.36
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/gatk-4.1.2.0
+
+# trimming
+echo "Step: Trimming"
+java -jar $TRIM_HOME/trimmomatic.jar PE \
+  raw/"$file"_R1_001.fastq.gz \
+  raw/"$file"_R2_001.fastq.gz \
+  trimmed/paired/"$file"_R1_paired.fq.gz \
+  trimmed/unpaired/"$file"_R1_unpaired.fq.gz \
+  trimmed/paired/"$file"_R2_paired.fq.gz \
+  trimmed/unpaired/"$file"_R2_unpaired.fq.gz \
+  ILLUMINACLIP:$TRIM_HOME/adapters/TruSeq3-PE.fa:2:30:10:2:keepBothReads \
+  SLIDINGWINDOW:4:20
+
+# mapping
+echo "Step: mapping"
+bwa mem -M -R "@RG\tID:$file\tSM:$file\tPL:HiSeq4K" \
+  -t 2 \
+  reference/reference.fasta \
+  trimmed/paired/"$file"_R1_paired.fq.gz 	\
+  trimmed/paired/"$file"_R2_paired.fq.gz \
+  > mapped/sam/$file.sam
+rm trimmed/paired/"$file"_R1_paired.fq.gz trimmed/paired/"$file"_R2_paired.fq.gz
+java -Xmx4g -jar $PICARD SortSam I=mapped/sam/$file.sam \
+  O=mapped/bam/$file.bam \
+  SORT_ORDER=coordinate 
+rm mapped/sam/$file.sam
+samtools index mapped/bam/$file.bam
+
+# haplotyping
+echo "Step: haplotyping"
+gatk  --java-options "-Xmx20G" \
+  HaplotypeCaller \
+  -R reference/reference.fasta \
+  -I mapped/bam/$file.bam \
+  -O called/gvcf/$file.g.vcf.gz  \
+  -ERC GVCF
+rm mapped/bam/$file.bam
+```
+
+## Genotyping
+
+```{bash haplo2geno, eval=F, echo=T}
+#!/bin/bash    
+
+# variable
+file=$1
+echo "File: $file"
+
+# modules
+module load bioinfo/gatk-4.1.2.0
+
+# GenomicsDB
+echo "Step: DB"
+gatk --java-options "-Xmx20g -Xms20g" \
+  GenomicsDBImport \
+  --genomicsdb-workspace-path db/"${file%.*}".DB \
+  -L reference.sequences.lists/$file \
+  --sample-name-map sample_map.txt \
+  --batch-size 10 --consolidate
+
+## genotyping
+echo "Step: genotyping"
+gatk --java-options "-Xmx20g" \
+  GenotypeGVCFs \
+  -R ../reference/reference.fasta \
+  -L reference.sequences.lists/$file \
+  -V gendb://db/${file%.*}.DB -O parvicapture.raw.vcf/${file%.*}.vcf.gz
+rm -r db/${file%.*}.DB
+```
+
+## Data production
+
+```{bash parvicapture, eval=F, echo=T}
+#!/bin/bash
+#SBATCH --time=48:00:00
+#SBATCH -J parvi
+#SBATCH -o parvi.out
+#SBATCH -e parvi.err
+#SBATCH --mem=20G
+#SBATCH --cpus-per-task=8
+#SBATCH --mail-type=BEGIN,END,FAIL
+
+# variable
+raw=raw
+echo "Raw: $raw"
+
+# modules
+module load bioinfo/bcftools-1.8
+module load bioinfo/gatk-4.1.2.0
+module load bioinfo/plink_high_contig_20190905
+module load bioinfo/plink2_high_contig_20190905
+
+# init
+echo "Step: init"
+# rm -r trimmed mapped called outHaplo # if repeated in same folder
+mkdir trimmed trimmed/paired trimmed/unpaired
+mkdir mapped mapped/sam mapped/bam
+mkdir called called/gvcf
+ls $raw | sed -e 's/_R[12]_001.fastq.gz//' | sort | uniq > libraries.txt
+
+# haplotyping
+echo "Step: haplotyping"
+mkdir outHaplo
+for lib in $(cat libraries.txt); do echo "bash raw2haplo.sh $lib"; done > run.sh
+sarray --wait -J haplo -o outHaplo/%j.out -e outHaplo/_%j.err \
+  -t 48:00:00 --mem=10G --cpus-per-task=2 --mail-type=BEGIN,END,FAIL run.sh
+wait
+rm -r trimmed mapped
+
+## genotyping
+echo "Step: genotyping"
+cd called
+for file in $(ls gvcf/*.g.vcf.gz) ; do echo -e $(basename $file | sed -e 's/.g.vcf.gz//')"\t"$file ; done > sample_map.txt
+mkdir reference.sequences.lists
+cut ../reference/reference.fasta.fai -f1 > reference.sequences.lists/reference.sequences.list
+cd reference.sequences.lists
+split -l 100 -d reference.sequences.list reference.sequences_ --additional-suffix=.list
+rm reference.sequences.list
+cd ..
+mkdir db parvicapture.raw.vcf outGeno
+cp ../haplo2geno.sh ./
+for file in $(ls reference.sequences.lists/); do echo "bash haplo2geno.sh $file"; done > run.sh
+sarray --wait -J genotype -o outGeno/%j.out -e outGeno/%j.err -t 48:00:00 \
+  --mem=25G --mail-type=BEGIN,END,FAIL run.sh
+wait
+echo -e '#!/bin/bash\n#SBATCH --time=48:00:00\n#SBATCH -J gather\n#SBATCH -o gather.out\n#SBATCH -e gather.err\n#SBATCH --mem=20G\n#SBATCH --cpus-per-task=1\n#SBATCH --mail-type=BEGIN,END,FAIL\nmodule load bioinfo/picard-2.14.1\njava -Xmx20g -jar $PICARD GatherVcfs \' > gather.sh
+for file in $(ls parvicapture.raw.vcf/*.gz)
+do
+	echo -e '\tI='$file' \' >> gather.sh
+done
+echo -e '\tO=parvicapture.raw.vcf.gz\n' >> gather.sh
+sbatch --wait gather.sh
+wait
+rm -r reference.sequences.lists gvcf db parvicapture.raw.vcf
+
+## filtering
+echo "Step: filtering"
+bcftools view --max-alleles 2 --threads 8 parvicapture.raw.vcf.gz | bgzip -c --threads 8 > parvicapture.biallelic.vcf.gz
+gatk IndexFeatureFile -F parvicapture.biallelic.vcf.gz
+gatk VariantFiltration \
+  -V parvicapture.biallelic.vcf.gz \
+  --filter-expression "QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0" \
+  --filter-name "FAIL" \
+  -O parvicapture.biallelic.annot.vcf.gz
+gatk SelectVariants \
+  -select-type SNP \
+  -V parvicapture.biallelic.annot.vcf.gz \
+  --exclude-filtered \
+  -O parvicapture.all.biallelic.snp.filtered.vcf.gz
+rm parvicapture.biallelic.vcf.gz parvicapture.biallelic.vcf.gz.tbi parvicapture.biallelic.annot.vcf.gz*
+gatk IndexFeatureFile -F parvicapture.all.biallelic.snp.filtered.vcf.gz
+mkdir filtered
+plink2 --threads 8 --memory 20000 \
+  --vcf parvicapture.all.biallelic.snp.filtered.vcf.gz \
+  --allow-extra-chr \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out filtered/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile filtered/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out filtered/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+## Pipeline test
+
+```{bash test2, eval=F, echo=T}
+rm -r test2
+mkdir test2
+for ind in $(head individuals_test.txt -n 2); do grep $ind libraries.txt ; done > test2/libraries_test.txt
+mkdir test2/raw0 test2/raw test2/reference
+cp reference/* test2/reference
+cp raw2haplo.sh haplo2geno.sh parvicapture.sh test2/
+cd test2
+for file in $(cat libraries_test.txt); do cp ../raw/$file* raw0 ; done
+for file in $(ls raw0); do zcat raw0/$file | head -n 40000 | gzip > raw/$file ; done
+sbatch parvicapture.sh
+```
+
+## Test 1
+
+```{bash data, eval=F, echo=T}
+# init
+for ind in $(cat individuals_test.txt); do grep $ind libraries.txt ; done > libraries_test.txt
+rm -r test
+mkdir test test/raw test/reference
+mkdir test/trimmed test/trimmed/paired test/trimmed/unpaired
+mkdir test/mapped  test/mapped/sam test/mapped/bam
+mkdir test/called test/called/gvcf
+for file in $(cat libraries_test.txt); do cp raw/$file* test/raw ; done
+cp reference/* test/reference
+cp raw2haplo.sh haplo2geno.sh test/
+cd test
+ls raw/ | sed -e 's/_R[12]_001.fastq.gz//' | sort | uniq > libraries.txt
+
+# haplotyping
+rm -r out
+mkdir out
+for lib in $(cat libraries.txt); do echo "bash raw2haplo.sh $lib"; done > run.sh
+sarray -J haplo -o out/haplo_%j.out -e out/haplo_%j.err -t 48:00:00 --mem=10G --cpus-per-task=2 --mail-type=BEGIN,END,FAIL  run.sh
+
+## genotyping
+echo "Step: genotyping"
+cd called
+for file in $(ls gvcf/*.g.vcf.gz) ; do echo -e $(basename $file | sed -e 's/.g.vcf.gz//')"\t"$file ; done > sample_map.txt
+mkdir reference.sequences.lists
+cut ../reference/reference.fasta.fai -f1 > reference.sequences.lists/reference.sequences.list
+cd reference.sequences.lists
+split -l 100 -d reference.sequences.list reference.sequences_ --additional-suffix=.list
+rm reference.sequences.list
+cd ..
+mkdir db parvicapture.raw.vcf outGeno
+cp ../haplo2geno.sh ./
+for file in $(ls reference.sequences.lists/); do echo "bash haplo2geno.sh $file"; done > run.sh
+sarray -J genotype -o outGeno/%j.out -e outGeno/%j.err -t 48:00:00 \
+  --mem=25G --mail-type=BEGIN,END,FAIL run.sh
+wait
+echo -e '#!/bin/bash\n#SBATCH --time=48:00:00\n#SBATCH -J gather\n#SBATCH -o gather.out\n#SBATCH -e gather.err\n#SBATCH --mem=20G\n#SBATCH --cpus-per-task=1\n#SBATCH --mail-type=BEGIN,END,FAIL\nmodule load bioinfo/picard-2.14.1\njava -Xmx20g -jar $PICARD GatherVcfs \' > gather.sh
+for file in $(ls parvicapture.raw.vcf/*.gz)
+do
+	echo -e '\tI='$file' \' >> gather.sh
+done
+echo -e '\tO=parvicapture.raw.vcf.gz\n' >> gather.sh
+sbatch gather.sh
+
+## filtering
+srun --mem=20G --cpus-per-task=8 --pty bash
+module load bioinfo/bcftools-1.8
+module load bioinfo/gatk-4.1.2.0
+module load bioinfo/plink_high_contig_20190905
+module load bioinfo/plink2_high_contig_20190905
+bcftools view --max-alleles 2 --threads 8 parvicapture.raw.vcf.gz | bgzip -c --threads 8 > parvicapture.biallelic.vcf.gz
+gatk IndexFeatureFile -F parvicapture.biallelic.vcf.gz
+gatk VariantFiltration \
+  -V parvicapture.biallelic.vcf.gz \
+  --filter-expression "QUAL < 30.0 || QD < 2.0 || FS > 60.0 || SOR > 3.0" \
+  --filter-name "FAIL" \
+  -O parvicapture.biallelic.annot.vcf.gz
+gatk SelectVariants \
+  -select-type SNP \
+  -V parvicapture.biallelic.annot.vcf.gz \
+  --exclude-filtered \
+  -O parvicapture.all.biallelic.snp.filtered.vcf.gz
+rm parvicapture.biallelic.annot.vcf.gz*
+gatk IndexFeatureFile -F parvicapture.all.biallelic.snp.filtered.vcf.gz
+rm -r filtered
+mkdir filtered
+plink2 --threads 8 --memory 20000 \
+  --vcf parvicapture.all.biallelic.snp.filtered.vcf.gz \
+  --allow-extra-chr \
+  --mind 0.95 --geno 0.15 \
+  --make-bed --out filtered/parvicapture.biallelic.snp.filtered.nonmissing
+plink --bfile filtered/parvicapture.biallelic.snp.filtered.nonmissing \
+  --allow-extra-chr --missing --het --freqx --pca \
+  --out filtered/parvicapture.biallelic.snp.filtered.nonmissing
+```
+
+## Result
+
+```{r filterIndtest, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual.", eval=F}
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "test", "called", "filtered",
+                              "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  separate(Sample, paste0("X", 1:7), "[:punct:]") %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  dplyr::select(IdGenetic, Lane, PCA1, PCA2) %>% 
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = paste(Genus, Species), label = paste(IdGenetic, Lane))) +
+  geom_point(size=2, alpha = 0.5) +
+  geom_hline(yintercept = 0) +
+  geom_vline(xintercept = 0) +
+  scale_color_discrete("Species") +
+  ggtitle("All --mind 0.95 --geno 0.15")
+plotly::ggplotly(g.pca)
+```
+
+

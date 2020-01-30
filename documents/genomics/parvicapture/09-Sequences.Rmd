@@ -14,6 +14,7 @@ opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
 path <- "../../../data/Eschweilera_Paracou"
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
 ```
 
 
@@ -93,7 +94,7 @@ We listed all libraries in a txt files and trimmed all libraries with `trimmomat
 lapply(list.files(file.path(path, "Sequences", "quality"), full.names = T, pattern = "general_stats"), read_tsv) %>% 
   bind_rows() %>% 
   dplyr::rename(Reads = `Input Reads (absolute number)`) %>% 
-  mutate(Sample = gsub("_R[12]_001", "", Sample)) %>% 
+  mutate(Sample = gsub("_R[12]_001", "", Sample)) %>%
   unique() %>% 
   dplyr::select(Sample) %>% 
   write_tsv(path = file.path(path, "Sequences", "libraries.txt"), col_names = F)
@@ -145,10 +146,34 @@ The reference is made of the neutral and functional targets designed for the cap
 
 ```{bash reference, eval=F, echo=T}
 cat functional.targets.20190503.fasta neutral.targets.20190503.fasta > reference.fasta
-
+module load bioinfo/deconseq-standalone-0.4.3
+deconseq.pl -f reference.fasta -out_dir deconseq_bact -dbs bact
+cat deconseq_bact/*_cont.fa | grep ">"
+>TRINITY_DN60869_c0_g1_i1 len=401 path=[1:0N400] [N1, 1, N2]
+>TRINITY_DN72082_c0_g1_i1 len=380 path=[1:0N379] [N1, 1, N2]
+>TRINITY_DN4622_c0_g1_i1 len=316 path=[1:0N178 157:179N315] [N1, 1, 157, N2]
+>test003_nuc_372107
+>test003_nuc_584012
+deconseq.pl -f reference.fasta -out_dir deconseq_default
+cat deconseq_default/*_cont.fa | grep ">"
+>TRINITY_DN24848_c1_g1_i1 len=475 path=[1:0N267 454:268N290 270:291N303 283:304N324 304:325N333 313:334N474] [N1, 1, 454, 270, 283, 304, 313, N2]
+>test001_nuc_1073852
+>test001_nuc_433258
+>test002_nuc_341176
+>test002_nuc_959182
+>test003_nuc_319402
+>test003_nuc_372107
+>test003_nuc_427809
+>test003_nuc_533716
+>test003_nuc_584012
+>test003_nuc_691972
+>test007_nuc_1025458
+>test007_nuc_709019
+>test008_nuc_660309
 ```
 
-## Individuals merging
+
+## Merging
 
 Repeated libraries were merged to increase their information before mapping and variant calling.
 
