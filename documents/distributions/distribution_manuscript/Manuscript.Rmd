@@ -37,8 +37,6 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 
 ```{r complexes}
 Complexes <- bind_rows(
-  data.frame(Complex = "Chartacea", Genus = "Eschweilera",
-             Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
                          "wachenheimii", "grandiflora_form2")),
@@ -58,6 +56,7 @@ Complexes <- bind_rows(
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
+  filter(Plot %in% c(1, 6, 11, 13:16)) %>% # control and biodiv only
   filter(CensusYear == 2015) %>%
   filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
   filter(Species != "Indet.") %>% 
@@ -95,8 +94,9 @@ mdata <- lapply(complexes, function(complex) {
                   sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
-load("../distribution_save/complexes0.Rdata")
+load("../distribution_save/complexesUnlogged.Rdata")
 names(fits)[1:2] <- c("Chartacea", "Parvifolia")
+fits$Chartacea <- NULL
 fitsComplex <- fits
 predComplex <- lapply(names(fits), function(complex){
 
@@ -171,7 +171,8 @@ mdata <- lapply(complexes, function(complex) {
          as.matrix())
 })
 names(mdata) <- complexes
-load("../distribution_save/species.Rdata")
+load("../distribution_save/speciesUnlogged.Rdata")
+fits$Chartacea <- NULL
 predSpecies <- lapply(complexes, function(complex){
 
   N <- 25
@@ -519,14 +520,18 @@ predSpecies %>%
             by = c("complex" = "Complex", "species" = "Species")) %>% 
   mutate(species = ifelse(species == "grandiflora_form2", "grandiflora", species)) %>%
   mutate(Species = paste0(substr(Genus, 1,1), ". ", species)) %>% 
-  do(g = ggplot(data = ., aes(x = value, col = Species)) + 
-       geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
-       geom_line(aes(y = Y), lwd = 1.3) +
-       geom_hline(aes(yintercept = RelAbund, col = Species), linetype = "dashed") +
-       facet_grid(complex ~ variable, scales = "free_x") +
-       guides(col = guide_legend(nrow=3)) +
-       theme(legend.position = "bottom") +
-       ylab("Species relative abundance") + xlab("Standardized value") +
-       scale_y_sqrt()) %>% 
-  gridExtra::grid.arrange(grobs = .$g)
+  ggplot(data = ., aes(x = value, col = Species)) + 
+  geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
+  geom_line(aes(y = Y), lwd = 1.3) +
+  geom_hline(aes(yintercept = RelAbund, col = Species), linetype = "dashed") +
+  facet_grid(complex ~ variable, scales = "free") +
+  guides(col = guide_legend(nrow=4)) +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  ylab("Species relative abundance") + xlab("Standardized value") +
+  scale_y_sqrt() +
+  scale_color_manual(values = c(RColorBrewer::brewer.pal(6, "Dark2")[1:6], 
+                       RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+                       RColorBrewer::brewer.pal(8, "Dark2")[1:8],
+                       RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+                       RColorBrewer::brewer.pal(3, "Dark2")[1:3]))
 ```

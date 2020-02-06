@@ -458,6 +458,11 @@ broom::tidyMCMC(fitGrowthKin, c("sigmaP", "sigmaG", "sigmaR",
         col.names = c("Parameter", "$\\theta$", "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
+```{r}
+load(file.path("symcapture_save", 'growthkin2.Rdata'))
+mcmc_trace(as.array(fitGrowthKin, pars = c("Gmaxp", "Doptp", "Ksp", "sigmaG", "sigmaR", "sigma")))
+# mcmc_pairs(as.array(fitGrowthKin, pars = c("Gmaxg", "Doptg", "Ksg")))
+```
 
 ```{r growthKinshipG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for ontogenetic parameters."}
 mcmc_intervals_data(fitGrowthKin, regex_pars = c("h2", "h2p", "Qst")) %>% 

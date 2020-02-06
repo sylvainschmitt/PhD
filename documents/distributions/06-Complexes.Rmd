@@ -200,6 +200,22 @@ trees %>%
 include_graphics("./distribution_data/Talisia_Baraloto.png")
 ```
 
+## Haplotypes sharing
+
+```{r, echo=T}
+ste.seq <- Biostrings::readDNAStringSet("https://raw.githubusercontent.com/r-syst/databases/master/r-syst%3A%3Aplants/French_Guiana_Trees_trnH.fas")
+ste.tbl <- read_tsv("https://raw.githubusercontent.com/r-syst/databases/master/r-syst%3A%3Aplants/French_Guiana_Trees_trnH.char") %>% 
+  separate(Species, c("Genus", "Species", "Author"), " ", extra = "merge") %>% 
+  dplyr::select(-Order, -Family, -Author) %>% 
+  right_join(complexes) %>% 
+  na.omit(Complex)
+ste.tbl %>% 
+  group_by(Complex, Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  knitr::kable()
+```
+
+
 ## Conclusion
 
 ```{r summary}

@@ -23,6 +23,7 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # globa
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
+  filter(Plot %in% c(1, 6, 11, 13:16)) %>% # control and biodiv only
   filter(CensusYear == 2015) %>%
   filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
   filter(Species != "Indet.") %>% 
@@ -144,9 +145,9 @@ names(mdata) <- complexes
 # Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/complexes0.Rdata")
-load("./distribution_save/complexes0.Rdata")
-pars <- c("alpha", "beta", "gamma")
+# save(fits, file = "./distribution_save/complexesUnlogged.Rdata")
+load("./distribution_save/complexesUnlogged.Rdata")
+pars <- c("alpha", "beta", "gamma") 
 ```
 
 ```{r preds_compdist}
@@ -183,10 +184,10 @@ preds <- lapply(names(fits), function(complex){
     Y = values$Y$value,
     Y5 = values$Y5$value,
     Y95 = values$Y95$value)
-}) %>% bind_rows()
+}) %>% bind_rows() 
 ```
 
-# Complexes distributions (NCIcomplex)
+# Complexes distributions
 
 The aim of this document is to study the distribution at micro-environmental scale with biotic and abiotic environment of whole species complexes in Paracou (not species within complexes).
 
@@ -247,7 +248,7 @@ lapply(fits, function(fit)
         escape = F, digits = 3, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
   column_spec(1, bold = T) %>%
-  collapse_rows(columns = 1)
+  collapse_rows(columns = 1)  
 ```
 
 ```{r PosteriorNPrediction_compdist, fig.cap="Model parameters posterior and predictions."}
@@ -291,7 +292,7 @@ g2 <-preds %>%
         strip.background = element_blank(),
         strip.text.x = element_blank())
 cowplot::plot_grid(g1, g2, nrow = 2, rel_heights = c(1,2), 
-                   labels = LETTERS[1:2], label_x = 0.1)
+                   labels = LETTERS[1:2], label_x = 0.1)  
 ```
 
 ## Supplementray materials

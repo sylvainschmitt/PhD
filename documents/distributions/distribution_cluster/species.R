@@ -18,6 +18,7 @@ d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(CensusYear == 2015) %>%
+  filter(Plot %in% c(1, 6, 11, 13:16)) %>% # control and biodiv only
   filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
   filter(Species != "Indet.") %>% 
   mutate(DBH = CircCorr/pi) %>% 

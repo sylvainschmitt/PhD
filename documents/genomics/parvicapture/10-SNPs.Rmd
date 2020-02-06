@@ -179,7 +179,7 @@ plink2 --threads 8 --memory 20000 \
 ```
 
 ```{r missingIndividuals, fig.cap="Missing data statistics for filtered biallelic SNP before missing data filtering per individual."}
-g.het_imiss <- read_delim(file.path(path, "Sequences", "calling", "filtered",
+g.het_imiss <- read_delim(file.path(pathCluster, "Sequences", "merged", "filtered",
                                     "parvicapture.biallelic.snp.filtered.imiss"), delim = " ") %>%
   dplyr::rename_all(funs(gsub(" ", "", .))) %>%
   mutate_at(c("N_MISS", "N_GENO", "F_MISS"), as.numeric) %>%
@@ -191,7 +191,7 @@ g.het_imiss <- read_delim(file.path(path, "Sequences", "calling", "filtered",
   scale_x_log10() +
   scale_fill_discrete("Species", guide = "none") +
   xlab("Proportion of missing SNPs per individual")
-g.pca <- read_delim(file.path(path, "Sequences", "calling", "filtered",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "filtered",
                               "parvicapture.biallelic.snp.filtered.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -207,7 +207,7 @@ cowplot::plot_grid(g.het_imiss, g.pca, nrow = 2, rel_heights = c(1,2))
 
 
 ```{r missingSNP, fig.cap="Missing data statistics for filtered biallelic SNP before missing data filtering per SNP."}
-read_delim(file.path(path, "Sequences", "calling", "filtered",
+read_delim(file.path(pathCluster, "Sequences", "merged", "filtered",
                                 "parvicapture.biallelic.snp.filtered.lmiss"), delim = " ") %>%
   dplyr::rename_all(funs(gsub(" ", "", .))) %>%
   dplyr::rename(contig = CHR) %>%
@@ -240,7 +240,7 @@ plink --bfile neutral/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r neutralInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "neutral",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "neutral",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -269,7 +269,7 @@ plink --bfile functional/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r functionalInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "functional",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "functional",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -299,7 +299,7 @@ plink --bfile 1k/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r 1kInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "1k",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "1k",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -324,7 +324,7 @@ googlesheets::gs_title("Parvicapture") %>%
   unique() %>% ungroup() %>% 
   mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
   dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
-  write_tsv(path = file.path(pathCluster, "Sequences", "calling", "Repeated.fam"), col_names = F)
+  write_tsv(path = file.path(pathCluster, "Sequences", "merged", "Repeated.fam"), col_names = F)
 googlesheets::gs_title("Parvicapture") %>% 
   googlesheets::gs_read("Extraction") %>% 
   group_by(IdGenetic) %>% 
@@ -333,7 +333,7 @@ googlesheets::gs_title("Parvicapture") %>%
   unique() %>% ungroup() %>% 
   mutate(FID = 0, IID = paste0(IdGenetic, ".g.vcf"), PAT = 0, MAT = 0, SEX = 0, PHENO = -9) %>% 
   dplyr::select(FID, IID, PAT, MAT, SEX, PHENO) %>% 
-  write_tsv(path = file.path(pathCluster, "Sequences", "calling", "Unique.fam"), col_names = F)
+  write_tsv(path = file.path(pathCluster, "Sequences", "merged", "Unique.fam"), col_names = F)
 ```
 
 
@@ -351,7 +351,7 @@ plink --bfile repeated/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r repeatedInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "repeated",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "repeated",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -379,7 +379,7 @@ plink --bfile unique/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r uniqueInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "unique",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "unique",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -408,7 +408,7 @@ plink --bfile outliers/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r outliersInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "outliers",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "outliers",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
@@ -453,7 +453,7 @@ plink --bfile test/parvicapture.biallelic.snp.filtered.nonmissing \
 ```
 
 ```{r testInd, fig.cap="Missing data statistics for filtered biallelic SNP after missing data filtering (95% for individuals and 15% for SNPs) per individual."}
-g.pca <- read_delim(file.path(pathCluster, "Sequences", "calling", "test",
+g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "test",
                               "parvicapture.biallelic.snp.filtered.nonmissing.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   mutate(IdGenetic = gsub(".g.vcf", "", Sample)) %>%
