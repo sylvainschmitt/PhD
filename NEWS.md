@@ -1,3 +1,12 @@
+# PhD 0.1.9163
+* lectures: rmarkdwon for FOREN seminar @INPHB
+* symcapture: new growth model with DBH
+
+# PhD 0.1.9163
+* symcapture: growth R2
+* distribution: without logging & cleaning
+* parvicapture: rtest to search label mix
+
 # PhD 0.1.9162
 * parvicapture: raw2vcf script & error search
 * symcapture: msc growth begins

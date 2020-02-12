@@ -15,23 +15,9 @@ parameters {
   real<lower=0> sigmaG ; // genetic variance
   real<lower=0> sigmaR ; // residual variance
 }
-transformed parameters {
-  real<lower=0> sigmaP ; // population variance
-  sigmaP = variance(mu[population]) ;
-}
 model {
   Y ~ normal(mu[population] + A*a, sqrt(sigmaR)) ;
   a ~ normal(0, sqrt(sigmaG)) ;
   sigmaG ~ normal(0, 1) ;
   sigmaR ~ student_t(4, 0, 1) ;
-}
-generated quantities{
-  real R2m ;
-  real R2c ;
-  real h2 ; // strict heritabilities
-  real Qst ; // quantitative genetic differentiations
-  R2m = sigmaP / (sigmaP + sigmaG + sigmaR) ;
-  R2c = (sigmaP + sigmaG) / (sigmaP + sigmaG + sigmaR) ;
-  h2 = sigmaG ./ (sigmaP + sigmaG + sigmaR) ;
-  Qst = sigmaP ./ (sigmaP + 2*sigmaG) ;
 }

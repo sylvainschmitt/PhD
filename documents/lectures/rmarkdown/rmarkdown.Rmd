@@ -1,0 +1,179 @@
+---
+title: "Prise en main R Markdown"
+author: "Sylvain SCHMITT"
+date: "12/02/2020, Yamoussoukro"
+output:
+  bookdown::html_document2: 
+    theme: readable
+    toc: true
+    toc_float: yes
+    number_sections: no
+  html_document:
+    theme: readable
+    toc: true
+    toc_float: yes
+  pdf_document: default
+  word_document: default
+bibliography: biblio.bib
+csl: joe.csl
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Cet présentation est inspiré d'un [super guide en construction](https://bookdown.org/yihui/rmarkdown-cookbook/). Elle nécessite les packages suivants :
+
+```{r pkgs, eval=FALSE}
+install.packages(c("rmarkdown", "knitr", "blogdown", "tidyverse", "citr"))
+```
+
+# Titre
+
+## Sous-titre
+
+## Sous-sous-titre
+
+* liste avec *
+* ou +
+* ou -
+* 
+1. liste à numéro
+1. toujours 1 en Md mais rendu 2
+
+*italique*, _italique_, **gras**, __gras__
+
+> Citation
+
+<!-- commentaire -->
+ 
+# Chunks
+
+Dans le texte, par exemple 1 + 1 = `r 1+1` 
+
+Sortie console
+
+```{r sum}
+1 + 2
+```
+
+Table
+
+```{r table}
+knitr::kable(head(cars), caption = "Ceci est une table.")
+```
+
+Figures
+
+```{r figure, fig.cap="Ceci est une figure."}
+ggplot(cars, aes(speed, dist)) + geom_point()
+```
+
+Et autres (sorties dynamiques)...
+
+# Chunk options
+
+`include = FALSE` pour empêcher toute sortie
+
+```{r, include = TRUE}
+1 + 2
+```
+
+```{r, include = FALSE}
+1 + 2
+```
+
+`echo = FALSE` pour cache le code R
+
+```{r, echo = TRUE}
+1 + 2
+```
+
+```{r, echo = FALSE}
+1 + 2
+```
+
+`message = FALSE` pour cache les messages
+
+```{r, message = TRUE}
+message("Bienvenu")
+```
+
+```{r, message = FALSE}
+message("Bienvenu")
+```
+
+`warning = FALSE` pour cache les messages
+
+```{r, warning = TRUE}
+warning("Attention")
+```
+
+```{r, warning = FALSE}
+warning("Attention")
+```
+
+`fig.cap = "Caption."` pour la légende d'une figure
+
+```{r fig.cap="Ceci est une figure."}
+ggplot(cars, aes(speed, dist)) + geom_point()
+```
+
+`fig.height = 8, fig.width=4` pour la taille de la figure
+
+```{r fig.height = 8, fig.width=4}
+ggplot(cars, aes(speed, dist)) + geom_point()
+```
+
+[Voir documentation](https://yihui.org/knitr/options/)
+
+# Cache
+
+Le cache vous permet d'enregistrer les sorties d'un fragment de code pour que lors des prochaines compilation il ne soit pas recalculer. Il créé un dossier `_files`  et `_cache` avec les images R des objets du chunk et les figures respectives. **Attention**, si votre chunk dépend d'un chunk qui est mise à jour et que vous ne précisez pas la dépendance il ne sera pas mis à jour. Utilisez l'option `dependson` ou nettoyez le cache pour éviter cela.
+
+```{r nocache, cache=FALSE}
+Sys.sleep(5)
+1 + 1
+```
+
+```{r cache, cache=TRUE}
+Sys.sleep(5)
+1 + 1
+```
+
+# Options générales
+
+Les options de sortie des chunks peuvent être réglées globalement grace aux options de l'environnement de `knitr` :
+
+```{r}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Equations
+
+Les équations s'écrivent sous format latex maths dans le texte avec un $ ou en bloque avec deux. 
+
+Par exemple dans le texte $\gamma = \alpha + \beta$ ou en bloque 
+$$Y \sim \mathcal N(\frac{\mu_s}{\beta \times X}, \sigma^2)$$
+[Voir le latex maths wiki](https://en.wikibooks.org/wiki/LaTeX/Mathematics)
+
+# Bibliographie
+
+La bilbliographie est lu à partir d'un fichier `.bib` préciser dans l'en-tête YAML et peut être généré automatiquement avec Mendeley, Endnote, etc ... On peut aussi préciser le formation de citation avec un fichier `.csl` défini en ligne pour chaque journal. La référence [@Cochrane2003] se fait avec @ + [ + code bib + ] mais on peut utiliser l'add-in `citr` pour le faire de manière interactive. Je recommande même de définir un raccourcit clavier personnel pour facilement effectuer une citation (par exemple CTRL + SHIFT + G). Enfin on place un titre Référence à la fin du document après lequel se placera la bibliographie mise en forme.
+
+# Références croisées
+
+Les références croisées nécessite du'iliser le package `bookdon` même sans faire un livre à partir des formats `documents2`. Elle se font avec SLASH + @ + ref + ( + type + : + nom du chunk + ). Par exemple je fais référence à la table \@ref(tab:tableRef) et la figure \@ref(fig:figureRef).
+
+```{r tableRef}
+knitr::kable(head(cars), caption = "Ceci est une table.")
+```
+
+```{r figureRef, fig.cap="Ceci est une figure."}
+ggplot(cars, aes(speed, dist)) + geom_point()
+```
+
+# Références

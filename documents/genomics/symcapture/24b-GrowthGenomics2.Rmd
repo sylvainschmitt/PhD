@@ -1,3 +1,8 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
 ```{r setup_growthgenom2, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
@@ -11,7 +16,7 @@ library(rstan)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
-  cache = T, cache.lazy = F)
+  cache = F, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
@@ -28,8 +33,14 @@ load("./symcapture_save/Env2.Rdata")
 load("./symcapture_save/Env2.Rdata")  
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed
-  filter(!is.na(AGR), !is.na(ANCR)) %>% 
-  mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
+  group_by(Ind) %>% 
+  mutate(Y0 = first(CensusYear), DBH0 = first(DBH), DBHtoday = last(DBH)) %>% 
+  ungroup() %>% 
+  dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday) %>% 
+  unique() %>% 
+  # filter(Y0 != 2017) %>% 
+  # filter((DBH0 - DBHtoday) != 0) %>% 
+  mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop))) 
 treesSub <- filter(trees, Plot == 16) %>% # for test purposes
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
 fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
@@ -39,192 +50,54 @@ K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"),
   mutate(IID = fam$IID) %>% 
   column_to_rownames(var = "IID") %>% 
   as.matrix()
-mdata <- function(data) list(N = nrow(data),
-                             I = length(unique(data$Ind)),
-                             G = length(unique(data$pop)),
-                             AGR = data$AGR,
-                             DBH = data$DBH,
-                             TWI = as.vector(scale(data$TWI, center = F)),
-                             AREW = as.vector(scale(data$AREW, center = F)),
-                             NCI = as.vector(scale(data$NCI, center = F)),
-                             ind = data$IndNum,
-                             gp = data$popNum,
-                             indingp = unique(arrange(data, IndNum)[c("IndNum", "popNum")])$popNum,
-                             K = dplyr::select(data, IID, IndNum) %>% 
-                               unique() %>% arrange(IndNum) %>% 
-                               dplyr::select(IID) %>% unlist() %>% K[.,.],
-                             L = c(0.1, 0, 0.1), U = c(max(data$AGR), max(data$DBH), 3))
+mdata <- function(data){
+  list(I = nrow(data),
+       Y = 2017 - min(data$Y0) + 1,
+       P = length(unique(data$popNum)),
+       years = min(data$Y0):2017,
+       DBH0 = data$DBH0,
+       Y0 = data$Y0,
+       DBHtoday = data$DBHtoday,
+       ind = data$IndNum,
+       pop = data$popNum,
+       K = dplyr::select(data, IID, IndNum) %>% arrange(IndNum) %>% 
+         dplyr::select(IID) %>% unlist() %>% K[.,.],
+       L = c(0, 0, 0), 
+       U = c(2, 200, 1)
+       )
+}
 ```
 
 ## Growth & Ontogeny
 
-$$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma)$$
-$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})$$
+$$DBH_{today,p,i} \sim \mathcal N (DBH_{t0}+\sum_{y=y0+1}^{y=today}AGR(DBH_{y-1,p,i}, \sigma)$$
 
-```{r growthOntogenyTab2}
-# growth <- stan_model("./symcapture_models/Growth2.stan")
-# fitGrowth <- sampling(growth, chains = 2, data = mdata(treesSub),
-#                       control = list(adapt_delta = 0.9, max_treedepth = 12), save_warmup = F)
-# save(fitGrowth, file = file.path("symcapture_save", 'growth2.Rdata'))
-load(file.path("symcapture_save", 'growth2.Rdata'))
-broom::tidyMCMC(fitGrowth, c("Gmax", "Dopt", "Ks", 
-                             "sigmaR", "sigma", "R2", "lp__"), droppars = NULL, rhat = T) %>% 
-  separate(term, c("parameter", "popNum"), "[:punct:]", convert = T) %>% 
-  mutate(parameter = recode(parameter, "sigmaR" = "$\\sigma_R$", "R2" = "$R^2$", 
-                            "sigma" = "$\\sigma$", "lp" = "loglikelihood")) %>% 
-  left_join(trees %>%
-              dplyr::select(popNum, pop) %>% 
-              unique()) %>% 
-  mutate(pop = recode(pop, "globuliferaTypeParacou" = "S. globulifera Paracou",
-                      "globuliferaTypeRegina" = "S. globulifera Regina", "sp1" = "S. sp1")) %>% 
-  mutate(pop = ifelse(is.na(pop), "", pop)) %>% 
-  dplyr::select(parameter, pop, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the ontogenic growth model", 
-        col.names = c("Parameter", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
-```
-
-```{r}
-mcmc_trace(as.array(fitGrowth, pars = c("Gmax", "Dopt", "Ks", "sigmaR", "sigma")))
-# mcmc_pairs(as.array(fitGrowth, pars = c("Gmax", "sigmaR", "sigma")))
-```
-
-
-```{r growthOntogenyG1, fig.cap="Ontogenetic parameters R2."}
-mcmc_intervals_data(fitGrowth, regex_pars = c("R2")) %>% 
-  separate(parameter, c("index", "parameter"), "[:punct:]") %>% 
-  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
-  mutate(index = recode(index, "R2" = "R^2 == frac(sigma[P]^2,sigma[P]^2+sigma[R]^2)")) %>% 
-  ggplot(aes(x = parameter, xend = parameter, col = parameter, fill = parameter)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ index, labeller = label_parsed) +
-  xlab("") + ylab("") + 
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
-```
-
-```{r growthOntogenyG2, fig.cap="Growth model predictions."}
-parsg <- as.data.frame(fitGrowth, pars = c("Gmax", "Dopt", "Ks")) %>% 
-  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(popNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  reshape2::melt(id.vars = c("parameter", "popNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(popNum ~ parameter) %>% 
-  mutate(popNum = as.numeric(popNum))
-parsi <- as.data.frame(fitGrowth, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
-  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(IndNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  reshape2::melt(id.vars = c("parameter", "IndNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(IndNum ~ parameter) %>% 
-  mutate(IndNum = as.numeric(IndNum))
-data.frame(DBH = rep(1:100, mdata(trees)$I), 
-           IndNum = rep(1:mdata(trees)$I, each = 100)) %>% 
-  left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop))) %>% 
-  left_join(parsg) %>% 
-  left_join(parsi) %>% 
-  mutate(Gpredg = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2),
-         Gpred5g = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2),
-         Gpred95g = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)) %>% 
-  mutate(Gpredi = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2),
-         Gpred5i = Gmaxi_q5*exp(-0.5*(log(DBH/Dopti_q5)/Ksi_q5)^2),
-         Gpred95i = Gmaxi_q95*exp(-0.5*(log(DBH/Dopti_q95)/Ksi_q95)^2)) %>% 
-  ggplot(aes(x = DBH)) +
-  geom_ribbon(aes(ymin = Gpred5i, ymax = Gpred95i, group = Ind), alpha = 0.5, fill = "lightgrey") +
-   geom_point(aes(y = log(AGR +1), col = Ind), alpha = 0.4, data = trees) +
-  geom_line(aes(y = Gpredi, col = Ind), linetype = "dotted") +
-  geom_line(aes(y = Gpredg, group = pop), col = "black") +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none") 
-```
-
-## Growth & Ontogeny 2
+$$AGR_{t,y,i} = \theta1_i.exp(-\frac12.[\frac{log(\frac{DBH_{y-1,p,i}}{\theta2_i})}{\theta3_i}]^2)\mid \forall \theta, \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})$$
 
 ```{r growthOntogenyTab3}
-# growth <- stan_model("./symcapture_models/Growth3.stan")
-# fitGrowth <- sampling(growth, chains = 2, data = mdata(trees),
-#                       control = list(adapt_delta = 0.9, max_treedepth = 12), save_warmup = F)
-# save(fitGrowth, file = file.path("symcapture_save", 'growth3.Rdata'))
-load(file.path("symcapture_save", 'growth3.Rdata'))
-broom::tidyMCMC(fitGrowth, c("theta", "sigmaR", "sigma", "R2"), droppars = NULL, rhat = T) %>% kable()
+growth <- stan_model("./symcapture_models/Growth5.stan")
+fitGrowth <- sampling(growth, chains = 2, 
+                      control = list(adapt_delta = 0.99, max_treedepth = 12),
+                      include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi"), 
+                      data = mdata(trees))
+mcmc_trace(fitGrowth)
+beepr::beep()
+# save(fitGrowth, file = file.path("symcapture_save", 'growth4.Rdata'))
+# load(file.path("symcapture_save", 'growth4.Rdata'))
+# broom::tidyMCMC(fitGrowth, c("theta", "sigmaR", "sigma"), droppars = NULL, rhat = T) %>% kable()
 ```
-
-```{r}
-load(file.path("symcapture_save", 'growth3.Rdata'))
-mcmc_trace(as.array(fitGrowth, pars = c("theta", "sigmaR", "sigma")))
-# mcmc_pairs(as.array(fitGrowth, pars = c("theta")))
-```
-
+                
 ## Growth & Kinship
 
 $$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma^2)$$
 $$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p + a_{\theta}, \sigma^2_{R_{\theta}})  \\ a_{\theta} \sim \mathcal{MVN} (0, \sigma^2_{G_{\theta}}.K) \end{align}$$
-
-```{r growthKinshipTab2}
-# growth <- stan_model("./symcapture_models/GrowthAnimal2.stan")
-# fitGrowthKin <- sampling(growth, chains = 2, save_warmup = F,
-#                          control = list(adapt_delta = 0.9, max_treedepth = 12), data = mdata(treesSub))
-# save(fitGrowthKin, file = file.path("symcapture_save", 'growthkin3.Rdata'))
-load(file.path("symcapture_save", 'growthkin3.Rdata'))
-broom::tidyMCMC(fitGrowthKin, c("Gmax", "Dopt", "Ks", 
-                             "sigmaR", "sigmaG", "sigma", "R2m", "R2c", "lp__"), droppars = NULL, rhat = T) %>% 
-  separate(term, c("parameter", "popNum"), "[:punct:]", convert = T) %>% 
-  mutate(parameter = recode(parameter, "sigmaR" = "$\\sigma_R$", "sigmaG" = "$\\sigma_G$", 
-                            "R2m" = "$R^2_m$", "R2c" = "$R^2_c$", 
-                            "sigma" = "$\\sigma$", "lp" = "loglikelihood")) %>% 
-  left_join(trees %>%
-              dplyr::select(popNum, pop) %>% 
-              unique()) %>% 
-  mutate(pop = recode(pop, "globuliferaTypeParacou" = "S. globulifera Paracou",
-                      "globuliferaTypeRegina" = "S. globulifera Regina", "sp1" = "S. sp1")) %>% 
-  mutate(pop = ifelse(is.na(pop), "", pop)) %>% 
-  dplyr::select(parameter, pop, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the ontogenic growth model", 
-        col.names = c("Parameter", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
-```
-
-```{r}
-mcmc_trace(as.array(fitGrowthKin, pars = c("Gmax", "Dopt", "Ks", "sigmaG", "sigmaR", "sigma")))
-# mcmc_pairs(as.array(fitGrowthKin, pars = c("Gmax", "Dopt", "Ks")))
-```
-
-```{r growthKinshipG21, fig.cap="Ontogenetic parameters R2 (marginal and conditional."}
-mcmc_intervals_data(fitGrowthKin, regex_pars = c("R2")) %>% 
-  separate(parameter, c("index", "parameter"), "[:punct:]") %>% 
-  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
-  mutate(index = recode(index, "R2m" = "Marginal", "R2c" = "Conditional")) %>%
-  ggplot(aes(x = index, xend = index, col = parameter, fill = parameter)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  facet_wrap(~ parameter, labeller = label_parsed) +
-  xlab("") + ylab(expression(R^2)) + 
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
-```
-
-## Growth & Kinship 2
 
 ### Subset
 
 ```{r growthKinshipTab3sub}
 # growth <- stan_model("./symcapture_models/GrowthAnimal3.stan")
 # fitGrowthKin <- sampling(growth, chains = 2, save_warmup = F,
-#                          control = list(adapt_delta = 0.9, max_treedepth = 12), data = mdata(treesSub))
+#                          control = list(adapt_delta = 0.99, max_treedepth = 12), data = mdata(treesSub))
 # save(fitGrowthKin, file = file.path("symcapture_save", 'growthkin4sub.Rdata'))
 load(file.path("symcapture_save", 'growthkin4sub.Rdata'))
 broom::tidyMCMC(fitGrowthKin, c("theta", "sigmaR", "sigmaG", "sigma", "R2m", "R2c", "lp__"), droppars = NULL, rhat = T) %>% kable() 
@@ -236,28 +109,12 @@ mcmc_trace(as.array(fitGrowthKin, pars = c("theta", "sigmaG", "sigmaR", "sigma")
 # mcmc_pairs(as.array(fitGrowthKin, pars = c("theta")))
 ```
 
-```{r growthKinshipG31sub, fig.cap="Ontogenetic parameters R2 (marginal and conditional."}
-mcmc_intervals_data(fitGrowthKin, regex_pars = c("R2")) %>%  
-  separate(parameter, c("index", "parameter"), "[:punct:]") %>% 
-  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
-  mutate(index = recode(index, "R2m" = "Marginal", "R2c" = "Conditional")) %>%
-  ggplot(aes(x = index, xend = index, col = parameter, fill = parameter)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  facet_wrap(~ parameter, labeller = label_parsed) +
-  xlab("") + ylab(expression(R^2)) + 
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
-```
-
 ### Full
 
 ```{r growthKinshipTab3}
 # growth <- stan_model("./symcapture_models/GrowthAnimal3.stan")
 # fitGrowthKin <- sampling(growth, chains = 2, save_warmup = F,
-#                          control = list(adapt_delta = 0.9, max_treedepth = 12), data = mdata(trees))
+#                          control = list(adapt_delta = 0.99, max_treedepth = 12), data = mdata(trees))
 # save(fitGrowthKin, file = file.path("symcapture_save", 'growthkin4.Rdata'))
 load(file.path("symcapture_save", 'growthkin4.Rdata'))
 broom::tidyMCMC(fitGrowthKin, c("theta", "sigmaR", "sigmaG", "sigma", "R2m", "R2c", "lp__"), droppars = NULL, rhat = T) %>% kable() 
@@ -265,7 +122,7 @@ broom::tidyMCMC(fitGrowthKin, c("theta", "sigmaR", "sigmaG", "sigma", "R2m", "R2
 
 ```{r}
 mcmc_trace(as.array(fitGrowthKin, pars = c("theta", "sigmaG", "sigmaR", "sigma"))) 
-# mcmc_pairs(as.array(fitGrowthKin, pars = c("sigmaR", "sigmaG")))
+mcmc_pairs(as.array(fitGrowthKin, pars = c("sigmaG")))
 ```
 
 ```{r growthKinshipG31, fig.cap="Ontogenetic parameters R2 (marginal and conditional."}
@@ -282,4 +139,52 @@ mcmc_intervals_data(fitGrowthKin, regex_pars = c("R2")) %>%
   xlab("") + ylab(expression(R^2)) + 
   scale_fill_discrete(guide = "none") +
   scale_color_discrete(guide = "none")  
+```
+                              
+### Parameters
+
+$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p + a_{\theta}, \sigma^2_{R_{\theta}})  \\ a_{\theta} \sim \mathcal{MVN} (0, \sigma^2_{G_{\theta}}.K) \end{align}$$
+
+```{r}
+parameters <- as.data.frame(fitGrowth, pars = "thetai") %>% 
+  reshape2::melt(NULL, variable.name = "parameter") %>% 
+  separate(parameter, c("theta", "parameter", "IndNum"), sep = "[:punct:]", convert = T) %>% 
+  dplyr::select(-theta) %>% 
+  mutate(parameter = recode(parameter, "1" = "Gmax",  "2" = "Dopt", "3"= "Ks")) %>% 
+  group_by(parameter, IndNum) %>% 
+  summarise_all(mean) %>% 
+  ungroup() %>% 
+  left_join(dplyr::select(trees, IID, IndNum, popNum) %>% unique())
+
+mdataPar <- function(par) {
+  parameter <- filter(parameters, parameter == par)
+    list(N = nrow(parameter), 
+         P = max(parameter$popNum), 
+         Y = parameter$value, 
+         population = parameter$popNum, 
+         K = dplyr::select(parameter, IID, IndNum) %>% 
+           unique() %>% arrange(IndNum) %>% 
+           dplyr::select(IID) %>% unlist() %>% K[.,.])}
+
+# animal <- stan_model("./symcapture_models/Animal.stan")
+# fitAnimal <- lapply(c("Gmax", "Dopt", "Ks"), function(par)
+#   sampling(animal, chains = 2, save_warmup = F,
+#            control = list(adapt_delta = 0.99, max_treedepth = 12), data = mdataPar(par)))
+# names(fitAnimal) <- c("Gmax", "Dopt", "Ks")
+# save(fitAnimal, file = file.path("symcapture_save", 'growthkin5.Rdata'))
+load(file.path("symcapture_save", 'growthkin5.Rdata'))
+lapply(fitAnimal, broom::tidyMCMC, pars = c("sigmaG", "sigmaR", "R2m", "R2c"), droppars = NULL, rhat = T) %>% 
+  bind_rows(.id = "parameter") %>% kable() 
+```
+
+```{r}
+cowplot::plot_grid(plotlist = lapply(fitAnimal, function(fit) 
+  mcmc_trace(as.array(fit, pars = c("sigmaG", "sigmaR")))), 
+  labels = names(fitAnimal), nrow = 3)
+```
+
+```{r}
+cowplot::plot_grid(plotlist = lapply(fitAnimal, function(fit) 
+  mcmc_intervals(fit, regex_pars = c("R2")) ), 
+  labels = names(fitAnimal))
 ```
