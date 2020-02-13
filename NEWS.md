@@ -1,4 +1,7 @@
-# PhD 0.1.9163
+# PhD 0.1.9165
+* symcapture: Animal model validated with VCFtools kinship relatedness 2
+
+# PhD 0.1.9164
 * lectures: rmarkdwon for FOREN seminar @INPHB
 * symcapture: new growth model with DBH
 

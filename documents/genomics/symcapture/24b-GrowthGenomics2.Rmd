@@ -1,7 +1,7 @@
 ---
 output: html_document
 editor_options: 
-  chunk_output_type: console
+  chunk_output_type: inline
 ---
 ```{r setup_growthgenom2, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
@@ -75,16 +75,15 @@ $$DBH_{today,p,i} \sim \mathcal N (DBH_{t0}+\sum_{y=y0+1}^{y=today}AGR(DBH_{y-1,
 $$AGR_{t,y,i} = \theta1_i.exp(-\frac12.[\frac{log(\frac{DBH_{y-1,p,i}}{\theta2_i})}{\theta3_i}]^2)\mid \forall \theta, \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})$$
 
 ```{r growthOntogenyTab3}
-growth <- stan_model("./symcapture_models/Growth5.stan")
-fitGrowth <- sampling(growth, chains = 2, 
-                      control = list(adapt_delta = 0.99, max_treedepth = 12),
-                      include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi"), 
-                      data = mdata(trees))
-mcmc_trace(fitGrowth)
-beepr::beep()
+# growth <- stan_model("./symcapture_models/Growth5.stan")
+# fitGrowth <- sampling(growth, chains = 2, 
+#                       control = list(adapt_delta = 0.99, max_treedepth = 12),
+#                       include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi"), 
+#                       data = mdata(trees))
 # save(fitGrowth, file = file.path("symcapture_save", 'growth4.Rdata'))
-# load(file.path("symcapture_save", 'growth4.Rdata'))
-# broom::tidyMCMC(fitGrowth, c("theta", "sigmaR", "sigma"), droppars = NULL, rhat = T) %>% kable()
+load(file.path("symcapture_save", 'growth4.Rdata'))
+mcmc_trace(fitGrowth)
+broom::tidyMCMC(fitGrowth, droppars = NULL, rhat = T) %>% kable()
 ```
                 
 ## Growth & Kinship
