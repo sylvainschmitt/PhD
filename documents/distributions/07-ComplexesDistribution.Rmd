@@ -12,7 +12,7 @@ library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
-  cache = T, cache.lazy = F)
+  cache = T, cache.lazy = F, eval=F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
@@ -91,9 +91,7 @@ load("./distribution_save/Competition.Rdata")
 
 ```{r complexes_compdist}
 Complexes <- bind_rows(
-  data.frame(Complex = "E. Chartacea", Genus = "Eschweilera",
-             Species = c("simiorum", "congestiflora")),
-  data.frame(Complex = "E. Parvifolia", Genus = "Eschweilera",
+  data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
                          "wachenheimii", "grandiflora_form2")),
   data.frame(Complex = "Licania", Genus = "Licania",
@@ -121,18 +119,14 @@ data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex) {
   data_complex <- left_join(data,
                             Competition %>% 
-                              left_join(Complexes, by = c("Genusj" = "Genus", "Speciesj" = "Species")) %>% 
-                              mutate(Complex = ifelse(is.na(Complex), "no", Complex)) %>% 
                               mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-                              mutate(strata = as.numeric(Complex == complex)) %>% 
                               group_by(idTree) %>% 
-                              summarise(NCIother = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
-                                        NCIcomplex = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1)))
+                              summarise(NCI = log(sum(DBHj^2*exp(-0.25*dij))+1)))
   list(N = nrow(data_complex),
-       K = 3,
+       K = 2,
        Y = as.numeric(data_complex$Complex == complex),
-       X = dplyr::select(data_complex, TWI, NCIother, NCIcomplex) %>%
-         mutate_all(funs(scale)) %>%
+       X = dplyr::select(data_complex, TWI, NCI) %>%
+         mutate_all(scale, center = F) %>%
          as.matrix(),
        w = ifelse(data_complex$Complex == complex,
                   1-sum(data_complex$Complex == complex)/length(data_complex$Complex),
@@ -142,11 +136,12 @@ names(mdata) <- complexes
 ```
 
 ```{r fit_compdist}
+# save(mdata, file = "./distribution_save/complexes.Rdata")
 # Model <- stan_model("distribution_models/SingleModelUnweighted.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data))
-# names(fits) <- complexes
-# save(fits, file = "./distribution_save/complexesUnlogged.Rdata")
-load("./distribution_save/complexesUnlogged.Rdata")
+names(fits) <- complexes
+save(mdata, fits, file = "./distribution_save/complexes.Rdata")
+load("./distribution_save/complexes.Rdata")
 pars <- c("alpha", "beta", "gamma") 
 ```
 

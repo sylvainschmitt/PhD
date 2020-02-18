@@ -10,10 +10,10 @@ data {
 }
 parameters {
   vector<lower=0, upper=5>[P] Gmax ; // maximum growth potential
-  vector<lower=0, upper=200>[P] Dopt ; // optimal growth diameter
+  vector<lower=1, upper=200>[P] Dopt ; // optimal growth diameter
   vector<lower=0, upper=2>[P] Ks ; // growth kurtosis
   vector<lower=0, upper=5>[I] Gmaxi ; // maximum growth potential
-  vector<lower=0, upper=200>[I] Dopti ; // optimal growth diameter
+  vector<lower=1, upper=200>[I] Dopti ; // optimal growth diameter
   vector<lower=0, upper=2>[I] Ksi ; // growth kurtosis
   vector<lower=0>[3] sigmaR ; // parameters residual variances
   real<lower=0> sigma ; // global residual variance
@@ -31,14 +31,16 @@ transformed parameters {
 }
 model {
   DBHtoday ~ lognormal(log(DBH), sigma) ;
-  Gmaxi  ~ lognormal(log(Gmax[pop]), sqrt(sigmaR[1])) ;
-  Dopti  ~ lognormal(log(Dopt[pop]), sqrt(sigmaR[2])) ;
-  Ksi  ~ lognormal(log(Ks[pop]), sqrt(sigmaR[3])) ;
+  for(i in 1:I){
+    Gmaxi[i]  ~ normal(Gmax[pop[i]], sqrt(sigmaR[1])) T[0,] ;
+    Dopti[i]  ~ normal(Dopt[pop[i]], sqrt(sigmaR[2])) T[1,] ;
+    Ksi[i]  ~ normal(Ks[pop[i]], sqrt(sigmaR[3])) T[0,] ;
+  }
   Gmax ~ lognormal(log(0.5), 1) ;
   Dopt ~ lognormal(log(30), 10) ;
   Ks ~ lognormal(log(0.5), 1) ;
   sigmaR[1] ~ student_t(4, 0, 1) ;
-  sigmaR[2] ~ student_t(4, 0, 200) ;
+  sigmaR[2] ~ student_t(4, 0, 10) ;
   sigmaR[3] ~ student_t(4, 0, 1) ;
   sigma ~ student_t(4, 0, 1) ;
 }

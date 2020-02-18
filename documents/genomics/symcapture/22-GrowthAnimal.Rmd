@@ -18,10 +18,8 @@ rstan_options(auto_write = T)
 load("./symcapture_save/Env2.Rdata")
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed
-  group_by(Ind) %>% 
-  mutate(Y0 = first(CensusYear), DBH0 = first(DBH), DBHtoday = last(DBH)) %>% 
-  ungroup() %>% 
   dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday)
+pathCluster <- "~/Remotes/genotoul/work/PhD/documents/genomics/symcapture"
 ```
 
 # Growth & Animal models
@@ -74,9 +72,12 @@ gdata <- function(
   DBH0 <- rlnorm(I, meanlog = mean(log(trees$DBH0)), 
                  sdlog = sd(log(trees$DBH0))) 
   Y0 <- sample(trees$Y0, I)
-  Gmaxi <- rlnorm(I, mean = log(Gmax[pop]), sd = sqrt(sigmaR[1]))
-  Dopti <- rlnorm(I, mean = log(Dopt[pop]), sd = sqrt(sigmaR[2]))
-  Ksi <- rlnorm(I, mean = log(Ks[pop]), sd = sqrt(sigmaR[3]))
+  # Gmaxi <- rlnorm(I, mean = log(Gmax[pop]), sd = sqrt(sigmaR[1]))
+  # Dopti <- rnorm(I, mean = Dopt[pop], sd = sqrt(sigmaR[2]))
+  # Ksi <- rlnorm(I, mean = log(Ks[pop]), sd = sqrt(sigmaR[3]))
+  Gmaxi <- truncnorm::rtruncnorm(I, mean = Gmax[pop], sd = sqrt(sigmaR[1]), a = 0)
+  Dopti <- truncnorm::rtruncnorm(I, mean = Dopt[pop], sd = sqrt(sigmaR[2]), a = 0)
+  Ksi <- truncnorm::rtruncnorm(I, mean = Ks[pop], sd = sqrt(sigmaR[3]), a = 0)
   DBH <- rep(NA, I)
   for (t in 1:(Y-1)) {
     for(i in 1:I){
@@ -85,7 +86,7 @@ gdata <- function(
     }
     DBH <- DBH + Gmaxi * exp(-0.5*(log(DBH / Dopti) / Ksi) * (log(DBH / Dopti) / Ksi))
   }
-  DBHtoday <- rnorm(I, DBH, sigma)
+  DBHtoday <- rlnorm(I, log(DBH), sdlog = sigma)
   list(params = list(Gmax = Gmax, Dopt = Dopt, Ks = Ks, 
                      sigmaR = sigmaR, sigma = sigma),
        data = data.frame(ind = 1:I, pop = pop, 
@@ -108,25 +109,25 @@ gkdata <- function(
   sigma = 0.14
 ){
   K <- kin.mat(P, Fam)
-  Kdf <- kin.df(P, fam)
+  Kdf <- kin.df(P, Fam)
   I <- nrow(K)
   Gmax <- Gmax[1:P]
   Dopt <- Dopt[1:P]
   Ks <- Ks[1:P]
-  years <- 1985:(1985+Y-1)
+  years <- 1984:(1984+Y-1)
   pop <- sample(1:P, I, replace = T)
   DBH0 <- rlnorm(I, meanlog = mean(log(trees$DBH0)), 
                  sdlog = sd(log(trees$DBH0))) 
   Y0 <- sample(trees$Y0, I)
-  uG <- rnorm(I, sd = sqrt(sigmaG))
-  uD <- rnorm(I, sd = sqrt(sigmaG))
-  uK <- rnorm(I, sd = sqrt(sigmaG))
-  Gmaxi <- rlnorm(I, mean = log(Gmax[Kdf$pop] + as.vector(t(chol(K)) %*% uG)), 
-                  sd = sqrt(sigmaR[1]))
-  Dopti <- rlnorm(I, mean = log(Dopt[Kdf$pop] + as.vector(t(chol(K)) %*% uD)), 
-                  sd = sqrt(sigmaR[2]))
-  Ksi <- rlnorm(I, mean = log(Ks[Kdf$pop] + as.vector(t(chol(K)) %*% uK)), 
-                sd = sqrt(sigmaR[3]))
+  uG <- truncnorm::rtruncnorm(I, sd = sqrt(sigmaG[1]), a = -Gmax[Kdf$pop])
+  uD <- truncnorm::rtruncnorm(I, sd = sqrt(sigmaG[2]), a = -Dopt[Kdf$pop])
+  uK <- truncnorm::rtruncnorm(I, sd = sqrt(sigmaG[3]), a = -Ks[Kdf$pop])
+  Gmaxi <- truncnorm::rtruncnorm(I, mean = Gmax[Kdf$pop] + as.vector(t(chol(K)) %*% uG),
+                                 sd = sqrt(sigmaR[1]), a = 0)
+  Dopti <- truncnorm::rtruncnorm(I, mean = Dopt[Kdf$pop] + as.vector(t(chol(K)) %*% uD), 
+                                 sd = sqrt(sigmaR[2]), a = 0)
+  Ksi <- truncnorm::rtruncnorm(I, mean = Ks[Kdf$pop] + as.vector(t(chol(K)) %*% uK), 
+                               sd = sqrt(sigmaR[3]), a = 0)
   DBH <- rep(NA, I)
   for (t in 1:(Y-1)) {
     for(i in 1:I){
@@ -135,7 +136,7 @@ gkdata <- function(
     }
     DBH <- DBH + Gmaxi * exp(-0.5*(log(DBH / Dopti) / Ksi) * (log(DBH / Dopti) / Ksi))
   }
-  DBHtoday <- rnorm(I, DBH, sigma)
+  DBHtoday <- rlnorm(I, log(DBH), sdlog = sigma)
   list(params = list(Gmax = Gmax, Dopt = Dopt, Ks = Ks, 
                      sigmaR = sigmaR, sigmaG = sigmaG, sigma = sigma),
        data = data.frame(ind = 1:I, pop = pop, 
@@ -207,52 +208,27 @@ broom::tidyMCMC(fitAnimal2, pars = c("mu", "sigmaG", "sigmaR"), droppars = NULL,
 mcmc_trace(as.array(fitAnimal2, pars = c("mu", "sigmaG", "sigmaR")))
 ```
 
-### Growth - DBH
+### Growth
 
-```{r growth1, eval=F}
-mdata <- gdata1(I = 20, P = 1)
+```{r growth1}
+# mdata <- gdata(I = 10*7, P = 1)
+# save(mdata, file = file.path("symcapture_save", "growth5.Rdata"))
+# file.copy("./symcapture_save/growth5.Rdata",
+#           file.path(pathCluster, "symcapture_save"), overwrite = T)
+# file.copy("./symcapture_models/Growth5.stan",
+#           file.path(pathCluster, "symcapture_models"), overwrite = T)
+# load(file = file.path("symcapture_save", "growth5.Rdata"))  # Begin cluster
+# growth1 <- stan_model("./symcapture_models/Growth5.stan")
+# fitGrowth1 <- sampling(growth1, chains = 2, data = mdata$mdata, save_warmup = F,
+#                       include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi"))
+# save(mdata, fitGrowth1, file = file.path("symcapture_save", "growth5.Rdata"))  # End cluster
+# file.copy(file.path(pathCluster, "symcapture_save"),
+#           "./symcapture_save/growth5.Rdata", overwrite = T)
+load(file = file.path("symcapture_save", "growth5.Rdata"))
 ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0, shape = as.factor(pop))) + 
   geom_point() + geom_abline()
-growth1 <- stan_model("./symcapture_models/Growth5.stan")
-fitGrowth1 <- sampling(growth1, chains = 2, data = mdata$mdata, save_warmup = F,
-                      include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi"))
-unlist(mdata$params)
 broom::tidyMCMC(fitGrowth1, droppars = NULL, rhat = T) %>% kable()
 mcmc_trace(fitGrowth1) + 
-  ggtitle(paste(unlist(mdata$params), collapse = " "),
-          paste(names(unlist(mdata$params)), collapse = " "))
-# mcmc_pairs(fitGrowth1, regex_pars = c("Gmax", "Dopt", "Ks"))
-```
-
-### Growth - DBH bis
-
-```{r growth1b, eval=F}
-mdata <- gdata1(I = 50, P = 1)
-ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0, shape = as.factor(pop))) + 
-  geom_point() + geom_abline()
-growth1 <- stan_model("./symcapture_models/Growth5b.stan")
-fitGrowth1 <- sampling(growth1, chains = 2, data = mdata$mdata, save_warmup = F,
-                      include = F, pars = c("DBH", "Gmaxi"))
-unlist(mdata$params)
-broom::tidyMCMC(fitGrowth1, droppars = NULL, rhat = T) %>% kable()
-mcmc_trace(fitGrowth1) + 
-  ggtitle(paste(unlist(mdata$params), collapse = " "),
-          paste(names(unlist(mdata$params)), collapse = " "))
-```
-
-### Growth - Gmax
-
-```{r growth2, eval=F}
-mdata <- gdata1(I = 20, P = 1)
-ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0, shape = as.factor(pop))) + 
-  geom_point() + geom_abline()
-growth2 <- stan_model("./symcapture_models/Growth6.stan")
-fitGrowth2 <- sampling(growth2, chains = 2, data = mdata$mdata, save_warmup = F,
-                      include = F, pars = c("DBH", "Gmax"))
-unlist(mdata$params)
-broom::tidyMCMC(fitGrowth2, droppars = NULL, rhat = T, 
-                estimate.method = "median") %>% kable()
-mcmc_trace(fitGrowth2) + 
   ggtitle(paste(unlist(mdata$params), collapse = " "),
           paste(names(unlist(mdata$params)), collapse = " "))
 ```
@@ -260,57 +236,28 @@ mcmc_trace(fitGrowth2) +
 ### Growth & Genotype
 
 ```{r growthK1, eval=F}
-growthanimal1 <- stan_model("symcapture_models/GrowthAnimalTest1.stan")
-fitGrowthAnimal1 <- sampling(growthanimal1, chains = 2, save_warmup = F, 
-                             data = list(N = nrow(data), I = max(data$i), y = data$y, 
-                                         x = data $x, ind = data$i, K = K, L = c(0.1, 0, 0.1), U = c(2, 200, 3)))
-broom::tidyMCMC(fitGrowthAnimal1, pars = c("theta", "sigmaG", "sigmaR"), droppars = NULL, rhat = T) %>% kable()
-mcmc_trace(as.array(fitGrowthAnimal1, pars = c("theta", "sigmaG", "sigmaR")))
-mcmc_pairs(as.array(fitGrowthAnimal1, pars = c("sigmaG", "sigmaR")))
-```
-
-### Growth & Gmax only
-
-```{r growthK2, eval=F}
-P = 1
-Fam = 5
-K <- kin.mat(P, Fam)
-ped.df <- kin.df(P, Fam)
-sigmaG <- 0.4
-sigmaRt <- c(0.1, 10, 0.2)
-sigmaR <- 0.1
-N <- nrow(K)
-Time = 3
-u <- rnorm(N, sd = sqrt(sigmaG))
-theta <- c(1, 30, 0.8)
-r <- rnorm(N, sd = sqrt(sigmaR))
-rt <- sapply(sigmaRt, function(sigma) rnorm(N, sd = sqrt(sigma)))
-thetai <- matrix(nrow = N, ncol = 3)
-thetai[,1] <- theta[1] + t(chol(K)) %*% u + rt[,1]
-for(i in 2:3)
-  thetai[,i] <- theta[i] + rt[,i]
-data <- sapply(1:Time, function(t)
-  data.frame(x = rlnorm(N, meanlog = 3.2, sdlog = 0.5),
-             i = rownames(K)) %>% 
-    mutate(y = thetai[,1]*exp(-0.5*(log(x/thetai[,2])/thetai[,3])^2) + r),
-  simplify = F
-) %>% bind_rows(.id = "t") %>% 
-  mutate(i = as.numeric(as.factor(i)))
-ggplot(data, aes(x, y, col = as.factor(i))) +
-  geom_point() +
-  stat_function(fun = function(x)
-    theta[1]*exp(-0.5*(log(x/theta[2])/theta[3])^2), col = "red") +
-  scale_color_discrete(guide = "none") +
-  ggtitle(paste("Vg=", paste0(round(var(u), 2), collapse = " "),
-                "Vr=", paste0(round(apply(rt, 2, var), 2), collapse = " ")),
-          paste("theta =", paste0(round(theta, 2), collapse = " ")))
-growthanimal2 <- stan_model("symcapture_models/GrowthAnimalTest2.stan")
-fitGrowthAnimal2 <- sampling(growthanimal2, chains = 2, save_warmup = F,
-                             data = list(N = nrow(data), I = max(data$i), y = data$y,
-                                         x = data $x, ind = data$i, K = K, L = c(0.1, 0, 0.1), U = c(2, 200, 3)))
-broom::tidyMCMC(fitGrowthAnimal2, pars = c("theta", "sigmaG", "sigmaR"), droppars = NULL, rhat = T) %>% kable()
-mcmc_trace(as.array(fitGrowthAnimal2, pars = c("theta", "sigmaG", "sigmaR")))
-mcmc_pairs(as.array(fitGrowthAnimal2, pars = c("theta", "sigmaG", "sigmaR")))
+mdata <- gkdata(Fam = 3, P = 1)
+ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0, shape = as.factor(pop))) + 
+  geom_point() + geom_abline()
+save(mdata, file = file.path("symcapture_save", "growthgeno1.Rdata"))
+file.copy("./symcapture_save/growthgeno1.Rdata",
+          file.path(pathCluster, "symcapture_save"), overwrite = T)
+file.copy("./symcapture_models/GrowthGeno1.stan",
+          file.path(pathCluster, "symcapture_models"), overwrite = T)
+load(file = file.path("symcapture_save", "growthgeno1.Rdata")) # Begin cluster
+growthgeno1 <- stan_model("./symcapture_models/GrowthGeno1.stan")
+fitGrowthGeno1 <- sampling(growthgeno1, chains = 2, data = mdata$mdata, save_warmup = F,
+                           include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi",
+                                                 "aG", "aK", "aD"))
+save(mdata, fitGrowthGeno1, file = file.path("symcapture_save", "GrowthGeno1.stan")) # End cluster
+file.copy(file.path(pathCluster, "symcapture_save"),
+          "./symcapture_save/growthgeno1.Rdata", overwrite = T)
+load(file = file.path("symcapture_save", "growth5.Rdata"))
+unlist(mdata$params)
+broom::tidyMCMC(fitGrowthGeno1, droppars = NULL, rhat = T) %>% kable()
+mcmc_trace(fitGrowthGeno1) + 
+  ggtitle(paste(unlist(mdata$params), collapse = " "),
+          paste(names(unlist(mdata$params)), collapse = " "))
 ```
 
 ## Test2 - Symphonia Kinship
@@ -352,7 +299,7 @@ ggplot(data.frame(y = y, u = u), aes(u, y)) +
                 "mu =", round(mu, 2),
                 "Vg=", round(var(as.vector((t(chol(K)) %*% u))), 2), 
                 "Vr=", round(var(r), 2)))
-animal1 <- stan_model("symcapture_models/Animal1.stan")
+animal3 <- stan_model("symcapture_models/Animal1.stan")
 fitAnimal1 <- sampling(animal1, chains = 2, save_warmup = F, data = list(N = N, Y = y, K = K))
 broom::tidyMCMC(fitAnimal1, pars = c("mu", "sigmaG", "sigmaR"), droppars = NULL, rhat = T) %>% kable()
 mcmc_trace(as.array(fitAnimal1, pars = c("mu", "sigmaG", "sigmaR")))
@@ -387,7 +334,6 @@ ggplot(data.frame(y = y, u = u, pop = as.factor(pop)),
                 "Vg=", round(var(as.vector((t(chol(K)) %*% u))), 2), 
                 "Vr=", round(var(r), 2)),
           paste("p =", paste0(round(p, 2), collapse = " ")))
-broom::tidyMCMC(fitAnimal2, pars = c("mu", "sigmaG", "sigmaR"), droppars = NULL, rhat = T) %>% kable()
-mcmc_trace(as.array(fitAnimal2, pars = c("mu", "sigmaG", "sigmaR")))
+broom::tidyMCMC(fitAnimal2, pars = c("sigmaP", "sigmaG", "sigmaR"), droppars = NULL, rhat = T) %>% kable()
+mcmc_trace(as.array(fitAnimal2, pars = c("sigmaP", "sigmaG", "sigmaR")))
 ```
-

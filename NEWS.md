@@ -1,3 +1,8 @@
+# PhD 0.1.9166
+* distribution: R+ variables + cleaning
+* lectures: rmarkdown
+* symcapture: growth & animal models
+
 # PhD 0.1.9165
 * symcapture: Animal model validated with VCFtools kinship relatedness 2
 

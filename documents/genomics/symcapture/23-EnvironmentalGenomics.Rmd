@@ -35,13 +35,7 @@ The topographic wetness index (TWI) was selected among several abiotic descripto
 Biotic descriptors included the Neighborhood Crowding Index [NCI; @Uriarte2004] and the Annual Crowding Rate, both integrated over time. The Neighborhood Crowding Index $NCI_i$ from tree individual $i$ was calculated with following formula:
 
 $$NCI_i = (\int_{t_0} ^{2015} \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}.dt).\frac1{\Delta t}$$
-with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface. The decrease of neighbors $DBH$ effect with distance was set to 0.25 here to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters. $NCI$ represents biotic asymmetric competition through tree neighborhood over time. 
-
-The Annual Neighborhood Crowding Rate $ANCR_i$ from tree individual $i$ was calculated with following formula:
-
-$$ANCR_i = \int_{t_0+1} ^{2015} \frac{ NCI_{i,t} - NCI_{i,t-1} }{\Delta t}  .dt$$
-
-with the same parameters as $NCI_i$. $ANCR$ represents the dynamic of biotic asymmetric competition through tree neighborhood over time (derivate of $NCI_i$). Both NCI and ANCR were calculated among heterospecific and conspecific neighbors and with all enighbors confounded. Both correlations and principal component analyses showed non colinear TWI, NCI and ANCR that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom)).
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface. The decrease of neighbors $DBH$ effect with distance was set to 0.25 here to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters. $NCI$ represents biotic asymmetric competition through tree neighborhood over time. Both correlations and principal component analyses showed non colinear TWI and NCI that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom)).
 
 ```{r DataEnvGenom, eval=F}
 trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
@@ -123,10 +117,6 @@ trees %>%
   dplyr::select(FID, IID, NCI) %>%
     mutate(NCI = RNOmni::rankNorm(NCI)) %>%
   write_tsv(file.path(path, "gemma", "NCI", "NCI.env"), col_names = F)
-trees %>%
-  dplyr::select(FID, IID, ANCR) %>%
-  mutate(ANCR = RNOmni::rankNorm(ANCR)) %>%
-  write_tsv(file.path(path, "gemma", "ANCR", "ANCR.env"), col_names = F)
 ```
 
 ```{r correlationsEnvGenom, fig.cap="Environmental descriptors correlations."}
@@ -140,21 +130,26 @@ trees %>%
 ```{r Envmdata}
 trees <- trees %>% 
   mutate(popNum = as.numeric(as.factor(pop)))
-fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
-                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
-              col_names = fam$IID) %>% 
-  mutate(IID = fam$IID) %>% 
-  column_to_rownames(var = "IID") %>% 
+fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), 
+                  delim = " ", 
+                  col_names = c("FID", "IID", "PAT", "MAT", 
+                                "SEX", "PHENOTYPE"))
+K <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                        "out.relatedness2"))  %>% 
+  reshape2::dcast(INDV1 ~ INDV2, value.var = "RELATEDNESS_PHI") %>% 
+  column_to_rownames("INDV1") %>% 
   as.matrix()
-mdata <- function(data, variable) 
+mdata <- function(data, variable) {
+  K <- K[trees$IID, trees$IID]
+  K[K < 0] <- 0
+  K <- K*2
+  K <- as.matrix(nearPD(K)$mat)
   list(N = nrow(data),
        P = length(unique(data$pop)),
        Y = unlist(data[variable])/sd(unlist(data[variable])),
        population = data$popNum,
-       K = K[data$IID, data$IID])
-dplyr::select(trees, FID, IID, TWI, NCI, ANCR) %>%
-  write_tsv(file.path(path, "gemma", "env", "env.phenotype"), col_names = F)
+       K = K) 
+}
 ```
 
 ## Genetic variance
@@ -167,17 +162,17 @@ $$\mu_{Population} \sim \mathcal{N}(\mu,\sigma_P)$$
 
 where individual is defined as a normal law centered on the sum of population mean environments $\mu_{Population}$ and additive gentic variance $a$ with associated individual variance $\sigma_R$. Additive genetic variance $a$ follow a multivariate normal law centered on 0 of covariance $\sigma_G K$. Population mean environments $\mu_{Population}$ were defined as random effects on genus level mean environment with associated population variance $\sigma_P$.
 
-Most of the variability for topography was explained by the population (58%) and around 30% of the remaining variability was explained by the genotype. On the opposite, most of the variability for competition was explained by the genotype (40-50%) and around 37% of the remaining variability was explained by the population (Tab. \@ref(tab:EnvAnimal) and Fig. \@ref(fig:envKinshipG1) and \@ref(fig:envKinshipG2)). Kinship and population explain more than 80% of the variation from neighboring crowding, so there is a within population adaptation to competition and light access. Variation with topgraphy was more differentiated between population than random genetic variation ($Qst>>Fst$), highlighting a local adptation of *Symphonia* populations to topography.
+Most of the variability for topography was explained by the population (53%) and 47% of the remaining variability was explained by the genotype. On the opposite, most of the variability for competition was explained by the genotype 42% and only 20% of the remaining variability was explained by the population (Tab. \@ref(tab:EnvAnimal) and Fig. \@ref(fig:envKinshipG1) and \@ref(fig:envKinshipG2)). Variation with topgraphy but not with competition was more differentiated between population than random genetic variation ($Qst$ of 0.56 and 0.14 for TWI and NCI respectivelly against an $Fst$ of 0.15), highlighting a local adptation of *Symphonia* populations to topography.
 
 ```{r EnvAnimal, fig.cap="Genetic variance modelling for environmental variables."}
-# animal <- stan_model("./symcapture_models/Animal.stan")
-# fitEnvKin <- lapply(c("TWI", "NCI", "ANCR"), function(var)
+# animal <- stan_model("./symcapture_models/Animal2.stan")
+# fitEnvKin <- lapply(c("TWI", "NCI"), function(var)
 #   sampling(animal, chains = 2, data = mdata(trees, var), save_warmup = F,
 #            include = F, pars = "a", control = list(adapt_delta = 0.99)))
-# names(fitEnvKin) <- c("TWI", "NCI", "ANCR")
+# names(fitEnvKin) <- c("TWI", "NCI")
 # save(fitEnvKin, file = file.path("symcapture_save", 'envkin.Rdata'))
 load(file.path("symcapture_save", 'envkin.Rdata'))
-lapply(fitEnvKin, broom::tidyMCMC, c("muP", "sigmaP", "sigmaG", "sigmaR"), 
+lapply(fitEnvKin, broom::tidyMCMC, c("mu", "sigmaP", "sigmaG", "sigmaR"), 
        droppars = NULL, rhat = T) %>% 
   bind_rows(.id = "Variable") %>% 
   separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
@@ -187,20 +182,18 @@ lapply(fitEnvKin, broom::tidyMCMC, c("muP", "sigmaP", "sigmaG", "sigmaR"),
         col.names = c("Variable", "Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
-```{r envKinshipG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for environmental variables."}
-lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("h2", "h2p", "Qst")) %>% 
+```{r envKinshipG1, fig.cap="Marginal and conditional $R^2$ for environmental variables."}
+lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("R2")) %>% 
   bind_rows(.id = "variable") %>% 
-  mutate(index = recode(parameter, "h2" = "h^2 == frac(sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
-                        "h2p" = "h[p]^2 == frac(sigma[P]^2+sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
-                        "Qst" = "Q[st] == frac(sigma[P]^2,sigma[P]^2+2*sigma[G]^2)")) %>%
-  ggplot(aes(x = variable, xend = variable, col = variable, fill = variable)) +
+  mutate(index = recode(parameter, 
+                        "R2m" = "Marginal", "R2c" = "Conditional")) %>%
+  ggplot(aes(x = index, xend = index, col = variable, fill = variable)) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_wrap(~ index, labeller = label_parsed) +
-  xlab("") + ylab("") +
+  facet_wrap(~ variable, labeller = label_parsed) +
+  xlab("") + ylab(expression(R^2)) +
   scale_fill_discrete(guide = "none") +
   scale_color_discrete(guide = "none")
 ```
@@ -217,24 +210,7 @@ lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigma
   facet_wrap(~ variable, scales = "free") +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2))
-```
-
-```{r MscFig3, eval=F}
-lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>% 
-  bind_rows(.id = "variable") %>% 
-  filter(variable != "ANCR") %>% 
-  mutate(parameter = recode(parameter, "sigmaP" = "Population", "sigmaG" = "Genotype", "sigmaR" = "Residual")) %>% 
-  group_by(variable) %>%
-  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
-  ggplot(aes(x = variable, fill = parameter)) +
-  geom_col(aes(y = m)) +
-  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
-  facet_wrap(~ variable, scales = "free") +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2)) + 
-  ggsave(filename = "symcapture_manuscripts/figures/Fig3.png")
+  scale_fill_discrete(expression(sigma^2)) 
 ```
 
 ## Population genetic variance
@@ -247,7 +223,7 @@ $$\mu_{Population} \sim \mathcal{N}(\mu,\sigma_P)$$
 
 where individual is defined as a normal law centered on the sum of population mean environments $\mu_{Population}$ and additive gentic variance $a$ with associated individual variance $\sigma_R$. Additive gentic variance $a$ follow a multivariate normal law centered on 0 of covariance defined as the sum of populations genetic additive variance $\sigma_{Gpopulation}$ multiplied by within-population kinship $K_{Population}$. Population mean environments $\mu_{Population}$ were defined as random effects on genus level mean environment with associated population variance $\sigma_P$.
 
-Results are similar to the previous paragraph, they onlyt inform a little bit on within-population genetic variation. Globally the genetic variances are not significantly different exceot for *S. sp1* with an increased genotypic variability with ANCR but decreased with TWI. I'm not sure I will use these results, so they aren't discussed for the moment.
+Results are similar to the previous paragraph, they onlyt inform a little bit on within-population genetic variation. I'm not sure I will use these results, so they aren't discussed for the moment.
 
 ```{r EnvAnimalPop, fig.cap="Genetic variance modelling for environmental variables."}
 # animal <- stan_model("./symcapture_models/AnimalPop.stan")
@@ -262,39 +238,41 @@ Results are similar to the previous paragraph, they onlyt inform a little bit on
 #   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
 # })
 # dim(Karray) <- c(nrow(trees), nrow(trees), max(trees$popNum))
-# Y <- lapply(c("TWI", "NCI", "ANCR"), function(var){
-#  y <- mdata(trees, var) ; y$K <- aperm(Karray, c(3,1,2)) ; return(y)})
-# fitEnvPop <- lapply(Y, function(y) sampling(animal, chains = 2, data = y, save_warmup = F,
+# Y <- lapply(c("TWI", "NCI"), function(var){
+#   y <- mdata(trees, var) ; y$K <- aperm(Karray, c(3,1,2)) ; return(y)})
+# fitEnvPop <- lapply(Y, function(y) 
+#   sampling(animal, chains = 2, data = y, save_warmup = F,
 #            include = F, pars = "a", control = list(adapt_delta = 0.99)))
-# names(fitEnvPop) <- c("TWI", "NCI", "ANCR")
+# names(fitEnvPop) <- c("TWI", "NCI")
 # save(fitEnvPop, file = file.path("symcapture_save", 'envpop.Rdata'))
 load(file.path("symcapture_save", 'envpop.Rdata'))
-lapply(fitEnvPop, broom::tidyMCMC, c("muP", "sigmaP", "sigmaG", "sigmaR"),
+lapply(fitEnvPop, broom::tidyMCMC, c("mu", "sigmaP", "sigmaG", "sigmaR"),
        droppars = NULL, rhat = T) %>%
   bind_rows(.id = "Variable") %>%
   separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>%
   mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>%
   mutate(population = ifelse(is.na(population), "", population)) %>%
   kable(caption = "Summary table of the kinship growth model",
-        col.names = c("Variable", "Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+        col.names = c("Variable", "Parameter",  
+                      "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
-```{r envPopG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for environmental variables per population."}
-lapply(fitEnvPop, mcmc_intervals_data, regex_pars = c("h2", "h2p", "Qst")) %>% 
+```{r envPopG1, fig.cap="Marginal and conditional $R^2$ for environmental variables per population."}
+lapply(fitEnvPop, mcmc_intervals_data, regex_pars = c("R2")) %>% 
   bind_rows(.id = "variable") %>% 
-  separate(parameter, c("parameter", "population"), "[:punct:]", convert = T) %>%
-  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
-  mutate(index = recode(parameter, "h2" = "h^2 == frac(sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
-                        "h2p" = "h[p]^2 == frac(sigma[P]^2+sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
-                        "Qst" = "Q[st] == frac(sigma[P]^2,sigma[P]^2+2*sigma[G]^2)")) %>%
-  ggplot(aes(x = population, xend = population, col = population, fill = population)) +
+  separate(parameter, c("parameter", "population"),
+           "[:punct:]", convert = T) %>%
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", 
+                             "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(index = recode(parameter, 
+                        "R2m" = "Marginal", "R2c" = "Conditional")) %>%
+  ggplot(aes(x = index, xend = index, col = population, fill = population)) +
   geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
   geom_segment(aes(y = ll, yend = hh),
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_grid(variable ~ index, labeller = label_parsed) +
-  xlab("") + ylab("") +
+  facet_grid(variable ~ population, labeller = label_parsed) +
+  xlab("") + ylab(expression(R^2)) +
   scale_fill_discrete(guide = "none") +
   scale_color_discrete(guide = "none")
 ```
@@ -316,7 +294,7 @@ lapply(fitEnvPop, mcmc_intervals_data, regex_pars = c("sigmaP", "sigmaG", "sigma
   facet_wrap(~ variable, scales = "free", nrow = 3) +
   coord_flip() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank()) +
-  scale_fill_discrete(expression(sigma^2))
+  scale_fill_discrete(expression(sigma^2)) 
 ```
 
 ## Major effect SNPs

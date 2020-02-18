@@ -3,17 +3,17 @@ title: "Prise en main R Markdown"
 author: "Sylvain SCHMITT"
 date: "12/02/2020, Yamoussoukro"
 output:
+  word_document: default
+  html_document:
+    theme: readable
+    toc: true
+    toc_float: yes
   bookdown::html_document2: 
     theme: readable
     toc: true
     toc_float: yes
     number_sections: no
-  html_document:
-    theme: readable
-    toc: true
-    toc_float: yes
   pdf_document: default
-  word_document: default
 bibliography: biblio.bib
 csl: joe.csl
 link-citations: yes
@@ -63,7 +63,8 @@ Sortie console
 Table
 
 ```{r table}
-knitr::kable(head(cars), caption = "Ceci est une table.")
+knitr::kable(head(cars), 
+             caption = "Ceci est une table.")
 ```
 
 Figures

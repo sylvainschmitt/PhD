@@ -15,11 +15,10 @@ opts_chunk$set(
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+pathCluster <- "~/Remotes/genotoul/work/PhD/documents/genomics/symcapture"
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
-load("./symcapture_save/Env2.Rdata")  
-# load(file.path("symcapture_save", 'AnimalModels.Rdata'))
 ```
 
 # Growth genomics
@@ -28,35 +27,12 @@ We explored and selected ontogenic and environmental descriptors to be used in t
 
 ## Variables
 
-We explored the role of individual size, abitoic environment, biotic interactions, and individual genotype on individual tree growth in space and time. Individual tree growth was calculated with following formula:
-
-$AGR_{i,t} = \frac{DBH_{i,t} - DBH_{i,t-1}}{\Delta t}$
-
-with the annual growth rate $AGR$ of individual $i$ in year $t$ depended of individual $DBH$ at year $t$ and $t-1$ and the timelaps between the two year $\Delta t$.
-
-The topographic wetness index ($TWI_i$) was selected among several spatial abiotic descriptors as a proxy of water accumulation. Waterlogging and topography have been highlighted as crucial for forest dynamics [@ferry2010higher] and species habitat preference [@Allie2015] at the Paracou study site. TWI was derived from a 1-m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign done in 2015.
-
-The area and the sum of days under the curve for a threshold of 0.4 of the relative extractible water [$REW_t$, @Wagner2011], respectively $AREW$ and $SREW$ were selected among several temporal abiotic descriptors as a major climatic driver of tropical forest dynamics [@Aubry-Kientz2015a].
-
-Biotic descriptors included two spatial and temporal variables: the Neighborhood Crowding Index [NCI; @Uriarte2004] and the Annual Crowding Rate. The Neighborhood Crowding Index $NCI_{i,t}$ from tree individual $i$ in year $t$ was calculated with following formula:
-
-$$NCI_i = \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}$$
-
-with $DBH_{j,t}$ the diameter from neighboring tree $j$ in year $t$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface. The decrease of neighbors $DBH$ effect with distance was set to 0.25 here to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters. $NCI$ represents biotic asymmetric competition through tree neighborhood over time. 
-
-The Annual Neighborhood Crowding Rate $ANCR_{i,t}$ from tree individual $i$ in year $t$ was calculated with following formula:
-
-$ANCR_{i,t} = \frac{NCI_{i,t} - NCI_{i,t-1}}{\Delta t}$
-
-$ANCR$ represents the dynamic of biotic asymmetric competition through tree neighborhood over time (derivate of $NCI_i$). Both NCI and ANCR were calculated among heterospecific and conspecific neighbors and with all neighbors confounded. Edging effect have been corrected by weighing values from individual close to the border by the inverse of the surface outside of the plot in the 20m radius.
-
-Both correlations and principal component analyses showed non colinear DBH, TWI, AUC, NCI and ANCR (Fig. \@ref(fig:correlationsGrowthGenom)).
-
-```{r DataGrowthGenom, eval=F}
+```{r DataGrowthGenom}
 trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
                               "trees", "Paracou.sqlite")) %>% 
   tbl("Paracou") %>% 
   filter(Genus == "Symphonia") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
   collect()
 trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
@@ -69,365 +45,90 @@ trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                      col_names = c("IID", "pop"))) %>% 
   left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
             by = "Ind", suffix = c("", ".hybrid"))
-treesXY <- trees
-coordinates(treesXY) <- ~Xutm + Yutm
-proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
-crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
-treesXY <- spTransform(treesXY, CRSobj = crs)
-wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
-                            "topography", "TWI_1m.tif"))
-dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                        "topography", "DEM_1m_2015.tif")) # for CRS
-projection(wetness) <- projection(dem)
-wetness <- projectRaster(wetness, crs = crs)
-trees$TWI <- raster::extract(wetness, treesXY)
-rm(dem, wetness, treesXY)
-weather <- read_csv(file.path("../../../data/Paracou/", "weather", "REW_1978-2017_Fabien.csv")) %>% 
-  dplyr::select(-X1, -day, -month, day_julian) %>% 
-  filter(REW < 0.4) %>% 
-  mutate(AREW = 0.4-REW) %>% 
-  group_by(year) %>% 
-  summarise(AREW = sum(AREW), SREW = n()) %>% 
-  dplyr::rename(CensusYear = year)
-trees <- left_join(trees, weather)
-rm(weather)
-cl <- parallel::makeCluster(getOption("cl.cores", 4))
-parallel::clusterExport(cl, list("trees"))
-NCI <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
-  library(tidyverse)
-  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
-    tbl("Paracou") %>% 
-    filter(CensusYear == local(trees$CensusYear[ind])) %>% 
-    filter(Plot == local(trees$Plot[ind])) %>% 
-    filter(idTree != local(trees$idTree[ind])) %>% 
-    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
-    mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-    filter(dij < 20) %>% 
-    mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
-    mutate(DBH = CircCorr/pi) %>% 
-    summarise(idTree = local(trees$idTree[ind]),
-              CensusYear  = local(trees$CensusYear[ind]),
-              NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con),
-              NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))) %>% 
-    collect()})
-parallel::stopCluster(cl) ; rm(cl)
-NCI <- bind_rows(NCI)
-trees <- left_join(trees, NCI)
-rm(NCI)
 trees <- trees %>% 
-  rowwise() %>% 
-  mutate(NCI = sum(NCIcon, NCIhetero))
-trees <- trees %>% 
-  mutate(DBH = CircCorr/pi) %>% 
-  group_by(idTree) %>% 
-  arrange(CensusYear) %>% 
-  mutate(AGR = (DBH-lag(DBH))/(CensusYear-lag(CensusYear)),
-         ANCRcon = (NCIcon-lag(NCIcon))/(CensusYear-lag(CensusYear)),
-         ANCRhetero = (NCIhetero-lag(NCIhetero))/(CensusYear-lag(CensusYear)),
-         ANCR = (NCI-lag(NCI))/(CensusYear-lag(CensusYear))) %>% 
-  mutate(AGR = ifelse(AGR < 0, NA, AGR)) %>% 
-  ungroup()
+  group_by(Ind) %>% 
+  mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
+         DBHtoday = dplyr::last(DBH)) %>%  
+  ungroup() %>% 
+  dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday) %>% 
+  unique()
 save(trees, file = "./symcapture_save/Env2.Rdata")
 ```
 
-```{r correlationsGrowthGenom, fig.cap="Environmental descriptors correlations."}
-trees %>% 
-  dplyr::select(DBH, TWI, AREW, SREW, NCI, ANCR) %>% 
-  na.omit() %>% 
-  cor(.) %>% 
-  corrplot::corrplot.mixed()
-```
-
 ```{r mdata}
-load("./symcapture_save/Env2.Rdata")  
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed
-  filter(!is.na(AGR), !is.na(ANCR)) %>% 
-  mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
-treesSub <- filter(trees, Plot == 16) %>% # for test purposes
   mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
 fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ", 
                   col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-K <- read_tsv(file.path(path, "gemma", "Gmax0", "paracou3pop.kinship.sXX.txt"), 
-              col_names = fam$IID) %>% 
-  mutate(IID = fam$IID) %>% 
-  column_to_rownames(var = "IID") %>% 
+K <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                        "out.relatedness2"))  %>% 
+  reshape2::dcast(INDV1 ~ INDV2, value.var = "RELATEDNESS_PHI") %>% 
+  column_to_rownames("INDV1") %>% 
   as.matrix()
-mdata <- function(data) list(N = nrow(data),
-                             I = length(unique(data$Ind)),
-                             G = length(unique(data$pop)),
-                             AGR = data$AGR,
-                             DBH = data$DBH,
-                             TWIi = dplyr::select(treesSub, IndNum, TWI) %>% unique() %>% 
-                               mutate(TWI = scale(TWI, center = F)) %>% arrange(IndNum) %>% 
-                               dplyr::select(TWI) %>% unlist(),
-                             TWIp = dplyr::select(treesSub, popNum, TWI) %>% unique() %>% 
-                               mutate(TWI = scale(TWI, center = F)) %>% group_by(popNum) %>% 
-                               summarise_all(mean) %>% arrange(popNum) %>% 
-                               dplyr::select(TWI) %>% unlist(),
-                             AREW = as.vector(scale(data$AREW, center = F)),
-                             NCI = as.vector(scale(data$NCI, center = F)),
-                             ind = data$IndNum,
-                             gp = data$popNum,
-                             indingp = unique(arrange(data, IndNum)[c("IndNum", "popNum")])$popNum,
-                             K = dplyr::select(data, IID, IndNum) %>% 
-                               unique() %>% arrange(IndNum) %>% 
-                               dplyr::select(IID) %>% unlist() %>% K[.,.])
+mdata <- function(data) {
+  K <- K[trees$IID, trees$IID]
+  K[K < 0] <- 0
+  K <- K*2
+  K <- as.matrix(nearPD(K)$mat)
+  list(I = nrow(data),
+       Y = 2017 - min(data$Y0) + 1,
+       P = length(unique(data$popNum)),
+       years = min(data$Y0):2017,
+       DBH0 = data$DBH0,
+       Y0 = data$Y0,
+       DBHtoday = data$DBHtoday,
+       ind = data$IndNum,
+       pop = data$popNum,
+       K = K)
+}
 ```
 
 ## Growth & Ontogeny
 
-We integrated population structure and individual varition in the growth model used in @Herault2011 to explain individual growth with ontogeny. We used the following form of hierachical model to explain the logarithm of Annual Growth Rate $AGR_{y,p,i}$ with Diameter at Breast Height $DBH_{y,p,i}$ at year $y$ for individual $i$ in population $p$:
+We used the following form of hierachical model to model DBH today $DBH_{y=today}$ with Diameter at Breast Height $DBH_{y,p,i}$ at year $y\in[y_0,today]$ for individual $i$ in population $p$:
 
-$$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma)$$
-$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})  \\ \theta_p \sim \mathcal N (\theta, \sigma^2_{P_{\theta}})\end{align}$$
+$$DBH_{y=today,p,i} \sim \mathcal{logN} (DBH_0 + \sum _{y=y_0} ^{y=today} Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma)$$
+$$\mid \forall \theta \in [Gmax, Dopt,Ks], \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})$$
 
-with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly. Ontogenic parameters were defined at the individual level $i$ as random effects centered on the population level $p$ parameters with associated individual variance $\sigma^2_R$, and population level $p$ parameters were themselves defined as random effects on genus level parameters with associated population variance $\sigma^2_P$. 
+with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly. Ontogenic parameters were defined at the individual level $i$ as random effects centered on the population level $p$ parameters with associated individual variance $\sigma^2_R$.
 
 At the genus level, *Symphonia* individuals showed a maximum growth of $6.91\pm1.8~mm.yr^{-1}$ at optimal diameter of $28\pm11~cm$ with a kurtosis of $0.7\pm0.1$ (Tab. \@ref(tab:growthOntogenyTab)). Maximum growth and kurtosis didn't significantly varied at the population level but optmal diameter did with a larger optimal diameter for *S. globulifera type Regina* ($Dopt=32~cm$) and a smaller optimal diameter for *S. sp1* ($Dopt=21~cm$). Finally, all parameters showed significant variation at the individual level within populations ($\pm1.8~mm.yr^{-1}$, $\pm9~cm$, and $\pm0.2$ for maximum growth, optimal diameter, and kurtosis respectively, Fig. \@ref(fig:growthOntogenyG)). The model residual variation is relatively low ($\pm1.5~mm.yr^{-1}$, Fig. \@ref(fig:growthOntogenyGP3)).
 
-```{r growthOntogenyTab}
-# growth <- stan_model("./symcapture_models/Growth.stan")
-# fitGrowth <- sampling(growth, chains = 2, data = mdata(trees), save_warmup = F)
-# save(fitGrowth, file = file.path("symcapture_save", 'growth.Rdata'))
-load(file.path("symcapture_save", 'growth.Rdata'))
-broom::tidyMCMC(fitGrowth, c("Gmax", "Gmaxg", "sigmaGmaxg", "sigmaGmaxi",
-                             "Dopt", "Doptg", "sigmaDoptg", "sigmaDopti",
-                             "Ks", "Ksg", "sigmaKsg", "sigmaKsi",
-                             "sigma", "lp__"), droppars = NULL, rhat = T) %>% 
-  mutate(theta = ifelse(grepl("Gmax", term), "Gmax", NA)) %>% 
-  mutate(theta = ifelse(grepl("Dopt", term), "Dopt", theta)) %>% 
-  mutate(theta = ifelse(grepl("Ks", term), "Ks", theta)) %>%
-  mutate(theta = ifelse(term == "sigma", "$\\sigma$", theta)) %>%
-  mutate(theta = ifelse(term == "lp__", "loglikelihood", theta)) %>%
-  mutate(term = ifelse(theta == term, paste0(theta, "all"), term)) %>% 
-  group_by(theta) %>% 
-  mutate(parameter = gsub(theta, "", term)) %>% 
-  separate(parameter, c("parameter", "popNum"), "[:punct:]", convert = T) %>% 
-  mutate(parameter = recode(parameter, "all" = "$\\theta_{Symphonia}$",  "g" = "$\\theta_{Population}$",
-                            "sigmag" = "$\\sigma_P$", "sigmai" = "$\\sigma_R$", 
-                            "sigma" = "", "lp" = "")) %>% 
-  left_join(trees %>%
-              dplyr::select(popNum, pop) %>% 
-              unique()) %>% 
-  mutate(pop = recode(pop, "globuliferaTypeParacou" = "S. globulifera Paracou",
-                            "globuliferaTypeRegina" = "S. globulifera Regina",
-                            "sp1" = "S. sp1")) %>% 
-  mutate(pop = ifelse(is.na(pop), "", pop)) %>% 
-  dplyr::select(theta, parameter, pop, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the ontogenic growth model", 
-        col.names = c("Parameter", "$\\theta$", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```{r growthOntogenyTab, eval=F}
+mdata <- mdata(trees)
+save(mdata, file = file.path("symcapture_save", "growth.Rdata"))
+file.copy("./symcapture_save/growth.Rdata",
+          file.path(pathCluster, "symcapture_save"), overwrite = T)
+file.copy("./symcapture_models/Growth5.stan",
+          file.path(pathCluster, "symcapture_models"), overwrite = T)
+load(file = file.path("..", "symcapture_save", "growth.Rdata"))  # Begin cluster
+growth <- stan_model("../symcapture_models/Growth5.stan")
+fitGrowth <- sampling(growth, chains = 2, data = mdata, save_warmup = F,
+                      include = F, pars = c("DBH", "Gmaxi", "Dopti", "Ksi"))
+save(mdata, fitGrowth, file = file.path("..", "symcapture_save", "growth.Rdata"))  # End cluster
+file.copy(file.path(pathCluster, "symcapture_save"),
+          "./symcapture_save/growth.Rdata", overwrite = T)
+load(file.path("symcapture_save", 'growth5.Rdata'))
+broom::tidyMCMC(fitGrowth, droppars = NULL, rhat = T) %>% 
+  mutate(term = recode(term, "sigmaR[1]" = "$\\sigma_{R_{Gmax}}$",
+                       "sigmaR[2]" = "$\\sigma_{R_{Dopt}}$",
+                       "sigmaR[3]" = "$\\sigma_{R_{Ks}}$",
+                       "sigma" = "$\\sigma$",
+                      "lp__" = "loglokelihood")) %>%
+  kable(caption = "Summary table of the ontogenic growth model",
+        col.names = c("Parameter", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+# mcmc_trace(fitGrowth)
 ```
-
-```{r growthOntogenyG, fig.cap="Growth model predictions."}
-pars <- as.data.frame(fitGrowth, pars = c("Gmax", "Dopt", "Ks")) %>% 
-  reshape2::melt(variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(genusNum = 1) %>% 
-  reshape2::melt(id.vars = c("parameter", "genusNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(genusNum ~ parameter)
-parsg <- as.data.frame(fitGrowth, pars = c("Gmaxg", "Doptg", "Ksg")) %>% 
-  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(popNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  reshape2::melt(id.vars = c("parameter", "popNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(popNum ~ parameter) %>% 
-  mutate(popNum = as.numeric(popNum))
-parsi <- as.data.frame(fitGrowth, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
-  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(IndNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  reshape2::melt(id.vars = c("parameter", "IndNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(IndNum ~ parameter) %>% 
-  mutate(IndNum = as.numeric(IndNum))
-data.frame(DBH = rep(1:100, mdata(trees)$I), 
-           IndNum = rep(1:mdata(trees)$I, each = 100)) %>% 
-  left_join(unique(dplyr::select(trees, IndNum, Ind, popNum, pop))) %>% 
-  mutate(genusNum = 1) %>% 
-  left_join(pars) %>% 
-  left_join(parsg) %>% 
-  left_join(parsi) %>% 
-  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2),
-         Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2),
-         Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)) %>% 
-  mutate(Gpredg = Gmaxg_m*exp(-0.5*(log(DBH/Doptg_m)/Ksg_m)^2),
-         Gpred5g = Gmaxg_q5*exp(-0.5*(log(DBH/Doptg_q5)/Ksg_q5)^2),
-         Gpred95g = Gmaxg_q95*exp(-0.5*(log(DBH/Doptg_q95)/Ksg_q95)^2)) %>% 
-  mutate(Gpredi = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2),
-         Gpred5i = Gmaxi_q5*exp(-0.5*(log(DBH/Dopti_q5)/Ksi_q5)^2),
-         Gpred95i = Gmaxi_q95*exp(-0.5*(log(DBH/Dopti_q95)/Ksi_q95)^2)) %>% 
-  ggplot(aes(x = DBH)) +
-  geom_ribbon(aes(ymin = Gpred5i, ymax = Gpred95i, group = Ind), alpha = 0.5, fill = "lightgrey") +
-   geom_point(aes(y = log(AGR +1), col = Ind), alpha = 0.4, data = trees) +
-  geom_line(aes(y = Gpredi, col = Ind), linetype = "dotted") +
-  geom_line(aes(y = Gpredg, group = pop), col = "black", linetype = "dashed") +
-  geom_line(aes(y = Gpred), col = "black", size = 1.2) +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none") 
-```
-
-```{r growthOntogenyGP3, fig.cap="Growth model predictions for Plot 3."}
-filter(trees, Plot == 3) %>% 
-  group_by(Ind) %>% 
-  filter(n() > 1) %>% 
-  mutate(genusNum = 1) %>% 
-  left_join(pars) %>% 
-  left_join(parsg) %>% 
-  left_join(parsi) %>% 
-  mutate(Gpred = Gmax_m*exp(-0.5*(log(DBH/Dopt_m)/Ks_m)^2),
-         Gpred5 = Gmax_q5*exp(-0.5*(log(DBH/Dopt_q5)/Ks_q5)^2),
-         Gpred95 = Gmax_q95*exp(-0.5*(log(DBH/Dopt_q95)/Ks_q95)^2)) %>% 
-  mutate(Gpredg = Gmaxg_m*exp(-0.5*(log(DBH/Doptg_m)/Ksg_m)^2),
-         Gpred5g = Gmaxg_q5*exp(-0.5*(log(DBH/Doptg_q5)/Ksg_q5)^2),
-         Gpred95g = Gmaxg_q95*exp(-0.5*(log(DBH/Doptg_q95)/Ksg_q95)^2)) %>% 
-  mutate(Gpredi = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2),
-         Gpred5i = Gmaxi_q5*exp(-0.5*(log(DBH/Dopti_q5)/Ksi_q5)^2),
-         Gpred95i = Gmaxi_q95*exp(-0.5*(log(DBH/Dopti_q95)/Ksi_q95)^2)) %>% 
-  ggplot(aes(x = CensusYear)) +
-  geom_ribbon(aes(ymin = Gpred5, ymax = Gpred95, fill = "Genus"), alpha = 0.5) +
-  geom_ribbon(aes(ymin = Gpred5g, ymax = Gpred95g, fill = "Gene pool"), alpha = 0.5) +
-  geom_ribbon(aes(ymin = Gpred5i, ymax = Gpred95i, fill = "Individual"), alpha = 0.5) +
-  geom_point(aes(y = log(AGR +1)), col = "black") +
-  geom_line(aes(y = Gpredi, col = "Individual"), size = 1.2) +
-  geom_line(aes(y = Gpredg, col = "Gene pool"), size = 1.2) +
-  geom_line(aes(y = Gpred, col = "Genus"), size = 1.2) +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete("Hierarchical level") +
-  facet_wrap(~ Ind, scales = "free") +
-  theme(legend.position = "bottom")
-``` 
-
-## Growth & Environment
-
-Environmental descriptors include topography (TWI), climate (AREW), and neighbors interaction (NCI). Topography is fixed for an individual life and will be confounded with population and individual parameters in growth response. Thus remaining inter-annual variation can be only explained by temporal effects of climate (AREW), and neighbors interaction (NCI) that we integrated as linear effects on residual variation. We used the following form of model to explain the logarithm of Annual Growth Rate $AGR_{y,p,i}$ with Diameter at breast Height $DBH_{y,p,i}$, Area Under the Curve of Relative Extractible Water Content $AREW_{y}$, and Neighbor Crowding Index $NCI_{y,p,i}$, at year $y$ for individual $i$ in population $p$:
-
-$$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.e^{-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2} + Clim.AREW_{y}+Comp.NCI_{y,p,i}, \sigma)$$
-$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})  \\ \theta_p \sim \mathcal N (\theta, \sigma^2_{P_{\theta}})\end{align}$$
-
-with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly; and $Clim$, and $Comp$ the slopes of environmental effects. Ontogenic parameters were defined at the individual level $i$ as random effects centered on population level $p$ parameters with associated individual variance $\sigma_R$ and population level parameters $p$ were themselves defined as random effects on genus level parameters with associated population variance $\sigma_P$.
-
-Growth response to ontogeny didn't change compared to the previous paragraph, and won't be discussed here. At the genus *Symphonia* level, AREW had a positive and NCI a negative effect on growth (Fig. \@ref(fig:growthEnvG)). Drier years slightly increased individual growth when competition decreased it (Tab. \@ref(tab:growthEnvTab)).
-
-```{r growthEnvTab}
-# growthEnv <- stan_model("./symcapture_models/GrowthEnv.stan")
-# fitGrowthEnv <- sampling(growthEnv, chains = 2, data = mdata(trees), save_warmup = F, control = list(adapt_delta = 0.99))
-# save(fitGrowthEnv, file = file.path("symcapture_save", 'growthenv.Rdata'))
-load(file.path("symcapture_save", 'growthenv.Rdata'))
-broom::tidyMCMC(fitGrowthEnv, c("Gmax", "Gmaxg", "sigmaGmaxg", "sigmaGmaxi",
-                             "Dopt", "Doptg", "sigmaDoptg", "sigmaDopti",
-                             "Ks", "Ksg", "sigmaKsg", "sigmaKsi",
-                             "Clim", "Comp", "sigma", "lp__"), droppars = NULL, rhat = T) %>% 
-    mutate(theta = ifelse(grepl("Gmax", term), "Gmax", NA)) %>% 
-  mutate(theta = ifelse(grepl("Dopt", term), "Dopt", theta)) %>% 
-  mutate(theta = ifelse(grepl("Ks", term), "Ks", theta)) %>%
-  mutate(theta = ifelse(term == "Clim", "Clim", theta)) %>%
-  mutate(theta = ifelse(term == "Comp", "Comp", theta)) %>%
-  mutate(theta = ifelse(term == "sigma", "$\\sigma$", theta)) %>%
-  mutate(theta = ifelse(term == "lp__", "loglikelihood", theta)) %>%
-  mutate(term = ifelse(theta == term, paste0(theta, "all"), term)) %>% 
-  group_by(theta) %>% 
-  mutate(parameter = gsub(theta, "", term)) %>% 
-  separate(parameter, c("parameter", "popNum"), "[:punct:]", convert = T) %>% 
-  mutate(parameter = recode(parameter, "all" = "$\\theta_{Symphonia}$",  "g" = "$\\theta_{Population}$",
-                            "sigmag" = "$\\sigma_P$", "sigmai" = "$\\sigma_R$", 
-                            "sigma" = "", "lp" = "")) %>% 
-  left_join(trees %>%
-              dplyr::select(popNum, pop) %>% 
-              unique()) %>% 
-  mutate(pop = recode(pop, "globuliferaTypeParacou" = "S. globulifera Paracou",
-                            "globuliferaTypeRegina" = "S. globulifera Regina",
-                            "sp1" = "S. sp1")) %>% 
-  mutate(pop = ifelse(is.na(pop), "", pop)) %>% 
-  dplyr::select(theta, parameter, pop, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the environment growth model", 
-        col.names = c("Parameter", "$\\theta$", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
-```
-
-```{r growthEnvG, fig.cap="Environmental effects posterior for the growth model with ontogeny and environment."}
-mcmc_dens(as.array(fitGrowthEnv, pars = c("Clim", "Comp")))
-```
-
-```{r growthEnvGP16, fig.cap="Growth model predictions for Plot 3."}
-pars <- as.data.frame(fitGrowthEnv, pars = c("Gmax", "Dopt", "Ks", "Clim", "Comp")) %>% 
-  reshape2::melt(variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(genusNum = 1) %>% 
-  reshape2::melt(id.vars = c("parameter", "genusNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(genusNum ~ parameter)
-parsg <- as.data.frame(fitGrowthEnv, pars = c("Gmaxg", "Doptg", "Ksg")) %>% 
-  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(popNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  reshape2::melt(id.vars = c("parameter", "popNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(popNum ~ parameter) %>% 
-  mutate(popNum = as.numeric(popNum))
-parsi <- as.data.frame(fitGrowthEnv, pars = c("Gmaxi", "Dopti", "Ksi")) %>% 
-  reshape2::melt(id.vars = NULL, variable.name = "parameter") %>% 
-  group_by(parameter) %>% 
-  summarise(q5 = quantile(value, 0.05), m = mean(value), q95 = quantile(value, 0.95)) %>% 
-  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
-  mutate(IndNum = gsub("([[:alpha:]])", "", parameter)) %>% 
-  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
-  reshape2::melt(id.vars = c("parameter", "IndNum")) %>% 
-  mutate(parameter = paste0(parameter, "_", variable)) %>% 
-  dplyr::select(-variable) %>%
-  reshape2::dcast(IndNum ~ parameter) %>% 
-  mutate(IndNum = as.numeric(IndNum))
-filter(trees, Plot == 3) %>% 
-  mutate_at(c("AREW", "NCI"), scale, center = F) %>% 
-  group_by(Ind) %>% 
-  filter(n() > 1) %>% 
-  mutate(genusNum = 1) %>% 
-  left_join(pars) %>% 
-  left_join(parsg) %>% 
-  left_join(parsi) %>% 
-  mutate(Gpredi = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2),
-         Gpred5i = Gmaxi_q5*exp(-0.5*(log(DBH/Dopti_q5)/Ksi_q5)^2),
-         Gpred95i = Gmaxi_q95*exp(-0.5*(log(DBH/Dopti_q95)/Ksi_q95)^2)) %>% 
-  mutate(Genvi = Gmaxi_m*exp(-0.5*(log(DBH/Dopti_m)/Ksi_m)^2)+Clim_m*AREW+Comp_m*NCI,
-         Genv5i = Gmaxi_q5*exp(-0.5*(log(DBH/Dopti_q5)/Ksi_q5)^2+Clim_q5*AREW+Comp_q5*NCI),
-         Genv95i = Gmaxi_q95*exp(-0.5*(log(DBH/Dopti_q95)/Ksi_q95)^2)+Clim_q95*AREW+Comp_q95*NCI) %>% 
-  ggplot(aes(x = CensusYear)) +
-  geom_ribbon(aes(ymin = Gpred5i, ymax = Gpred95i, fill = "Ontogeny"), alpha = 0.5) +
-   geom_ribbon(aes(ymin = Genv5i, ymax = Genv95i, fill = "Environment"), alpha = 0.5) +
-  geom_point(aes(y = log(AGR +1)), col = "black") +
-  geom_line(aes(y = Gpredi, col = "Ontogeny"), size = 1.2) +
-  geom_line(aes(y = Genvi, col = "Environment"), size = 1.2) +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete("Model") +
-  facet_wrap(~ Ind, scales = "free") +
-  theme(legend.position = "bottom")
-``` 
 
 ## Growth & Kinship
 
-The kinship matrix express individuals genetic covariation an can help assess the role of genetic variation in individual response to growth. We used the following form of model to explain the logarithm of Annual Growth Rate $AGR_{y,p,i}$ with Diameter at breast Height $DBH_{y,p,i}$ and and individuals Kinsip matrix $K$, at year $y$ for individual $i$ in population $p$:
+The kinship matrix express individuals genetic covariation an can help assess the role of genetic variation in individual response to growth. We used the following form of hierachical model to model DBH today $DBH_{y=today}$ with Diameter at Breast Height $DBH_{y,p,i}$  and individuals Kinsip matrix $K$ at year $y\in[y_0,today]$ for individual $i$ in population $p$:
 
-$$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma^2)$$
-$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p + a_{\theta}, \sigma^2_{R_{\theta}})  \\ \theta_p \sim \mathcal N (\theta, \sigma^2_{P_{\theta}}) \\ a_{\theta} \sim \mathcal{MVN} (0, \sigma^2_{G_{\theta}}.K) \end{align}$$
+$$DBH_{y=today,p,i} \sim \mathcal{logN} (DBH_0 + \sum _{y=y_0} ^{y=today} Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma)$$
+$$\mid \forall \theta \in [Gmax, Dopt,Ks], \theta_i \sim \mathcal N (\theta_p+A.a_\theta, \sigma^2_{R_{\theta}}),a_\theta\sim\mathcal N(0,\sigma_{G_\theta})$$
 
-with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly. Ontogenic parameters were defined at the individual level $i$ as random effects centered on the sum of population level $p$ parameters and additive gentic variance $a_{theta}$ with associated individual variance $\sigma_R$. Parameter additive gentic variance $a_{theta}$ follow a multivariate normal law centered on 0 of covariance $\sigma_G K$. Ontogenic parameters at population level $p$ were defined as random effects on genus level parameters with associated population variance $\sigma_P$.
+with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly. Ontogenic parameters were defined at the individual level $i$ as random effects centered on the sum of population level $p$ parameters and additive gentic variance $a_{theta}$ with associated individual variance $\sigma_R$. Parameter additive gentic variance $a_{theta}$ follow a multivariate normal law centered on 0 of covariance $\sigma_G K$.
 
 Growth response to ontogeny didn't change compared to the previous paragraph, and won't be discussed here. For the three ontogenetic parameters ($Gmax$, $Dopt$, and $Ks$), most of the variability was explained by the population (ca 50%) and around 30% of the remaining variability was explained by the genotype (Tab. \@ref(tab:growthKinshipTab) and Fig. \@ref(fig:growthKinshipG1) and \@ref(fig:growthKinshipG1)). Growth parameters were more differentiated between population than random genetic variation ($Qst >> Fst$). These results highlights a strong local adptation with *Symphonia*.
 
@@ -498,105 +199,6 @@ mcmc_intervals_data(fitGrowthKin, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) 
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
   scale_fill_discrete(expression(sigma^2))
-```
-
-```{r MscFig4, eval=F}
-mcmc_intervals_data(fitGrowthKin, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>%
-  separate(parameter, c("sigma", "parameter"), "[:punct:]") %>% 
-  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
-  mutate(sigma = recode(sigma, "sigmaP" = "Population", "sigmaG" = "Genotype", "sigmaR" = "Residual")) %>% 
-  mutate(sigma = factor(sigma, levels = c("Population", "Genotype", "Residual"))) %>% 
-  group_by(parameter) %>% 
-  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>% 
-  ggplot(aes(x = parameter, fill = sigma)) +
-  geom_col(aes(y = m)) +
-  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
-  facet_wrap(~ parameter, scales = "free") +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2)) + 
-  ggsave(filename = "symcapture_manuscripts/figures/Fig4.png")
-```
-
-## Growth & Populations
-
-The kinship matrix can further be split between population to express individuals genetic covariation within-population and can help assess the role of genetic variation in individual response to growth within populations. We used the following form of model to explain the logarithm of Annual Growth Rate $AGR_{y,p,i}$ with Diameter at breast Height $DBH_{y,p,i}$ and and individuals Kinsip matrix within-population $K_p$, at year $y$ for individual $i$ in population $p$:
-
-$$log(AGR_{y,p,i}+1) \sim \mathcal N (Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma^2)$$
-$$\mid \forall \theta \in \begin{bmatrix} Gmax \\ Dopt \\ Ks \end{bmatrix}, \begin{align} \theta_i \sim \mathcal N (\theta_p + a_{\theta}, \sigma^2_{R_{\theta}})  \\ \theta_p \sim \mathcal N (\theta, \sigma^2_{P_{\theta}}) \\ a_{\theta} \sim \mathcal{MVN} (0, \sum^P \sigma^2_{Gp_{\theta}}.K_{p}) \end{align}$$
-
-with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly. Ontogenic parameters were defined at the individual level $i$ as random effects centered on the sum of population level $p$ parameters and additive genztic variance $a_{theta}$ with associated individual variance $\sigma_R$. Parameter additive gentic variance $a_{theta}$ follow a multivariate normal law centered on 0 of covariance defined as the sum of populations genetic additive variance $\sigma_{Gp}$ multiplied by within-population kinship $K_p$. Ontogenic parameters at population level $p$ were defined as random effects on genus level parameters with associated population variance $\sigma_P$.
-
-Growth response to ontogeny didn't change compared to the previous paragraph, and won't be discussed here. Within-population genetic variances didn't significantly differ (Tab. \@ref(tab:growthPopTab) and Fig. \@ref(fig:growthPopG)), except for $Gmax_{S. sp1}$ which had reduced $\sigma_G$.
-
-```{r growthPopTab}
-# growth <- stan_model("./symcapture_models/GrowthPopulations.stan")
-# ind <- dplyr::select(treesSub, IndNum, IID, popNum) %>% 
-#   unique() %>% 
-#   arrange(IndNum)
-# Karray <- sapply(1:max(ind$popNum), function(p){
-#   Kp = K[ind$IID,ind$IID]
-#   for(n in 1:nrow(ind)) {
-#     if(ind$popNum[n] != p) {
-#       Kp[,n] = 10^-6
-#       Kp[n,] = 10^-6
-#     }
-#   }
-#   Kp <- as.matrix(Matrix::nearPD(Kp)$mat)
-# })
-# dim(Karray) <- c(nrow(ind), nrow(ind), max(ind$popNum))
-# Y <- mdata(treesSub)
-# Y$K <- aperm(Karray, c(3,1,2))
-# fitGrowthPop <- sampling(growth, chains = 2, save_warmup = F,
-#                          control = list(adapt_delta = 0.9, max_treedepth = 12), data = Y)
-# save(fitGrowthPop, file = file.path("symcapture_save", 'growthpop.Rdata'))
-load(file.path("symcapture_save", 'growthpop.Rdata'))
-broom::tidyMCMC(fitGrowthPop, c("sigmaP", "sigmaG", "sigmaR",
-                                "sigma", "lp__"), droppars = NULL, rhat = T) %>%
-  separate(term, c("sigma", "population", "parameter"), "[:punct:]", convert = T) %>% 
-  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
-  mutate(parameter = recode(parameter, "1" = "Gmax",  "2" = "Dopt", "3" = "Ks")) %>% 
-  mutate(parameter = ifelse(is.na(parameter), "", parameter)) %>% 
-  mutate(population = ifelse(is.na(population), "", population)) %>% 
-  mutate(sigma = recode(sigma, "sigmaP" = "$\\sigma_P$", "sigmaG" = "$\\sigma_G$", "sigmaR" = "$\\sigma_R$", 
-                            "sigma" = "$\\sigma$", "lp" = "loglikelihood")) %>% 
-  dplyr::select(sigma, parameter, population, estimate, std.error, rhat) %>% 
-  kable(caption = "Summary table of the kinship growth model", 
-        col.names = c("Parameter", "$\\theta$", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
-```
-
-```{r growthPopG, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for ontogenetic parameters per population."}
-mcmc_intervals_data(fitGrowthPop, regex_pars = c("h2", "h2p", "Qst")) %>%
-  separate(parameter, c("index", "population", "parameter"), "[:punct:]") %>%
-  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>%
-  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
-  mutate(index = recode(index, "h2" = "h^2 == frac(sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
-                        "h2p" = "h[p]^2 == frac(sigma[P]^2+sigma[G]^2,sigma[P]^2+sigma[G]^2+sigma[R]^2)",
-                        "Qst" = "Q[st] == frac(sigma[P]^2,sigma[P]^2+2*sigma[G]^2)")) %>%
-  ggplot(aes(x = population, xend = population, col = population, fill = population)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  coord_flip() +
-  facet_grid(parameter ~ index, labeller = label_parsed) +
-  xlab("") + ylab("") +
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
-```
-
-## Comparisons
-
-Model growth & ontogeny included 10 parameters, against 12 for growth & environment, 13 for growth & kinship, and 19 for growth & populations. On the other hand growth & kinship showed a large increased in loglikelihood and growth & populations didn't improved loglikelighood (Fig. \@ref(fig:lpGrowth)). Consequently the model growth & kinship appear as the best to describe individual growth variation.
-
-```{r lpGrowth, fig.cap="Comparisons of loglikelihood between models for all plots or plot 16 alone."}
-cowplot::plot_grid(data.frame(Ontogeny = unlist(as.data.frame(fitGrowth, "lp__")),
-                              Environment = unlist(as.data.frame(fitGrowthEnv, "lp__")),
-                              Kinship = unlist(as.data.frame(fitGrowthKin, "lp__"))) %>% 
-                     bayesplot::mcmc_intervals(),
-                   data.frame(Kinship = unlist(as.data.frame(fitGrowthKin0, "lp__")),
-                              Populations = unlist(as.data.frame(fitGrowthPop, "lp__"))) %>% 
-                     bayesplot::mcmc_intervals(), labels = c("All", "P16"))
 ```
 
 ## Associations

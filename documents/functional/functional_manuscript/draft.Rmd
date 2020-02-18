@@ -1,17 +1,17 @@
 ---
 title: Topography consistently drives intra- and interspecific leaf trait variation within Neotropical tree species
 output:
+  bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/oikos.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -191,7 +191,11 @@ __Figure \@ref(fig:TWInNCI)__ Inter- and intraspecific effect of topographic wet
 Individuals %>% 
   mutate(Species = gsub("_", " ", Species)) %>% 
   group_by(Genus, Species) %>% 
-  summarise(N = n()) %>% 
+  summarise(N = n(), 
+            TWI = paste0(round(mean(TWI), 2), " [",
+                         round(min(TWI), 2), "- ",
+                         round(max(TWI), 2), "]")
+  ) %>% 
   arrange(desc(N)) %>% 
   kable(caption = "Number of individuals sampled per genus and species.",
         escape = F, format = "pandoc") %>% 

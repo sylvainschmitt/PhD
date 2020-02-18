@@ -1,4 +1,4 @@
-```{r setup_species, include=FALSE}
+```{r setup_species, include=FALSE, eval=T}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -12,7 +12,7 @@ library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 10, fig.width = 10,
-  cache = T, cache.lazy = F)
+  cache = T, cache.lazy = F, eval=T)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
@@ -88,17 +88,12 @@ load("./distribution_save/env.Rdata")
 load("./distribution_save/Competition.Rdata")
 Competition <- Competition %>% 
   mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
-  mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
   group_by(idTree) %>% 
-  summarise(NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
-            NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1))
+  summarise(NCI = log(sum(DBHj^2*exp(-0.25*dij))+1))
 ```
 
 ```{r complexes_species}
 Complexes <- bind_rows(
-  # data.frame(Complex = "Chartacea", Genus = "Eschweilera",
-  #            Species = c("simiorum", "congestiflora")),
   data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
              Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
                          "wachenheimii", "grandiflora_form2")),
@@ -132,22 +127,23 @@ mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
-       K = 3,
+       K = 2,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, NCIhetero, NCIcon) %>%
-         mutate_all(funs(scale)) %>%
+       X = dplyr::select(data, TWI, NCI) %>%
+         mutate_all(scale, center = F) %>%
          as.matrix())
 })
 names(mdata) <- complexes
 ```
 
 ```{r fit_species}
+# save(mdata, file = "./distribution_save/species.Rdata")
 # Model <- stan_model("./distribution_models/JointModel.stan")
 # fits <- lapply(mdata, function(data) sampling(Model, chains = 2, data = data))
 # names(fits) <- complexes
-# save(fits, file = "./distribution_save/speciesUnlogged.Rdata")
-load("./distribution_save/speciesUnlogged.Rdata")
+# save(fits, mdata, file = "./distribution_save/species.Rdata")
+load("./distribution_save/species.Rdata")
 pars <- c("alpha", "beta", "gamma")
 species <- lapply(mdata, function(data) 
   data.frame(species = 1:length(colnames(data$Y)),
@@ -162,10 +158,8 @@ predSpecies <- lapply(complexes, function(complex){
   N <- 25
   TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
              to = max(mdata[[complex]]$X[,1]), length.out = N)
-  BA <- seq(from = min(mdata[[complex]]$X[,2]), 
+  NCI <- seq(from = min(mdata[[complex]]$X[,2]), 
              to = max(mdata[[complex]]$X[,2]), length.out = N)
-  BAgenus <- seq(from = min(mdata[[complex]]$X[,3]), 
-             to = max(mdata[[complex]]$X[,3]), length.out = N)
   
   S <- mdata[[complex]]$S
   K <- mdata[[complex]]$K
@@ -181,19 +175,15 @@ predSpecies <- lapply(complexes, function(complex){
     
   Yp <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1] * TWI[i] + beta[n,,2]*BA[i] + beta[n,,3]*BAgenus[i] + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*BAgenus[i]^2)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1] * TWI[i] + beta[n,,2]*NCI[i] + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*NCI[i]^2)
     ), simplify = F), along = 3)
   Ytwi <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(NCI) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(NCI)^2)
     ), simplify = F), along = 3)
-  Yba <- abind::abind(sapply(1:length(TWI), function(i) 
+  Ynci <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*BA[i] + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*mean(BAgenus)^2)
-    ), simplify = F), along = 3)
-  Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
-    sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*NCI[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*NCI[i]^2)
     ), simplify = F), along = 3)
 
   bind_rows(
@@ -212,23 +202,12 @@ predSpecies <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "NCIhetero",
-        value = BA,
+        variable = "NCI",
+        value = NCI,
         Yp = apply(Yp[sp,,], 2, mean),
-        Y = apply(Yba[sp,,], 2, mean),
-        Y5 = apply(Yba[sp,,], 2, quantile, probs = 0.05),
-        Y95 = apply(Yba[sp,,], 2, quantile, probs = 0.95))) %>% 
-      bind_rows(),
-    lapply(1:S, function(sp)
-      data.frame(
-        complex = complex,
-        species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "NCIcon",
-        value = BAgenus,
-        Yp = apply(Yp[sp,,], 2, mean),
-        Y = apply(Ybagenus[sp,,], 2, mean),
-        Y5 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.05),
-        Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
+        Y = apply(Ynci[sp,,], 2, mean),
+        Y5 = apply(Ynci[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Ynci[sp,,], 2, quantile, probs = 0.95))) %>% 
       bind_rows())
 }) %>% bind_rows()
 ```
@@ -258,8 +237,7 @@ Defined in document [A04-Complexes](A04-Complexes.html):
 Defined in document [A03-Descriptors](A03-Descriptors.html):
 
 * TWI
-* $NCI_{hetero}$
-* $NCI_{con}$
+* $NCI$
 
 ### Analysis
 
@@ -287,12 +265,11 @@ lapply(fits, function(fit)
   left_join(species) %>% 
   mutate(descriptor = substr(index, 2, 2)) %>% 
   dplyr::select(complex, term, SpeciesLong, descriptor, estimate) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "$NCI_{hetero}$", `3` = "$NCI_{con}$")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", `2` = "NCI")) %>% 
   mutate(term = recode_factor(term, alpha = "$\\alpha$", 
                               beta = "$\\beta$", 
                               gamma = "$\\gamma$")) %>%
-  reshape2::dcast(term + descriptor ~ SpeciesLong, value.var = "estimate") %>%
+  reshape2::dcast(descriptor + term ~ SpeciesLong, value.var = "estimate") %>%
   kable(caption = "Model parameters for each complex with scaled descriptors.",
         escape = F, digits = 3, format = "pandoc") %>% 
   kable_styling(full_width = F) %>% 
@@ -312,8 +289,7 @@ lapply(lapply(fits, as.array, pars = "beta"),
   left_join(species) %>% 
   mutate(complex = gsub("E. ", "", complex)) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIhetero", `3` = "NCIcon")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", `2` = "NCI")) %>% 
   dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
   filter(parameter != "alpha") %>% 
   mutate(parameter = paste0(parameter, "[", descriptor, "]")) %>% 
@@ -363,43 +339,7 @@ predSpecies %>%
 
 ## Supplementray materials
 
-### S1: Model
-
-```{stan Model_species, output.var="Model", echo=T, eval=F, cache=F}
-functions {
-  real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
-    real alpha_plus = sum(alpha);
-    return lgamma(alpha_plus) + sum(lgamma(alpha + to_vector(y)))
-                - lgamma(alpha_plus+sum(y)) - sum(lgamma(alpha));
-  }
-}
-data {
-  int<lower = 1> N  ;       // # of individuals
-  int<lower = 1> S  ;       // # of species
-  int<lower = 0, upper=1> Y[N, S]  ; // individuals presence or absence for each species
-  vector[N] TWI ; // Topographical Wetness Index
-  vector[N] BA ; // Basal Area
-  vector[N] BAgenus ; // Congeneric Basla Area
-  vector<lower=0, upper=1>[N] w ; // weights for pseudo-absence to be equal to presence
-}
-parameters {
-  vector[S] alpha ; // intercept
-  matrix[S,3] beta ; // sigmoidal slope
-  matrix[S,3] gamma ; // quadratic form
-}
-model {
-  alpha ~ normal(0,1) ;  
-  for(k in 1:3){
-    beta[,k] ~ normal(0,1) ;
-    gamma[,k] ~ normal(0,1) ;
-  }
-  for (n in 1:N)
-    Y[n] ~ dirichlet_multinomial(softmax(alpha + TWI[n] * beta[,1] + TWI[n] * TWI[n] * gamma[,1] + BA[n] * beta[,2] + BA[n] .* BA[n] * gamma[,2] + BAgenus[n] * beta[,3] + BAgenus[n] .* BAgenus[n] * gamma[,3])) ; // likelihood
-}
-```
-
-
-### S2: Diagnostic
+### S1: Diagnostic
 
 Model inference converged ($\hat R = 1$, figure \@ref(fig:mcmc)) for every complex with relatively little or no divergent transition (< 0.1%), and relatively uncorrelated parameters.
 
