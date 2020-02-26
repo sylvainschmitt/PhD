@@ -1,5 +1,5 @@
 
-```{r setup_interactionInterIntra, include=FALSE}
+```{r setupInteractionInterIntra, include=FALSE}
 #rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -11,13 +11,13 @@ library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
-  cache = T, cache.lazy = F)
+  cache = F, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "../../data/Paracou/"
 ```
 
-```{r data_interactionInterIntra, eval=T}
+```{r dataInteractionInterIntra, eval=T}
 # traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
 #   googlesheets::gs_read("AllTraits") %>%
 #   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
@@ -59,11 +59,18 @@ Individuals <- Individuals %>%
   group_by(Genus) %>% 
   mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
   ungroup()
+# ggplot(Individuals, aes(LT*LDMC, LMA)) + 
+#   geom_point() + 
+#   geom_smooth(method = "lm") +
+#   ggtitle("LMA = 0.98 + 0.12 LT.LDMC",
+#           "r2 = 0.72; n = 742; P < 0.001")
 ```
 
-```{r mdata_interactionInterIntra}
+```{r mdataInteractionInterIntra}
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 complexes <- c("Symphonia", "Eschweilera")
+# traits <- c("LMA", "invLA")
+# complexes <- c("Symphonia")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 mdata <- lapply(models, function(model){
   trait <- strsplit(model, "-")[[1]][2]
@@ -76,35 +83,37 @@ mdata <- lapply(models, function(model){
     arrange(SpeciesNum) 
   list(N = nrow(data_ind),
        S = nrow(data_sp),
+       P = max(as.numeric(as.factor(data_ind$Plot))),
        Trait = unlist(data_ind[trait]),
        DBH = data_ind$DBH,
        TWIs = data_sp$TWIs,
        TWIis = data_ind$TWIis,
-       species = data_ind$SpeciesNum)
+       species = data_ind$SpeciesNum,
+       plot = as.numeric(as.factor(data_ind$Plot)))
   })
 names(mdata) <- models
 ```
 
-```{r fits_interactionInterIntra}
+```{r fitsInteractionInterIntra}
 # fits <- lapply(mdata, function(x)
 #   sampling(Model, chains = 2, data = x, save_warmup = F))
 # names(fits) <- models
 # save(fits, file = "./functional_save/InterIntraTWI.Rdata")
-load("./functional_save/InterIntraTWI.Rdata") 
+load("./functional_save/InterIntraTWI.Rdata")
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x)) 
 ```
 
-```{r species_interactionInterIntra}
+```{r speciesInteractionInterIntra}
 species <- Individuals %>% 
   dplyr::select(SpeciesLong, Genus, Species, SpeciesNum) %>% 
   unique()
 ```
 
-```{r predicitons_interactionInterIntra}
-traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
-complexes <- c("Symphonia", "Eschweilera")
+```{r predicitonsInteractionInterIntra}
+# traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+# complexes <- c("Symphonia", "Eschweilera")
 models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
 preds <- lapply(models, function(model){
   trait <- strsplit(model, "-")[[1]][2]
@@ -165,7 +174,7 @@ preds <- lapply(models, function(model){
 ```{r summarySpeciesInterIntra}
 lapply(fits, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
-                                "betaTWI", "gammaTWI", 
+                                "betaTWI", "gammaTWI", "sigma_p",
                                 "sigma_t", "lp__"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "model") %>% 
@@ -183,6 +192,7 @@ lapply(fits, function(fit)
                               betaDBH = "$\\beta_{DBH}$", 
                               betaTWI = "$\\beta_{TWI}$", 
                               gammaTWI = "$\\gamma_{TWI}$",
+                              sigmap = "$\\sigma^2_{Plot}$",
                               sigmat = "$\\sigma^2_{t}$",
                               lp = "log-likelihood")) %>% 
   mutate(trait = recode_factor(trait, 
@@ -204,11 +214,12 @@ lapply(fits, function(fit)
 ```{r speciesInterceptInterIntra, fig.cap="Model species effect for Intercept."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
-                               pars = c("alpha", "sigma_a")))) %>% 
+                               pars = c("alpha", "sigma_a", "sigma_p")))) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("complex", "trait"), "-") %>%
   mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
-  mutate(parameter = recode_factor(parameter, sigma_a = "sigma[alpha]")) %>% 
+  mutate(parameter = recode_factor(parameter, sigma_a = "sigma[alpha]", 
+                                   sigma_p = "sigma[Plot]")) %>% 
   ggplot(aes(x = datatools::reorder_within(complex, m, trait), 
              xend = datatools::reorder_within(complex, m, trait),
              color = complex, fill = complex)) +
@@ -273,7 +284,8 @@ preds %>%
 ```{r speciesNindividualTWI, fig.cap="Model species vs individual effect for TWI."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
-                               pars = c("betaTWI", "gammaTWI")))) %>% 
+                               pars = c("betaTWI", "gammaTWI")),
+                      prob_outer = 0.8)) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("Genus", "trait"), "-") %>%
   mutate(SpeciesNum = gsub("([[:punct:]])", "", parameter)) %>% 
@@ -348,13 +360,15 @@ Resulting in the following `stan` code with selected priors:
 
 ```{stan stanModelInterIntra, output.var="Model", echo=T, eval=F, cache=F}
 data {
-  int<lower=1>  N ; // # of observations
+  int<lower=1>  N ; // # observations
   int<lower=1> S ; // # species
+  int<lower=1> P ; // # plots
   vector[N] Trait ; // Trait
   vector[N] DBH ; // Diameter at Breast Height
   vector[S] TWIs ; // Topographic Wetness Index of species
   vector[N] TWIis ; // Topographic Wetness Index of individual knowing species TWI_i|s
   int<lower=1, upper=S> species[N] ; // species index
+  int<lower=1, upper=P> plot[N] ; // plot index
 }
 parameters {
   real alpha ; // genus intercept
@@ -362,18 +376,22 @@ parameters {
   vector<lower=0> [S]  betaDBH ; // DBH half-load
   real betaTWI ; // TWI slope
   vector[S] gammaTWI ; // TWI slopee
-  real<lower=0> sigma_a ; // Variance of the species intercepts
-  real<lower=0> sigma_t ; // Variance
+  vector[P] delta ;
+  real<lower=0> sigma_p ; // Plot variation
+  real<lower=0> sigma_a ; // Species variation
+  real<lower=0> sigma_t ; // Residual variation
 }
 model {
-  alpha ~ normal(0, 10^6) ; // Priors
+  Trait ~ normal((alpha_s[species] +  delta[plot] + betaTWI*TWIs[species] +  gammaTWI[species] .* TWIis) .* (DBH ./ (betaDBH[species] + DBH)), sigma_t) ; // Likelihood
   alpha_s ~ normal(alpha, sigma_a) ;
+  alpha ~ normal(0, 10^6) ; // Priors
   betaDBH ~ normal(0,1) ;
   betaTWI ~ normal(0,1) ;
   gammaTWI ~ normal(0,1) ;
+  delta ~ normal(0, sigma_p) ;
+  sigma_p ~ normal(0, 1) ;
   sigma_a ~ normal(0, 1) ;
   sigma_t ~ normal(0, 1) ;
-  Trait ~ normal((alpha_s[species] + betaTWI*TWIs[species] +  gammaTWI[species] .* TWIis) .* (DBH ./ (betaDBH[species] + DBH)), sigma_a) ; // Likelihood
 }
 ```
 
@@ -381,7 +399,8 @@ model {
 
 ```{r mcmcInterIntra, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
 # lapply(fits, check_divergences)
-mcmc_trace(as.array(fits$`Symphonia-LT`, pars = c("alpha",  "sigma_a", "betaDBH", 
+mcmc_trace(as.array(fits$`Symphonia-LMA`, pars = c("alpha_s",  "sigma_a",
+                                                  "sigma_p",  "betaDBH", 
                                                   "betaTWI", "gammaTWI", 
                                                   "sigma_t", "lp__")),
              facet_args = list(labeller = label_parsed)) 
@@ -392,5 +411,5 @@ mcmc_pairs(as.array(fits$`Symphonia-LT`, pars = c("betaTWI", "gammaTWI")))
 ```
 
 ```{r pairsInterIntraSigma, fig.cap="Model $\\sigma$ pair scaterplots."}
-mcmc_pairs(as.array(fits$`Symphonia-LT`, pars = c("sigma_a", "sigma_t")))
+mcmc_pairs(as.array(fits$`Symphonia-LT`, pars = c("sigma_a", "sigma_p", "sigma_t")))
 ```

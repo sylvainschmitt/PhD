@@ -14,6 +14,33 @@ path <- "../../data/Paracou/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
 ```
 
+```{r, eval=F}
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2017) %>% 
+  collect() %>% 
+  mutate(SpeciesLong = paste(Genus, Species))
+env <- paracou %>%
+   dplyr::select(SpeciesLong, idTree, Xutm, Yutm) %>%
+   unique() %>% 
+  na.omit()
+coordinates(env) <- ~Xutm + Yutm
+proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+env <- spTransform(env, CRSobj = crs)
+twi <- raster(file.path(path, "topography", "TWI_1m.tif"))
+twi <- projectRaster(twi, crs = crs)
+env <- data.frame(cbind(env@data, twi = raster::extract(twi, env)))
+env %>% 
+  group_by(SpeciesLong) %>% 
+  filter(n() > 20) %>% 
+  summarise(TWIbreadth = quantile(twi, 0.95) - quantile(twi, 0.05)) %>% 
+  ggplot(aes(TWIbreadth)) + geom_histogram() + 
+  geom_vline(aes(xintercept = breadth, col = Species), linetype = "dashed", 
+               data = data.frame(breadth = c(4.12 - 0.97, 6.31 - 1.59, 3.52 - 1.06, 4.92 - 0.96, 2.78 - 1.06),
+                               Species = c("S. sp1", "S. globulifera", "E. sagotiana", "E. coriacea", "E. decolorans"))) +
+  scale_x_sqrt()
+```
+
 ```{r data_env}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>% 
   googlesheets::gs_read("AllTraits") %>% 

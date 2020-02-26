@@ -40,22 +40,22 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 # load("../functional_save/Individuals.Rdata")
 # Individuals0 <- Individuals
 # sdDBH <- sd(Individuals$DBH)
-# Individuals <- Individuals %>% 
-#   rename(LMA = invSLA) %>% 
-#   group_by(Species) %>% 
-#   filter(n() > 20) %>% 
-#   ungroup() %>% 
-#   group_by(SpeciesLong) %>% 
-#   mutate(TWIs = mean(TWI, na.rm = T)) %>% 
-#   mutate(TWIis = TWI - TWIs) %>% 
-#   ungroup() %>% 
+# Individuals <- Individuals %>%
+#   rename(LMA = invSLA) %>%
+#   group_by(Species) %>%
+#   filter(n() > 20) %>%
+#   ungroup() %>%
+#   group_by(SpeciesLong) %>%
+#   mutate(TWIs = mean(TWI, na.rm = T)) %>%
+#   mutate(TWIis = TWI - TWIs) %>%
+#   ungroup() %>%
 #   mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWIs", "TWIis"),
-#             funs(./sd(., na.rm = T))) %>% 
-#   group_by(Genus) %>% 
-#   mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+#             funs(./sd(., na.rm = T))) %>%
+#   group_by(Genus) %>%
+#   mutate(SpeciesNum = as.numeric(as.factor(Species))) %>%
 #   ungroup()
-# species <- Individuals %>% 
-#   dplyr::select(SpeciesLong, Genus, Species, SpeciesNum) %>% 
+# species <- Individuals %>%
+#   dplyr::select(SpeciesLong, Genus, Species, SpeciesNum) %>%
 #   unique()
 # load("../functional_save/InterIntraTWI.Rdata")
 # traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
@@ -193,8 +193,8 @@ Individuals %>%
   group_by(Genus, Species) %>% 
   summarise(N = n(), 
             TWI = paste0(round(mean(TWI), 2), " [",
-                         round(min(TWI), 2), "- ",
-                         round(max(TWI), 2), "]")
+                         round(quantile(TWI, 0.05), 2), "- ",
+                         round(quantile(TWI, 0.95), 2), "]")
   ) %>% 
   arrange(desc(N)) %>% 
   kable(caption = "Number of individuals sampled per genus and species.",
@@ -254,8 +254,9 @@ if(knitr:::is_latex_output()){
 
 ```{r parameters}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
+  broom::tidyMCMC(fit, pars = c("alpha", "betaDBH", 
                                 "betaTWI", "gammaTWI", 
+                                "sigma_a", "sigma_p", 
                                 "sigma_t", "lp__"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "model") %>% 
@@ -269,11 +270,12 @@ lapply(fits, function(fit)
   mutate(term = gsub("([[:punct:]])", "", term)) %>% 
   mutate(term = recode_factor(term, 
                               alpha = "$\\alpha$",
-                              sigmaa = "$\\sigma^2_{\\alpha}$",
                               betaDBH = "$\\beta_{DBH}$", 
                               betaTWI = "$\\beta_{TWI}$", 
                               gammaTWI = "$\\gamma_{TWI}$",
-                              sigmat = "$\\sigma^2_{t}$",
+                              sigmaa = "$\\sigma^2_{Species}$",
+                              sigmap = "$\\sigma^2_{Plot}$",
+                              sigmat = "$\\sigma^2_{Trait}$",
                               lp = "log-likelihood")) %>% 
   mutate(trait = recode_factor(trait, 
                               LMA = "$LMA$",
@@ -352,7 +354,8 @@ ggplot(ind, aes(x, y, colour = SpeciesLong)) +
 ```{r TWInNCI, fig.cap="Inter- and intraspecific effect of topographic wetness index (TWI) on each trait for both *Symphonia* and *Eschweilera.* The effect of TWI was estimated as the posterior distribution of the slope parameters $\\beta$ and $\\gamma$ representing respectively inter- and intraspecific effects (see Materials and Methods) using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval, and thin lines the 95% confidence interval, and colour the corresponding genus for the interspecific effect or species for the intraspecific effect. See table \\@ref(tab:Trait) for abbreviation of traits."}
 lapply(fits, function(fit) 
   mcmc_intervals_data(as.array(fit,
-                               pars = c("betaTWI", "gammaTWI")))) %>% 
+                               pars = c("betaTWI", "gammaTWI")),
+                      prob_outer = 0.8)) %>% 
   bind_rows(.id = "model") %>% 
   separate(model, c("Genus", "trait"), "-") %>%
   mutate(SpeciesNum = gsub("([[:punct:]])", "", parameter)) %>% 

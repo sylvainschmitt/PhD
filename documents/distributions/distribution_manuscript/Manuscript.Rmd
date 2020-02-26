@@ -28,6 +28,7 @@ if(knitr:::is_html_output()) options(knitr.table.format = "html")
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
 library(broom)
+library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, 
                fig.height = 8, fig.width = 8,
@@ -76,79 +77,66 @@ data <- mutate(data, Complex = ifelse(is.na(Complex), "no", Complex))
 mdata <- lapply(complexes, function(complex) {
   data_complex <- left_join(data,
                             Competition %>% 
-                              left_join(Complexes, by = c("Genusj" = "Genus", "Speciesj" = "Species")) %>% 
-                              mutate(Complex = ifelse(is.na(Complex), "no", Complex)) %>% 
                               mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-                              mutate(strata = as.numeric(Complex == complex)) %>% 
                               group_by(idTree) %>% 
-                              summarise(NCIother = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
-                                        NCIcomplex = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1)))
+                              summarise(NCI = log(sum(DBHj^2*exp(-0.25*dij))+1)))
   list(N = nrow(data_complex),
-       K = 3,
+       K = 2,
        Y = as.numeric(data_complex$Complex == complex),
-       X = dplyr::select(data_complex, TWI, NCIother, NCIcomplex) %>%
-         mutate_all(funs(scale)) %>%
+       X = dplyr::select(data_complex, TWI, NCI) %>%
+         mutate_all(scale, center = F) %>%
          as.matrix(),
        w = ifelse(data_complex$Complex == complex,
                   1-sum(data_complex$Complex == complex)/length(data_complex$Complex),
                   sum(data_complex$Complex == complex)/length(data_complex$Complex)))
 })
 names(mdata) <- complexes
-load("../distribution_save/complexesUnlogged.Rdata")
+load("../distribution_save/complexes.Rdata")
 names(fits)[1:2] <- c("Chartacea", "Parvifolia")
 fits$Chartacea <- NULL
 fitsComplex <- fits
 predComplex <- lapply(names(fits), function(complex){
-
-  TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
-             to = max(mdata[[complex]]$X[,1]), length.out = 100)
-  NCIother <- seq(from = min(mdata[[complex]]$X[,2]), 
-             to = max(mdata[[complex]]$X[,2]), length.out = 100)
-  NCIcomplex <- seq(from = min(mdata[[complex]]$X[,3]), 
-             to = max(mdata[[complex]]$X[,3]), length.out = 100)
-
+  
+  K <- mdata[[complex]]$K
+  N <- 100
+  X <- sapply(1:K, function(i)
+    seq(from = min(mdata[[complex]]$X[,i]), 
+        to = max(mdata[[complex]]$X[,i]), length.out = N))
+  
   alpha <- as.matrix(fits[[complex]], pars = "alpha")
+  alpha <- matrix(rep(alpha, each = N), ncol = N, byrow = T)
   beta <- as.matrix(fits[[complex]], pars = "beta")
   gamma <- as.matrix(fits[[complex]], pars = "gamma")
-
-  Ytwi <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*TWI + beta[n,2]*mean(NCIother) + beta[n,3]*mean(NCIcomplex) + gamma[n,1]*TWI^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*mean(NCIcomplex)^2)), simplify = F))
-  Ynciother <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*NCIother + beta[n,3]*mean(NCIcomplex) + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*NCIother^2 + gamma[n,3]*mean(NCIcomplex)^2)), simplify = F))
-  Yncicomplex <- do.call("rbind", sapply(1: nrow(alpha), function(n) (arm::invlogit(alpha[n] + beta[n,1]*mean(TWI) + beta[n,2]*mean(NCIother) + beta[n,3]*NCIcomplex + gamma[n,1]*mean(TWI)^2 + gamma[n,2]*mean(NCIother)^2 + gamma[n,3]*NCIcomplex^2)), simplify = F))
-
-  bind_rows(
-    data.frame(
-      Complex = complex,
-      variable = "TWI",
-      value = TWI,
-      Y = apply(Ytwi, 2, mean),
-      Y5 = apply(Ytwi, 2, quantile, probs = 0.05),
-      Y95 = apply(Ytwi, 2, quantile, probs = 0.95)),
-    data.frame(
-      Complex = complex,
-      variable = "NCIother",
-      value = NCIother,
-      Y = apply(Ynciother, 2, mean),
-      Y5 = apply(Ynciother, 2, quantile, probs = 0.05),
-      Y95 = apply(Ynciother, 2, quantile, probs = 0.95)),
-    data.frame(
-      Complex = complex,
-      variable = "NCIcomplex",
-      value = NCIcomplex,
-      Y = apply(Yncicomplex, 2, mean),
-      Y5 = apply(Yncicomplex, 2, quantile, probs = 0.05),
-      Y95 = apply(Yncicomplex, 2, quantile, probs = 0.95)))
-}) %>% bind_rows()
+  
+  Ymean <- abind::abind(sapply(1:K, function(i){
+    Xtmp <- X
+    for(j in (1:K)[-i]) 
+      Xtmp[,j] <- mean(Xtmp[,j])
+    arm::invlogit(alpha + beta %*% t(Xtmp) + gamma %*% t(Xtmp^2))
+  }, simplify = F), along = 3)
+  
+  values <- list(value = X,
+                 Y = apply(Ymean, c(2,3), mean),
+                 Y5 = apply(Ymean, c(2,3), quantile, probs = 0.05),
+                 Y95 = apply(Ymean, c(2,3), quantile, probs = 0.95))
+  values <- lapply(values, function(x){colnames(x) <- c("TWI", "NCI") ; return(x)})
+  values <- lapply(values, reshape2::melt)
+  data.frame(
+    Complex = complex,
+    variable = values$value$Var2,
+    value = values$value$value,
+    Y = values$Y$value,
+    Y5 = values$Y5$value,
+    Y95 = values$Y95$value)
+}) %>% bind_rows() 
 ```
 
 ```{r predSpecies}
 load("../distribution_save/Competition.Rdata")
 Competition <- Competition %>% 
   mutate(dij = ifelse(dij <1, 1, dij)) %>% 
-  left_join(dplyr::select(trees, idTree, Genus, Species)) %>% 
-  mutate(strata = as.numeric(Genusj == Genus, Speciesj == Species)) %>% 
   group_by(idTree) %>% 
-  summarise(NCIhetero = log(sum(DBHj^2*exp(-0.25*dij)*abs(strata-1))+1),
-            NCIcon = log(sum(DBHj^2*exp(-0.25*dij)*strata)+1))
+  summarise(NCI = log(sum(DBHj^2*exp(-0.25*dij))+1))
 data <- trees %>% 
   left_join(env) %>% 
   left_join(Complexes) %>% 
@@ -163,25 +151,22 @@ mdata <- lapply(complexes, function(complex) {
   data<- filter(data, Complex == complex)
   list(N = nrow(data),
        S = length(unique(data$Species)),
-       K = 3,
+       K = 2,
        Y = sapply(levels(as.factor(data$Species)),
                   function(sp) as.numeric(data$Species == sp)),
-       X = dplyr::select(data, TWI, NCIhetero, NCIcon) %>%
-         mutate_all(funs(scale)) %>%
+       X = dplyr::select(data, TWI, NCI) %>%
+         mutate_all(scale, center = F) %>%
          as.matrix())
 })
 names(mdata) <- complexes
-load("../distribution_save/speciesUnlogged.Rdata")
-fits$Chartacea <- NULL
+load("../distribution_save/species.Rdata")
 predSpecies <- lapply(complexes, function(complex){
 
   N <- 25
   TWI <- seq(from = min(mdata[[complex]]$X[,1]), 
              to = max(mdata[[complex]]$X[,1]), length.out = N)
-  BA <- seq(from = min(mdata[[complex]]$X[,2]), 
+  NCI <- seq(from = min(mdata[[complex]]$X[,2]), 
              to = max(mdata[[complex]]$X[,2]), length.out = N)
-  BAgenus <- seq(from = min(mdata[[complex]]$X[,3]), 
-             to = max(mdata[[complex]]$X[,3]), length.out = N)
   
   S <- mdata[[complex]]$S
   K <- mdata[[complex]]$K
@@ -197,19 +182,15 @@ predSpecies <- lapply(complexes, function(complex){
     
   Yp <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1] * TWI[i] + beta[n,,2]*BA[i] + beta[n,,3]*BAgenus[i] + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*BAgenus[i]^2)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1] * TWI[i] + beta[n,,2]*NCI[i] + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*NCI[i]^2)
     ), simplify = F), along = 3)
   Ytwi <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(BA) + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*mean(BAgenus)^2)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*TWI[i] + beta[n,,2]*mean(NCI) + gamma[n,,1]*TWI[i]^2 + gamma[n,,2]*mean(NCI)^2)
     ), simplify = F), along = 3)
-  Yba <- abind::abind(sapply(1:length(TWI), function(i) 
+  Ynci <- abind::abind(sapply(1:length(TWI), function(i) 
     sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*BA[i] + beta[n,,3]*mean(BAgenus) + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*BA[i]^2 + gamma[n,,3]*mean(BAgenus)^2)
-    ), simplify = F), along = 3)
-  Ybagenus <- abind::abind(sapply(1:length(TWI), function(i) 
-    sapply(1: nrow(alpha), function(n)
-      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*mean(BA) + beta[n,,3]*BAgenus[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*mean(BA)^2 + gamma[n,,3]*BAgenus[i]^2)
+      tsensembler:::softmax(alpha[n,] + beta[n,,1]*mean(TWI) + beta[n,,2]*NCI[i] + gamma[n,,1]*mean(TWI)^2 + gamma[n,,2]*NCI[i]^2)
     ), simplify = F), along = 3)
 
   bind_rows(
@@ -228,23 +209,12 @@ predSpecies <- lapply(complexes, function(complex){
       data.frame(
         complex = complex,
         species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "NCIhetero",
-        value = BA,
+        variable = "NCI",
+        value = NCI,
         Yp = apply(Yp[sp,,], 2, mean),
-        Y = apply(Yba[sp,,], 2, mean),
-        Y5 = apply(Yba[sp,,], 2, quantile, probs = 0.05),
-        Y95 = apply(Yba[sp,,], 2, quantile, probs = 0.95))) %>% 
-      bind_rows(),
-    lapply(1:S, function(sp)
-      data.frame(
-        complex = complex,
-        species = colnames(mdata[[complex]]$Y)[sp],
-        variable = "NCIcon",
-        value = BAgenus,
-        Yp = apply(Yp[sp,,], 2, mean),
-        Y = apply(Ybagenus[sp,,], 2, mean),
-        Y5 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.05),
-        Y95 = apply(Ybagenus[sp,,], 2, quantile, probs = 0.95))) %>% 
+        Y = apply(Ynci[sp,,], 2, mean),
+        Y5 = apply(Ynci[sp,,], 2, quantile, probs = 0.05),
+        Y95 = apply(Ynci[sp,,], 2, quantile, probs = 0.95))) %>% 
       bind_rows())
 }) %>% bind_rows()
 ```
@@ -423,15 +393,12 @@ trees %>%
 <!-- figures -->
 
 ```{r ComplexesDistribution, fig.cap="Relative abundance of species complexes. Subplot **A** represent $\\beta$ parameter values for each descriptor and species complex, with the circle representing the mean value of the parameter posterior, thick lines the 50% confidence interval and thin lines the 95% confidence interval. Subplot **B**, represent species complex predicted relative abundance and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex."}
-g1 <-lapply(fitsComplex, function(fit) 
-  bayesplot::mcmc_intervals_data(as.array(fit, pars = "beta"))) %>% 
+g1 <-lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit, pars = "beta"))) %>% 
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
   mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIother", `3` = "NCIcomplex")) %>% 
-  mutate(descriptor = factor(descriptor, levels = c("NCIcomplex",
-                                                    "NCIother", "TWI"))) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", `2` = "NCI")) %>% 
   mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
   mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
   dplyr::select(-outer_width, -inner_width, -point_est) %>% 
@@ -443,7 +410,7 @@ g1 <-lapply(fitsComplex, function(fit)
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_wrap(~ descriptor, labeller = label_parsed, scales = "free_y") +
+  facet_wrap(~ descriptor, labeller = label_parsed, scales = "free") +
   ylab("") + xlab("Species\ncomplex") + 
   scale_fill_discrete(guide = "none") +
   scale_color_discrete(guide = "none") +
@@ -455,7 +422,7 @@ g2 <-predComplex %>%
   ggplot(aes(x = value, col = Complex)) +
   geom_ribbon(aes(ymin = Y5, ymax = Y95), alpha = 0.2) +
   geom_line(aes(y = Y)) +
-  # geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
+  geom_hline(aes(yintercept = Yo, col = Complex), lty = "dashed") +
   facet_wrap(~ variable, nrow = 1, scales = "free") + 
   xlab("") + ylab("Species complex relative abundance") +
   scale_y_sqrt() +
@@ -463,7 +430,7 @@ g2 <-predComplex %>%
         strip.background = element_blank(),
         strip.text.x = element_blank())
 cowplot::plot_grid(g1, g2, nrow = 2, rel_heights = c(1,2), 
-                   labels = LETTERS[1:2], label_x = 0.1) 
+                   labels = LETTERS[1:2], label_x = 0.1)  
 ```
 
 ```{r betaTWI, fig.cap="TWI and NCI heterospecific and conspecific effects on species relative distribution within species complexes. $\\beta_{TWI}$, $\\beta_{NCIhetero}$, $\\beta_{TWIcon}$ posterior are represented for each species complex and species with mean (circle), 50% credibility interval (thick segment) and 95% confidence interval (thin segment).", fig.height=10} 
@@ -485,8 +452,7 @@ lapply(fits, function(fit)
   mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
   left_join(species) %>% 
   mutate(descriptor = substr(descriptor, 2, 2)) %>% 
-  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", 
-                                    `2` = "NCIhetero", `3` = "NCIcon")) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", `2` = "NCI")) %>% 
   dplyr::select(Complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
   mutate(parameter = ifelse(parameter != "alpha",
                             paste0(parameter, "[", descriptor, "]"),

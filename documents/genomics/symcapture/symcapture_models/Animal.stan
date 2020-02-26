@@ -22,8 +22,8 @@ transformed parameters {
 model {
   Y ~ normal(mu[population] + A*a, sqrt(sigmaR)) ;
   a ~ normal(0, sqrt(sigmaG)) ;
-  sigmaG ~ normal(0, 1) ;
-  sigmaR ~ student_t(4, 0, 1) ;
+  sigmaG ~ lognormal(0, 1) ;
+  sigmaR ~ lognormal(0, 1) ;
 }
 generated quantities{
   real R2m ;

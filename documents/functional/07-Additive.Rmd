@@ -29,6 +29,13 @@ path <- "../../data/Paracou/"
 #   googlesheets::gs_read("AllTraits") %>%
 #   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
 #   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   mutate(LMA=1/SLA) %>%
+#   group_by(idTree) %>%
+#   summarise_at(vars("LMA", "LDMC", "LT", "LA", "CC"), sd, na.rm = T) %>% 
+#   ungroup() %>% 
+#   summarise_at(vars("LMA", "LDMC", "LT", "LA", "CC"), mean, na.rm = T) # SD
 # traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
 #   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
 #   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,

@@ -1,3 +1,8 @@
+# PhD 0.1.9167
+* distribution: new results
+* functional: updated for review
+* symcapture: growth models with lognormal
+
 # PhD 0.1.9166
 * distribution: R+ variables + cleaning
 * lectures: rmarkdown
