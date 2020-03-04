@@ -1,4 +1,7 @@
 # PhD 0.1.9167
+* symcapture: gmax model is good !
+
+# PhD 0.1.9167
 * distribution: new results
 * functional: updated for review
 * symcapture: growth models with lognormal

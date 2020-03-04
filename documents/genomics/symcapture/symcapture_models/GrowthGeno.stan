@@ -57,9 +57,9 @@ model {
   sigmaG_raw ~ lognormal(0, 1) ;
   sigma ~ lognormal(0, 1) ;
 }
-generated quantities{
+/*generated quantities{
   vector<lower=0>[3] R2m ;
   vector<lower=0>[3] R2c ;
   R2m = sigmaP ./ (sigmaP + sigmaG + sigmaR) ;
   R2c = (sigmaG + sigmaP) ./ (sigmaP + sigmaG + sigmaR) ;
-}
+}*/

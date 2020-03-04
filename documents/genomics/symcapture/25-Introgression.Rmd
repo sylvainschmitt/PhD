@@ -18,7 +18,23 @@ path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGeno
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
-load("./symcapture_save/Env2.Rdata")
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(trees) %>% 
+  left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop"))) %>% 
+  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
+            by = "Ind", suffix = c("", ".hybrid"))
 ```
 
 # Introgressions

@@ -1,0 +1,60 @@
+---
+title: "Lognormal R vs stan"
+author: "Sylvain Schmitt"
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    theme: readable
+    toc: no
+    toc_float: yes
+    number_sections: no
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = T, eval = T)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+```
+
+```{r generator}
+N <- 1000
+mu <- 0.54
+sigma <- 0.5
+y <- rlnorm(N, log(mu), sigma)
+ggplot(data.frame(y = y), aes(x = y)) + 
+  geom_histogram(fill = "lightgrey") +
+  geom_vline(xintercept = mu, linetype = "dashed", col = "red")
+```
+
+```{r sampling}
+model <- "
+data {
+  int<lower=1> N ;
+  real<lower=0> y[N] ;
+}
+parameters {
+  real<lower=0> mu ;
+  real<lower=0> sigma ;
+}
+model {
+  y ~ lognormal(log(mu), sigma) ;
+  mu ~ lognormal(0, 1) ;
+  sigma ~ lognormal(0, 1) ;
+}
+"
+fit <- stan(model_code = model, chains = 2, save_warmup = F, data = list(N = N, y = y))
+mcmc_trace(fit, pars = c("mu", "sigma")) +
+  geom_hline(aes(yintercept = expected), col = "red", 
+             data = data.frame(parameter = c("mu", "sigma"),
+                               expected = c(mu, sigma)))
+```
+
+
+

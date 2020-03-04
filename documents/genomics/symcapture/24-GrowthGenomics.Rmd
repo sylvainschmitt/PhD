@@ -49,9 +49,9 @@ trees0 <- trees
 trees <- trees %>% 
   group_by(Ind) %>% 
   mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
-         DBHtoday = dplyr::last(DBH)) %>%  
+         DBHtoday = dplyr::last(DBH), N = n()) %>%  
   ungroup() %>% 
-  dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday) %>% 
+  dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday, N) %>% 
   unique()
 save(trees, file = "./symcapture_save/Env2.Rdata")
 ```
@@ -126,7 +126,7 @@ opts_chunk$set(eval = F)
 # mcmc_trace(fitGrowth)
 ```
 
-```{r predgrowth}
+```{r predgrowth, eval=F}
 pars <- as.data.frame(fitGrowth, pars = "thetai") %>% 
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
@@ -200,7 +200,7 @@ broom::tidyMCMC(fitGrowthGeno, c("theta", "sigmaP", "sigmaG", "sigmaR",
         col.names = c("Ontogenetic parameter", "Parameter", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
-```{r pred}
+```{r predgrowthgeno, eval=F}
 Gmax <- c(0.8064037,	0.9498348,	0.5231761)
 Dopt <-	c(27.4856024,	31.1377830,	25.9439725)
 Ks <- c(0.5460768,	0.5099998, 0.6050797)
@@ -230,13 +230,13 @@ trees0 %>%
   facet_wrap(~ Ind, scales = "free_y")
 ```
 
-```{r}
+```{r, eval=F}
 load(file.path("symcapture_save", 'growthkin2.Rdata'))
 mcmc_trace(as.array(fitGrowthGeno, pars = c("theta", "sigmaG", "sigmaR", "sigma")))
 # mcmc_pairs(as.array(fitGrowthKin, pars = c("Gmaxg", "Doptg", "Ksg")))
 ```
 
-```{r growthKinshipG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for ontogenetic parameters."}
+```{r growthKinshipG1, fig.cap="Heritability $h^2$, broad heritability $h_p^2$ and trait differentiation $Qst$ for ontogenetic parameters.", eval=F}
 mcmc_intervals_data(fitGrowthGeno, regex_pars = c("R2")) %>% 
   separate(parameter, c("index", "parameter"), "[:punct:]") %>% 
   mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
@@ -252,7 +252,7 @@ mcmc_intervals_data(fitGrowthGeno, regex_pars = c("R2")) %>%
   scale_color_discrete(guide = "none")
 ```
 
-```{r growthKinshipG2, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
+```{r growthKinshipG2, fig.cap="Genetic variance partitionning for ontogenetic parameters.", eval=F}
 mcmc_intervals_data(fitGrowthGeno, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>%
   separate(parameter, c("sigma", "parameter"), "[:punct:]") %>% 
   mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 

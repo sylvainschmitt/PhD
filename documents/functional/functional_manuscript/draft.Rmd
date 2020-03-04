@@ -68,6 +68,42 @@ path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 load("draftData.Rdata")
 ```
 
+```{r reviewersComments, eval=F}
+src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>% 
+  group_by(Plot) %>% 
+  summarise(N = n(), Area = PlotArea) %>% 
+  mutate(N = N/Area) %>% 
+  ungroup() %>% 
+  summarise(mean = mean(N), min = min(N), max = max(N))
+paracou <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+  filter(CensusYear == 2017) %>% 
+  collect() %>% 
+  mutate(SpeciesLong = paste(Genus, Species))
+paracou <- paracou %>%
+   dplyr::select(SpeciesLong, idTree, Xutm, Yutm) %>%
+   unique() %>% 
+  na.omit()
+coordinates(paracou) <- ~Xutm + Yutm
+proj4string(paracou) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+paracou <- spTransform(paracou, CRSobj = crs)
+twi <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "TWI_1m.tif"))
+twi <- projectRaster(twi, crs = crs)
+r2 <- twi
+r2[] <- 0
+counts<- table(cellFromXY(twi, paracou))
+r2[as.numeric(names(counts))] <- counts
+data.frame(r2 = values(r2)) %>% 
+  filter(r2 > 0) %>% 
+  group_by(r2) %>% 
+  summarise(N = n())
+```
 
 # Abstract
  

@@ -34,11 +34,12 @@ env %>%
   group_by(SpeciesLong) %>% 
   filter(n() > 20) %>% 
   summarise(TWIbreadth = quantile(twi, 0.95) - quantile(twi, 0.05)) %>% 
-  ggplot(aes(TWIbreadth)) + geom_histogram() + 
+  ggplot(aes(TWIbreadth)) + geom_histogram(col = "lightgrey") + 
   geom_vline(aes(xintercept = breadth, col = Species), linetype = "dashed", 
                data = data.frame(breadth = c(4.12 - 0.97, 6.31 - 1.59, 3.52 - 1.06, 4.92 - 0.96, 2.78 - 1.06),
                                Species = c("S. sp1", "S. globulifera", "E. sagotiana", "E. coriacea", "E. decolorans"))) +
-  scale_x_sqrt()
+  scale_x_sqrt() +
+  ylab("N") + xlab("TWI breadth") + scale_color_discrete("Studied species")
 ```
 
 ```{r data_env}
