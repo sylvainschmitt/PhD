@@ -26,12 +26,11 @@ transformed parameters {
       exp(-0.5* square(log(DBH ./ (100*theta[pop,2]))
       ./ theta[pop,3])) ;
   }
-  DBH = DBH - DBH0 ;
 }
 model {
-  DBHtoday - DBH0 ~ lognormal(log(DBH), sigma) ;
+  DBHtoday ~ lognormal(log(DBH), sigma) ;
   Gmaxi ~ std_normal() ;
   for(p in 1:3) theta[,p] ~ lognormal(0, 1) ;
-  sigmaR ~ normal(0, 1) ;
-  sigma ~ normal(0, 1) ;
+  sigmaR ~ lognormal(0, 1) ;
+  sigma ~ lognormal(0, 1) ;
 }

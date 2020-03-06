@@ -9,7 +9,7 @@ data {
   int<lower=1, upper=Y> pop[I] ; // gene pools
 }
 parameters {
-  matrix<lower=0.1>[P,3] theta ;
+  matrix<lower=0.01, upper=2>[P,3] theta ;
   matrix[I, 3] thetai ;
   vector<lower=0>[3] sigmaR ;
   real<lower=0> sigma ;

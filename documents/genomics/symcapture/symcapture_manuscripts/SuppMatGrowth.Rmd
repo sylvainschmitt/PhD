@@ -3,17 +3,17 @@ title: Supplementary Materials
 author: Sylvain Schmitt, Myriam Heuertz, Niklas Tysklind, Bruno Herault
 date: '`r Sys.Date()`'
 output:
-  bookdown::word_document2: default
+  bookdown::html_document2:
+    number_sections: false
+    toc: no
+    toc_float: no
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::html_document2:
-    number_sections: false
-    toc: no
-    toc_float: no
+  bookdown::word_document2: default
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -28,3 +28,22 @@ link-citations: yes
 
 \renewcommand{\figurename}{Supplementary Material S.}
 \renewcommand{\tablename}{Supplementary Material S.}
+
+```{r config, message=FALSE, warning=FALSE, include=FALSE}
+rm(list = ls()); invisible(gc())
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, 
+               fig.height = 8, fig.width = 8,
+               cache = T, cache.lazy = F)
+```
+
+<!-- SUPPLEMENTARY MATERIALS -->
+
+```{r probeDesign, fig.cap="Probes designe scheme..."}
+include_graphics("../images/Probes2.png")
+```

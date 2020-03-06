@@ -82,9 +82,27 @@ The genus *Symphonia* has been highlighted as a species complexe with low phylog
 In addition, outgroup were built with 13 individuals of *Symphonia globulifera* from Africa (Sao Tome, Gabon, Cameroun, Congo, Benin, Liberia, Ivory Coast, and Gana), 7 from South America (Brazil, Costa Rica and Panama), 2 *Symphonia nectarifera* from Madagascar, 2 *Symphonia urophylla* from Madagascar, 5 *Pentadesma butyracea* from Benin and Cameroun and 1 *Pentadesma grandifolia* from Cameroun.
 Leaves were collected from the 432 (402 + 30) individuals and desicated using silica gel. 
 
+## Design of sequence capture 
+
+We designed in *silico* a set of 20,000 80-mer probes sequences for *Symphonia globulifera* (Supplementary Material S1). We used a published low-coverage draft genome of an African *Symphonia globulifera* [@Olsson2017], an unpublished draft genome of a *Symhpnoia globulifera* from French Guiana [Scotti et al., in prep], an unpublished transcriptome from the 20 juvenile of *Symphonia globulifera* from French Guiana [Tysklind et al., in prep], and genomic reads from genome-by-sequencing data from individuals from French Guiana [Torroba-Balmori et al., unpublished]. 
+
+We aligned genomic reads on the two genome drafts with `bwa` [@Li2009]. We then filtered scaffolds from the two genome drafts with a length superior to 1 kbp and at least one matching alignment with a read matching on a unique position, and we merged the two filtered genome drafts with `quickmerge` [@Chakraborty2016]. We aligned transcripts on the new filtered genome draft with `BLAT` [@Kent2002] and selected 533 anonymous scaffolds without any transcript matching. Finally, we masked repetitive regions with `RepeatMasker` [@Smit2015] and selected 533 1-kbp loci within the 533 selected scaffolds.
+
+In parrallel, we filtered transcripts from the 20 juvenile of *Symphonia globulifera* from French Guiana [Tysklind et al., in prep] based on SNP quality, type and frequency. We further selected transcripts including non-overlapping open reading frame (ORFs) with a start codon (Methyonin) detected using `transdecoder` [@Haas2013]. We further filtered ORFs aligning with `BLAT` [@Kent2002] on the previous new filtered genome draft and masked repetitive regions with `RepeatMasker` [@Smit2015]. We finally selected 1,150 loci of 500-bp to 1-kbp starting 100 bp before ORFs start and a maximum of 900 bp after, resulting in 1-Mbp of transcriptomic loci including ORFs. 
+
 ## Genomic data production
 
-Genomic DNA was extracted from dried leaf tissue with a CTAB protocol described by @Doyle1987 and libraries were prepared using the NEBNext Ultra II FS DNA Library Prep kit (new England Biolabs Inc, UK), before pooling in equimolar amounts to be captured by hybridization. 
+Genomic DNA was extracted from 5 mg of dried leaf tissue with a CTAB protocol described by @Doyle1987 and libraries were digested with 'Ultra II FS Enzyme Mix' (new England Biolabs Inc, MA, USA) for a target size of 150 bp  and prepared using the 'NEBNext Ultra II FS DNA Library Prep kit for Illumina'(new England Biolabs Inc, MA, USA).
+
+Libraries were amplified and tagged using 5 $\mu L$ of adaptor-ligated DNA together with 8.3 $\mu L$ of 'NEBNext Ultra II Q5 Master Mix' (new England Biolabs Inc, MA, USA), and 1.6 $\mu L$ of diluted Index Primer i5 and 1.6 $\mu L$ of diluted Index Primer i7 from 'NEBNext Multiplex Oligos for Illumina (Dual Index Primers Set 1 and Set 2)' (new England Biolabs Inc, MA, USA). Initial denaturation (98°C for 30 s) was followed by 8 cycles (98°C for 10 s and 65°C for 1 min 30 s) and a final extension (65°C for 5 min).
+ 
+ before pooling in equimolar amounts
+ 
+ to be captured by hybridization with the 20,000 80-mer designed probes sequences using myBaits Custom 1-20K (Arbor Biosciences, MI, USA). 
+
+
+
+A set of 20,000 -mer probes sequences targeting XX distinct loci 
 
 ## Analysis
 

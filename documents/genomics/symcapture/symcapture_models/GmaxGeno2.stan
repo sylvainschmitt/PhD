@@ -7,10 +7,16 @@ data {
   vector[I] Y0 ;
   vector[I] DBHtoday ;
   int<lower=1, upper=Y> pop[I] ; // gene pools
+  cov_matrix[I] K ; // kinship covariance matrix
+}
+transformed data{
+  matrix[I, I] A = cholesky_decompose(K) ;
 }
 parameters {
-  matrix<lower=0>[P,3] theta ;
+  matrix<lower=0.1, upper=2>[P,3] theta ;
   vector[I] Gmaxi ;
+  vector[I] a ; 
+  real<lower=0> sigmaG ;
   real<lower=0> sigmaR ;
   real<lower=0> sigma ;
 }
@@ -22,7 +28,7 @@ transformed parameters {
       if(years[t] == Y0[i])
         DBH[i] = DBH0[i] ;
     }
-    DBH += exp(log(theta[pop,1]) + sigmaR*Gmaxi) .*
+    DBH += exp(log(A*exp(log(theta[pop,1]) + sigmaG*a)) + sigmaR*Gmaxi) .*
       exp(-0.5* square(log(DBH ./ (100*theta[pop,2]))
       ./ theta[pop,3])) ;
   }
@@ -30,8 +36,9 @@ transformed parameters {
 }
 model {
   DBHtoday - DBH0 ~ lognormal(log(DBH), sigma) ;
+  a ~ std_normal() ;
   Gmaxi ~ std_normal() ;
   for(p in 1:3) theta[,p] ~ lognormal(0, 1) ;
-  sigmaR ~ normal(0, 1) ;
-  sigma ~ normal(0, 1) ;
+  sigmaG ~ lognormal(0, 1) ;
+  sigmaR ~ lognormal(0, 1) ;
 }

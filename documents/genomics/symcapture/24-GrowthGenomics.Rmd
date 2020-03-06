@@ -33,6 +33,7 @@ trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou
   tbl("Paracou") %>% 
   filter(Genus == "Symphonia") %>% 
   mutate(DBH = CircCorr/pi) %>% 
+  filter(!(CodeMeas %in% c(4))) %>% 
   collect()
 trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
@@ -81,9 +82,7 @@ model_data <- function(data) {
        DBHtoday = data$DBHtoday + 10^-6,
        ind = data$IndNum,
        pop = data$popNum,
-       K = K,
-       L = c(0, 10, 0.1), 
-       U = c(5, 100, 1.5))
+       K = K)
 }
 ```
 
@@ -91,23 +90,23 @@ model_data <- function(data) {
 
 We used the following form of hierachical model to model DBH increasqe between DBH today $DBH_{y=today}$ and DBH at recruitment $DBH_{y=y0,p,i}$ for individual $i$ in population $p$:
 
-$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} (\sum _{y=y_0} ^{y=today} Gmax_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_i})}{Ks_i}]^2), \sigma)$$
-$$\mid \forall \theta \in [Gmax, Dopt,Ks], \theta_i \sim \mathcal N (\theta_p, \sigma^2_{R_{\theta}})$$
+$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} (\\log(\sum _{y=y_0} ^{y=today} e^{log(Gmax_p) + \sigma^2_{R1}.Gmax_i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{e^{log(Dopt_p) + \sigma^2_{R2}.Dopt_i}})}{e^{log(Ks_p) + \sigma^2_{R3}.Ks_i}}]^2)), \sigma^2) \\ \mid \forall \theta \in [Gmax, Dopt,Ks], \theta_i \sim \mathcal N(0, 1) $$
 
 with $Gmax$, $Dopt$ and $Ks$ the parameters of the growth response to ontgeny representing respectively the maximum growth potential, the optimal growth diameter when this potential is reached, and the kurtosis of the growth curve respectivelly. Ontogenic parameters were defined at the individual level $i$ as random effects centered on the population level $p$ parameters with associated individual variance $\sigma^2_R$.
 
-At the population level, *Symphonia* individuals showed a maximum growth potential of $3.7 - 6.1 ~mm.yr^{-1}$ at optimal diameter of $16-30~cm$ with a kurtosis of $0.83-1.21$ (Tab. \@ref(tab:growthOntogenyTab)). All parameters showed significant (not optimal diameter) variation at the individual level within populations ($\pm0.3~mm.yr^{-1}$, $\pm53~cm$, and $\pm0.3$ for maximum growth, optimal diameter and kurtosis respectively).
+<!-- At the population level, *Symphonia* individuals showed a maximum growth potential of $3.7 - 6.1 ~mm.yr^{-1}$ at optimal diameter of $16-30~cm$ with a kurtosis of $0.83-1.21$ (Tab. \@ref(tab:growthOntogenyTab)). All parameters showed significant (not optimal diameter) variation at the individual level within populations ($\pm0.3~mm.yr^{-1}$, $\pm53~cm$, and $\pm0.3$ for maximum growth, optimal diameter and kurtosis respectively). -->
 
 ```{r growthOntogenyTab}
 # mdata <- model_data(trees)
+# save(mdata, file = file.path("symcapture_save", "growthPar.Rdata"))
 # growth <- stan_model("symcapture_models/Growth.stan")
-# fitGrowth <- sampling(growth, chains = 2, data = mdata, save_warmup = F,
-#                        control = list(adapt_delta = 0.9, max_treedepth = 12),
-#                        include = F, pars = c("DBH", "theta_raw", "thetai_raw", "sigmaR_raw"))
-# save(mdata, fitGrowth, file = file.path("symcapture_save", "growthPar.Rdata"))
+fitGrowth <- sampling(growth, chains = 2, data = mdata, save_warmup = F,
+                       control = list(adapt_delta = 0.99, max_treedepth = 12),
+                       include = F, pars = c("DBH"))
+save(mdata, fitGrowth, file = file.path("symcapture_save", "growthPar.Rdata"))
 load(file.path("symcapture_save", 'growthPar.Rdata'))
-broom::tidyMCMC(fitGrowth, pars = c("theta", "sigmaP", "sigmaR", "sigma", "R2", "lp__"), 
-                droppars = NULL, rhat = T) %>% 
+broom::tidyMCMC(fitGrowth, pars = c("theta", "sigmaP", "sigmaR", "sigma", "lp__"), 
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   separate(term, c("parameter", "population", "ontogeny"), sep = "[:punct:]") %>% 
   mutate(ontogeny = ifelse(ontogeny == "", population, ontogeny)) %>% 
   mutate(population = ifelse(parameter != "theta", NA, population)) %>% 
@@ -119,44 +118,19 @@ broom::tidyMCMC(fitGrowth, pars = c("theta", "sigmaP", "sigmaR", "sigma", "R2", 
                             "lp" = "loglikelihood")) %>% 
   mutate_at(c("population", "ontogeny"), funs(ifelse(is.na(.), "", .))) %>% 
   arrange(ontogeny, parameter, population) %>% 
-  dplyr::select(ontogeny, parameter, population, estimate, std.error, rhat) %>% 
+  dplyr::select(ontogeny, parameter, population, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Summary table of the ontogenic growth model",
-        col.names = c("Ontogenetic parameter", "Parameter", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
-opts_chunk$set(eval = F)
-# mcmc_trace(fitGrowth)
+        col.names = c("Ontogenetic parameter", "Parameter", "Population", "Estimate", "$\\sigma$", "$\\hat{R}$", "$N_{eff}$"))
 ```
 
-```{r predgrowth, eval=F}
-pars <- as.data.frame(fitGrowth, pars = "thetai") %>% 
-  reshape2::melt(NULL) %>% 
-  group_by(variable) %>% 
-  summarise(l = quantile(value, 0.05), m = mean(value), u = quantile(value, 0.95)) %>% 
-  separate(variable, c("variable", "IndNum", "parameter"), convert = T) %>% 
-  dplyr::select(-variable) %>% 
-  mutate(parameter = recode(parameter, "1" = "Gmax", "2" = "Dopt", "3" = "Ks")) %>% 
-  left_join(dplyr::select(trees, IndNum, Ind))
-pred <- matrix(nrow = nrow(trees), ncol = 2017-1984+1)
-row.names(pred) <- trees$Ind
-colnames(pred) <- 1984:2017
-for(t in 1:(ncol(pred)-1)) {
-    pred[trees$Y0 == colnames(pred)[t],t] <- trees$DBH0[trees$Y0 == colnames(pred)[t]]
-    pred[,t+1] <- unlist(pred[,t] + pars[pars$parameter == "Gmax","m"]*
-      exp(-0.5*(log(pred[,t]/pars[pars$parameter == "Dopt","m"])/
-                  pars[pars$parameter == "Ks","m"])^2))
-}
-pred <- as.data.frame(pred) %>% 
-  rownames_to_column("Ind") %>% 
-  reshape2::melt(id.vars = "Ind", variable.name = "Year", value.name = "DBHp") %>% 
-  mutate(Year = as.numeric(as.character(Year)))
-trees0 %>% 
-  rename(Year = CensusYear, DBHo = DBH) %>% 
-  left_join(pred) %>% 
-  filter(Plot == 3) %>% 
-  # filter(Ind == sample(trees$Ind, 20)) %>% 
-  ggplot(aes(x = Year)) +
-  geom_point(aes(y = DBHo), alpha = 0.5) +
-  geom_line(aes(y = DBHp), col = "red", lwd = 1.2) +
-  facet_wrap(~ Ind, scales = "free_y")
+```{r}
+mcmc_trace(as.array(fitGrowth, 
+                    pars = c("theta", "sigmaP", "sigmaR", "sigma", "lp__")),
+           np = nuts_params(fitGrowth))
+as.data.frame(fitGrowth, pars = c("sigmaR", "sigma", "lp__")) %>%
+  dplyr::rename(sigmaR = "sigmaR[1]") %>% 
+  ggplot(aes(x= sigmaR, y = sigma, col = lp__)) + geom_point()
+opts_chunk$set(eval = F)
 ```
 
 ## Growth & Genotype

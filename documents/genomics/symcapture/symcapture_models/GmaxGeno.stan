@@ -30,7 +30,7 @@ transformed parameters {
       if(years[t] == Y0[i])
         DBH[i] = DBH0[i] ;
     }
-    DBH += exp(log(theta[pop,1]) + sigmaG*A*a + sigmaR*Gmaxi) .*
+    DBH += exp(log(theta[pop,1] + sigmaG*A*a) + sigmaR*Gmaxi) .*
       exp(-0.5* square(log(DBH ./ (100*theta[pop,2]))
       ./ theta[pop,3])) ;
   }
@@ -41,7 +41,7 @@ model {
   a ~ std_normal() ;
   Gmaxi ~ std_normal() ;
   for(p in 1:3) theta[,p] ~ lognormal(0, 1) ;
-  sigmaR ~ lognormal(0, 1) ;
   sigmaG ~ lognormal(0, 1) ;
+  sigmaR ~ lognormal(0, 1) ;
   sigma ~ lognormal(0, 1) ;
 }

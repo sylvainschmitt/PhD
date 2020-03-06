@@ -9,10 +9,8 @@ data {
   int<lower=1, upper=Y> pop[I] ; // gene pools
 }
 parameters {
-  matrix<lower=0>[P,3] theta ;
-  vector[I] Gmaxi ;
+  matrix<lower=0.01, upper=2>[P,3] theta ;
   real<lower=0> sigmaR ;
-  real<lower=0> sigma ;
 }
 transformed parameters {
   vector<lower=0>[I] DBH = rep_vector(1, I) ;
@@ -22,16 +20,13 @@ transformed parameters {
       if(years[t] == Y0[i])
         DBH[i] = DBH0[i] ;
     }
-    DBH += exp(log(theta[pop,1]) + sigmaR*Gmaxi) .*
-      exp(-0.5* square(log(DBH ./ (100*theta[pop,2]))
+    DBH += exp(-0.5* square(log(DBH ./ (100*theta[pop,2]))
       ./ theta[pop,3])) ;
   }
   DBH = DBH - DBH0 ;
 }
 model {
-  DBHtoday - DBH0 ~ lognormal(log(DBH), sigma) ;
-  Gmaxi ~ std_normal() ;
+  (DBHtoday - DBH0) ./ DBH ~ lognormal(log(theta[pop,1]), sigmaR) ;
   for(p in 1:3) theta[,p] ~ lognormal(0, 1) ;
-  sigmaR ~ normal(0, 1) ;
-  sigma ~ normal(0, 1) ;
+  sigmaR ~ lognormal(0, 1) ;
 }
