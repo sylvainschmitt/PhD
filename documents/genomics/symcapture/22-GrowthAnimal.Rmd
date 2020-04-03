@@ -12,15 +12,13 @@ library(rstan)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
-  cache = F, cache.lazy = F)
+  cache = T, cache.lazy = F)
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 load("./symcapture_save/Env2.Rdata")
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed
-  filter(Y0 < 2007) %>%
   dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday, N)
-pathCluster <- "~/Remotes/genotoul/work/PhD/documents/genomics/symcapture"
 ```
 
 # Growth & Animal models
@@ -52,57 +50,6 @@ kin.mat <- function(P = 3, Fam = 6){
   K <- 2*K
 }
 heatmap(kin.mat(3, 6))
-```
-
-```{r gkdata}
-gkdata <- function(
-  P = 3, # Nb pops
-  Fam = 6, # Nb family
-  Y = 33, # Nb years
-  Gmax = c(0.54, 0.53, 0.44),
-  Dopt = c(27, 31, 20)/100,
-  Ks = c(0.67, 0.73, 0.64),
-  sigmaR = c(0.4, 0.8, 0.4), 
-  sigmaG = c(0.2, 0.4, 0.2), 
-  sigma = 0.05
-){
-  K <- kin.mat(P, Fam)
-  Kdf <- kin.df(P, Fam)
-  I <- nrow(K)
-  Gmax <- Gmax[1:P]
-  Dopt <- Dopt[1:P]
-  Ks <- Ks[1:P]
-  years <- 1984:(1984+Y-1)
-  pop <- sample(1:P, I, replace = T)
-  Init <- sample_n(trees, I)
-  DBH0 <- Init$DBH0
-  Y0 <- Init$Y0
-  
-  Gmaxi <- exp(log(as.vector(t(chol(K)) %*% exp(log(Gmax[pop]) + sigmaG[1]*rnorm(I)))) +
-                 + sigmaR[1]*rnorm(I))
-  Dopti <- exp(log(as.vector(t(chol(K)) %*% exp(log(Dopt[pop]) + sigmaG[2]*rnorm(I)))) +
-                 + sigmaR[2]*rnorm(I))
-  Ksi <- exp(log(as.vector(t(chol(K)) %*% exp(log(Ks[pop]) + sigmaG[3]*rnorm(I)))) +
-               + sigmaR[3]*rnorm(I))
-  
-  DBH <- rep(NA, I)
-  for (t in 1:(Y-1)) {
-    for(i in 1:I){
-      if(years[t] == Y0[i]) 
-        DBH[i] <- DBH0[i] 
-    }
-    DBH <- DBH + Gmaxi * exp(-0.5*(log(DBH / (100*Dopti)) / Ksi)^2)
-  }
-  DBH <- DBH - DBH0
-  DBHtoday <- DBH0 + rlnorm(I, log(DBH), sdlog = sigma)
-  list(params = list(Gmax = Gmax, Dopt = Dopt, Ks = Ks, 
-                     sigmaR = sigmaR, sigmaG = sigmaG, sigma = sigma),
-       data = data.frame(ind = 1:I, pop = pop, 
-                         DBH0 = DBH0, Y0 = Y0, Y = Y, DBHtoday = DBHtoday),
-       mdata = list(I = I, Y = Y, P = P, years = years, DBH0 = DBH0,
-                    Y0 = Y0, DBHtoday = DBHtoday, pop = pop, K = K),
-       fun = gkdata)
-}
 ```
 
 ### Genotype
@@ -202,19 +149,34 @@ mcmc_trace(as.array(fitAnimal2, pars = c("mu", "sigmaG", "sigmaR"))) +
 We then used our own Kinship matrix to validate it's use and transformation. Specifically we used the kinship matrix built with `VCFTools` with coefficients between 0 and 0.5 and negative coefficients due to population structure. We set negative coefficient to 0 to not coufound with the population specific intercept. Then we multiplied the matrix by 2 to have a variance of 1. Finally, we used `Matrix::nearPD` function to find the closest matrix positive definite for Cholesky decomposition.
 
 ```{r kinship2, fig.cap="Prepared Kinship matrix for Symphonia individuals (no negative values, positive definite, and varying from 0 to 1."}
-path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
-fam <- read_delim(file.path(path, "gemma", "Gmax0", "paracou3pop.fam"), delim = " ",
-                  col_names = c("FID", "IID", "PAT", "MAT", "SEX", "PHENOTYPE"))
-inds <- unique(trees$IID)
-K <- read_tsv(file.path(path, "..", "variantCalling", "paracou", "out.relatedness2"))  %>% 
-  reshape2::dcast(INDV1 ~ INDV2, value.var = "RELATEDNESS_PHI") %>% 
-  column_to_rownames("INDV1") %>% 
-  as.matrix()
-K <- K[inds, inds]
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/variantCalling/"
+ids <- read_tsv(file.path(path, "growth", "plink2.king.id"))
+K <- read_tsv(file.path(path, "growth", "plink2.king"), col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K <- as.matrix(K)
 K[K < 0] <- 0
 K <- K*2
 K <- as.matrix(nearPD(K)$mat)
 heatmap(K)
+```
+
+```{r, eval=F}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/variantCalling/"
+ids <- read_tsv(file.path(path, "growth", "plink2.king.id"))
+K <- read_tsv(file.path(path, "growth", "plink2.king"), col_names = ids$IID) %>% 
+  as.data.frame() %>% 
+  mutate(IID1 = ids$IID) %>% 
+  reshape2::melt(id.vars = "IID1", variable.name = "IID2", value.name = "kinshipAll")
+ids1 <- read_tsv(file.path(path, "growth", "sp1.king.id"))
+K1 <- read_tsv(file.path(path, "growth", "sp1.king"), col_names = ids1$IID) %>% 
+  as.data.frame() %>% 
+  mutate(IID1 = ids1$IID) %>% 
+  reshape2::melt(id.vars = "IID1", variable.name = "IID2", value.name = "kinshipSp1")
+left_join(K, K1) %>% 
+  ggplot(aes(kinshipAll, kinshipSp1)) +
+  geom_point() +
+  geom_abline()
 ```
 
 ### Genotype
@@ -309,8 +271,48 @@ mcmc_trace(as.array(fitAnimal2, pars = c("mu", "sigmaG", "sigmaR"))) +
                                expected = c(p, sigmaG, sigmaR)))
 ```
 
-## Test Growth
+### Log - Population & Genotype
 
+$$y \sim \mathcal{logN}(A.a,\sigma_R)~|~a \sim \mathcal{logN}(log(\mu_p),\sigma_G)$$
+
+```{r pop3Data, fig.cap="Data used for the animal model with population effect."}
+# pop <- dplyr::select(trees, IID, pop) %>% unique() %>%
+#   mutate(popNum = as.numeric(as.factor(pop))) %>% dplyr::select(popNum) %>% unlist()
+# P <- max(pop)
+# sigmaP <- 0.5
+# sigmaG <- 0.3
+# sigmaR <- 0.2
+# N <- nrow(K)
+# p <- rlnorm(P, sd = sqrt(sigmaP))
+# a <- as.vector(t(chol(K)) %*% exp(log(p[pop]) + sigmaG*rnorm(N)))
+# y <- rlnorm(N, meanlog = log(a), sdlog = sigmaR)
+# animal3 <- stan_model("symcapture_models/AnimalLog.stan")
+# fitAnimal3 <- sampling(animal3, chains = 2, save_warmup = F,
+#                        data = list(N = N, Y = y, K = K, P = P, population = pop))
+# save(P, K, sigmaP, sigmaG, sigmaR, N, p, u, r, y, pop, fitAnimal3,
+#      file = file.path("symcapture_save", "animal3_real.Rdata"))
+load(file.path("symcapture_save", "animal3_real.Rdata"))
+```
+
+```{r pop3Table}
+broom::tidyMCMC(fitAnimal3, pars = c("mu", "sigmaG", "sigmaR", "Vp"), 
+                droppars = NULL, rhat = T) %>% 
+  mutate(expected = c(p, sigmaG, sigmaR, var(p))) %>% 
+  dplyr::select(term, estimate, std.error, expected, rhat) %>% 
+  kable(caption = "Animal model with population effects fitted versus expected values.",
+        col.names = c("Parameter", "Estimate", "Standard error", 
+                      "Expected", "$\\hat R$"))
+```
+
+```{r pop3Fig, fig.cap="Parameters for Animal model with population effects traceplot and expected value in red."}
+mcmc_trace(as.array(fitAnimal3, pars = c("mu", "sigmaG", "sigmaR", "Vp", "lp__"))) +
+    geom_hline(aes(yintercept = expected), col = "red", 
+             data = data.frame(parameter = c(paste0("mu[", 1:3, "]"), 
+                                             "sigmaG", "sigmaR", "Vp", "lp__"), 
+                               expected = c(p, sigmaG, sigmaR, var(p), NA)))
+```
+
+## Test Growth
 
 ```{r gdata}
 gdata <- function(
@@ -357,324 +359,140 @@ gdata <- function(
 pairs_stan <- function(chain, stan_model, pars) {
   energy <- as.matrix(sapply(get_sampler_params(stan_model, inc_warmup = F), 
                              function(x) x[,"energy__"]))
-  pars <- extract(stan_model, pars = pars, permuted = F)
+  pars <- rstan::extract(stan_model, pars = pars, permuted = F)
   df <- data.frame(energy[,chain], pars[,chain,])
   names(df)[1] <- "energy"
   GGally::ggpairs(df, title = paste0("Chain", chain), 
                   lower = list(continuous = GGally::wrap("points", alpha = 0.2)))                    
-}
+} 
 ```
 
-```{r gmaxdata, fig.cap="Data used for the individual growth model combined with population animal model."}
-# mdata <- gdata(I = 332, P = 1, Gmax = 0.54, sigmaR = c(0.5, 0, 0), sigma = 0.15)
-# save(mdata, file = file.path("symcapture_save", "gmaxData.Rdata"))
-load(file = file.path("symcapture_save", "gmaxData.Rdata"))
-# save(mdatabis, file = file.path("symcapture_save", "gmaxDataF.Rdata"))
-load(file = file.path("symcapture_save", "gmaxDataF.Rdata"))
-ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0)) + 
-  geom_point() + geom_abline() + 
-  xlab("DBH at recruitment") + ylab("DBH today") +
-  viridis::scale_color_viridis("Year of recruitment") +
-  coord_equal() +
-  ggtitle("Simulated data")
-ggplot(mdatabis$data, aes(x = DBH0, y = DBHtoday, col = Y0)) + 
-  geom_point() + geom_abline() + 
-  xlab("DBH at recruitment") + ylab("DBH today") +
-  viridis::scale_color_viridis("Year of recruitment") +
-  coord_equal() +
-  ggtitle("Simulated filtered data")
+```{r realdata}
 ggplot(trees, aes(x = DBH0, y = DBHtoday, col = Y0, shape = pop)) + 
   geom_point() + geom_abline() + 
   xlab("DBH at recruitment") + ylab("DBH today") +
   viridis::scale_color_viridis("Year of recruitment") +
   coord_equal() +
-  ggtitle("Real filtered data")
+  ggtitle("Real data")
 ```
 
-### Gmax 1 - $DBH_{today} - DBH_0$
+### Gmax
 
-$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( \\ log(\sum _{y=y_0} ^{y=today} e^{DBH_{y=y0,p,i} + log(Gmax_p) + \sigma^2_{R1}.Gmax_i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_p})}{Ks_p}]^2)), \sigma^2) \\ Gmax_i \sim \mathcal N(0, 1) $$
-
-```{r gamx1Tab}
-# gmax1 <- stan_model("./symcapture_models/Gmax.stan")
-# fitGmax1 <- sampling(gmax1, chains = 2, data = mdata$mdata, save_warmup = F,
-#                      control = list(adapt_delta = 0.99, max_treedepth = 12))
-# save(mdata, fitGmax1, file = file.path("symcapture_save", "gmax1.Rdata"))
-load(file = file.path("symcapture_save", "gmax1.Rdata"))
-broom::tidyMCMC(fitGmax1, pars = c("theta", "sigmaR", "sigma", "lp__"), 
-                         droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  mutate(expected = c(unlist(mdata$params)[c(1:4, 7)], NA)) %>% 
-  dplyr::select(term, estimate, std.error, expected, rhat, ess) %>% 
-  kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
-        col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$", "$N_{eff}$"))
+```{r gmaxdata, fig.height=10, fig.width=10}
+pars <- data.frame(sigmaR1 = rep(seq(from = 0.1, to = 1, length.out = 5), each = 5),
+                   sigma = rep(seq(from = 0.1, to = 1, length.out = 5), 5),
+                   sim = 1:25)
+# mdata <- mapply(function(sigmaR1, sigma) 
+#   gdata(I = 332, P = 1, Gmax = 0.54, sigmaR = c(sigmaR1, 0, 0), sigma = sigma),
+#   sigmaR1 = pars$sigmaR1, sigma = pars$sigma, SIMPLIFY = F)
+# names(mdata) <- paste0(pars$sigmaR1, "-", pars$sigma)
+# save(mdata, file = file.path("symcapture_save", "gmaxData.Rdata"))
+load(file = file.path("symcapture_save", "gmaxData.Rdata")) 
+lapply(mdata, function(x) x$data) %>% 
+  bind_rows(.id = "pars") %>% 
+  separate(pars, c("sigmaR1", "sigma"), "-", convert = T, remove = F) %>% 
+  ggplot() + 
+  geom_point(aes(x = DBH0, y = DBHtoday, col = Y0)) + 
+  geom_abline() + 
+  geom_text(aes(label = pars), x = 60, y = 20, size = 3) + 
+  xlab("DBH at recruitment") + ylab("DBH today") +
+  viridis::scale_color_viridis(guide = "none") +
+  facet_wrap(~ sigmaR1 + sigma, scales = "free") +
+  theme(strip.background = element_blank(), strip.text.x = element_blank()) 
 ```
 
-```{r gmax1Trace, fig.cap="Traceplot of model parameters and expected value in red."}
-mcmc_trace(as.array(fitGmax1, pars = c("theta", "sigmaR", "sigma", "lp__")),
-           np = nuts_params(fitGmax1)) + 
-  geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c(paste0("theta[1,", 1:3, "]"),
-                                             "sigmaR", "sigma", "lp__"),
-                               expected = c(unlist(mdata$params)[c(1:4,7)], NA)))
+$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( \\ log(\sum _{y=y_0} ^{y=today} e^{log(\theta1_p) + \sigma^2_{R1}.\theta1_i}. \\ exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta2_p})}{\theta3_p}]^2)), \sigma^2) \\ \theta1_i \sim \mathcal N(0, 1) $$
+
+```{bash fitGmaxCluster, eval=F, echo=T}
+for sim in $(seq 25) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript Gmax.R $sim" ; done > Gmax.sh
+sarray -J Gmax -o out/%j.Gmax.out -e out/%j.Gmax.err -t 36:00:00 --constraint=broadwell --cpus-per-task=2 --mail-type=BEGIN,END,FAIL Gmax.sh
 ```
 
-```{r gmax1Pairs, message=FALSE}
-pairs_stan(1, fitGmax1, c("theta", "sigmaR", "sigma"))
-```
-
-```{r gmax1Energy}
-mcmc_nuts_energy(nuts_params(fitGmax1))
-```
-
-```{r gmax1Sigma}
-as.data.frame(fitGmax1, c("sigmaR", "sigma", "lp__")) %>%
-  ggplot(aes(x= sigmaR, y = sigma, col = lp__)) + geom_point()
-```
-
-```{r gmax1Pred, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-   geom_vline(xintercept = mdata$data$DBH0, alpha = 0.1) +
-  stat_function(aes(col = "Expected"), fun = function(.x) 
-    mdata$params$Gmax*exp(-.5*(log(.x/(100*mdata$params$Dopt))/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    mean(as.array(fitGmax1, "theta[1,1]"))*
-      exp(-.5*(log(.x/(100*mean(as.array(fitGmax1, "theta[1,2]"))))
-               /mean(as.array(fitGmax1, "theta[1,3]")))^2))
-```
-
-```{r gmax1Pred2}
-as.data.frame(fitGmax1, c("DBH", "lp__")) %>% 
-  filter(lp__ ==  max(lp__)) %>% 
-  sample_n(1) %>% 
-  dplyr::select(-lp__) %>% 
-  reshape2::melt(NULL, value.name = "predicted") %>% 
-  mutate(DBH0 = mdata$data$DBH0, DBHtoday = mdata$data$DBHtoday) %>% 
-  mutate(observed = (DBHtoday - DBH0)) %>% 
-  ggplot(aes(x= observed, y = predicted)) + 
-  geom_abline(col = "lightgrey") +
-  geom_point(alpha = 0.3) +
-  ggtitle("Sum of growth (without DBH0)")
-```
-
-### Gmax 1bis - $DBH_{today} - DBH_0$
-
-$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( \\ log(\sum _{y=y_0} ^{y=today} e^{DBH_{y=y0,p,i} + log(Gmax_p) + \sigma^2_{R1}.Gmax_i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_p})}{Ks_p}]^2)), \sigma^2) \\ Gmax_i \sim \mathcal N(0, 1) $$
-
-```{r gamx1bisTab}
-# gmax1bis <- stan_model("./symcapture_models/Gmaxbis.stan")
-# fitGmax1bis <- sampling(gmax1bis, chains = 2, data = mdatabis$mdata, save_warmup = F,
-#                         control = list(adapt_delta = 0.99, max_treedepth = 12))
-# save(mdatabis, fitGmax1bis, file = file.path("symcapture_save", "gmax1bis.Rdata"))
-load(file = file.path("symcapture_save", "gmax1bis.Rdata"))
-broom::tidyMCMC(fitGmax1bis, pars = c("theta", "sigmaR", "sigma", "lp__"), 
+```{r gamxTab}
+fitsGmax <- list()
+sims <- c(1:25)
+for(sim in sims){
+  load(paste0("./symcapture_save/gmax/gmax", sim, ".Rdata"))
+  fitsGmax[[sim]] <- fit
+}
+broom::tidyMCMC(fitsGmax[[1]], pars = c("theta", "sigmaR", "sigma", "lp__"), 
                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  mutate(expected = c(unlist(mdatabis$params)[c(1:4, 7)], NA)) %>% 
+  mutate(expected = c(unlist(mdata[[1]]$params)[c(1:4, 7)], NA)) %>% 
   dplyr::select(term, estimate, std.error, expected, rhat, ess) %>% 
   kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
         col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$", "$N_{eff}$"))
+                      "Expected", "$\\hat R$", "$N_{eff}$")) 
 ```
 
-```{r gmax1bisTrace, fig.cap="Traceplot of model parameters and expected value in red."}
-mcmc_trace(as.array(fitGmax1bis, pars = c("theta", "sigmaR", "sigma", "lp__")),
-           np = nuts_params(fitGmax1bis)) + 
+```{r gmaxTraceSigma, fig.height=6, fig.width=10}
+cowplot::plot_grid(plotlist = lapply(sims, function(sim)
+  mcmc_trace(as.array(fitsGmax[[sim]], pars = c("sigmaR", "sigma"))) + 
+    geom_hline(aes(yintercept = expected), col = "red", 
+               data = data.frame(parameter = c("sigmaR", "sigma"),
+                                 expected = unlist(mdata[[sim]]$params)[c(4,7)])) +
+    theme(legend.position = "none") + ylim(0, 1.5)), labels = names(mdata))
+```
+
+```{r gmaxTrace, fig.cap="Traceplot of model parameters and expected value in red."}
+mcmc_trace(as.array(fitsGmax[[1]], pars = c("theta")),
+           np = nuts_params(fitsGmax[[1]])) + 
   geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c(paste0("theta[1,", 1:3, "]"),
-                                             "sigmaR", "sigma", "lp__"),
-                               expected = c(unlist(mdatabis$params)[c(1:4,7)], NA)))
+             data = data.frame(parameter = paste0("theta[1,", 1:3, "]"),
+                               expected = unlist(mdata[[1]]$params)[1:3]))
 ```
 
-```{r gmax1bisPairs, message=FALSE}
-pairs_stan(1, fitGmax1bis, c("theta", "sigmaR", "sigma"))
+```{r gmaxPairs, message=FALSE}
+pairs_stan(1, fitsGmax[[1]], c("theta", "sigmaR", "sigma"))
 ```
 
-```{r gmax1bisEnergy}
-mcmc_nuts_energy(nuts_params(fitGmax1bis))
+```{r gmaxEnergy}
+mcmc_nuts_energy(nuts_params(fitsGmax[[1]]))
 ```
 
-```{r gmax1bisSigma}
-as.data.frame(fitGmax1bis, c("sigmaR", "sigma", "lp__")) %>%
-  ggplot(aes(x= sigmaR, y = sigma, col = lp__)) + geom_point()
-```
-
-```{r gmax1bisPred, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-   geom_vline(xintercept = mdata$data$DBH0, alpha = 0.1) +
-  stat_function(aes(col = "Expected"), fun = function(.x) 
-    mdata$params$Gmax*exp(-.5*(log(.x/(100*mdata$params$Dopt))/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    mean(as.array(fitGmax1bis, "theta[1,1]"))*
-      exp(-.5*(log(.x/(100*mean(as.array(fitGmax1bis, "theta[1,2]"))))
-               /mean(as.array(fitGmax1bis, "theta[1,3]")))^2))
-```
-
-```{r gmax1bisPred2}
-as.data.frame(fitGmax1bis, c("DBH", "lp__")) %>% 
+```{r gmaxPred}
+as.data.frame(fitsGmax[[1]], c("DBH", "lp__")) %>% 
   filter(lp__ ==  max(lp__)) %>% 
   sample_n(1) %>% 
   dplyr::select(-lp__) %>% 
   reshape2::melt(NULL, value.name = "predicted") %>% 
-  mutate(DBH0 = mdatabis$data$DBH0, DBHtoday = mdatabis$data$DBHtoday) %>% 
+  mutate(DBH0 = mdata[[1]]$data$DBH0, 
+         DBHtoday = mdata[[1]]$data$DBHtoday) %>% 
   mutate(observed = (DBHtoday - DBH0)) %>% 
   ggplot(aes(x= observed, y = predicted)) + 
   geom_abline(col = "lightgrey") +
   geom_point(alpha = 0.3) +
   ggtitle("Sum of growth (without DBH0)")
 ```
-
-### Gmax 2 - $DBH_{today}$
-
-$$DBH_{y=today,p,i} \sim \mathcal{logN} ( \\ log(DBH_{y=y0,p,i} +\sum _{y=y_0} ^{y=today} e^{DBH_{y=y0,p,i} + log(Gmax_p) + \sigma^2_{R1}.Gmax_i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_p})}{Ks_p}]^2)), \sigma^2) \\ Gmax_i \sim \mathcal N(0, 1) $$
-
-```{r gamx2Tab}
-# gmax2 <- stan_model("./symcapture_models/Gmax2.stan")
-# fitGmax2 <- sampling(gmax2, chains = 2, data = mdata$mdata, save_warmup = F,
-#                      control = list(adapt_delta = 0.99, max_treedepth = 12))
-# save(mdata, fitGmax2, file = file.path("symcapture_save", "gmax2.Rdata"))
-load(file = file.path("symcapture_save", "gmax2.Rdata"))
-broom::tidyMCMC(fitGmax2, pars = c("theta", "sigmaR", "sigma", "lp__"), 
-                         droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  mutate(expected = c(unlist(mdata$params)[c(1:4, 7)], NA)) %>% 
-  dplyr::select(term, estimate, std.error, expected, rhat, ess) %>% 
-  kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
-        col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$", "$N_{eff}$"))
-```
-
-```{r gmax2Trace, fig.cap="Traceplot of model parameters and expected value in red."}
-mcmc_trace(as.array(fitGmax2, pars = c("theta", "sigmaR", "sigma", "lp__")),
-           np = nuts_params(fitGmax2)) + 
-  geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c(paste0("theta[1,", 1:3, "]"),
-                                             "sigmaR", "sigma", "lp__"),
-                               expected = c(unlist(mdata$params)[c(1:4,7)], NA)))
-```
-
-```{r gmax2Pairs, message=FALSE}
-pairs_stan(1, fitGmax2, c("theta", "sigmaR", "sigma"))
-```
-
-```{r gmax2Energy}
-mcmc_nuts_energy(nuts_params(fitGmax2))
-```
-
-```{r gmax2Sigma}
-as.data.frame(fitGmax2, c("sigmaR", "sigma", "lp__")) %>%
-  ggplot(aes(x= sigmaR, y = sigma, col = lp__)) + geom_point()
-```
-
-```{r gmax2Pred, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-   geom_vline(xintercept = mdata$data$DBH0, alpha = 0.1) +
-  stat_function(aes(col = "Expected"), fun = function(.x) 
-    mdata$params$Gmax*exp(-.5*(log(.x/(100*mdata$params$Dopt))/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    mean(as.array(fitGmax2, "theta[1,1]"))*
-      exp(-.5*(log(.x/(100*mean(as.array(fitGmax2, "theta[1,2]"))))
-               /mean(as.array(fitGmax2, "theta[1,3]")))^2))
-```
-
-```{r gmax2Pred2}
-as.data.frame(fitGmax2, c("DBH", "lp__")) %>% 
-  filter(lp__ ==  max(lp__)) %>% 
-  sample_n(1) %>% 
-  dplyr::select(-lp__) %>% 
-  reshape2::melt(NULL, value.name = "predicted") %>% 
-  mutate(DBH0 = mdata$data$DBH0, DBHtoday = mdata$data$DBHtoday) %>% 
-  mutate(predicted = predicted - DBH0) %>% 
-  mutate(observed = (DBHtoday - DBH0)) %>% 
-  ggplot(aes(x= observed, y = predicted)) + 
-  geom_abline(col = "lightgrey") +
-  geom_point(alpha = 0.3) +
-  ggtitle("Sum of growth (without DBH0)")
-```
-
-### Gmax 3 - $Gmax$
-
-$$\frac{DBH_{y=today,p,i} - DBH_{y=y0,p,i}}{\sum _{y=y_0} ^{y=today}exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_p})}{Ks_p}]^2)} \sim \mathcal{logN} (log(Gmax_p) , \sigma^2_R)$$
-
-```{r gamx3Tab}
-# gmax3 <- stan_model("./symcapture_models/Gmax3.stan")
-# fitGmax3 <- sampling(gmax3, chains = 2, data = mdata$mdata, save_warmup = F,
-#                      control = list(adapt_delta = 0.99, max_treedepth = 12))
-# save(mdata, fitGmax3, file = file.path("symcapture_save", "gmax3.Rdata"))
-load(file = file.path("symcapture_save", "gmax3.Rdata"))
-broom::tidyMCMC(fitGmax3, pars = c("theta", "sigmaR", "lp__"), 
-                         droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  mutate(expected = c(unlist(mdata$params)[c(1:4)], NA)) %>% 
-  dplyr::select(term, estimate, std.error, expected, rhat, ess) %>% 
-  kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
-        col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$", "$N_{eff}$"))
-```
-
-```{r gmax3Trace, fig.cap="Traceplot of model parameters and expected value in red."}
-mcmc_trace(as.array(fitGmax3, pars = c("theta", "sigmaR", "lp__")),
-           np = nuts_params(fitGmax3)) + 
-  geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c(paste0("theta[1,", 1:3, "]"),
-                                             "sigmaR", "lp__"),
-                               expected = c(unlist(mdata$params)[c(1:4)], NA)))
-```
-
-```{r gmax3Pairs, message=FALSE}
-pairs_stan(1, fitGmax3, c("theta", "sigmaR"))
-```
-
-```{r gmax3Energy}
-mcmc_nuts_energy(nuts_params(fitGmax3))
-```
-
-```{r gmax3Pred, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-   geom_vline(xintercept = mdata$data$DBH0, alpha = 0.1) +
-  stat_function(aes(col = "Expected"), fun = function(.x) 
-    mdata$params$Gmax*exp(-.5*(log(.x/(100*mdata$params$Dopt))/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    mean(as.array(fitGmax3, "theta[1,1]"))*
-      exp(-.5*(log(.x/(100*mean(as.array(fitGmax3, "theta[1,2]"))))
-               /mean(as.array(fitGmax3, "theta[1,3]")))^2))
-```
-
-```{r gmax3Pred2}
-as.data.frame(fitGmax3, c("DBH", "lp__")) %>% 
-  filter(lp__ ==  max(lp__)) %>% 
-  dplyr::select(-lp__) %>% 
-  reshape2::melt(NULL, value.name = "predicted") %>% 
-  mutate(DBH0 = mdata$data$DBH0, DBHtoday = mdata$data$DBHtoday) %>% 
-  mutate(observed = (DBHtoday - DBH0)) %>% 
-  mutate(predicted = predicted*mdata$params$Gmax) %>% 
-  ggplot(aes(x= observed, y = predicted)) + 
-  geom_abline(col = "lightgrey") +
-  geom_point(alpha = 0.3) +
-    ggtitle("Sum of growth (without DBH0)")
-opts_chunk$set(eval = F)
-```
-
-### Gmax - Comparisons
 
 ### Growth
 
-$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} (\\log(\sum _{y=y_0} ^{y=today} e^{log(Gmax_p) + \sigma^2_{R1}.Gmax_i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{e^{log(Dopt_p) + \sigma^2_{R2}.Dopt_i}})}{e^{log(Ks_p) + \sigma^2_{R3}.Ks_i}}]^2)), \sigma^2) \\ \mid \forall \theta \in [Gmax, Dopt,Ks], \theta_i \sim \mathcal N(0, 1) $$
-
-```{r growth1Data, fig.cap="Data used for the individual growth model combined with population animal model."}
-# mdata <- gdata(I = 372, P = 1, Gmax = 0.54, Dopt = 0.27, Ks = 0.65,
+```{r growthData}
+# mdata <- gdata(I = 371, P = 1, Gmax = 0.54, Dopt = 0.27, Ks = 0.65,
 #                sigmaR = c(0.3, 0.3, 0.3), sigma = 0.2)
-# growth1 <- stan_model("./symcapture_models/Growth.stan")
-# fitGrowth1 <- sampling(growth1, chains = 2, data = mdata$mdata, save_warmup = F,
-#                        include = F, pars = c("DBH", "thetai"))
-# save(mdata, fitGrowth1, file = file.path("symcapture_save", "growth.Rdata"))
-load(file = file.path("symcapture_save", "growth.Rdata"))
+# save(mdata, file = file.path("symcapture_save", "growthData.Rdata"))
+load(file = file.path("symcapture_save", "growthData.Rdata"))
 ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0)) + 
   geom_point() + geom_abline() + 
   xlab("DBH at recruitment") + ylab("DBH today") +
-  viridis::scale_color_viridis("Year of recruitment")
+  viridis::scale_color_viridis("Year of recruitment") 
+```
+
+$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} (\\log(\sum _{y=y_0} ^{y=today} e^{log(\theta1_p) + \sigma^2_{R1}.\theta1_i}.\\exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.e^{log(\theta2_p) + \sigma^2_{R2}.\theta2_i}})}{e^{log(\theta3_p) + \sigma^2_{R3}.\theta3_i}}]^2)), \sigma^2) \\ (\theta1_i,\theta2_i,\theta3_i) \sim \mathcal N^3(0, 1) $$
+
+```{bash fitGrowthCluster, eval=F}
+for chain in $(seq 4) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript Growth.R $chain" ; done > Growth.sh
+sarray -J GrowthT -o out/%j.GrowthT.out -e out/%j.GrowthT.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL Growth.sh
 ```
 
 ```{r growth1Tab}
-broom::tidyMCMC(fitGrowth1, pars = c("theta", "sigmaR", "sigma", "lp__"), 
-                         droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+fitGrowth <- list()
+for(chain in 1:4){
+  load(paste0("./symcapture_save/growth/growth", chain, ".Rdata"))
+  fitGrowth[[chain]] <- fit
+}
+fitGrowth <- sflist2stanfit(fitGrowth)
+broom::tidyMCMC(fitGrowth, pars = c("theta", "sigmaR", "sigma", "lp__"), 
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   mutate(expected = c(unlist(mdata$params), NA)) %>% 
   dplyr::select(term, estimate, std.error, expected, rhat, ess) %>% 
   kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
@@ -682,129 +500,313 @@ broom::tidyMCMC(fitGrowth1, pars = c("theta", "sigmaR", "sigma", "lp__"),
                       "Expected", "$\\hat R$", "$N_{eff}$"))
 ```
 
-```{r growth1Fig, fig.cap="Parameters for individual growth model combined with population animal model traceplot and expected value in red."}
-mcmc_trace(as.array(fitGrowth1, pars = c("theta", "sigmaR", "sigma", "lp__")),
-           np = nuts_params(fitGrowth1)) +
+```{r growthTrace, fig.cap="Traceplot of model parameters and expected value in red."}
+mcmc_trace(as.array(fitGrowth, pars = c("theta", "sigmaR", "sigma", "lp__")),
+           np = nuts_params(fitGrowth)) + 
   geom_hline(aes(yintercept = expected), col = "red", 
              data = data.frame(parameter = c(paste0("theta[1,", 1:3, "]"),
                                              paste0("sigmaR[", 1:3, "]"), "sigma", "lp__"), 
                                expected = c(unlist(mdata$params), NA)))
-# mcmc_pairs(as.array(fitGrowth1, pars = c("theta", "sigmaR", "sigma")),
-#            np = nuts_params(fitGrowth1))
 ```
 
-```{r growth1Fig2, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-  stat_function(aes(col = "Expected"), fun = function(.x) 
-    mdata$params$Gmax*exp(-.5*(log(.x/(100*mdata$params$Dopt))/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    median(as.array(fitGrowth1, "theta[1,1]"))*
-      exp(-.5*(log(.x/(100*median(as.array(fitGrowth1, "theta[1,2]"))))/median(as.array(fitGrowth1, "theta[1,3]")))^2))
+```{r growthPairs, message=FALSE}
+pairs_stan(1, fitGrowth, c("theta", "sigmaR", "sigma"))
+```
+
+```{r growthEnergy}
+mcmc_nuts_energy(nuts_params(fitGrowth))
+```
+
+```{r growthPred}
+as.data.frame(fitGrowth, c("DBH", "lp__")) %>% 
+  filter(lp__ ==  max(lp__)) %>% 
+  sample_n(1) %>% 
+  dplyr::select(-lp__) %>% 
+  reshape2::melt(NULL, value.name = "predicted") %>% 
+  mutate(DBH0 = mdata$data$DBH0, 
+         DBHtoday = mdata$data$DBHtoday) %>% 
+  mutate(observed = (DBHtoday - DBH0)) %>% 
+  ggplot(aes(x= observed, y = predicted)) + 
+  geom_abline(col = "lightgrey") +
+  geom_point(alpha = 0.3) +
+  ggtitle("Sum of growth (without DBH0)")
 ```
 
 ## Test Growth & Animal
 
+```{r gkdata}
+gkdata <- function(
+  P = 3, # Nb pops
+  Fam = 6, # Nb family
+  Y = 33, # Nb years
+  Gmax = c(0.54, 0.53, 0.44),
+  Dopt = c(27, 31, 20)/100,
+  Ks = c(0.67, 0.73, 0.64),
+  sigmaR = c(0.4, 0.8, 0.4), 
+  sigmaG = c(0.2, 0.4, 0.2), 
+  sigma = 0.05
+){
+  K <- kin.mat(P, Fam)
+  Kdf <- kin.df(P, Fam)
+  I <- nrow(K)
+  Gmax <- Gmax[1:P]
+  Dopt <- Dopt[1:P]
+  Ks <- Ks[1:P]
+  years <- 1984:(1984+Y-1)
+  pop <- sample(1:P, I, replace = T)
+  Init <- sample_n(trees, I)
+  DBH0 <- Init$DBH0
+  Y0 <- Init$Y0
+  
+  Gmaxi <- exp(log(as.vector(t(chol(K)) %*% exp(log(Gmax[pop]) + sigmaG[1]*rnorm(I)))) +
+                 + sigmaR[1]*rnorm(I))
+  Dopti <- exp(log(as.vector(t(chol(K)) %*% exp(log(Dopt[pop]) + sigmaG[2]*rnorm(I)))) +
+                 + sigmaR[2]*rnorm(I))
+  Ksi <- exp(log(as.vector(t(chol(K)) %*% exp(log(Ks[pop]) + sigmaG[3]*rnorm(I)))) +
+               + sigmaR[3]*rnorm(I))
+  
+  DBH <- rep(NA, I)
+  for (t in 1:(Y-1)) {
+    for(i in 1:I){
+      if(years[t] == Y0[i]) 
+        DBH[i] <- DBH0[i] 
+    }
+    DBH <- DBH + Gmaxi * exp(-0.5*(log(DBH / (100*Dopti)) / Ksi)^2)
+  }
+  DBH <- DBH - DBH0
+  DBHtoday <- DBH0 + rlnorm(I, log(DBH), sdlog = sigma)
+  list(params = list(Gmax = Gmax, Dopt = Dopt, Ks = Ks, 
+                     sigmaR = sigmaR, sigmaG = sigmaG, sigma = sigma),
+       data = data.frame(ind = 1:I, pop = pop, 
+                         DBH0 = DBH0, Y0 = Y0, Y = Y, DBHtoday = DBHtoday),
+       mdata = list(I = I, Y = Y, P = P, years = years, DBH0 = DBH0,
+                    Y0 = Y0, DBHtoday = DBHtoday, pop = pop, K = K),
+       fun = gkdata)
+}
+```
+
 ### Gmax & Genotype
 
-$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} ( \\ log(\sum _{y=y_0} ^{y=today} e^{log(Gmax_p) + \sigma^2_{G1}.A.a_i + \sigma^2_{R1}.Gmax_i}. \\ exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{Dopt_p})}{Ks_p}]^2)), \sigma^2) \\ (Gmax_i, a_i) \sim \mathcal N^2(0, 1) $$
-
-```{r gmaxgeno1Data, fig.cap="Data used for the individual growth and genotype model."}
-# mdata <- gkdata(Fam = 26, P = 1, Gmax = 0.65, Dopt = 0.27, Ks = 0.65,
-#                 sigmaR = c(0.5, 0, 0),
-#                 sigmaG = c(0.3, 0, 0),
-#                 sigma = 0.2)
-# gmaxgeno <- stan_model("./symcapture_models/GmaxGeno2.stan")
-# fitGmaxGeno1 <- sampling(gmaxgeno, data = mdata$mdata, save_warmup = F, chains = 2,
-#                          include = F, pars = c("DBH", "Gmaxi", "a"))
-# save(mdata, fitGmaxGeno1, file = file.path("symcapture_save", "gmaxgeno1.Rdata"))
-load(file = file.path("symcapture_save", "gmaxgeno1.Rdata"))
-ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0)) + 
-  geom_point() + geom_abline() + 
+```{r gmaxgenodata, fig.height=10, fig.width=10}
+pars <- data.frame(sigmaG = rep(seq(from = 0.1, to = 1, length.out = 5), each = 5),
+                   sigmaR = rep(seq(from = 0.1, to = 1, length.out = 5), 5),
+                   sim = 1:25)
+# mdata <- mapply(function(sigmaG, sigmaR)
+#   gkdata(Fam = 26, P = 1, Gmax = 0.65, Dopt = 0.27, Ks = 0.65,
+#                 sigmaR = c(sigmaR, 0, 0), sigmaG = c(sigmaG, 0, 0), sigma = 0.2),
+#   sigmaG = pars$sigmaG, sigmaR = pars$sigmaR, SIMPLIFY = F)
+# names(mdata) <- paste0(pars$sigmaG, "-", pars$sigmaR)
+# save(mdata, file = file.path("symcapture_save", "gmaxgeno1Data.Rdata"))
+load(file = file.path("symcapture_save", "gmaxgeno1Data.Rdata")) 
+lapply(mdata, function(x) x$data) %>% 
+  bind_rows(.id = "pars") %>% 
+  separate(pars, c("sigmaG", "sigmaR"), "-", convert = T, remove = F) %>% 
+  ggplot() + 
+  geom_point(aes(x = DBH0, y = DBHtoday, col = Y0)) + 
+  geom_abline() + 
+  geom_text(aes(label = pars), x = 60, y = 20, size = 3) + 
   xlab("DBH at recruitment") + ylab("DBH today") +
-  viridis::scale_color_viridis("Year of recruitment")
+  viridis::scale_color_viridis(guide = "none") +
+  facet_wrap(~ sigmaG + sigmaR, scales = "free") +
+  theme(strip.background = element_blank(), strip.text.x = element_blank()) 
+```
+
+$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} ( \\ log(\sum _{y=y_0} ^{y=today} e^{log(A.e^{log(\theta1_p)+ \sigma^2_{G1}.a1_i}) + \sigma^2_{R1}.\theta1_i}. \\ exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta2_p})}{\theta3_p}]^2)), \sigma^2) \\ (\theta1_i, a1_i) \sim \mathcal N^2(0, 1) \\ \begin{pmatrix} \theta2_p \\ \theta3_p \end{pmatrix} \sim \mathcal{logN}(\begin{pmatrix} \theta2 \\ \theta3 \end{pmatrix}, \begin{pmatrix} \sigma^2_{P2} \\ \sigma^2_{P3} \end{pmatrix})$$
+
+```{bash fitGmaxGeno1Cluster, eval=F, echo=T}
+for sim in $(seq 25) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript GmaxGeno.R $sim" ; done > GmaxGeno.sh
+sarray -J GmG -o out/%j.GmG.out -e out/%j.GmG.err -t 48:00:00 --constraint=broadwell --cpus-per-task=2 --mail-type=BEGIN,END,FAIL GmaxGeno.sh
 ```
 
 ```{r gmaxgeno1Tab}
-broom::tidyMCMC(fitGmaxGeno1, 
-                pars = c("theta", "sigmaR", "sigmaG", "sigma"),
-                droppars = NULL, ess = T, rhat = T) %>%
-  mutate(expected = unlist(mdata$params)[c(1:4,7,10)]) %>% 
+fitsGmaxGeno <- list()
+sims <- c(1:25)
+for(sim in sims){
+  load(paste0("./symcapture_save/gmaxgeno/gmaxgeno", sim, ".Rdata"))
+  fitsGmaxGeno[[sim]] <- fit
+}
+broom::tidyMCMC(fitsGmaxGeno[[1]], pars = c("thetap1", "theta2", "theta3",
+                                            "sigmaR", "sigmaG", "sigma"), 
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  mutate(expected = c(unlist(mdata[[1]]$params)[c(1:4, 7)], NA)) %>% 
   dplyr::select(term, estimate, std.error, expected, rhat, ess) %>% 
-  kable(caption = "Individual growth model fitted versus expected values.",
+  kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
         col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$", "$N_{eff}$"))
+                      "Expected", "$\\hat R$", "$N_{eff}$")) 
 ```
 
-```{r gmaxgeno1Fig, fig.cap="Parameters for individual growth model traceplot and expected value in red."}
-mcmc_trace(as.array(fitGmaxGeno1, 
-                    pars = c("theta", "sigmaR", "sigmaG", "sigma", "lp__"))) + 
+```{r gmaxgenoTraceSigma, fig.height=6, fig.width=10}
+cowplot::plot_grid(plotlist = lapply(sims, function(sim)
+  mcmc_trace(as.array(fitsGmaxGeno[[sim]], pars = c("sigmaG", "sigmaR"))) + 
+    geom_hline(aes(yintercept = expected), col = "red", 
+               data = data.frame(parameter = c("sigmaR", "sigmaG"),
+                                 expected = unlist(mdata[[sim]]$params)[c(4,7)])) +
+    theme(legend.position = "none") + ylim(0, 1.5)), labels = names(mdata))
+```
+
+```{r gmaxgenoTrace, fig.cap="Traceplot of model parameters and expected value in red."}
+mcmc_trace(as.array(fitsGmaxGeno[[1]], 
+                    pars = c("thetap1", "theta2", "theta3", "sigma", "lp__"))) + 
   geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c("theta[1,1]", "theta[1,2]", "theta[1,3]",
-                                             paste0("sigmaR"),
-                                             paste0("sigmaG"), "sigma", "lp__"), 
-                               expected = c(unlist(mdata$params)[c(1:4,7,10)], NA)))
-# mcmc_pairs(as.array(fitGmaxGeno1, pars = c("theta", "sigmaR", "sigmaG", "sigma")))
-mcmc_scatter(fitGmaxGeno1, pars = c("sigma", "lp__"))
-# shinystan::launch_shinystan(fitGmaxGeno1)
+             data = data.frame(parameter = c("thetap1[1]", "theta2", "theta3",
+                                             "sigma", "lp__"), 
+                               expected = c(unlist(mdata[[1]]$params)[c(1:3,10)], NA)))
 ```
 
-```{r gmaxgeno1Fig2, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-  geom_vline(xintercept = mdata$data$DBH0, alpha = 0.1) +
-  stat_function(aes(col = "Expected"), fun = function(.x)
-    mdata$params$Gmax*exp(-.5*(log(.x/(100*mdata$params$Dopt))/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    mean(as.array(fitGmaxGeno1, "theta[1,1]"))*
-      exp(-.5*(log(.x/(100*mean(as.array(fitGmaxGeno1, "theta[1,2]"))))/mean(as.array(fitGmaxGeno1, "theta[1,3]")))^2))
+```{r  gmaxgenoPairs, message=FALSE}
+pairs_stan(1, fitsGmaxGeno[[1]], c("thetap1", "theta2", "theta3", "sigmaR", "sigma"))
+```
+
+```{r gmaxgenoEnergy}
+mcmc_nuts_energy(nuts_params(fitsGmaxGeno[[1]]))
+```
+
+```{r gmaxgenoPred, eval=F}
+as.data.frame(fitsGmaxGeno[[1]], c("DBH", "lp__")) %>% 
+  filter(lp__ ==  max(lp__)) %>% 
+  sample_n(1) %>% 
+  dplyr::select(-lp__) %>% 
+  reshape2::melt(NULL, value.name = "predicted") %>% 
+  mutate(DBH0 = mdata[[1]]$data$DBH0, 
+         DBHtoday = mdata[[1]]$data$DBHtoday) %>% 
+  mutate(observed = (DBHtoday - DBH0)) %>% 
+  ggplot(aes(x= observed, y = predicted)) + 
+  geom_abline(col = "lightgrey") +
+  geom_point(alpha = 0.3) +
+  ggtitle("Sum of growth (without DBH0)")
 ```
 
 ### Growth & Genotype
 
-$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} (\\log(\sum _{y=y_0} ^{y=today} e^{log(Gmax_p) + \sigma^2_{G1}.A.a1_i + \sigma^2_{R1}.Gmax_i} \\ .exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{e^{log(Dopt_p) + \sigma^2_{G2}.A.a2_i + \sigma^2_{R2}.Dopt_i}})}{e^{log(Ks_p) + \sigma^2_{G3}.A.a3_i + \sigma^2_{R3}.Ks_i}}]^2)), \sigma^2) \\ (Gmax_i, Dopt_i,Ks_i,a1_i,a2_i,a3_i) \sim \mathcal N^6(0, 1) $$
-
-```{r growthgeno1Data, fig.cap="Data used for the individual growth and genotype model."}
-# mdata <- gkdata(Fam = 6, P = 1)
-# growthgeno <- stan_model("./symcapture_models/GrowthGenoLog.stan")
-# fitGrowthGeno <- sampling(growthgeno, chains = 2, data = mdata$mdata, save_warmup = F,
-#                           control = list(adapt_delta = 0.9, max_treedepth = 12),
-#                           include = F, pars = c("DBH", "theta_raw", "thetai_raw", "a_raw",
-#                                                 "sigmaR_raw", "sigmaG_raw", "thetai", "a"))
-# save(mdata, fitGrowthGeno, file = file.path("symcapture_save", "growthgeno1.Rdata")) 
-load(file = file.path("symcapture_save", "growthgeno1.Rdata"))
-ggplot(mdata$data, aes(x = DBH0, y = DBHtoday, col = Y0)) + 
-  geom_point() + geom_abline() + 
+```{r growthgenodata, fig.height=10, fig.width=10, eval=T}
+pars <- data.frame(sigmaR = rep(seq(from = 0.1, to = 1, length.out = 5), each = 5),
+                   sigmaG = rep(seq(from = 0.1, to = 1, length.out = 5), 5),
+                   sim = 1:25)
+pars <- sapply(1:3, function(i) 
+  rename_at(pars, c("sigmaR", "sigmaG"), funs(paste0(., i))), simplify = F) %>% 
+  bind_rows(.id = "theta") %>% 
+  mutate_at(vars(contains('sigmaR')), funs(ifelse(is.na(.), 0.4, .))) %>% 
+  mutate_at(vars(contains('sigmaG')), funs(ifelse(is.na(.), 0.3, .))) %>% 
+  mutate(theta = paste0("theta", theta)) %>% 
+  mutate(sim = paste0(theta, "-sim", sim)) %>% 
+  mutate(simNum = 1:nrow(.))
+# mdata <- mapply(function(sigmaR1, sigmaR2, sigmaR3,
+#                          sigmaG1, sigmaG2, sigmaG3)
+#   gkdata(Fam = 26, P = 1, Gmax = 0.65, Dopt = 0.27, Ks = 0.65,
+#         sigmaR = c(sigmaR1, sigmaR2, sigmaR3), 
+#         sigmaG = c(sigmaG1, sigmaG2, sigmaG3), 
+#         sigma = 0.2),
+#   sigmaR1 = pars$sigmaR1, sigmaR2 = pars$sigmaR2, sigmaR3 = pars$sigmaR3, 
+#   sigmaG1 = pars$sigmaG1, sigmaG2 = pars$sigmaG2, sigmaG3 = pars$sigmaG3, 
+#   SIMPLIFY = F)
+# names(mdata) <- pars$sim
+# save(mdata, file = file.path("symcapture_save", "growthgenoData.Rdata"))
+load(file = file.path("symcapture_save", "growthgenoData.Rdata")) 
+lapply(mdata, function(x) x$data) %>% 
+  bind_rows(.id = "sim") %>% 
+  left_join(pars) %>% 
+  ggplot() + 
+  geom_point(aes(x = DBH0, y = DBHtoday, col = Y0)) + 
+  geom_abline() + 
   xlab("DBH at recruitment") + ylab("DBH today") +
-  viridis::scale_color_viridis("Year of recruitment")
+  viridis::scale_color_viridis(guide = "none") +
+  facet_wrap(~ sim, scales = "free") +
+  theme(strip.text.x = element_text(size = 8)) 
 ```
 
-```{r growthgeno1Tab}
-broom::tidyMCMC(fitGrowthGeno, 
-                pars = c("theta", "sigmaR", "sigmaG", "sigma"),
-                droppars = NULL, rhat = T) %>%
-  mutate(expected = c(unlist(mdata$params))) %>% 
-  dplyr::select(term, estimate, std.error, expected, rhat) %>% 
-  kable(caption = "Individual growth model fitted versus expected values.",
-        col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$"))
+$$DBH_{y=today,p,i} - DBH_{y=y0,p,i} \sim \mathcal{logN} (\\log(\sum _{y=y_0} ^{y=today} e^{log(A.e^{log(\theta1_p)+ \sigma^2_{G1}.a1_i}) + \sigma^2_{R1}.\theta1_i}. \\ .exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.e^{log(A.e^{log(\theta2_p)+ \sigma^2_{G2}.a2_i}) + \sigma^2_{R2}.\theta2_i}})}{e^{log(A.e^{log(\theta3_p)+ \sigma^2_{G3}.a3_i}) + \sigma^2_{R3}.\theta3_i}}]^2)), \sigma^2) \\ (\theta1_i, \theta2_i,\theta3_i,a1_i,a2_i,a3_i) \sim \mathcal N^6(0, 1) $$
+
+```{bash fitGrowthGenoCluster, eval=F, echo=T}
+for sim in $(seq 75) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript GrowthGeno.R $sim" ; done > GrowthGeno.sh
+sarray -J GrG -o out/%j.GrG.out -e out/%j.GrG.err -t 48:00:00 --constraint=broadwell --cpus-per-task=2 --mail-type=BEGIN,END,FAIL GrowthGeno.sh
 ```
 
-```{r growthgeno1Fig, fig.cap="Parameters for individual growth model traceplot and expected value in red."}
-mcmc_trace(as.array(fitGrowthGeno, 
-                    pars = c("theta", "sigmaR", "sigmaG", "sigma"))) + 
-  geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c("theta[1,1]", "theta[1,2]", "theta[1,3]",
-                                             paste0("sigmaR[", 1:3, "]"),
-                                             paste0("sigmaG[", 1:3, "]"), "sigma"), 
-                               expected = c(unlist(mdata$params))))
-mcmc_pairs(as.array(fitGrowthGeno, pars = c("sigmaR", "sigma")))
+```{r growthgenoTab}
+fitsGrowthGeno <- list()
+sims <- c(1:75)
+for(sim in sims){
+  load(paste0("./symcapture_save/growthgeno/growthgeno", sim, ".Rdata"))
+  fitsGrowthGeno[[sim]] <- fit
+}
+names(fitsGrowthGeno) <- pars$sim
+fitsGrowthGeno <- fitsGrowthGeno[!unlist(lapply(fitsGrowthGeno, is.null))]
+fitsGrowthGeno <- fitsGrowthGeno[unlist(lapply(fitsGrowthGeno,
+                                             function(x) length(x@sim) != 0))]
+pars <- filter(pars, sim %in% names(fitsGrowthGeno))
+broom::tidyMCMC(fitsGrowthGeno[[1]], pars = c("theta", "sigmaR", "sigmaG", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>%
+  mutate(expected = c(unlist(mdata[[1]]$params)[c(1:10)], NA)) %>%
+  dplyr::select(term, estimate, std.error, expected, rhat, ess) %>%
+  kable(caption = "Individual growth model combined with population animal model fitted versus expected values.",
+        col.names = c("Parameter", "Estimate", "Standard error",
+                      "Expected", "$\\hat R$", "$N_{eff}$"))
 ```
 
-```{r growthgeno1Fig2, fig.cap="Obtained versus expected growth trajectories."}
-ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
-  geom_vline(xintercept = mdata$data$DBH0, alpha = 0.1) +
-  stat_function(aes(col = "Expected"), fun = function(.x) 
-    mdata$params$Gmax*exp(-.5*(log(.x/mdata$params$Dopt)/mdata$params$Ks)^2)) +
-  stat_function(aes(col = "Obtained"), fun = function(.x) 
-    mean(as.array(fitGrowthGeno, "theta[1,1]"))*
-      exp(-.5*(log(.x/mean(as.array(fitGrowthGeno, "theta[1,2]")))/mean(as.array(fitGrowthGeno, "theta[1,3]")))^2))
-``` 
+```{r growthgenoTraceSigma1, fig.height=6, fig.width=10}
+cowplot::plot_grid(plotlist = lapply(filter(pars, grepl("theta1", sim))$sim, 
+                                     function(sim)
+  mcmc_trace(as.array(fitsGrowthGeno[[sim]],
+                      pars = c("sigmaG[1]", "sigmaR[1]"))) + 
+    geom_hline(aes(yintercept = expected), col = "red", 
+               data = data.frame(parameter = c("sigmaR[1]", "sigmaG[1]"),
+                                 expected = unlist(mdata[[sim]]$params)[c(4,7)])) +
+    theme(legend.position = "none") + ylim(0, 1.5)), 
+  labels = filter(pars, grepl("theta1", sim))$sim)
+```
+
+```{r growthgenoTraceSigma2, fig.height=6, fig.width=10}
+cowplot::plot_grid(plotlist = lapply(filter(pars, grepl("theta2", sim))$sim, 
+                                     function(sim)
+  mcmc_trace(as.array(fitsGrowthGeno[[sim]],pars = c("sigmaR[2]", "sigmaG[2]"))) + 
+    geom_hline(aes(yintercept = expected), col = "red", 
+               data = data.frame(parameter = c("sigmaG[2]", "sigmaR[2]"),
+                                 expected = unlist(mdata[[sim]]$params)[c(5,8)])) +
+    theme(legend.position = "none") + ylim(0, 1.5)), 
+  labels = filter(pars, grepl("theta2", sim))$sim)
+```
+
+```{r growthgenoTraceSigma3, fig.height=6, fig.width=10}
+cowplot::plot_grid(plotlist = lapply(filter(pars, grepl("theta3", sim))$sim, 
+                                     function(sim)
+  mcmc_trace(as.array(fitsGrowthGeno[[sim]],pars = c("sigmaR[3]", "sigmaG[3]"))) + 
+    geom_hline(aes(yintercept = expected), col = "red", 
+               data = data.frame(parameter = c("sigmaG[3]", "sigmaR[3]"),
+                                 expected = unlist(mdata[[sim]]$params)[c(6,9)])) +
+    theme(legend.position = "none") + ylim(0, 1.5)), 
+  labels = filter(pars, grepl("theta3", sim))$sim)
+```
+
+
+```{r growthgenoTrace, fig.cap="Traceplot of model parameters and expected value in red."}
+mcmc_trace(as.array(fitsGrowthGeno[[1]], pars = c("theta")),
+           np = nuts_params(fitsGrowthGeno[[1]])) +
+  geom_hline(aes(yintercept = expected), col = "red",
+             data = data.frame(parameter = paste0("theta[1,", 1:3, "]"),
+                               expected = unlist(mdata[[1]]$params)[1:3]))
+```
+
+```{r growthgenoPairs, message=FALSE}
+pairs_stan(1, fitsGrowthGeno[[1]], c("theta", "sigmaR", "sigma"))
+```
+
+```{r growthgenoEnergy, fig.height=6, fig.width=10}
+cowplot::plot_grid(plotlist = lapply(pars$sim, function(sim)
+  mcmc_nuts_energy(nuts_params(fitsGrowthGeno[[sim]])) + 
+    theme(legend.position = "none") + xaxis_title(F)), 
+  labels = pars$sim)
+```
+
+```{r growthgenoPred}
+as.data.frame(fitsGrowthGeno[[1]], c("DBH", "lp__")) %>%
+  filter(lp__ ==  max(lp__)) %>%
+  sample_n(1) %>%
+  dplyr::select(-lp__) %>%
+  reshape2::melt(NULL, value.name = "predicted") %>%
+  mutate(DBH0 = mdata[[1]]$data$DBH0,
+         DBHtoday = mdata[[1]]$data$DBHtoday) %>%
+  mutate(observed = (DBHtoday - DBH0)) %>%
+  ggplot(aes(x= observed, y = predicted)) +
+  geom_abline(col = "lightgrey") +
+  geom_point(alpha = 0.3) +
+  ggtitle("Sum of growth (without DBH0)")
+```

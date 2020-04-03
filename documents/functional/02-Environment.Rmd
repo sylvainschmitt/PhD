@@ -62,6 +62,12 @@ paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
            Genus == "Symphonia" & CensusYear == 2015) %>%
   mutate(DBH = CircCorr/pi) %>% 
   collect()
+# traits %>% 
+#   group_by(idTree) %>%
+#   mutate(LMA = (1/SLA)*10^4) %>% 
+#   summarise(IIV = sd(LMA, na.rm = T)) %>% 
+#   ungroup() %>% 
+#   summarise(mean(IIV, na.rm = T))
 data <- left_join(traits, paracou) %>% 
   dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, CensusYear, Xutm, Yutm) %>%
   unique()

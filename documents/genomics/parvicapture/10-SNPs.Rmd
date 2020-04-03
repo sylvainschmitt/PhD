@@ -12,7 +12,7 @@ rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
-  cache = T, cache.lazy = F)
+  cache = T, cache.lazy = F, eval = F)
 path <- "../../../data/Eschweilera_Paracou"
 pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
 ```
@@ -225,7 +225,7 @@ read_delim(file.path(pathCluster, "Sequences", "merged", "filtered",
 
 ## Neutral vs functional
 
-```{bash neutral, eval=F, echo=T}
+```{bash neutralSNPs, eval=F, echo=T}
 cat filtered/parvicapture.biallelic.snp.filtered.bim | grep nuc > neutral.bim
 rm -r neutral
 mkdir neutral
@@ -254,7 +254,7 @@ g.pca <- read_delim(file.path(pathCluster, "Sequences", "merged", "neutral",
 plotly::ggplotly(g.pca)
 ```
 
-```{bash functional, eval=F, echo=T}
+```{bash functionalSNPs, eval=F, echo=T}
 cat filtered/parvicapture.biallelic.snp.filtered.bim | grep TRINITY > functional.bim
 rm -r functional
 mkdir functional

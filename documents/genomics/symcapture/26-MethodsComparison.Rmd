@@ -1,0 +1,276 @@
+```{r setup_methcomp, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+library(bayesplot)
+library(rstan)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+```
+
+# Methods comparisons
+
+```{r DataMetComp}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia") %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  filter(!(CodeMeas %in% c(4))) %>% 
+  collect()
+trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(trees) %>% 
+  left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop"))) %>% 
+  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
+            by = "Ind", suffix = c("", ".hybrid"))
+trees0 <- trees
+trees <- trees %>% 
+  group_by(Ind) %>% 
+  mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
+         DBHtoday = dplyr::last(DBH), N = n()) %>%  
+  ungroup() %>% 
+  dplyr::select(Ind, IID, pop, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday, N) %>% 
+  unique() %>% 
+  mutate(DBHtoday = ifelse(DBHtoday == DBH0, DBHtoday + 0.1, DBHtoday))
+trees <- trees %>% 
+  na.omit(pop) %>% # remove admixed
+  mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
+ids <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king.id"))
+K <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K <- as.matrix(K)
+K <- K[trees$IID, trees$IID]
+K[K < 0] <- 0
+K <- K*2
+K <- as.matrix(Matrix::nearPD(K)$mat)
+```
+
+## Data
+
+We used the model $Gmax1$ to estimate individual growth potential per population:
+
+$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( log(\sum _{y=y_0} ^{y=today} \theta1_i . exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{\theta2_p})}{\theta3_p}]^2)), \sigma^2) \\ \theta1_i \sim \mathcal{logN}(log(\theta1_p), \sigma^2_{R1}) \\ \begin{pmatrix} \theta2_p \\ \theta3_p \end{pmatrix} \sim \mathcal{logN}(\begin{pmatrix} \theta2 \\ \theta3 \end{pmatrix}, \begin{pmatrix} \sigma^2_{P2} \\ \sigma^2_{P3} \end{pmatrix})$$
+
+```{r gmax1ParTabMetComp}
+fitGmax1 <- list()
+for(sim in list.files("symcapture_save/gmax1Par", full.names = T)){
+  load(sim)
+  fitGmax1 <- c(fitGmax1, fit)
+}
+fitGmax1 <- sflist2stanfit(fitGmax1)
+Gmax <- as.data.frame(fitGmax1, "thetai1") %>%
+  summarise_all(median) %>%
+  reshape2::melt(NULL, value.name = "Gmax") %>%
+  separate(variable, c("theta", "IndNum"), convert = T) %>%
+  dplyr::select(-theta) %>%
+  left_join(trees)
+ggplot(Gmax, aes(Gmax)) +
+  geom_histogram() +
+  facet_wrap(~ pop, scales = "free")
+```
+
+## Hierarchical model
+
+$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( log(\sum _{y=y_0} ^{y=today} \theta1_i . exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{\theta2_p})}{\theta3_p}]^2)), \sigma^2) \\  \theta1_i \sim \mathcal{logN}(log(\theta1_p + a1_i), \sigma^2_{R1}) \\ a1_i \sim \mathcal{MVlogN}(0, \sigma^2_{G1}.K) \\ \begin{pmatrix} \theta2_p \\ \theta3_p \end{pmatrix} \sim \mathcal{logN}(\begin{pmatrix} \theta2 \\ \theta3 \end{pmatrix}, \begin{pmatrix} \sigma^2_{P2} \\ \sigma^2_{P3} \end{pmatrix})$$
+
+```{r HierarchicalTab}
+fitGmaxGeno1 <- list()
+for(sim in list.files("symcapture_save/gmaxgeno1Par", full.names = T)){
+  load(sim)
+  fitGmaxGeno1 <- c(fitGmaxGeno1, fit)
+}
+fitGmaxGeno1 <- sflist2stanfit(fitGmaxGeno1)
+broom::tidyMCMC(fitGmaxGeno1, c("thetap1", "Vp", "Vg", "Vr"), 
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Individual growth potential model.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$"))
+```
+
+```{r HierarchicalR2, fig.cap="Marginal and conditional $R^2$ for ontogenetic parameters."}
+mcmc_intervals_data(fitGmaxGeno1, regex_pars = c("R2")) %>% 
+  mutate(index = recode(parameter, 
+                        "R2m" = "Marginal", "R2c" = "Conditional")) %>%
+  ggplot(aes(x = index, xend = index)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  xlab("") + ylab(expression(R^2)) +
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r HierarchicalVar, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
+mcmc_intervals_data(fitGmaxGeno1, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+  mutate(variance = recode_factor(parameter, 
+                           "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "Gmax", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) 
+```
+
+## Animal lognormal
+
+$$Gmax_i \sim \mathcal{logN}(a,\sigma_R) \\ a \sim \mathcal{MVlogN_N}(Gmax_{Population},\sigma_GK)$$
+
+```{r AnLogTab, fig.cap="Genetic variance modelling for environmental variables."}
+# animal <- stan_model("./symcapture_models/AnimalLog.stan")
+# fit <- sampling(animal, chains = 2, 
+#                 data = list(N = nrow(Gmax),
+#                             P = length(unique(Gmax$pop)),
+#                             Y = Gmax$Gmax,
+#                             population = Gmax$popNum,
+#                             K = K), 
+#                 save_warmup = F, control = list(adapt_delta = 0.99))
+# save(fit, file = file.path("symcapture_save", 'gmaxkinLog.Rdata'))
+load(file.path("symcapture_save", 'gmaxkinLog.Rdata'))
+broom::tidyMCMC(fit, c("mu", "Vp", "Vg", "Vr"), 
+       droppars = NULL, rhat = T) %>% 
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(population = ifelse(is.na(population), "", population)) %>% 
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```
+
+```{r AnLogR2, fig.cap="Marginal and conditional $R^2$ for ontogenetic parameters."}
+mcmc_intervals_data(fit, regex_pars = c("R2")) %>% 
+  mutate(index = recode(parameter, 
+                        "R2m" = "Marginal", "R2c" = "Conditional")) %>%
+  ggplot(aes(x = index, xend = index)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  xlab("") + ylab(expression(R^2)) +
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r AnLogVar, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
+mcmc_intervals_data(fit, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+  mutate(variance = recode_factor(parameter, 
+                           "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "Gmax", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) 
+```
+
+## Animal homemade
+
+$$log(Gmax_i) \sim \mathcal{N}(a,\sigma_R) \\ a \sim \mathcal{MVN_N}(log(Gmax_{Population}),\sigma_GK)$$
+
+```{r AnHomTab, fig.cap="Genetic variance modelling for environmental variables."}
+# animal <- stan_model("./symcapture_models/Animal.stan")
+# fit <- sampling(animal, chains = 2,
+#                 data = list(N = nrow(Gmax),
+#                             P = length(unique(Gmax$pop)),
+#                             Y = log(Gmax$Gmax),
+#                             population = Gmax$popNum,
+#                             K = K),
+#                 save_warmup = F, control = list(adapt_delta = 0.99))
+# save(fit, file = file.path("symcapture_save", 'gmaxkinhom.Rdata'))
+load(file.path("symcapture_save", 'gmaxkinhom.Rdata'))
+broom::tidyMCMC(fit, c("mu", "sigmaP", "sigmaG", "sigmaR"), 
+       droppars = NULL, rhat = T) %>% 
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(population = ifelse(is.na(population), "", population)) %>% 
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```
+
+```{r AnHomR2, fig.cap="Marginal and conditional $R^2$ for ontogenetic parameters."}
+mcmc_intervals_data(fit, regex_pars = c("R2")) %>% 
+  mutate(index = recode(parameter, 
+                        "R2m" = "Marginal", "R2c" = "Conditional")) %>%
+  ggplot(aes(x = index, xend = index)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  xlab("") + ylab(expression(R^2)) +
+  scale_fill_discrete(guide = "none") +
+  scale_color_discrete(guide = "none")
+```
+
+```{r AnHomVar, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
+mcmc_intervals_data(fit, regex_pars = c("sigmaP", "sigmaG", "sigmaR")) %>% 
+  mutate(variance = recode_factor(parameter, 
+                           "sigmaP" = "Population", "sigmaG" = "Genotype",
+                           "sigmaR" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "Gmax", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) 
+```
+
+## Animal `brms`
+
+```{r AnBrmsTab, fig.cap="Genetic variance modelling for environmental variables."}
+# fit <- brms::brm(log(Gmax) ~ pop + (1|IID), data = Gmax,
+#                  family = "gaussian", cov_ranef = list(IID = K),
+#                  chains = 2, save_warmup = F, control = list(adapt_delta = 0.99))
+# save(fit, file = file.path("symcapture_save", 'gmaxkinBrms.Rdata'))
+load(file.path("symcapture_save", 'gmaxkinBrms.Rdata'))
+broom::tidyMCMC(fit$fit, pars = c("sd_IID__Intercept", "sigma"), 
+       droppars = NULL, rhat = T) %>% 
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Parameter",  "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```
+
+```{r AnBrmsVar, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
+mcmc_intervals_data(fit, regex_pars = c("sd_IID__Intercept", "sigma")) %>% 
+  dplyr::select(parameter, m) %>% 
+  mutate(parameter = as.character(parameter), m = m^2) %>% 
+  bind_rows(data.frame(parameter = "Vp", 
+                       m = var(c(-0.73, 0.04, -0.27)))) %>% 
+  mutate(variance = recode_factor(parameter,
+                                  "Vp" = "Population",
+                                  "sd_IID__Intercept" = "Genotype",
+                                  "sigma" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "Gmax", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) 
+```

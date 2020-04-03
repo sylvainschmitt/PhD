@@ -23,7 +23,7 @@ data <- read_delim(file.path(path, "symphonia_juv_fullsample_trinity500_k2rt_typ
   filter(Possible_sequencing_error != "True") %>% 
   filter(SNP_in_mutliple_assembled_genes != "True")
 count_SNP <- data %>% 
-  select(Is_in_CDS, Is_not_synonymous, Is_condition_specific) %>% 
+  dplyr::select(Is_in_CDS, Is_not_synonymous, Is_condition_specific) %>% 
   group_by(Is_in_CDS, Is_not_synonymous, Is_condition_specific) %>% 
   summarize(n = n()) %>% 
   ungroup() %>%
@@ -41,7 +41,7 @@ count_SNP <- data %>%
 rm(data) ; invisible(gc())
 count_SNP %>% 
   filter(type != "unpossible") %>%
-  select(type, n) %>% 
+  dplyr::select(type, n) %>% 
   sunburstR::sunburst(count = T)
 ```
 
@@ -113,7 +113,7 @@ data <- data %>%
 #                                alpha = 0.5)
 
 goe_gene <- data %>% 
-  select(gene_id, width, id, go_id) %>% 
+  dplyr::select(gene_id, width, id, go_id) %>% 
   unique() %>% 
   group_by(gene_id, id) %>% 
   summarize(n_go = n(), width = mean(width)) %>% 
@@ -124,8 +124,11 @@ goe_gene <- data %>%
   mutate(goe = paste("S.", goe))
 
 unsel <- data %>% 
-  filter(grepl("RNA", go_name) | grepl("ribo", go_name) | grepl("mito", go_name) | grepl("chloro", go_name)) %>% 
-  select(transcript_id, gene_id, go_name, width)
+  filter(grepl("RNA", go_name) | 
+           grepl("ribo", go_name) | 
+           grepl("mito", go_name) | 
+           grepl("chloro", go_name)) %>% 
+  dplyr:m:select(transcript_id, gene_id, go_name, width)
 
 rm(snp, transcript, OE, data) ; invisible(gc())
 ```

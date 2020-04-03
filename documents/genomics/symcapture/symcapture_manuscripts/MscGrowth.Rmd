@@ -1,13 +1,13 @@
 ---
-title: "Genetic adaptations to topography and competition are strong predictors of tree growth in a Neotropical complex"
+title: Genetic structure, competition and topography interplay in individual tree growth and species coexistence in a Neotropical species complex (**TIP**)
 date: '`r Sys.Date()`'
 output:
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
   bookdown::html_document2:
     number_sections: false  
     toc: true
     toc_float: yes
-  bookdown::word_document2:
-    reference_docx: ./template/template.docx
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -23,6 +23,9 @@ link-citations: yes
 ```{r config, message=FALSE, warning=FALSE, include=FALSE}
 rm(list = ls()); invisible(gc())
 library(knitr)
+library(tidyverse)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, 
                fig.height = 8, fig.width = 8,
                cache = T, cache.lazy = F)
@@ -70,7 +73,7 @@ key ;
 ## Study site
 
 The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. 
-The site was characterized by an average of 3041 mm annual rainfall and a mean air temperature of 25.71 °C. 
+The site was characterized by an average of 3,041 mm annual rainfall and a mean air temperature of 25.71 °C. 
 Old tropical forest with an exceptional richness (over 750 woody species) has developed among the succession of small hills of this area, rising to 10–40 m a.s.l. [@Gourlet-Fleury2004].
 The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986.
 
@@ -80,7 +83,7 @@ The site is made of 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which ha
 *Symphonia globulifera* L.f (Clusiaceae) was previoulsy recognized as composed of two morphotypes in French Guiana [@Sabatier1997], *S. globulifera sensu stricto* and *Symphonia sp.1*, occurring in sympatry but in differentiated habitats, with *S. globulifera* preferentially growing in valley bottoms and *S. sp1* preferentially exploiting a variety of drier habitats [@Allie2015; Schmitt et al., in prep]. 
 The genus *Symphonia* has been highlighted as a species complexe with low phylogenetic resolution and high levels of plastid DNA sharing among sister species [@baraloto_using_2012-1; @Caron2019; @Gonzalez2009; @Torroba-Balmori2017]. 
 In addition, outgroup were built with 13 individuals of *Symphonia globulifera* from Africa (Sao Tome, Gabon, Cameroun, Congo, Benin, Liberia, Ivory Coast, and Gana), 7 from South America (Brazil, Costa Rica and Panama), 2 *Symphonia nectarifera* from Madagascar, 2 *Symphonia urophylla* from Madagascar, 5 *Pentadesma butyracea* from Benin and Cameroun and 1 *Pentadesma grandifolia* from Cameroun.
-Leaves were collected from the 432 (402 + 30) individuals and desicated using silica gel. 
+Leaves were collected from the 432 (402 + 30) individuals and desicated using silica gel (Fig. \@ref(fig:map)). 
 
 ## Design of sequence capture 
 
@@ -92,35 +95,106 @@ In parrallel, we filtered transcripts from the 20 juvenile of *Symphonia globuli
 
 ## Genomic data production
 
-Genomic DNA was extracted from 5 mg of dried leaf tissue with a CTAB protocol described by @Doyle1987 and libraries were digested with 'Ultra II FS Enzyme Mix' (new England Biolabs Inc, MA, USA) for a target size of 150 bp  and prepared using the 'NEBNext Ultra II FS DNA Library Prep kit for Illumina'(new England Biolabs Inc, MA, USA).
+*Extraction*
 
-Libraries were amplified and tagged using 5 $\mu L$ of adaptor-ligated DNA together with 8.3 $\mu L$ of 'NEBNext Ultra II Q5 Master Mix' (new England Biolabs Inc, MA, USA), and 1.6 $\mu L$ of diluted Index Primer i5 and 1.6 $\mu L$ of diluted Index Primer i7 from 'NEBNext Multiplex Oligos for Illumina (Dual Index Primers Set 1 and Set 2)' (new England Biolabs Inc, MA, USA). Initial denaturation (98°C for 30 s) was followed by 8 cycles (98°C for 10 s and 65°C for 1 min 30 s) and a final extension (65°C for 5 min).
- 
- before pooling in equimolar amounts
- 
- to be captured by hybridization with the 20,000 80-mer designed probes sequences using myBaits Custom 1-20K (Arbor Biosciences, MI, USA). 
+Genomic DNA was extracted from 5 mg of dried leaf tissue with a CTAB protocol described by @Doyle1987 and libraries were digested with 'Ultra II FS Enzyme Mix' (new England Biolabs Inc, MA, USA) for a target size of 150 bp, and prepared using the 'NEBNext Ultra II FS DNA Library Prep kit for Illumina'(new England Biolabs Inc, MA, USA).
 
+*Libraries preparation and sequencing*
 
+Libraries were amplified and tagged using 5 $\mu L$ of adaptor-ligated DNA together with 8.3 $\mu L$ of 'NEBNext Ultra II Q5 Master Mix' (new England Biolabs Inc, MA, USA), and 1.6 $\mu L$ of diluted Index Primer i5 and 1.6 $\mu L$ of diluted Index Primer i7 from 'NEBNext Multiplex Oligos for Illumina (Dual Index Primers Set 1 and Set 2)' (new England Biolabs Inc, MA, USA). Initial denaturation (98°C for 30 s) was followed by 8 cycles (98°C for 10 s and 65°C for 1 min 30 s) and a final extension (65°C for 5 min). Libraries were pooled in 4 multiplex in equimolar amounts and captured by hybridization for 80 hours with the 20,000 80-mer designed probes sequences using myBaits Custom 1-20K (Arbor Biosciences, MI, USA) and corresponding myBaits V4 protocol. Multiplex were further pooled in 2 multiplex and sequencing was performed on a Illumina HiSeq 4000 using paird-end and targetting 2x150bp reads.
 
-A set of 20,000 -mer probes sequences targeting XX distinct loci 
+*SNP call and filtering*
+
+Quality from raw reads were assessed with `multiqc` [@Ewels2016] before trimming with `trimmomatic` [@Andrews2010] keeping only pair end  (`PE`), removing all adaptors (`ILLUMINACLIP`) of our protocol (`TruSeq3-PE`) with a maximum of 2 mismatches allowed, a threshold for clipping palindrome of 30, a threshold for simple clip of 10, and a minimum adaptor length of 2. We trimmed sequences on phred score with a minimum of 15 in sliding window of 4 without any specific trimming of read beginning nor end. Due to a high level of reads mapping off-target (ca 70%), we mapped trimmed reads on the hybrid reference built for target design of sequence capture using `bwa` [@Li2009], `picard` [@BroadInstitute2018], `samtools` [@Li2009a] and `bedtools` [@Quinlan2010]. Variants were called by individual using `HaplotypeCaller` against the reference , aggregated using `GenomicsDBImport` and jointly-genotyped using `GenotypeGVCFs` all in `GATK4` software [@Freksa1993]. The 26,813,513 raw variants were filtered using `GATK4` keeping only 15,531,866 biallelic SNPs over 432 individuals. SNPs were further filtered with a minimum quality score of 30, a minimum quality by depth of 2, a maximum Fisher strand bias of 60 and minimum strand odd ratio of 3 using `GATK4` [@Freksa1993]. Finally individuals and SNPs were filtered for missing data with a maximum of 95% of missing data per individual and a maximum of 15% of missing data per SNP using `plink2` [@Chen2019], resulting in 454,262 biallelic filtered snps for 406 individuals.
+
+*Annotation*
+
+We used genomic [@Olsson2017; Scotti et al., in prep] and transciptomic data [Tysklind et al., in prep] previous alignments (see design of sequence capture) to calssify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchiking SNPs (close to a transcript or within an intron), and (iii) functional SNP (within an exon). We used transcript annotation of gene ontology to further annotate called SNPs. Finally, we used long ORFs detection with `TransDecoder` [@Haas2013], their alignment with `blastp` on the `Uniprot` database [@Bateman2019; @Bias1991] and with `hmmscan` on `Pfam` database [@Johnson2010; El-Gebali2019] in addition to called SNPs position into `SNPdat` [@Doran2013] to assess SNP synonymy.
+
+*SNP filtering for quantitative genomics*
+
+This first dataset was used for population genetic and demography analyses. But a second dataset was built for quantitative genomics. Indeed, minor alleles and linkage desequilibrium could bias the number of fixed loci increasing false-positives upward in genomic scans [@Foll2008]. We chose to filter variants with a minor allele frequency above 5% (at least 18 individuals have the minor allele in the population) and with linkage desequilibirum $r^2<0.99$. Moreover, we removed admixed individuals from genomic scans (see population genetic analyses for admixed individuals defitions). It reduced the dataset to 70,737 SNPs over 372 individuals.
 
 ## Analysis
 
-### Q1: Admixture, pi, ...
+### Population
 
-### Q2: Genotype by Environment association (no ANCR)
+We investigated first population structure using `admixture` [@Alexander2011], with 10 repetitions of K genetic groups varying from 1 to 10. We assessed genetic clustering in K groups by cross validation to determine the most probable number of *Symphonia* gene pools in Paracou. Admixed individuals with a gene pools membership below 90% have been removed from subsequent analyses. Pure-bred individuals and corresponding gene pools are further used in subsequent analyses.
 
-### Q3: Main focus on the growth model describing correctly and friendly the “hierarchy of models” 
+We then assessed identified population demography. We measured population diversity metrics with `VCFTools` [@Danecek2011]: (i) the nucleotidic diversity $\pi$, (ii) the ratio of non-synonymous over synonymous SNPs $\frac{\pi_a}{\pi_s}$, (iii) pairwise fixation index $F_{ST}$, and (iv) Tajima's $D$. All metrics have been assessed per population and SNP annotation (anonymous, putatively hitchhiking, and functional) on a sliding window of 100 bp. Differences between populations have been assessed by analysis of variance. We built per population and pairwise 2D site frequjency spectrum (SFS) to investigate demography patterns. And we used `treemix`  [@Pickrell2012] on a subset of individuals per Paracou population, with the highest coefficient of membership to the genepool, and outgroups (pooled as Madagascar, Africa, Sao Tome, Brazil and Costa Rica) to built a pantropical phylogeny of our different populations per SNP annotation. We allowed from 0 to 10 migration events and assessed the most probable number of migration events with loglikelihood.
 
-### Outlier tests, GO-terms, major effects, polygenicity
+Finally, we used `bayescan` [@Foll2008] to detect fixed SNPs between the different populations. We used the SNP dataset filtered for quantitative genomics (linkage desquilibrium over 0.99 and minor allele frequency above 0.05), that will be used in all subsequent analyses. We checked $F_{ST}$ convergence toward the expected values obtained with `VCFTools` [@Danecek2011]. And we considered SNPs as significant outliers with a q-value, p-value corrected for multiple testing by false discovery rate, below 0.05. We further tested functional SNP for ernrichment in gene ontology with the R package `clusterProfiler` [@DeLaCruz2014] using transcript annotation.
+
+### Environments
+
+We further investigated environmental genomics using environmental association analysis [@Rellstab2015a], with general linear models used in genome wide association studies (GWAS). Besides counterintuitive, the environment is here used as the response variable and previously identified genetic structure (populations) and relatedness (kinship matrix) as explanatory variables. We thus assumed that environmental factors are strongly correlated to the individual heritable phenotypes allowing its survival to at least 10-cm DBH [e.g. @Eckert2010]. 
+
+We used two uncorrelated variables (Pearson'$r=-0.16$). The topographic wetness index (TWI) was selected among several abiotic descriptors as a proxy of water accumulation. Waterlogging and topography have been highlighted as crucial for forest dynamics [@ferry2010higher] and species habitat preference [@Allie2015] at the Paracou study site. TWI was derived from a 1-m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign done in 2015. The neighborhood crowding index [NCI; @Uriarte2004] integrated over time was used as biotic descriptor. The Neighborhood Crowding Index $NCI_i$ from tree individual $i$ was calculated with following formula:
+
+$$NCI_i = (\int_{t_0} ^{2015} \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}.dt).\frac1{\Delta t}$$
+
+with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface. The decrease of neighbors $DBH$ effect with distance was set to 0.25 here to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters. $NCI$ represents biotic asymmetric competition through tree neighborhood over time.
+
+We used individual population assignment and between individual kinship in a a lognormal Animal model [@Wilson2010] to estimate genetic variance associated to individuals leaving in a given environment. Individual population assignment was derived from the previous analysis of population genomics with assigned population being one of the genepools identified by admixture removing admixed individuals. Individual kinship was inferred with KING [@Manichaikul2010] as the method has been proven to be robust to the identified population structure. Negative values were set to null as they are cofounding with population structure and the matrix was further transformed as positive definite using `nearPD`  function from the R package `Matrix` for further Cholesky decomposition. The environment $y_{p,i}$ where the individual $i$ in population $p$ grow was inferred with a lognormal distribution with following formula:
+
+$$y_{p,i} \sim \mathcal{logN}(log(u_{i}),\sigma^2_R) \\ u_{i} \sim \mathcal{MVlogN_N}(log(\mu_{p}),\sigma^2_G.K)$$
+
+where $u_i$ is the individual $i$ breeding value and $\sigma^2_R$ the residual variance. Individual breeding values $u_i$ are defined following a multivariate lognormal law $\mathcal{MVlogN}$ with parameters $log(\mu_p)$, the logarithm of the mean environment of population $p$, and the covariance matrix defined as the product of the kinshp matrix $K$ with estimated individual genotypic variation $\sigma^2_G$. We used lognormal and associated multivariate lognormal distributions instead of classical normal ones because the two studied variables are positive and lognormality better represented their distribution and our expectations about the distribution of breeding values [@LIMPERT2001; @Wan1998]. To estimate back variances on a latent normal-scale, we backed transformed population fixed effect, genetic additive values and residuals with logarithm, and used them to compute conditionnal and marginal $R^2$ [@Nakagawa2013]. A Bayesian method was used to infer parameters of all models using `stan` language [@Carpenter2017, see supplementary material SX] and `rstan` package [@Team2018] in the R environment [@RCoreTeam2020] using No-U-Turn Sampler [NUTS, @Hoffman2014] algorithm, as it performs better for estimating genetic parameters and breding values [@Nishio2019].
+
+Finally, we scanned the dataset of 70k SNPs defined for quantitative genomics for association to environmental variables controlling for population structure with the untransformed Kinship matrix using `GEMMA` [Genome-wide Efficient Mixed Model Analysis, @Zhou2012a]. We infered both major effect SNPs with linear mixed models (LMM) and polygenic signals with bayesian sparse linear model [BSLMM, @Zhou2013]. Significance of SNPs assessed with Wald-test in individual LMM, and the obtained $p-value$ was further corrected by false discovery rate defining $q-values$, resulting in SNPs with $q-values < 0.05$ further considered as true outliers. BSLMM results were interpreted only if hyperparameters [proportion of explained variance $PVE$, porportion of genetic variance $PGE$, proportion $\pi$ and number $n_\gamma$ of SNPs in the polygenic signal, see @Zhou2013] converged over the million of iterations. 
+If LMM and BLSMM identified functional SNPS as outliers, they were tested for ernrichment in gene ontology with the R package `clusterProfiler` [@DeLaCruz2014] using transcript annotation.
+
+### Growth
+
+Finally, we investigated joint effect of ecological and evolutionary processes on individual growth, using both genetic structure (populations) and relatedness (kinship matrix) and abiotic (topographic wetness index) and biotic (neighbor crowding index) environmental variables. The individual growth of individual $i$ in population $p$ between individual recruitment $y_0$ and 2017 correspond to the difference of DBH between the two years and is defined with a hierarchical model in lognormal distribution as follow:
+
+$$DBH_{y=2017,p,i}-DBH_{y=y_0,p,i} \sim \mathcal{logN}(log[\sum_{y=y_0}^{y=2017}AGR(DBH_{y,p,i})],\sigma²)$$
+
+where the difference of $DBH_{y=2017,p,i}-DBH_{y=y_0,p,i}$ is defined with a lognormal distribution of parameters log of the sum of annual growth rates $AGR$ for corresponding $DBH$ during the periode $y_0-2017$ and residual variation $\sigma^2$ on the log-scale. The annual growth rates $AGR$ for individual $i$ in population $p$ at year $y$ with corresponding diameter $DBH_{y,p,i}$ is further defined following a Gompertz model with associated bell-shaped curve [@Gompertz1825], already identified as the best model for growth trajectories of Paracou trees [@Herault2011]:
+
+$$AGR(DBH_{y,p,i})=Gmax_i.exp(-\frac12[\frac{log\frac{DBH_{y,p,i}}{Dopt_p}}{Ks_p}]^2)$$
+
+where $Gmax_i$ represents the individual $i$ maximum growth potential (maximal AGR during individual life), $Dopt_p$ represents the population optimal diameter at wich the individual reach its maximum growth potential, and $Ks_p$ the population kurtosis defining the width of the bell-shaped growth trajectory from the population [see figure 1 in @Herault2011]. To ease model inference, and as we were not specifically interested in their values, population optimal diameter $Dopt_p$ and kurtosis $Ks_p$ were defined as random population effect centered on a *Symphonia* global $Dopt$ and $Ks$ with corresponding variances $\sigma^2_{P,Dopt}$ and $\sigma^2_{P,Ks}$. Individual $i$ maximum growth potential $Gmax_i$ was further defined in a nested Animal model with a lognormal distribution as follow:
+
+$$Gmax_i \sim \mathcal{logN}(log(u_i + \beta_{TWI}.TWI+\beta_{NCI}.NCI), \sigma^2_{R,Gmax}) \\ u_i \sim \mathcal{MVlogN}(log(Gmax_p), \sigma^2_{G,Gmax}.K)$$
+where $u_i$ is the individual $i$ breeding value; $\beta_{TWI}$ and $\beta_{NCI}$ are the effects on $Gmax_i$ of the TWI and NCI respectively; and $\sigma^2_{R,Gmax}$ is the residual variance of $Gmax_i$ on the log-scale. Individual breeding values $u_i$ are defined following a multivariate lognormal law $\mathcal{MVlogN}$ with parameters $log(Gmax_p)$, the logarithm of the mean growth potential of population $p$, and the covariance matrix defined as the product of the kinshp matrix $K$ with estimated individual genotypic variation $\sigma^2_{G,Gmax}$. $\beta_{TWI}$ and $\beta_{NCI}$ are fixed effects assumed constant across population (besides tested between population, see supplementary material SX). We used lognormal distribution for the same reasons presented in the environmental genomics paragraph [@LIMPERT2001; @Wan1998]. To estimate back variances on a latent normal-scale, we also backed transformed population fixed effect, genetic additive values, TWI and NCI fixed effects, and residuals with logarithm, and used them to compute conditionnal and marginal $R^2$ [@Nakagawa2013]. And we similarly used Bayesian inference with No-U-Turn Sampler [NUTS, @Hoffman2014] using `stan` language [@Carpenter2017, see supplementary material SX] and previously introduced tools. As the geometry of the model was complex and resulted in low Bayesian fraction of missing information (BFMI), we tested the model with simulated data corresponding in 25 simulations were $\sigma^2_{R,Gmax}$ and $\sigma^2_{G,Gmax}$ varied from 0.1 to 1, which validated the robustness of the complex hierarchic model for a number of observation corresponding to our dataset (see supplementary material SX).
+
+Finally, we also used linear mixed models [LMM, @Zhou2012a], bayesian sparse linear model [BSLMM, @Zhou2013], and test of gene-ontology enrichment [@DeLaCruz2014] to scan the dataset of 70k SNPs defined for quantitative genomics for association to individual growth potential controlling for population structure with the untransformed Kinship matrix (see environmental genomics).
+
+<!-- * Gienapp et al. 2017 Genomic quantitative genetics to study evolution in the wild -->
+<!-- * Nichio and Arakawa 2019 Performance of Hamiltonian Monte Carlo and No-U-Turn Sampler for estimating genetic parameters and breeding values -->
+<!-- * Muff, S., Niskanen, A. K., Saatoglu, D., Keller, L. F., & Jensen, H. (2019). Animal models with group-specific additive genetic variances: extending genetic group models. Genetics Selection Evolution, 1–16. https://doi.org/10.1186/s12711-019-0449-7 -->
+<!-- * Bonnet, T., Morrissey, M. B., & Kruuk, L. E. B. (2019). Estimation of Genetic Variance in Fitness, and Inference of Adaptation, When Fitness Follows a Log-Normal Distribution. Journal of Heredity, 110(4), 393–395. https://doi.org/10.1093/jhered/esz018 -->
+<!-- * Wan, Y., De Andrade, M., Yu, L., Cohen, J., & Amos, G. I. (1998). Genetic linkage analysis using lognormal variance components. Annals of Human Genetics, 62(6), 521–530. https://doi.org/10.1017/S0003480099007228 -->
+<!-- * Wilson, A. J., Réale, D., Clements, M. N., Morrissey, M. M., Postma, E., Walling, C. A., … Nussey, D. H. (2010). An ecologist’s guide to the animal model. Journal of Animal Ecology, 79(1), 13–26. https://doi.org/10.1111/j.1365-2656.2009.01639.x -->
 
 # Results
+
+### Population
+
+Although *Symphonia globulifera* was previoulsy recognized as composed of two morphotypes in French Guiana [@Sabatier1997], cross validation of admixture analyses for different level of clustering K advocated for 3 different gene-pools (Fig. \@ref(fig:admixture), see supplementary material SX). The three gene-pools corresponded to the previously identified two morphotypes (70-80% of match) *S. globulifera* and *S. sp1*, with *S. globulifera* morphotype itself structured in two gene-pools. The two gene-pools composing the *S. globulifera* morphotype corresponded in fact to two locally defined submorphotypes called *S. globulifera type Paracou* and *S. globulifera type Régina* (Saint-Omer Cazal **and Pascal Petronneli ?**, pers. com.). In order to investigate gene-pools - morphotypes mismatches and the existence of the two morphotype *S. globulifera type Paracou* and *S. globulifera type Régina*, we conducted a second blind identification off all individuals in November, 2019. The second blind identification correctly assigned the difference between all *S. globulifera type Paracou* and *S. globulifera type Régina* and reclassified correctly 87% of previous mismatches. We thus defined three gene-pools - morphotype - ecotype associations for the rest of the study (Fig.\@ref(fig:map) and Fig.\@ref(fig:admixture)): (i) *S. sp1*, growing preferentially in drier plateaux and slopes (TWI < 3, Schmitt et al., in prep), has a light grey thin and smooth bark associated with smaller leaves, flowers and fruits, (ii) *S. globulifera type Paracou*, growing in intermediate wet habitats of bottomlands, has a dark and intermediate thin and smooth bark compared to the next morphotype, and (iii) *S. globulifera type Regina*, growing in the wettest bottomlands of Paracou, has a thicker and lashed bark. *S. globulifera type Regina* have also bigger leaves than *S. globulifera type Regina* (see supplementary material SX) but we did not collect fruit or flowers. We further refer to the three gene-pools as population. Nevertheless among the three populations, 25 individuals (7%) showed patterns of introgression,  15 between *S. globulifera type Regina* and *S. sp1* and 10 between *S. globulifera type Paracou* and *S. sp1*  (further confirmed with `introgress` R package [@Gompert2010], see supplementary material SX). They were removed from further analyses.
+
+The three populations showed a mean nucleotidic diversity of 0.05140 across populations and was significantly different between populations (ANOVA, p<2e-16) with *S. globulifera type Regina* being more diverse. But the ratio of non-synonymous over synonymous SNPs was not different between populations, besides globally positive indicating putative selection. Pairwise fixation index ($F_{st}$) between population was globally low with a mean value of 0.15, still *S. globulifera type Regina* was more differentiated with the two toher populations (ANOVA, p<2e-16). Nevertheless, functional SNP were significantly less differentiated than anonymous SNPs (mean $F_{st}$ of 0.07 against 0.15). Finally, Tajima's $D$ between population was globally low and significantly negative with a mean value of -0.795 and was significantly different between populations (ANOVA, p<2e-16) with *S. globulifera type Regina* having a globally higher value. Site frequency spectrum revealed population in expansion with an excess of rare alleles in each population (see supplementary material SX). And phylogeny with `treemix` revealed a high likelihood of at least one migration event between *S. sp1* and the other morphotypes and confirmed previously published typology [ref] with an ancestral population in Madagascar, and Sao Tome as the link between African and American populations (see supplementary material SX). Interestingly *S. sp1* was closer to the population of Brazil when the two other morphotype were closer to the population of Costa Rica. In addition, functional SNPs showed less drift than anonymous ones.
+
+The genomic scan revealed 4,020 outliers SNPs (5.7%) significantly associated to populations, *i.e.* fixed, with 309 functional SNPs, 2,456 putatively hitchhiker SNPs, and 1,255 anonymous SNPs. Putatively hitchhikers and funcitonal SNPs corresponded to 43,106 and 2,981 transcripts isoforms respectively, with 121 transcripts isoforms differentialy expressed between *S. globulifera* and *S. sp1* juveniles (Tysklind et la., in prep). Genes corrsponding to previous transcripts isoforms matched 1,133 unique terms of gene ontology (GO) with no significantly enriched GO term in outliers genes after false discovery rate correction, besides response to water deprivation had a p-value of 0.01106483.
+
+### Environments
+
+Variance partitionning (Fig. \@ref(fig:Epart)) revealed a high role of topographic wetness index ($TWI$) in genetic differentiation at population and genotypic levels, whereas null to very-weak effect of neighbor crowding index ($NCI$). Both $TWI$ and $NCI$ were mostly not explained by population and genotype with 41% and 96% of residual variation and corresponding marginal $R^2$ of 5% [CI:1-17] and 57% [CI:35-94], respectively. Still, the variability of TWI conditions where individual grow was strongly explained by the population and the genotype with a conditional $R^2$ of 41% [CI:25-57] and 17% [CI:16-30], respectively. Genomic scans revealed 15 significant major effect SNP for $TWI$ but no significant enrichment in gene ontology, and the polygenic model did not converge.
+
+### Growth
+
+The growth modelling showed a high variation in individual growth potential with differences at the population level (**table of parameters posteriors to include ?**). *S. globulifera type Regina* had the higher growth potential, followed by *S. globulifera type Paracou*, and *S. sp1* had the smallest growth potential. The variation in growth potential between populations corresponded to variation in maximum observed diameter in Paracou (**values ?**). Both $TWI$ and $NCI$ had a significant and positive effect on individual growth with stronger effect of $TWI$ ($\beta_{TWI} = 0.24$) over $NCI$ ($\beta_{NCI} = 0.09$). The variation of environemental variables was higher than population and genotypic variation, with a conditional $R^2$ of 13% [CI:7-20] and 3% [CI:1-7] for $TWI$ and $NCI$, respectively, against a conditional $R^2$ of 0% [CI:0-2] and 7% [CI:1-35] for population and genotype, respectively (Fig. \@ref(fig:Ppart)). All the effects resulted in a marginal $R^2$ of 25% [CI:16-50] indicating that around three quarter of the variance remained unexplained. Genomic scans revealed 3 significant major effect SNP for idividual growth potential (2 for *S. globulifera type Regina* and 1 for *S. sp1*) but no significant enrichment in gene ontology, and the polygenic model did not converge.
 
 # Discussion
 
 # Acknowledgements
 
 We thanks the University of Bordeaux for a PhD grant to Sylvain Schmitt. We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification.
+
+* Get Platform
+* Genotoul
+* INPHB hospitality
 
 # Authors’ contributions
 
@@ -134,31 +208,126 @@ SS...
 
 ## Table captions
 
-__Table \@ref(tab:)__
+<!-- __Table \@ref(tab:)__ -->
 
 ## Figure captions
 
 __Figure \@ref(fig:map)__ Map of sampled Symphonia individuals. Every individual is represented by a pie chart representing population admixture with a radius proportional to the individual circonference in 2015. Grey level represent topographic wetness index.
 
-__Figure \@ref(fig:admixture)__ Admixture plot of Symphonia individuals for K=3 with population distribution along topographic wetness index and associated trunk morphology. The three morphotypes are identified with their bark with S. sp1 having a light grey thin and smooth bark, the S. globulifera type Paracou having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of S. globulifera type Regina.
+__Figure \@ref(fig:admixture)__ Admixture plot of Symphonia individuals for K=3 with population distribution along topographic wetness index and associated trunk morphology. The three morphotypes are identified with their bark with *S. sp1* having a light grey thin and smooth bark, the *S. globulifera type Paracou* having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of *S. globulifera type Regina*.
 
-__Figure \@ref(fig:Epart)__ Variance partitioning for environmental variables. Individuals environmental variations have been partitioned into between-population, between-genotype (within-population) and residual variation for Neighbor Crowding Index (NCI) and Topographic Wetness Index (TWI).
+__Figure \@ref(fig:Epart)__ Posteriors of conditional and marginal $R^2$ (**A**) and variance partitioning (**B**) for environmental variables. Variations of individuals environments (**B**) have been partitioned into between-population (green), between-genotype (blue) and residual (grey) variation for Neighbor Crowding Index ($NCI$, top) and Topographic Wetness Index ($TWI$, bottom). Variations have been used to compute corresponding $R^2$ (**A**) for population (green), genotype (blue) and the two as marginal  $R^2$ (red). Variance partitioning is based on the median of parameters estimate, whereas circles represent the median estimate, thick lines the 50% confidence interval, and thin lines the 90% confidence interval for $R^2$.
 
-__Figure \@ref(fig:Ppart)__ Variance partitioning for parameters of growth ontogenetic-trajectory. Individuals variations for parameters of growth ontogenetic-trajectory have been partitioned into between-population, between-genotype (within-population) and residual variation for optimal diameter (Dopt), maximum growth potential (Gmax)  and growth kurtosis (Ks).
+__Figure \@ref(fig:Ppart)__ Posteriors of conditional and marginal $R^2$ (**A**) and variance partitioning (**B**) for individual maximum growth potential (Gmax). Variation of individual maximum growth (**B**) has been partitioned into between-population (orange), between-genotype (purple),  neighbor crowding (green) and topographic wetness effects (blue), and residual (grey) variation for Neighbor Crowding Index ($NCI$, top) and Topographic Wetness Index ($TWI$, bottom). Variations have been used to compute corresponding $R^2$ (**A**) between-population (orange), between-genotype (purple),  neighbor crowding (green) and topographic wetness effects (blue), and the four as marginal  $R^2$ (red). Variance partitioning is based on the median of parameters estimate, whereas circles represent the median estimate, thick lines the 50% confidence interval, and thin lines the 90% confidence interval for $R^2$.
+
 
 ```{r map, fig.cap="Map of sampled Symphonia individuals. Every individual is represented by a pie chart representing population admixture with a radius proportional to the individual circonference in 2015. Grey level represent topographic wetness index."}
 include_graphics("figures/Fig1.png")
 ```
 
-```{r admixture, fig.cap="Admixture plot of Symphonia individuals for K=3 with population distribution along topographic wetness index and associated trunk morphology. The three morphotypes are identified with their bark with S. sp1 having a light grey thin and smooth bark, the S. globulifera type Paracou having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of S. globulifera type Regina."}
+```{r admixture, fig.cap="Admixture plot of Symphonia individuals for K=3 with population distribution along topographic wetness index and associated trunk morphology. The three morphotypes are identified with their bark with *S. sp1* having a light grey thin and smooth bark, the *S. globulifera type Paracou* having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of *S. globulifera type Regina*."}
 include_graphics("figures/Fig2.png")
 ```
 
-```{r Epart, fig.cap="Variance partitioning for environmental variables. Individuals environmental variations have been partitioned into between-population, between-genotype (within-population) and residual variation for Neighbor Crowding Index (NCI) and Topographic Wetness Index (TWI)."}
-include_graphics("figures/Fig3.png")
+```{r Epart, fig.cap="Posteriors of conditional and marginal $R^2$ (**A**) and variance partitioning (**B**) for environmental variables. Variations of individuals environments (**B**) have been partitioned into between-population (green), between-genotype (blue) and residual (grey) variation for Neighbor Crowding Index ($NCI$, top) and Topographic Wetness Index ($TWI$, bottom). Variations have been used to compute corresponding $R^2$ (**A**) for population (green), genotype (blue) and the two as marginal  $R^2$ (red). Variance partitioning is based on the median of parameters estimate, whereas circles represent the median estimate, thick lines the 50% confidence interval, and thin lines the 90% confidence interval for $R^2$"}
+load(file.path("..", "symcapture_save", 'envkinLog.Rdata'))
+g1 <- lapply(fitEnvKin, pars = c("Vp", "Vg", "Vr"), as.data.frame) %>% 
+  bind_rows(.id = "model") %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vg, Vr))) %>% 
+  mutate(Vexp = sum(c(Vp, Vg))) %>% 
+  mutate_at(c("Vp", "Vg"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = "model") %>% 
+  group_by(model, variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vg" = "Genotype", 
+                           "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +
+  theme(axis.title.y = element_blank()) +
+  facet_wrap(~ model, nrow = 2) +
+  scale_color_manual(guide = "none", values = RColorBrewer::brewer.pal(3, "Set1")) +
+  coord_flip()
+g2 <- lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(parameter = recode(parameter, "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
+  group_by(variable) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = variable, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free", nrow = 2) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+    ylab(expression(sigma^2)) +
+  scale_fill_manual("", 
+                    values = c(RColorBrewer::brewer.pal(3, "Set1")[c(3,2)],
+                               "grey")) 
+cowplot::plot_grid(g1, g2, labels = LETTERS[1:2])
 ```
 
-```{r Ppart, fig.cap="Variance partitioning for parameters of growth ontogenetic-trajectory. Individuals variations for parameters of growth ontogenetic-trajectory have been partitioned into between-population, between-genotype (within-population) and residual variation for optimal diameter (Dopt), maximum growth potential (Gmax)  and growth kurtosis (Ks)."}
-include_graphics("figures/Fig4.png")
+```{r Ppart, fig.cap="Posteriors of conditional and marginal $R^2$ (**A**) and variance partitioning (**B**) for individual maximum growth potential (Gmax). Variation of individual maximum growth (**B**) has been partitioned into between-population (orange), between-genotype (purple),  neighbor crowding (green) and topographic wetness effects (blue), and residual (grey) variation for Neighbor Crowding Index ($NCI$, top) and Topographic Wetness Index ($TWI$, bottom). Variations have been used to compute corresponding $R^2$ (**A**) between-population (orange), between-genotype (purple),  neighbor crowding (green) and topographic wetness effects (blue), and the four as marginal  $R^2$ (red). Variance partitioning is based on the median of parameters estimate, whereas circles represent the median estimate, thick lines the 50% confidence interval, and thin lines the 90% confidence interval for $R^2$."}
+fitGmaxGenoEnv <- list()
+for(sim in list.files("../symcapture_save/gmaxgenoenv", full.names = T)){
+  load(sim)
+  fitGmaxGenoEnv <- c(fitGmaxGenoEnv, fit)
+}
+fitGmaxGenoEnv <- rstan::sflist2stanfit(fitGmaxGenoEnv)
+g1 <- as.data.frame(fitGmaxGenoEnv, pars = c("Vp", "Vg", "Vnci", "Vtwi", "Vr")) %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vg, Vnci, Vtwi, Vr))) %>% 
+  mutate(Vexp = sum(c(Vp, Vg, Vnci, Vtwi))) %>% 
+  mutate_at(c("Vp", "Vg", "Vnci", "Vtwi", "Vexp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = NULL) %>% 
+  group_by(variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vtwi" = "TWI", "Vnci" = "NCI",
+                           "Vg" = "Genotype", "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +
+  scale_color_manual(guide = "none", values = RColorBrewer::brewer.pal(5, "Set1")) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
+g2 <- mcmc_intervals_data(fitGmaxGenoEnv, regex_pars = c("Vp", "Vg", "Vnci", "Vtwi", "Vr")) %>%
+  mutate(variance = recode_factor(parameter, 
+                           "Vp" = "Population", "Vg" = "Genotype", 
+                           "Vnci" = "NCI", "Vtwi" = "TWI", "Vr" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "Gmax", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  ylab(expression(sigma^2)) +
+  scale_fill_manual("", 
+                    values = c(RColorBrewer::brewer.pal(5, "Set1")[c(5,4,3,2)],
+                               "grey")) 
+cowplot::plot_grid(g1, g2, labels = LETTERS[1:2])
 ```
-

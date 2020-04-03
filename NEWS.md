@@ -1,3 +1,8 @@
+# PhD 0.1.9168
+* symcapture:manuscript: M&M & Res v1
+* symcapture: growth model gamxgeno gemaxgenoenv 1 & 2
+* symcapture: FT geno
+
 # PhD 0.1.9167
 * symcapture: gmax model is good !
 

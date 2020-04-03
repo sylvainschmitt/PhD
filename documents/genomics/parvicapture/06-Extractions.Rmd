@@ -24,7 +24,7 @@ nanodrop <- lapply(list.files(file.path(path, "NanoDrop", "Extraction"),
   dplyr::rename(Position_extraction = Well,
                 concentration = Conc.) %>% 
   mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
-  select(Plate_extraction, Position_extraction, concentration)
+  dplyr::select(Plate_extraction, Position_extraction, concentration)
 extraction <- googlesheets::gs_title("Parvicapture") %>% 
   googlesheets::gs_read("Extraction")
 purification <- lapply(list.files(file.path(path, "NanoDrop", "Purification"), 
@@ -34,7 +34,7 @@ purification <- lapply(list.files(file.path(path, "NanoDrop", "Purification"),
   dplyr::rename(Position_extraction = Well,
                 Concentration_Purified = Conc.) %>% 
   mutate(Plate_extraction = as.numeric(Plate_extraction)) %>% 
-  select(Plate_extraction, Position_extraction, Concentration_Purified)
+  dplyr::select(Plate_extraction, Position_extraction, Concentration_Purified)
 qubit <- googlesheets::gs_title("Parvicapture") %>% 
   googlesheets::gs_read("QubitConcentrationP1")
 ```

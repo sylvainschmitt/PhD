@@ -1,0 +1,103 @@
+```{r setup_funcgenom, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+library(bayesplot)
+library(rstan)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+```
+
+# Functional genomics
+
+```{r DataFuncGenom}
+load("../../functional/functional_save/Individuals.Rdata")
+trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(X = gsub("P", "", Ind)) %>% 
+  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop"))) %>% 
+  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
+            by = "Ind", suffix = c("", ".hybrid")) %>% 
+  left_join(Individuals) %>% 
+  mutate(LMA = invSLA) %>% 
+  filter(!is.na(TWI), !is.na(NCI))
+ids <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king.id"))
+K <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K <- as.matrix(K)
+model_data <- function(Trait){
+  trees <- trees[!is.na(trees[Trait]),]
+  trees <- trees %>% 
+    filter(IID %in% ids$IID) %>% 
+    mutate(popNum = as.numeric(as.factor(pop)),
+           plotNum = as.numeric(as.factor(Plot)))
+  K <- K[trees$IID, trees$IID]
+  K[K < 0] <- 0
+  K <- K*2
+  K <- as.matrix(Matrix::nearPD(K)$mat)
+  list(I = nrow(trees),
+       S = length(unique(trees$popNum)),
+       P = length(unique(trees$plotNum)),
+       Trait = as.vector(scale(trees[,Trait], center = F)),
+       DBH = trees$DBH,
+       TWI = as.vector(scale(trees$TWI, center =F)),
+       NCI = as.vector(scale(trees$NCI, center =F)),
+       species = trees$popNum,
+       plot = trees$plotNum,
+       K = K)
+}
+# traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+traits <- c("LDMC")
+mdata <- lapply(traits, model_data)
+names(mdata) <- traits
+```
+
+We used the following model to asses genetic varaince associated to leaf functional traits once we accounted for ontogenetic variation through DBH:
+
+$$Trait_{t,s,i} \sim \mathcal{logN}(log((\alpha_{t,i}+\delta_P).\frac{DBH_i}{{\beta_{DBH}}_{t,s} + DBH_i}), \sigma_R) \\ \alpha_{t,i} \sim \mathcal{MVlogN}(log(\alpha_{t,s}), \sigma_G.K) \\ \delta_P\sim\mathcal N(0,\sigma_P)$$
+
+Unfortunately the information was not conssistent in the dataset and the posterior was identic to the prior with an effective samples size close to 2000. We thus can't exploit this model.
+
+```{r ftgenoTab}
+# ftgeno <- stan_model("symcapture_models/FTGeno.stan")
+# fitFTGeno <- lapply(mdata, function(x)
+#   sampling(ftgeno, chains = 2, data = x, save_warmup = F, init = "0",
+#            control = list(adapt_delta = 0.99, max_treedepth = 12)))
+# save(fitFTGeno, file = "symcapture_save/ftgeno.Rdata")
+load("symcapture_save/ftgeno.Rdata")
+lapply(fitFTGeno, broom::tidyMCMC, pars = c("alpha_s", "betaDBH",
+                                            "sigmaP", "sigmaG", "sigmaR", "lp__"), 
+       droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  bind_rows(.id = "trait") %>% 
+  dplyr::select(trait, term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Individual growth potential model.",
+        col.names = c("Trait", "Parameter", "Estimate", 
+                      "Standard error", "$\\hat R$", "$N_{eff}$"))
+```
+
+```{r ftgenoParTraceSigma, fig.cap="Traceplot of model parameters."}
+cowplot::plot_grid(plotlist = lapply(fitFTGeno, mcmc_trace, pars = "sigmaG", "sigmaR"), 
+                   labels = names(fitFTGeno), nrow = 5)
+```
+
+```{r ftgenoParDensSigmaG, fig.cap="Traceplot of model parameters."}
+cowplot::plot_grid(plotlist = lapply(fitFTGeno, mcmc_dens, pars = "sigmaG"), 
+                   labels = names(fitFTGeno))
+```
+
+

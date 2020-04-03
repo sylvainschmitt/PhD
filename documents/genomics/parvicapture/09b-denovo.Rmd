@@ -1,0 +1,65 @@
+```{r setup_denovo, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = F, cache.lazy = F)
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
+path <- "../../../data/Eschweilera_Paracou/"
+```
+
+
+# *de novo*
+
+## Libraries
+
+```{r denovoLib}
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  filter(!is.na(Seq)) %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  mutate(cat = recode(Species, "wachenheimii" = "other", "grandiflora_form2" = "other",
+                      "simiorum" = "outgroup", "collina"  = "other", "persistens" = "outgroup",
+                      "squamata" = "other", "pedicellata" = "other", "grandiflora" = "other",
+                      "micrantha" = "other", "parviflora" = "other", 
+                      "congestiflora" = "outgroup"))
+a <- read_tsv(file.path(pathCluster, "Sequences", "unmerged", "libraries", "libraries.txt"),
+         col_names = "Library") %>%
+  separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
+  dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>%
+  dplyr::select(Library, IdGenetic, Lane, Label)
+b <- googlesheets::gs_title("Parvicapture") %>%
+              googlesheets::gs_read("Extraction") %>%
+              filter(!is.na(Seq)) %>%
+              mutate(Pool = c(rep(LETTERS[1:3], each = ceiling(4*96/3))[1:(4*96)], rep("D", 534-4*96))) %>%
+  mutate(Lane = Seq) %>%
+  mutate(Label = 1:nrow(.)) # IGA label
+libraries <- left_join(a, b, by = c("IdGenetic", "Lane", "Label"))
+individuals %>% 
+  filter(cat != "other") %>% 
+  group_by(cat) %>% 
+  sample_n(14) %>% 
+  left_join(libraries) %>% 
+  ungroup() %>% 
+  dplyr::select(Library) %>% 
+  write_tsv(path = file.path(path, "Sequences", "denovo", "libraries.txt"), col_names = F)
+```
+
+```{bash denovoLibSh, eval=F, echo=T}
+mkdir raw
+for file in $(cat libraries.txt)
+do
+  cp ../raw/$file* raw ;
+done
+```
+
