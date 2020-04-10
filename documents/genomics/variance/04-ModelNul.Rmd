@@ -1,0 +1,216 @@
+```{r setupModelNul, include = FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "../../../data/CLONAPIN/"
+```
+
+```{r mdataClonapinModelNul}
+trees <- readRDS(file.path(path, "all_data_pheno-clim-soil_07042019.RDS")) %>% 
+  left_join(read_csv(file.path(path, "coordinates_provenances.csv")), by = c("prov" = "CODE")) %>% 
+  filter(!is.na(height), !is.na(max.Q)) %>% 
+  filter(site == "portugal") %>% 
+  dplyr::select(block, prov, clon, tree, height, 
+                age, bio5_prov, bio14_prov, Q1, Q2, Q3, Q4, Q5, Q6) %>% 
+  rename(provenance = prov, clone = clon, individual = tree, bio5 = bio5_prov,
+         bio14 = bio14_prov) %>% 
+  na.omit() %>% 
+  filter(block %in% unique(block)[1:4], provenance %in% unique(provenance)[1:4]) %>% 
+  mutate_at(c("age", "bio5", "bio14"), scale, center = F) %>% 
+  mutate_at(c("age", "bio5", "bio14"), as.vector) %>% 
+  mutate(blockNum = as.numeric(as.factor(block)), 
+         provenanceNum = as.numeric(as.factor(provenance)),
+         cloneNum = as.numeric(as.factor(clone)), 
+         individualNum = as.numeric(as.factor(individual)))
+mdata <- list(
+  B = max(trees$blockNum),
+  P = max(trees$provenanceNum),
+  G = 6,
+  C = max(trees$cloneNum),
+  I = max(trees$individualNum),
+  N = nrow(trees),
+  height = trees$height,
+  age = trees$age,
+  bio5 = trees$bio5,
+  bio14 = trees$bio14,
+  bloc = trees$blockNum,
+  provenance = trees$provenanceNum,
+  clone = trees$cloneNum,
+  individual = trees$individualNum,
+  Q = as.matrix(dplyr::select(trees, Q1, Q2, Q3, Q4, Q5, Q6))
+)
+```
+
+# Model Nul
+
+We first explored a null model without explaining geneotypic variance (with kinship matrix $K$) with increasing complexity. We combined for each height measurement of block $b$, from provenance $p$ and clone $c$ for individual $i$ at age $a$: (i) the individual age $Age_{i,a}$, the provenance environmnetal variables $BIO4_p$ and $BIO15_p$, and the genetic populations with matrix $Q$. Tests were done with 4 blocks and 4 provenances resulting in 664 measures of height.
+
+## Intercept $M_0$ 
+
+The totally nul model works well, but with lack of interest..
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu, \sigma) \\ \mu \sim \mathcal N(0,1) \\ \sigma \sim \mathcal C(0,1)$$
+
+```{r M0}
+m0 <- stan_model("variance_models/modelNul/M0.stan")
+fitm0 <- sampling(m0, chains = 2, data = mdata, save_warmup = F,
+                control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitm0, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitm0) ; mcmc_intervals(fitm0, regex_pars = c("mu", "sigma"))
+```
+
+## Age $M_a$ 
+
+Age seemed an important variable, both biologicaly and in data exploration, and greatly improved the model likelihood.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \beta1.Age_{i,a}, \sigma) \\ (\mu,\beta1) \sim \mathcal N^2(0,1) \\ \sigma \sim \mathcal C(0,1)$$
+
+```{r Ma}
+ma <- stan_model("variance_models/modelNul/Ma.stan")
+fitma <- sampling(ma, chains = 2, data = mdata, save_warmup = F,
+                control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitma, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitma) ; mcmc_intervals(fitma, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Age polynomial $M_{a,a^2}$ 
+
+I added a polynomial form to the age that iproved slightly the likelihood (but for an extra parameter ?).
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \beta1.Age_{i,a} + \beta2.Age_{i,a}^2, \sigma) \\ (\mu,\beta1,\beta2) \sim \mathcal N^3(0,1) \\ \sigma \sim \mathcal C(0,1)$$
+
+```{r Maa2}
+maa2 <- stan_model("variance_models/modelNul/Maa2.stan")
+fitmaa2 <- sampling(maa2, chains = 2, data = mdata, save_warmup = F,
+                control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmaa2, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmaa2) ; mcmc_intervals(fitmaa2, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Blocks $M_{a,a^2,b}$
+
+Blocks were randomly designed but we controlled their effect with a random effect.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \epsilon_b.\sigma_2 + \beta1.Age_{i,a} + \beta2.Age_{i,a}^2, \sigma_1) \\  (\mu,\epsilon_b,\beta1,\beta2) \sim \mathcal N^4(0,1) \\ (\sigma_1,\sigma_2) \sim \mathcal C^2(0,1)$$
+
+```{r Mb}
+mb <- stan_model("variance_models/modelNul/Mb.stan")
+fitmb <- sampling(mb, chains = 2, data = mdata, save_warmup = F,
+                  include = F, par = c("epsilon"),
+                  control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmb, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmb) ; mcmc_intervals(fitmb, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Provenance $M_{a,a^2,p}$
+
+I tested separately provenance as a random effect.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \epsilon_p.\sigma_2 + \beta1.Age_{i,a} + \beta2.Age_{i,a}^2, \sigma_1) \\  (\mu,\epsilon_b,\beta1,\beta2) \sim \mathcal N^4(0,1) \\ (\sigma_1,\sigma_2) \sim \mathcal C^2(0,1)$$
+
+```{r Mp}
+mp <- stan_model("variance_models/modelNul/Mp.stan")
+fitmp <- sampling(mp, chains = 2, data = mdata, save_warmup = F,
+                  include = F, par = c("epsilon"),
+                  control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmb, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmb) ; mcmc_intervals(fitmb, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Block & Provenance $M_{a,a^2,b,p}$
+
+We finally combined block and controlled random effects.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \epsilon_b.\sigma_2  + \epsilon_p.\sigma_3 + \beta1.Age_{i,a} + \beta2.Age_{i,a}^2, \sigma_1) \\  (\mu,\epsilon_b,\epsilon_p,\beta1,\beta2) \sim \mathcal N^5(0,1) \\ (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal C^2(0,1)$$
+
+```{r Mbp}
+mbp <- stan_model("variance_models/modelNul/Mbp.stan")
+fitmmbp <- sampling(mbp, chains = 2, data = mdata, save_warmup = F,
+                  include = F, par = c("epsilon_b", "epsilon_p"),
+                  control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmmbp, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmmbp) ; mcmc_intervals(fitmmbp, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Block & Environment $M_{a,a^2,b,e}$
+
+As the environment is redundant with the provenance, we tried first the environment alone as two fixed effects.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \epsilon_b.\sigma_2  + \epsilon_p.\sigma_3 \\+ \beta1.Age_{i,a} + \beta2.Age_{i,a}^2 + \beta3.Bio4_p + \beta4.Bio15_p, \sigma_1) \\  (\mu,\epsilon_b,\epsilon_p,\beta1,\beta2,\beta3,\beta4) \sim \mathcal N^7(0,1) \\ (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal C^2(0,1)$$
+
+```{r Mbe}
+mbe <- stan_model("variance_models/modelNul/Mbe.stan")
+fitmmbe <- sampling(mbe, chains = 2, data = mdata, save_warmup = F,
+                  include = F, par = c("epsilon_b", "epsilon_p"),
+                  control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmmbe, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmmbe) ; mcmc_intervals(fitmmbe, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Block, Provenance and Environment $M_{a,a^2,b,p,e}$
+
+We then built a model inculding both provenance random effect and provenance environment fixed effects.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \epsilon_b.\sigma_2  + \epsilon_p.\sigma_3 \\+ \beta1.Age_{i,a} + \beta2.Age_{i,a}^2 + \beta3.Bio4_p + \beta4.Bio15_p, \sigma_1) \\  (\mu,\epsilon_b,\epsilon_p,\beta1,\beta2,\beta3,\beta4) \sim \mathcal N^7(0,1) \\ (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal C^2(0,1)$$
+
+```{r Mbpe}
+mbpe <- stan_model("variance_models/modelNul/Mbpe.stan")
+fitmmbpe <- sampling(mbpe, chains = 2, data = mdata, save_warmup = F,
+                  include = F, par = c("epsilon_b", "epsilon_p"),
+                  control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmmbpe, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmmbpe) ; mcmc_intervals(fitmmbpe, regex_pars = c("mu", "beta", "sigma"))
+```
+
+## Population
+
+Despite a small increase of likelihood when adding environments to provenance, we added population effect on the model with all variables.
+
+$$log(h_{b,p,g,c,i,a}) \sim \mathcal N (\mu + \epsilon_b.\sigma_2  + \epsilon_p.\sigma_3 \\ + \beta1.Age_{i,a} + \beta2.Age_{i,a}^2 + \beta3.Bio4_p + \beta4.Bio15_p + Q.\gamma_G, \sigma_1) \\  (\mu,\epsilon_b,\epsilon_p,\beta1,\beta2,\beta3,\beta4,\gamma_G) \sim \mathcal N^{7+G}(0,1) \\ (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal C^2(0,1)$$
+
+```{r Mbpeg}
+mbpeg <- stan_model("variance_models/modelNul/Mbpeg.stan")
+fitmbpeg <- sampling(mbpeg, chains = 2, data = mdata, save_warmup = F,
+                  include = F, par = c("epsilon_b", "epsilon_p"),
+                  control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fitmbpeg, ess = T, rhat = T, estimate.method = "median", droppars = F)
+mcmc_trace(fitmbpeg)
+mcmc_intervals(fitmbpeg, regex_pars = c("mu", "beta", "gamma", "sigma"))
+```
+
+## Comparisons
+
+Besides a slight increase in loglikelihood, we will keep the model with all varaibles for demonstration purposes. Nevertheless, increasing the number of observations per groups (block, provenance and population) may change random effects estimate.
+
+```{r comparisons}
+lapply(list(fitm0, fitma, fitmaa2, fitmb, fitmp, fitmmbp, 
+            fitmmbe, fitmmbpe, fitmbpeg),
+       mcmc_intervals_data, pars = "lp__") %>% 
+  bind_rows(.id = "model") %>% 
+  mutate(model = recode_factor(model, "1" = "Intercept", "2" = "Age", 
+                               "3" = "Age Polynomial", "4" = "Block", 
+                               "5" = "Provenance", "6" = "Block & Provenance", 
+                               "7" = "Block & Environment",
+                               "8" = "Block, Provenance & Environment",
+                               "9" = "All")) %>% 
+  filter(model != "Intercept") %>%
+  ggplot(aes(x = model, xend = model,
+             color = model, fill = model)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  xaxis_title(F) + 
+  ylab("Loglokelihood") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```

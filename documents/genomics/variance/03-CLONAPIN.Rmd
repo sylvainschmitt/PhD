@@ -1,0 +1,167 @@
+```{r setupCLONAPIN, include = FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "../../../data/CLONAPIN/"
+```
+
+```{r dataCLONAPIN, message=F}
+trees <- readRDS(file.path(path, "all_data_pheno-clim-soil_07042019.RDS")) %>% 
+  left_join(read_csv(file.path(path, "coordinates_provenances.csv")), by = c("prov" = "CODE")) %>% 
+  filter(!is.na(height), !is.na(max.Q)) %>% 
+  filter(site == "portugal")
+```
+
+# CLONAPIN
+
+We filtered the individuals in Portugal including height and genetic data resulting in `r nrow(trees)` observations of tree height.
+
+## Height
+
+As expected, height followed a lognormal distribution (Fig. \@ref(fig:height)). 
+
+```{r height, fig.cap="Height distribution."}
+ggplot(trees, aes(height)) + 
+  geom_histogram() +
+  xlab("Height (cm)")
+```
+
+## Age
+
+We expect mainly the height to vary with the age. The dataset only included `r length(unique(trees$age))` different ages, which seems a few to estimate a linear age effect..
+
+```{r heightAge, fig.cap="Height per age."}
+ggplot(trees, aes(age, log(height))) + 
+  geom_point() +
+  geom_smooth(method = "lm") +
+  xlab("Age (months)") +
+  ylab("Logarithm of height")
+```
+
+## Block
+
+The `r length(unique(trees$block))` blocks did not seemed to have an effect on height distribution (Fig. \@ref(fig:heightBlock)).
+
+```{r heightBlock, fig.cap="Height distribution per block and age."}
+ggplot(trees, aes(height, fill = block)) + 
+  geom_histogram() +
+  xlab("Height (cm)") +
+  facet_grid(age ~ block, scales = "free_y") +
+  scale_fill_discrete(guide = "none")
+```
+
+## Provenance
+
+The `r length(unique(trees$prov))` provenances seemed to have an effect on height distribution (Fig. \@ref(fig:heightProv)).
+
+```{r heightProv, fig.cap="Height distribution per provenance and height."}
+ggplot(filter(trees, prov %in% unique(trees$prov)[1:9]),
+       aes(height, fill = prov)) + 
+  geom_histogram() +
+  xlab("Height (cm)") +
+  facet_grid(age ~ prov, scales = "free_y") +
+  scale_fill_discrete(guide = "none")
+```
+
+## Population
+
+The `r length(unique(trees$max.Q))` provenances seemed to have an effect on height distribution (Fig. \@ref(fig:heightPopulation)).
+
+```{r heightPopulation, fig.cap="Height distribution per population and age."}
+ggplot(trees, aes(height, fill = max.Q)) + 
+  geom_histogram() +
+  xlab("Height (cm)") +
+  facet_grid(age ~ max.Q, scales = "free_y") +
+  scale_fill_discrete(guide = "none")
+```
+
+## Temperature & Precipitation
+
+$BIO5$, maximum temperature of the warmest month,  and  $BIO14$, precipitation of the driest month, were the two environmental variables identified by Juliette with the horseshoe model. They both seemed to have an effect on height.
+
+```{r heightEnv, fig.cap="Height per population original environment."}
+trees %>% 
+  rename(bio5 = bio5_prov, bio14 = bio14_prov) %>% 
+  dplyr::select(height, bio5, bio14) %>% 
+  reshape2::melt(id.vars = "height") %>% 
+  ggplot(aes(value, log(height))) + 
+  geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(~ variable, scales = "free") +
+  xlab("") +
+  ylab("Logarithm of height")
+```
+
+## Genotype
+
+```{r plinkdataprep, eval = F}
+inds <- read_tsv(file.path(path, "clonapin_blups_523ind_piMASS_April2019-1.txt"))
+snps <- read_csv(file.path(path, "5165snps_523ind_genotypes.txt"), 
+                 col_names = c("SNP", "REF", "ALT", inds$X1)) %>% 
+  reshape2::melt(id.vars = c("SNP", "REF", "ALT"), 
+                 variable.name = "IID", value.name = "MAC") %>% 
+  mutate(FID = gsub(pattern = "[[:digit:]]", "", IID)) %>% 
+  mutate(A1 = ifelse(MAC %in% 1:2, REF, ALT)) %>% 
+  mutate(A2 = ifelse(MAC == 2, REF, ALT))
+snps %>% 
+  reshape2::melt(c("SNP", "REF", "ALT", "IID", "MAC", "FID"),
+                 variable.name = "Allele", value.name = "base") %>% 
+  mutate(SNP_Allele = paste0(SNP, "_", Allele)) %>%
+  mutate(PAT = 0, MAT = 0, SEX = 0, PHENOTYPE = -9) %>% 
+  reshape2::dcast(FID + IID + PAT + MAT + SEX + PHENOTYPE ~ SNP_Allele,
+                  value.var = "base") %>% 
+  write_tsv(path = file.path(path, "clonapin.ped"), col_names = F)
+snps %>% 
+  mutate(CHR = "X1") %>% # No CHR all on X1
+  mutate(POS = 0) %>% # No POS data
+  mutate(BP = 0) %>% # No BP data
+  dplyr::select(CHR, SNP, POS, BP) %>% 
+  unique() %>% 
+  write_tsv(path = file.path(path, "clonapin.map"), col_names = F)
+# plink --file clonapin --allow-extra-chr --out clonapin
+# plink2 --bfile clonapin  --allow-extra-chr --make-king square
+```
+
+The between-individuals kinship (Fig. \@ref(fig:kinshipclonapin)) seemed to have a relation with between-individuals height difference at the age of 27 months (Fig. \@ref(fig:kinshipHeightAge27)).
+
+```{r kinshipclonapin, fig.cap="Kinship matrix (phi > 0)."}
+ids <- read_tsv(file.path(path, "plink2.king.id"))
+K <- read_tsv(file.path(path, "plink2.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K <- as.matrix(K)
+K[K < 0] <- 0
+K <- K*2
+K <- as.data.frame(K) %>% 
+  rownames_to_column("IID1") %>% 
+  reshape2::melt(id.vars = "IID1", variable.name = "IID2", value.name = "kinship")
+ggplot(mutate(K, kinship = ifelse(kinship == 0, NA, kinship)),
+       aes(IID1, IID2, fill = kinship)) + 
+  geom_tile() +
+  viridis::scale_fill_viridis(na.value = "white") +
+  theme(axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank())
+```
+
+```{r kinshipHeightAge27, fig.cap="Kinship (phi > 0) and height differences between individual pairs."}
+K %>% 
+  left_join(filter(trees, clon %in% K$IID1, age == 27) %>% 
+              dplyr::select(clon, height) %>% 
+              dplyr::rename(IID1 = clon, height1 = height)) %>% 
+    left_join(filter(trees, clon %in% K$IID2, age == 27) %>% 
+              dplyr::select(clon, height) %>% 
+              dplyr::rename(IID2 = clon, height2 = height)) %>% 
+  mutate(DeltaHeight = sqrt((height1 - height2)^2)) %>% 
+  dplyr::select(kinship, DeltaHeight) %>% 
+  unique() %>% 
+  ggplot(aes(kinship, DeltaHeight)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "glm")
+```

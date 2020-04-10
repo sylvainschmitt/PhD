@@ -8,6 +8,7 @@ library(tidyverse)
 library(raster)
 library(bayesplot)
 library(rstan)
+library(rstanarm)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -15,42 +16,100 @@ opts_chunk$set(
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = T)
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
-load("./symcapture_save/Env.Rdata")
-treesEnv <- trees
-trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                              "trees", "Paracou.sqlite")) %>% 
-  tbl("Paracou") %>% 
-  filter(Genus == "Symphonia") %>% 
-  mutate(DBH = CircCorr/pi) %>% 
-  collect()
-trees <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
-                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
-         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
-  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
-  mutate(X = gsub("P", "", Ind)) %>% 
-  separate(X, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
-  left_join(trees) %>% 
-  left_join(read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
-                     col_names = c("IID", "pop"))) %>% 
-  left_join(read_tsv(file.path(path, "populations", "paracou.hybridmap")),
-            by = "Ind", suffix = c("", ".hybrid"))
-trees <- left_join(trees, treesEnv)
+load("./symcapture_save/introgression.Rdata")
+```
+
+```{r Dataintrogression, eval=F}
+trees  <- read_tsv(file.path(path, "populations", "paracou.hybridmap")) %>% 
+  left_join(src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                 "trees", "Paracou.sqlite")) %>% 
+              tbl("Paracou") %>% 
+              filter(Genus == "Symphonia") %>% 
+              filter(CensusYear == 2015) %>% 
+              mutate(Ind = paste0("P", Plot, "-", SubPlot, "-", TreeFieldNum)) %>% 
+              filter(Ind %in% local(trees$Ind)) %>% 
+              collect())
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+trees$TWI <- raster::extract(wetness, treesXY)
+rm(dem, wetness, treesXY)
+cl <- parallel::makeCluster(getOption("cl.cores", 2))
+parallel::clusterExport(cl, list("trees"))
+NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    collect() %>% 
+    group_by(CensusYear) %>% 
+    summarise(NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>% 
+    arrange(CensusYear) %>%
+    mutate(dt = CensusYear - lag(CensusYear)) %>% 
+    summarise(NCI = sum(NCI/dt, na.rm = T))})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+trees$NCI <- NC$NCI
+rm(NC)
+trees <-  trees %>% 
+  dplyr::rename(pop.hybrid = pop) %>% 
+  mutate(pop = recode(pop.hybrid, 
+                      "S. globulifera Paracou pure" = "S. globulifera Paracou", 
+                      "S. sp1 pure" = "S. sp1", 
+                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
+                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
+                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
+                      "Admixed S. globulifera - S. sp1" = "Admixed", 
+                      "Admixed S. sp1 - S. globulifera Regina" = "Admixed"))
+trees <- trees %>% 
+  left_join(src_sqlite(file.path("/home/sylvain/Documents/BIOGECO/PhD/data/Paracou/",
+                                 "trees", "Paracou.sqlite")) %>% 
+              tbl("Paracou") %>% 
+              filter(Genus == "Symphonia") %>% 
+              mutate(Ind = paste0("P", Plot, "-", SubPlot, "-", TreeFieldNum)) %>% 
+              filter(Ind %in% local(trees$Ind)) %>% 
+              mutate(DBH = CircCorr/pi) %>% 
+              collect() %>% 
+              group_by(Ind) %>% 
+              mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
+                     DBHtoday = dplyr::last(DBH), N = n()) %>%  
+              ungroup() %>% 
+              dplyr::select(Ind, Plot, SubPlot, TreeFieldNum, Y0, DBH0, DBHtoday, N) %>% 
+              unique() %>% 
+              mutate(DBHtoday = ifelse(DBHtoday == DBH0, DBHtoday + 0.1, DBHtoday)))
+Gmax <- function(Y0, DBH0, DBHtoday, Dopt = 0.2540835, Ks = 0.7008939){
+  DBH <- DBH0
+  for(y in Y0:2016) 
+    DBH = DBH + exp(-0.5*(log(DBH / (100*Dopt)) / Ks)^2)
+  return((DBHtoday - DBH0)/(DBH - DBH0))
+}
+trees <- mutate(trees, Gmax = Gmax(Y0, DBH0, DBHtoday))
+save(trees, file = "./symcapture_save/introgression.Rdata")
 ```
 
 # Introgressions
 
-Genomics structure analyses (population, envionmental and growth genomics) have been done with *pure* populations, defined with `admixture` as individuals with more than 90% of its genotype related to the genepool, rejecting admixed and introgressed individuals. In order to explore the importance of gene flow in the *Symphonia* species complex, we then explored admixed and introgressed individuals by identifying them and exploring there distribution along environments, with growth parameters and at genomic loci previously identified:
-
-* __Identification__ we used `introgress` to detect admixed individual hybrid index and further classed them
-* __Environment__
-* __Growth__ 
+Genomics structure analyses (population, envionmental and growth genomics) have been done with *pure* populations, defined with `admixture` as individuals with more than 90% of its genotype related to the genepool, rejecting admixed and introgressed individuals. In order to explore the importance of gene flow in the *Symphonia* species complex, we then explored admixed and introgressed individuals by identifying theim (`introgress`), scanning loci genomci clines (`bgc`), and exploring their distribution along environmental variables ($TWI$ and $NCI$) and individual growth potential ($Gmax$).
 
 ## Methodology
 
-> Another demographic process that can lead to idiosyncratic effects at individual loci is hy-bridization and introgression from related taxa [@Hoban2016]
+> Another demographic process that can lead to idiosyncratic effects at individual loci is hybridization and introgression from related taxa [@Hoban2016]
 
 This justify the realization of all genomics scan without admixed individuals and the inclusion of admixed individuals a posteriori.
 
@@ -60,14 +119,10 @@ We used the method developed by @Gompert2009 implemented in `introgress` [@Gompe
 
 We obtained relatilevely low levels of admixture (Fig. \@ref(fig:introgress)) with 222 *S. sp1* pure-bred, 108 *S. globulifera Paracou* pure-bred, and 30 *S. globulifera Regina* pure-bred. Only 5 individuals were admixed (2 *S. sp1* - *S. globulifera Regina* and 3 *S. sp1* - *S. globulifera Paracou*). Nevertheless *S. sp1* showed 13(6%) individuals introgressed with *S. globulifera Regina* and *S. globulifera Paracou* showed 7(6%) individuals introgressed with *S. sp1*.
 
-
-```{bash introgressSH, eval=F, echo=F}
-module load bioinfo/plink-v1.90b5.3
-plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr \
-  --extract LD.prune.in --maf 0.05 --geno 0 --out paracou.filtered --make-bed --recode structure
-```
-
 ```{r introgressCluster, eval=F, echo=F}
+# module load bioinfo/plink-v1.90b5.3
+# plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr \
+#   --extract LD.prune.in --maf 0.05 --geno 0 --out paracou.filtered --make-bed --recode structure
 paracou <- data.table::fread(file.path(path, "..", "variantCalling", "paracou", "paracou.filtered.recode.strct_in"), skip = 2) %>% as.tbl()
 inds <- gsub(".g.vcf", "", paracou$V1)
 pops <- symcapture.admix[[3]] %>% 
@@ -127,8 +182,6 @@ hi.index %>%
   mutate(pop = ifelse(is.na(pop), "S. sp1 pure", pop)) %>% 
   dplyr::select(-sr, -sp) %>% 
   write_tsv(file.path(path, "populations", "paracou.hybridmap"))
-# read_tsv(file.path(path, "populations", "paracou.hybridmap")) %>% 
-#   group_by(pop) %>% summarise(N = n()) %>% kable()
 ```
 
 ```{r introgress, fig.cap="Population structure and fraction of the genome inherited from S. sp1 for each individual (hybrid index or admixture coefficient). Population structure assessed with ADMIXTURE is represented with the color bar for each individual, with the percentage of membership to S. sp1 genepools represented by the bar height. The hybdrid index and it's confidence interval is represented by the black line and the white area. The white dashed line indicates levels used to define previous genepools and parental alleles frequencies."}
@@ -154,103 +207,17 @@ hi.index %>%
   theme(legend.position = "bottom")
 ```
 
-## Populations
+## Loci
 
-**Map admixture for significant SNPs on the gene associated to the enriched GOterm !**
-
-6 genes with 4 genic and 38 outliers with qval < 0.05
-
-No evidence for an allele transfer through introgressed or admixed individuals so far. I think it is not the right way to do it.
-
-```{r, eval=F}
-bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
-  mutate(snpNb = as.numeric(row.names(.))) %>% 
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
-  mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
-  left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
-  mutate(snpNb = 1:nrow(.))) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
-
-outliers <- data.frame(gene = c("TRINITY_DN795961_c2_g1", "TRINITY_DN796902_c0_g1", "TRINITY_DN800044_c7_g3", 
-                                "TRINITY_DN817465_c3_g1", "TRINITY_DN827983_c2_g1", "TRINITY_DN828088_c2_g1")) %>% 
-  left_join(bind_rows(read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>%
-                        mutate(type = "genic"),
-                      read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation")) %>% 
-                        mutate(type = "hitchhiker")) %>% 
-              mutate(gene = stringr::str_sub(trsc, 1, -4))) %>% 
-  filter(snp %in% filter(bayescan, qval < 0.05)$snp)
-
-t <- read_delim(file.path(path, "bayescan", "bayescan.snps.paracou.raw"), delim = " ") %>% 
-  dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
-  reshape2::melt(id.vars = "IID", variable.name = "SNP", value.name = "Allele") %>% 
-  mutate(SNP = stringr::str_sub(SNP, 1, -3)) %>% 
-  na.omit(Allele) %>% 
-  mutate(Allele = as.factor(Allele)) %>% 
-  left_join(filter(trees, !is.na(AGR)) %>% 
-                              mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
-                              dplyr::select(pop.hybrid, pop, Ind, IID) %>% unique()) %>% 
-  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
-                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
-                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
-                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
-                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed"))
-
-p1 <- group_by(t, SNP) %>% 
-  filter(pop.hybrid == "S. sp1 pure") %>% 
-  filter(all(Allele != 1))
- 
-p2 <- group_by(t, SNP) %>% 
-  filter(pop.hybrid == "S. globulifera Paracou pure") %>% 
-  filter(all(Allele != 1))
-
-ad <- group_by(t, SNP) %>% 
-  filter(pop.hybrid == "S. globulifera Paracou introgressed with S. sp1") %>% 
-  filter(all(Allele == 1))
-
-snps <- c(unique(p1$SNP[p1$SNP %in% ad$SNP]), unique(p2$SNP[p2$SNP %in% ad$SNP]))
-
-# snps <- c(unique(p1$SNP[p1$SNP %in% p2$SNP]), unique(p1$SNP[p1$SNP %in% ad$SNP]), unique(p2$SNP[p2$SNP %in% ad$SNP]))
-
-p1 <- group_by(t, SNP) %>% 
-  filter(pop.hybrid == "S. sp1 pure") %>% 
-  filter(all(Allele != 1))
- 
-p2 <-  filter(t, SNP %in% outliers$snp) %>% 
-  group_by(SNP) %>% 
-  filter(pop.hybrid == "S. globulifera Regina pure") %>% 
-  filter(all(Allele != 1))
-
-ad <- filter(t, SNP %in% outliers$snp) %>% 
-  group_by(SNP) %>% 
-  filter(pop.hybrid == "S. sp1 introgressed with S. globulifera Regina") %>% 
-  filter(any(Allele == 1))
-
-snps <- c(unique(p1$SNP[p1$SNP %in% p2$SNP]), unique(p1$SNP[p1$SNP %in% ad$SNP]), unique(p2$SNP[p2$SNP %in% ad$SNP]))
-
-ggplot(filter(t, SNP %in% snps) %>% 
-         group_by(pop, pop.hybrid, SNP, Allele) %>% 
-         summarise(N = n()),
-       aes(pop.hybrid, N, fill = pop, col = pop)) +
-  geom_col() +
-  coord_flip() +
-  theme(axis.title.y = element_blank()) +
-  scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
-  scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
-  facet_grid(Allele ~ SNP)
-```
+**Use `bgc`**
 
 ## Environment
 
-Introgression of *S. sp1* within *S. globulifera Paracou*, allowed introgressed *S. globulifera Paracou* individuals to reach drier habitats (TWI < 3) of *S. sp1*, but not the introgression of *S. globulifera Regina* in *S. sp1* (Fig. \@ref(fig:introgressTWI)). Admixed didn't showed any specific patterns, and the pattern is similar but less clear for competition (NCI). Mapping pure-bred and admixed individuals on the TWI-specific SNP didn't show any sign of specific introgression of the T allele confering an advantage in drier habitats.
+Introgression of *S. sp1* within *S. globulifera Paracou*, allowed introgressed *S. globulifera Paracou* individuals to reach drier habitats (TWI < 3) of *S. sp1*, but not the introgression of *S. globulifera Regina* in *S. sp1* (Fig. \@ref(fig:introgressTWIBox)). Admixed didn't show any specific patterns, and the pattern is similar but less clear for competition (NCI). Nevertheless, scatter plots (Fig. \@ref(fig:introgressTWIScatter)) suggested a positive relation between *S. sp1* ancestry and tolerance to lower TWI, i.e. *S. sp1* individuals introgressed with either *S. globulifera Paracou* or *S. globulifera Regina* seems to grow preferentially in wetter habitat.
 
-```{r introgressTWI, fig.cap="Pure-bred and admixed individuals distribution along the Topographic Wetness Index (TWI) per genepool."}
+```{r introgressTWIBox, fig.cap="TWI and NCI distributions between pure-bred and admixed individuals per population."}
 trees %>% 
   mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(TWI))) %>%
-  mutate(pop = recode(pop.hybrid, "S. globulifera Paracou pure" = "S. globulifera Paracou", "S. sp1 pure" = "S. sp1", 
-                      "S. globulifera Regina pure" = "S. gobulifera Regina", 
-                      "S. sp1 introgressed with S. globulifera Regina" = "S. sp1",  
-                      "S. globulifera Paracou introgressed with S. sp1" = "S. globulifera Paracou", 
-                      "Admixed S. globulifera - S. sp1" = "Admixed", "Admixed S. sp1 - S. globulifera Regina" = "Admixed")) %>% 
   dplyr::select(Ind, pop, pop.hybrid, TWI, NCI) %>% 
   reshape2::melt(id.vars = c("Ind", "pop", "pop.hybrid")) %>% 
   ggplot(aes(pop.hybrid, value, fill = pop, col = pop)) +
@@ -258,11 +225,136 @@ trees %>%
              data = data.frame(y = c(3,NA), variable = c("TWI", "NCI"))) +
   geom_boxplot(alpha = 0.7) +
   coord_flip() +
+  scale_fill_manual("", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626"),
+                    guide = guide_legend(nrow = 2)) +
+  scale_color_manual("", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  theme(axis.title.y = element_blank(), legend.position = "bottom") +
+  scale_y_sqrt() + ylab("") + 
+  facet_wrap(~ variable, scales = "free_x")
+```
+
+```{r introgressTWIScatter, fig.cap="TWI and NCI vs hybrid index (S. sp1 ancestry) between population-pairs."}
+hi.index %>% 
+  mutate(pair = recode_factor(pair,
+                              "sp" = "S. sp1 - S. globulifera Paracou",
+                              "sr" = "S. sp1 - S. globulifera Regina")) %>% 
+  left_join(trees) %>% 
+  dplyr::select(Ind, pop, pop.hybrid, TWI, NCI, pair, lower, h, upper, Gmax) %>% 
+  reshape2::melt(id.vars = c("Ind", "pop", "pop.hybrid", "Gmax",
+                             "pair", "lower", "h", "upper")) %>% 
+  ggplot(aes(x = value, col = Gmax)) +
+  geom_smooth(aes(y = 1-h), col = "grey", 
+              se = F, linetype = "dashed") +
+  geom_point(aes(y = 1 - h)) +
+  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper)) +
+  facet_grid(pair ~ variable, scales = "free") +
+  ylab("Hybrid index - S. sp1 ancestry") + ylab("") +
+  viridis::scale_color_viridis()
+```
+
+## Growth
+
+Admixed individuals between *S. globulifera Paracou* and *S. sp1* seems to have an increased growth potential, but with a sample size of 3 it's hard to say (Fig. \@ref(fig:introgressGmaxBox)). introgressed didn't show any specific patterns. Scatter plots (Fig. \@ref(fig:introgressGmaxScatter)) didn't suggested anything specific.
+
+```{r introgressGmaxBox, fig.cap="Individual growth potential (Gmax) distribution between pure-bred and admixed individuals per population."}
+trees %>% 
+  mutate(pop.hybrid = fct_reorder(pop.hybrid, dplyr::desc(Gmax))) %>%
+  ggplot(aes(pop.hybrid, log(Gmax), fill = pop, col = pop)) +
+  geom_boxplot(alpha = 0.7) +
+  coord_flip() +
   scale_fill_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626"),
                     guide = guide_legend(nrow = 2)) +
   scale_color_manual("Genepool", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
   theme(axis.title.y = element_blank(), legend.position = "bottom") +
-  # scale_y_sqrt() +
-  ylab("Topographic Wetness index (TWI)") + 
-  facet_wrap(~ variable, scales = "free_x")
+  ylab("Logarithm of individual growth potential (Gmax)") +
+  stat_summary(fun.data = function(y) 
+    return(data.frame(y = 0.95 * 5, label = length(y))), 
+    geom = "text", hjust = 0.5, vjust = 0.9) +
+  ggtitle(paste("ANOVA p-val = ",
+                round(summary(aov(log(Gmax) ~ pop.hybrid, data = trees))[[1]]$`Pr(>F)`[1], 5)))
 ```
+
+```{r introgressGmaxScatter, fig.cap="Individual growth potential (Gmax) and hybrid index (S. sp1 ancestry) between population-pairs."}
+hi.index %>% 
+  mutate(pair = recode_factor(pair,
+                              "sp" = "S. sp1 - S. globulifera Paracou",
+                              "sr" = "S. sp1 - S. globulifera Regina")) %>% 
+  left_join(trees) %>% 
+  ggplot(aes(x = log(Gmax), col = pop)) +
+  geom_smooth(aes(y = 1-h), col = "grey", 
+              se = F, linetype = "dashed") +
+  geom_point(aes(y = 1 - h)) +
+  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper)) +
+  facet_wrap(~ pair) +
+  xlab("Logarithm of individual growth potential Gmax") +
+  ylab("Hybrid index - S. sp1 ancestry") +
+  scale_color_manual("", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  theme(legend.position = "bottom")
+```
+
+## Quick modelling
+
+A quick beta regression with `rstanarm` confirmed a strong negative effect of the tropographic wetness index (TWI) on *S. sp1* ancestry (h) for both species pairs (Fig. \@ref(fig:introgressAllBetaReg)). Introgression of the two *S. globulifera* populations into *S. sp1* seemed to increase *S. sp1* tolerance to wetness. On the opposite the neighbor crowding index (NCI) had a small positive effect. 
+
+Individual growth potential (Gmax) had a small negative effect on the hybrid index (h) \@ref(fig:introgressAllBetaReg)) but linear regression didn't validate the effect of the hybrid index (h) on the growth potential (Gmax) (Fig. \@ref(fig:introgressGmaxLm)
+).
+
+```{r introgressAllBetaReg, fig.cap="Hybrid index (S. sp1 ancestry) beta regression with individual growth potential (Gmax), topographic wetness index (TWI), neighbor crowding index (NCI) and species pair."}
+fit <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
+               data = left_join(hi.index, trees) %>%
+                 mutate_at(c("TWI", "NCI"), scale, center = F) %>%
+                 mutate_at(c("TWI", "NCI"), as.vector) %>% 
+                 mutate(h = 1-h) %>% 
+                 mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
+                 mutate(h = ifelse(h == 1, 1 - 10^-6, h)))
+plot(fit) +
+  ggtitle("Beta regression: hybrid index ~ log(Gmax) + TWI + NCI + species pair")
+```
+
+```{r introgressGmaxLm, fig.cap="Quick linear model of the logarithm of individual growth potential (Gmax) with hybrid index (S. sp1 ancestry), topographic wetness index (TWI), neighbor crowding index (NCI) and species pair."}
+lm(log(Gmax) ~ h + pair + TWI + NCI, data = left_join(hi.index, trees) %>%
+     mutate(h = 1-h) %>% 
+     mutate_at(c("TWI", "NCI"), scale, center = F) %>%
+     mutate_at(c("TWI", "NCI"), as.vector)) %>% 
+  summary()
+```
+
+<!-- ## Introgression estimate [@Pfeifer2019] -->
+
+<!-- See [PhD 0.1.9.142 - Population Structure](https://github.com/sylvainschmitt/PhD/blob/6fe49a59f2c61ad0864a2ab3bebba7395d9320e6/documents/genomics/symcapture/18-PopulationStructure.Rmd) -->
+
+<!-- ```{r 1000Genomes} -->
+<!-- library(PopGenome) -->
+<!-- genome <- readData(file.path(".././../data/Symphonia_Paracou/Sequences/", -->
+<!--                              "variantCalling", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.vcf.gz"),  -->
+<!--                    format = "VCF") -->
+<!-- fam <- read_tsv(file.path(path, "..", "variantCalling", "globulifera", -->
+<!--                           "symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.fam"), -->
+<!--          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>%  -->
+<!--   mutate(Ind = gsub(".g.vcf", "", IID)) -->
+<!-- symcapture.admix <- readQ(list.files(file.path(path, "admixture", "globulifera"),  -->
+<!--                                      full.names = T, pattern = ".Q"), indlabfromfile=F) -->
+<!-- symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind) -->
+<!-- SgParacou = symcapture.admix$symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.2.Q %>%  -->
+<!--   mutate(Ind = paste0(row.names(.), ".g.vcf")) %>%  -->
+<!--   filter(Cluster1 < 0.5) %>%  -->
+<!--   dplyr::select(Ind) %>%  -->
+<!--   unlist() %>% unname() -->
+<!-- SgRegina = symcapture.admix$symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.2.Q %>%  -->
+<!--     mutate(Ind = paste0(row.names(.), ".g.vcf")) %>%  -->
+<!--     filter(Cluster1 > 0.5) %>%  -->
+<!--     dplyr::select(Ind) %>%  -->
+<!--     unlist() %>% unname() -->
+<!-- Ssp1 = read_tsv(file.path(path, "..", "variantCalling", "sp1", -->
+<!--                             "symcapture.all.biallelic.snp.filtered.nonmissing.sp1.fam"), col_names = F) %>% -->
+<!--     dplyr::select(X2) %>% -->
+<!--     unlist() %>% unname() -->
+<!-- pop <- list(SgParacou, SgRegina, Ssp1) -->
+<!-- genome <- set.populations(genome, pop, diploid = T) -->
+<!-- genome <- set.outgroup(genome, "FO23.g.vcf", diploid = T) -->
+<!-- genome <- sliding.window.transform(genome, width = 50) -->
+<!-- genome <- introgression.stats(genome, l.smooth = T, do.D = T) -->
+<!-- genome <- weighted.jackknife(genome, per.region = F) -->
+<!-- ``` -->
+
+<!-- Non singificant and low Patterson’s $D$ (`r round(genome@D.z, 3)`, P= `r round(genome@D.pval, 3)`) and @Pfeifer2019's $d_f$ (`r round(genome@df.z, 3)`, P= `r round(genome@df.pval, 3)`). But two genomics area have a significant P-value < 0.01 adjusted with Benjamin-Hochberg correction for $d_f$ in 50 bp window (Fig. \@ref(fig:popgenomeG)). One with significant positive values indicates introgressions of *S. globulifera type Regina* with *S. globulifera type Paracou* whereas the other with negative values indicates introgressions of *S. sp1* with *S. globulifera type Parcou*. -->

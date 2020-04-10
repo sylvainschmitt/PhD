@@ -45,21 +45,125 @@ b <- googlesheets::gs_title("Parvicapture") %>%
   mutate(Lane = Seq) %>%
   mutate(Label = 1:nrow(.)) # IGA label
 libraries <- left_join(a, b, by = c("IdGenetic", "Lane", "Label"))
-individuals %>% 
-  filter(cat != "other") %>% 
-  group_by(cat) %>% 
-  sample_n(14) %>% 
-  left_join(libraries) %>% 
-  ungroup() %>% 
-  dplyr::select(Library) %>% 
-  write_tsv(path = file.path(path, "Sequences", "denovo", "libraries.txt"), col_names = F)
+```
+
+```{bash raw2filtered, eval=F, echo=T}
+#!/bin/bash    
+
+# variable
+file=$1
+echo "File: $file"
+raw=$2
+echo "Raw: $raw"
+reference=$3
+echo "Reference: $reference"
+
+# modules
+module load bioinfo/Trimmomatic-0.36
+module load bioinfo/bwa-0.7.15
+module load bioinfo/picard-2.14.1
+module load bioinfo/samtools-1.4
+module load bioinfo/bedtools2-2.29.0
+
+# trimming
+echo "Step: Trimming"
+java -jar $TRIM_HOME/trimmomatic.jar PE \
+  $raw/"$file"_R1_001.fastq.gz \
+  $raw/"$file"_R2_001.fastq.gz \
+  trimmed/paired/"$file"_R1_paired.fq.gz \
+  trimmed/unpaired/"$file"_R1_unpaired.fq.gz \
+  trimmed/paired/"$file"_R2_paired.fq.gz \
+  trimmed/unpaired/"$file"_R2_unpaired.fq.gz \
+  ILLUMINACLIP:$TRIM_HOME/adapters/TruSeq3-PE.fa:2:30:10:2:keepBothReads \
+  SLIDINGWINDOW:4:20
+
+# mapping
+echo "Step: mapping"
+bwa mem -M -R "@RG\tID:$file\tSM:$file\tPL:HiSeq4K" \
+  -t 2 \
+  $reference \
+  trimmed/paired/"$file"_R1_paired.fq.gz 	\
+  trimmed/paired/"$file"_R2_paired.fq.gz \
+  > mapped/sam/$file.sam
+rm trimmed/paired/"$file"_R1_paired.fq.gz trimmed/paired/"$file"_R2_paired.fq.gz
+rm trimmed/unpaired/"$file"_R1_unpaired.fq.gz trimmed/unpaired/"$file"_R2_unpaired.fq.gz
+java -Xmx4g -jar $PICARD SortSam \
+  I=mapped/sam/$file.sam \
+  O=mapped/bam/$file.bam \
+  SORT_ORDER=coordinate 
+samtools index mapped/bam/$file.bam
+rm mapped/sam/$file.sam
+samtools view -u -f 1 -F 12 \
+  mapped/bam/$file.bam > mapped/bam.paired/$file.bam
+samtools index mapped/bam.paired/$file.bam
+rm mapped/bam/$file.bam mapped/bam/$file.bam.bai
+samtools sort -n  \
+  mapped/bam.paired/$file.bam > mapped/bam.paired.sorted/$file.bam
+rm mapped/bam.paired/$file.bam mapped/bam.paired/$file.bam.bai
+
+# extracting reads
+bedtools bamtofastq -i mapped/bam.paired.sorted/$file.bam \
+  -fq filtered.reads/"$file"_R1_001.fastq -fq2 filtered.reads/"$file"__001.fastq
+rm mapped/bam.paired.sorted/$file.bam
 ```
 
 ```{bash denovoLibSh, eval=F, echo=T}
-mkdir raw
-for file in $(cat libraries.txt)
-do
-  cp ../raw/$file* raw ;
-done
+raw=../raw/
+reference=../reference/reference.fasta
+mkdir trimmed trimmed/paired trimmed/unpaired
+mkdir mapped mapped/sam mapped/bam mapped/bam.paired mapped/bam.paired.sorted
+mkdir filtered.reads
+mkdir out
+for lib in $(cat libraries.txt); do echo "bash raw2filtered.sh $lib $raw $reference"; done > runFiltered.sh
+sarray -J haplo -o out/%j.out -e out/%j.err \
+  -t 10:00:00 --mem=8G --cpus-per-task=2 --mail-type=BEGIN,END,FAIL runFiltered.sh
+rm -r trimmed mapped out
+sbatch denovo.sh
+
+for lib in $(ls *.R2); do mv $lib ${lib%.*}_R2_001.fastq  ; done
 ```
 
+## PCA
+
+```{bash pcaSH, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+$plink \
+  --vcf denovo.vcf \
+  --const-fid --allow-extra-chr \
+  --set-missing-var-ids @_snp# \
+  --mind 0.95 \
+  --missing --het --freqx --pca var-wts \
+  --make-bed --out denovo
+
+```
+
+
+```{r genotype}
+read_delim(file.path(path, "Sequences", "denovo", "denovo_outfiles",
+                              "denovo.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  dplyr::select(Sample, IdGenetic, Lane, PCA1, PCA2) %>% 
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = Species, 
+             label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  scale_color_discrete("Species") +
+  theme(legend.position = "bottom")
+read_delim(file.path(path, "Sequences", "denovo", "denovo_outfiles",
+                              "denovo.eigenvec"),
+           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  dplyr::select(Sample, IdGenetic, Lane, PCA1, PCA2) %>% 
+  left_join(individuals) %>%
+  filter(PCA1 < 0) %>% 
+  ggplot(aes(x = PCA1, y = PCA2, col = Species, 
+             label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  scale_color_discrete("Species") +
+  theme(legend.position = "bottom")
+```

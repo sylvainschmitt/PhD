@@ -1,0 +1,269 @@
+```{r setupMethods, include = FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = F, cache.lazy = F)
+path <- "../../../data/CLONAPIN/"
+```
+
+# Methods
+
+## Animal model
+
+### Normal data
+
+Let's consider a set of $P=2$ populations including each $Fam=3$ families composed of $I = 14$ individuals with arbitrar relationships. Population, genotypic, and residual variation are defined by $\sigma_P^2$, $\sigma_G^2$ and $\sigma_R^2$, respectivelly. Genotypic noise followed a standard normal and is defined by $\epsilon_G$. And population intercepts are defined by $\mu_P$ following a normal distribution of variance $\sigma_P^2$ centered on 0.
+
+```{r simnormal, fig.cap="Kinship matrix", echo = T}
+P <- 2 # Populations
+Fam <- 3 # Families
+I <- 14 # Individuals
+ped.df <- data.frame(pop = rep(1:P, each = Fam*I),
+           fam = rep(1:Fam, each = I),
+           ind = rep(1:I, Fam*P),
+           father = rep(c(NA, NA, 1, 1, 1, 1, NA, 6, 6, 6, NA, 11, 11, 11), Fam*P),
+           mother = rep(c(NA, NA, 2, 2, 2, 2, NA, 7, 7, 7, NA, 3, 3, 3), Fam*P), 
+           sex = rep(c(1, 2, 2, 3, 3, 1, 2, 3, 3, 3, 1, 3, 3, 3), Fam*P)) %>% 
+  mutate_at(c("father", "mother"), funs(ifelse(!is.na(.), paste0(pop,fam,.), NA))) %>%
+  mutate(ind = paste0(pop,fam,ind))
+ped.ped <- kinship2::pedigree(id = ped.df$ind, dadid = ped.df$father, 
+                              momid = ped.df$mother, sex = ped.df$sex, 
+                              famid = paste0(ped.df$pop, ped.df$fam))
+K <- as.matrix(kinship2::kinship(ped.ped))
+K <- 2*K
+N <- nrow(K)
+sigmaP <- 0.5
+sigmaG <- 0.3
+sigmaR <- 0.2
+epsilonG <- rnorm(N)
+muP <- rnorm(P, sd = sigmaP)
+```
+
+#### Normal distribution 1
+
+The Animal model have the following equation:
+
+$$y \sim \mathcal N(\mu_P + u,\sigma_R)\\u \sim \mathcal{MVN}(0,\sigma_G.K)$$
+
+Than we can rewrite as:
+
+$$y \sim \mathcal N(\mu_P + \sigma_G.A.a,\sigma_R)\\ a \sim \mathcal{N}(0,1)\\|~u =\sigma_G.A.a$$
+
+```{r simnormal1, fig.cap="Normal simulated data.", echo = T}
+u <- sigmaG*as.vector(t(chol(K)) %*% epsilonG) 
+y <- rnorm(N, muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+           sigmaR)
+ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
+       aes(u, y, col = pop)) +
+  geom_point() + geom_smooth(method = "lm", se = F)
+```
+
+#### Normal distribution 2
+
+But the Animal model can be writen with the following equation too:
+
+$$y \sim \mathcal N(u',\sigma_R)\\u' \sim \mathcal{MVN}(\mu_P,\sigma_G.K)\\u'=u+\mu_p$$
+
+Than we can rewrite as:
+
+$$y \sim \mathcal N(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' =\mu_P + \sigma_G.A.a\\u=\sigma_G.A.a$$
+
+```{r simnormal2, fig.cap="Normal simulated data.", echo = T}
+up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG) 
+u <- up - muP[ped.df$pop]
+y <- rnorm(N, 
+           muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+           sigmaR)
+ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
+       aes(u, y, col = pop)) +
+  geom_point() + geom_smooth(method = "lm", se = F)
+```
+
+#### Lognormal distribution
+
+And if we know use a lognormal distribution
+
+$$e^y \sim \mathcal {logN}(u',\sigma_R)\\u' \sim \mathcal{MVN}(\mu_P,\sigma_G.K)\\u'=u+\mu_p$$
+
+Than we can rewrite as:
+
+$$e^y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' = \mu_P + \sigma_G.A.a\\u=\mu_P + \sigma_G.A.a-\mu_p$$
+
+```{r simnormal3, fig.cap="Normal simulated data.", echo = T}
+up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG)
+u <- up - muP[ped.df$pop]
+expy <- rlnorm(N, 
+               muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+               sigmaR)
+y <- log(expy)
+ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
+       aes(u, y, col = pop)) +
+  geom_point() + geom_smooth(method = "lm", se = F)
+```
+
+### Lognormal data
+
+#### Normal distribution
+
+And similarly if $y$ has a lognormal distribution, we can write with a normal distribution :
+
+$$log(y) \sim \mathcal N(u',\sigma_R)\\u' \sim \mathcal{MVN}(\mu_P,\sigma_G.K)\\u'=u+\mu_p$$
+
+Than we can rewrite as:
+
+$$log(y) \sim \mathcal N(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' =\mu_P + \sigma_G.A.a\\u=\sigma_G.A.a$$
+
+```{r simlognormal1, fig.cap="Logormal simulated data.", echo = T}
+up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG) 
+u <- up - muP[ped.df$pop]
+logy <- rnorm(N, 
+              muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+              sigmaR)
+y <- exp(logy)
+ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
+       aes(u, y, col = pop)) +
+  geom_point() + geom_smooth(method = "lm", se = F)
+```
+
+#### Lognormal distribution
+
+And if we know use a lognormal distribution
+
+$$y \sim \mathcal {logN}(u',\sigma_R)\\u' \sim \mathcal{MVN}(\mu_P,\sigma_G.K)\\u'=u+\mu_p$$
+
+Than we can rewrite as:
+
+$$y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' = \mu_P + \sigma_G.A.a\\u=\mu_P + \sigma_G.A.a-\mu_p$$
+
+```{r simlognormal2, fig.cap="Normal simulated data.", echo = T}
+up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG)
+u <- up - muP[ped.df$pop]
+y <- rlnorm(N, 
+            muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+            sigmaR)
+ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
+       aes(u, y, col = pop)) +
+  geom_point() + geom_smooth(method = "lm", se = F)
+```
+
+<!-- ## Genetic variance estimate -->
+
+<!-- ### Data simulation -->
+
+<!-- Let's consider a set of $P=3$ populations including each $Fam=6$ families composed of $I = 14$ individuals with arbitrar relationships. -->
+
+<!-- ```{r simnormal, fig.cap="Normal simulated data."} -->
+<!-- sigmaPnorm <- 0.5 -->
+<!-- sigmaGnorm <- 0.3 -->
+<!-- sigmaRnorm <- 0.2 -->
+<!-- pnorm <- rnorm(P, mean = 10, sd = sigmaPnorm) -->
+<!-- anorm <- sigmaGnorm*rnorm(N) -->
+<!-- ynorm <- rnorm(N, mean = pnorm[ped.df$pop] + as.vector(t(chol(K)) %*% anorm), sd = sigmaRnorm) -->
+<!-- Vpnorm <- var(pnorm) -->
+<!-- Vgnorm <- var(anorm) -->
+<!-- Vrnorm <- var(ynorm - as.vector(t(chol(K)) %*% anorm)) -->
+<!-- ggplot(data.frame(y = ynorm, a = anorm, pop = as.factor(ped.df$pop)),  -->
+<!--        aes(a, y, col = pop)) + -->
+<!--   geom_point() + geom_smooth(method = "lm", se = F) + -->
+<!--   xlab("Breeding values") + ylab("Observed values") + -->
+<!--   ggtitle("Normal data", -->
+<!--           paste0("Vp = ", round(Vpnorm,2),  -->
+<!--                  ", Vg = ", round(Vgnorm,2),  -->
+<!--                  ", Vr = ", round(Vrnorm,2))) -->
+<!-- ``` -->
+
+<!-- ```{r simlognormal, fig.cap="Lognormal simulated data."} -->
+<!-- sigmaPlognorm <- 0.5 -->
+<!-- sigmaGlognorm <- 0.3 -->
+<!-- sigmaRlognorm <- 0.2 -->
+<!-- plognorm <- rlnorm(P, sd = sqrt(sigmaPlognorm)) -->
+<!-- alognorm <- exp(log(plognorm[ped.df$pop]) + sigmaGlognorm*rnorm(N)) -->
+<!-- ylognorm <- rlnorm(N, meanlog = log(as.vector(t(chol(K)) %*% alognorm)),  -->
+<!--                    sdlog = sigmaRlognorm) -->
+<!-- Vplognorm <- var(plognorm) -->
+<!-- Vglognorm <- var(log(alognorm) - log(plognorm[ped.df$pop])) -->
+<!-- Vrlognorm <- var(log(ylognorm) - log(as.vector(t(chol(K)) %*% alognorm))) -->
+<!-- ggplot(data.frame(y = ylognorm, a = alognorm, pop = as.factor(ped.df$pop)),  -->
+<!--        aes(a, y, col = pop)) + -->
+<!--   geom_point() + geom_smooth(method = "lm", se = F) + -->
+<!--   xlab("Breeding values") + ylab("Observed values") + -->
+<!--   ggtitle("Lognormal data", -->
+<!--           paste0("Vp = ", round(Vplognorm,2),  -->
+<!--                  ", Vg = ", round(Vglognorm,2),  -->
+<!--                  ", Vr = ", round(Vrlognorm,2))) -->
+<!-- ``` -->
+
+<!-- ### Normal Animal Model -->
+
+<!-- $$log(y) \sim \mathcal N(\mu_P + \sigma_G.A.\epsilon,\sigma_R) \\ (\mu_P,\epsilon) \sim \mathcal N^{P+1}(0,1) \\ (\sigma_G,\sigma_R) \sim \mathcal C^2(0,1) \\ V_g=\sigma_G^2~,Vr=\sigma_R^2$$ -->
+
+<!-- ```{r VarAnNorm} -->
+<!-- Anorm <- stan_model("variance_models/methods/AnimalNormal.stan") -->
+<!-- fitAnormDnorm <- sampling(Anorm, chains = 2,  -->
+<!--                            data = list(N = N, y = ynorm,  -->
+<!--                                        K = K, population = ped.df$pop),  -->
+<!--                            include = F, pars = c("a", "epsilon"), -->
+<!--                            save_warmup = F,  -->
+<!--                            control = list(adapt_delta = 0.99, max_treedepth = 12)) -->
+<!-- fitAnormDlognorm <- sampling(Anorm, chains = 2,  -->
+<!--                              data = list(N = N, y = log(ylognorm),  -->
+<!--                                          K = K, population = ped.df$pop),  -->
+<!--                              include = F, pars = c("a", "epsilon"), -->
+<!--                              save_warmup = F,  -->
+<!--                              control = list(adapt_delta = 0.99, max_treedepth = 12)) -->
+<!-- lapply(c(fitAnormDnorm, fitAnormDlognorm),  -->
+<!--        broom::tidyMCMC, ess = T, rhat = T,  -->
+<!--        estimate.method = "median", droppars = F) %>%  -->
+<!--   bind_rows() -->
+<!-- mcmc_trace(as.array(fitAnormDnorm, pars = c("Vp", "Vg", "Vr"))) + -->
+<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
+<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
+<!--                                expected = c(Vpnorm, Vgnorm, Vrnorm))) -->
+<!-- mcmc_trace(as.array(fitAnormDlognorm, pars = c("Vp", "Vg", "Vr"))) + -->
+<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
+<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
+<!--                                expected = c(Vplognorm, Vglognorm, Vrlognorm))) -->
+<!-- ``` -->
+
+<!-- ### Lognormal Animal Model -->
+
+<!-- $$y \sim \mathcal {logN}(log(A.exp^{log(\mu_P) + \sigma_G.\epsilon},\sigma_R)) \\ (\mu_P,\epsilon) \sim \mathcal N^{P+1}(0,1) \\ (\sigma_G,\sigma_R) \sim \mathcal C^2(0,1) \\ V_g=Var(log(a))~,Vr=Var(log(y)-log(A.a))$$ -->
+
+<!-- ```{r VarAnLognorm} -->
+<!-- Alognorm <- stan_model("variance_models/methods/AnimalLognormal.stan") -->
+<!-- fitAlognormDnorm <- sampling(Alognorm, chains = 2,  -->
+<!--                              data = list(N = N, y = ynorm,  -->
+<!--                                          K = K, population = ped.df$pop),  -->
+<!--                              include = F, pars = c("a", "epsilon"), -->
+<!--                              save_warmup = F,  -->
+<!--                              control = list(adapt_delta = 0.99,  -->
+<!--                                             max_treedepth = 12)) -->
+<!-- fitAlognormDlognorm <- sampling(Alognorm, chains = 2,  -->
+<!--                                 data = list(N = N, y = ylognorm,  -->
+<!--                                             K = K, population = ped.df$pop),  -->
+<!--                                 include = F, pars = c("a", "epsilon"), -->
+<!--                                 save_warmup = F,  -->
+<!--                                 control = list(adapt_delta = 0.99,  -->
+<!--                                                max_treedepth = 12)) -->
+<!-- lapply(c(fitAlognormDnorm, fitAlognormDlognorm),  -->
+<!--        broom::tidyMCMC, ess = T, rhat = T,  -->
+<!--        estimate.method = "median", droppars = F) %>%  -->
+<!--   bind_rows() -->
+<!-- mcmc_trace(as.array(fitAlognormDnorm, pars = c("Vp", "Vg", "Vr"))) + -->
+<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
+<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
+<!--                                expected = c(Vpnorm, Vgnorm, Vrnorm))) -->
+<!-- mcmc_trace(as.array(fitAlognormDlognorm, pars = c("Vp", "Vg", "Vr"))) + -->
+<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
+<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
+<!--                                expected = c(Vplognorm, Vglognorm, Vrlognorm))) -->
+<!-- ``` -->
+
+ 
