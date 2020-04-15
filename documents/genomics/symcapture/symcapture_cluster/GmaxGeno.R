@@ -7,9 +7,9 @@ print(paste("Simulation number is", sim))
 load("../symcapture_save/gmaxgeno1Data.Rdata")
 print(paste("Simulation is", names(mdata)[sim]))
 library(rstan)
-options(mc.cores = 2)
+options(mc.cores = 1)
 rstan_options(auto_write = T)
-growthgeno <- stan_model("../symcapture_models/GmaxGeno1.stan")
-fit <- sampling(growthgeno, chains = 2, data = mdata[[sim]]$mdata, save_warmup = F,
+growthgeno <- stan_model("../symcapture_models/GmaxGeno.stan")
+fit <- sampling(growthgeno, chains = 1, data = mdata[[sim]]$mdata, save_warmup = F,
                      control = list(adapt_delta = 0.99, max_treedepth = 12))
-save(fit, file = paste0("../symcapture_save/gmaxgeno/gmaxgeno", sim, ".Rdata"))
+save(fit, file = paste0("../symcapture_save/gmaxgeno/chain", sim, ".Rdata"))

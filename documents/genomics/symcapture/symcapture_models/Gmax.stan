@@ -9,29 +9,40 @@ data {
   int<lower=1, upper=Y> pop[I] ; // gene pools
 }
 parameters {
-  matrix<lower=0, upper=3>[P,3] theta ;
-  vector[I] Gmaxi ;
-  real<lower=0> sigmaR ;
-  real<lower=0> sigma ;
+  vector<lower=0, upper=1>[P] thetap1 ;
+  real<lower=0, upper=1> theta2 ;
+  real<lower=0, upper=1> theta3 ;
+  vector[I] epsilon1 ;
+  vector[P] epsilon2 ;
+  vector[P] epsilon3 ;
+  vector<lower=0>[4] sigma ;
 }
 transformed parameters {
   vector<lower=0>[I] DBH = rep_vector(1, I) ;
-  real<lower=0> sigmaP = variance(theta[,1]) ;
+  real<lower=0> Vp = variance(thetap1) ;
+  vector<lower=0>[I] thetai1 = exp(log(thetap1[pop]) + sigma[2]*epsilon1) ; 
+  vector<lower=0>[P] thetap2 = exp(log(theta2) + sigma[3]*epsilon2) ; 
+  vector<lower=0>[P] thetap3 = exp(log(theta3) + sigma[4]*epsilon3) ; 
   for(t in 1:Y-1) {
     for(i in 1:I) {
       if(years[t] == Y0[i])
         DBH[i] = DBH0[i] ;
     }
-    DBH += exp(log(theta[pop,1]) + sigmaR*Gmaxi) .*
-      exp(-0.5* square(log(DBH ./ (100*theta[pop,2]))
-      ./ theta[pop,3])) ;
+    DBH += thetai1 .* exp(-0.5* square(log(DBH ./ (100*thetap2[pop])) ./ thetap3[pop])) ;
   }
   DBH = DBH - DBH0 ;
 }
 model {
-  DBHtoday - DBH0 ~ lognormal(log(DBH), sigma) ;
-  Gmaxi ~ std_normal() ;
-  for(p in 1:3) theta[,p] ~ lognormal(0, 1) ;
-  sigmaR ~ normal(0, 1) ;
+  DBHtoday - DBH0 ~ lognormal(log(DBH), sigma[1]) ;
+  epsilon1 ~ std_normal() ;
+  epsilon2 ~ std_normal() ;
+  epsilon3 ~ std_normal() ;
+  thetap1 ~ lognormal(0, 1) ;
+  theta2 ~ lognormal(0, 1) ;
+  theta3 ~ lognormal(0, 1) ;
   sigma ~ normal(0, 1) ;
+}
+generated quantities{
+  real Vr = square(sigma[2]) ;
+  real R2 = Vp / (Vp + Vr) ;
 }

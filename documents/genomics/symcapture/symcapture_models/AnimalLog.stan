@@ -1,7 +1,7 @@
 data {
   int<lower=0>  N ; // # of individuals
   int<lower=0>  P ; // # of populations
-  real Y[N] ; // phenotype
+  real y[N] ; // phenotype
   int<lower=1, upper=P> population[N] ; // populations
   cov_matrix[N] K ; // kinship covariance matrix
 }
@@ -10,24 +10,21 @@ transformed data{
 }
 parameters {
   vector<lower=0>[P] mu ; // intercept
-  vector[N] epsilon ; // breeding values
-  real<lower=0> sigmaG ; // genetic variance
-  real<lower=0> sigmaR ; // residual variance
+  vector[N] epsilon ; // genotypic noise
+  vector<lower=0>[2] sigma ; // genetic variance
 }
 transformed parameters {
   real<lower=0> Vp = variance(mu) ; // population variance
-  vector<lower=0>[N] a = exp(log(mu[population]) + sigmaG*epsilon) ;
 }
 model {
+  y ~ lognormal(log(mu[population]) + sigma[2]*A*epsilon, sigma[1]) ;
   mu ~ lognormal(0, 1) ;
-  sigmaG ~ normal(0, 1) ;
-  sigmaR ~ normal(0, 1) ;
-  epsilon ~ normal(0, 1) ;
-  Y ~ lognormal(log(A*a), sigmaR) ;
+  epsilon ~ std_normal() ;
+  sigma ~ normal(0, 1) ;
 }
 generated quantities{
-  real Vg = variance(log(a) - log(mu[population])) ;
-  real Vr = variance(to_vector(log(Y)) - log(A*a)) ;
-  real R2m  = Vp / (Vp + Vg + Vr) ;
+  real Vg = square(sigma[2]) ;
+  real Vr = square(sigma[1]) ;
+  real R2m = Vp / (Vp + Vg + Vr) ;
   real R2c = (Vp + Vg) / (Vp + Vg + Vr) ;
 }

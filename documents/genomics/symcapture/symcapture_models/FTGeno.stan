@@ -12,32 +12,28 @@ transformed data{
   matrix[I, I] A = cholesky_decompose(K) ;
 }
 parameters {
-  vector<lower=0>[S] alpha_s ;
-  vector[I] epsilon ; // individual random effect
+  vector<lower=0>[S] alpha ; // species intercept
+  vector[I] epsilon_a ; // genotypic noise
+  vector[P] epsilon_p ; // plot noise
   vector<lower=0> [S]  betaDBH ; // DBH half-load
-  vector[P] delta ;
-  real<lower=0> sigmaP ;
-  real<lower=0> sigmaG ;
-  real<lower=0> sigmaR ;
+  vector<lower=0>[3] sigma ;
 }
 transformed parameters {
-  real<lower=0> Vs = variance(alpha_s) ;
-  vector<lower=0>[I] alpha_i  = exp(log(alpha_s[species]) + sigmaG*epsilon) ;
+  real<lower=0> Vs = variance(alpha) ;
 }
 model {
-  Trait ~ lognormal(log((A*alpha_i +  delta[plot]) .* 
+  Trait ~ lognormal(log((exp(log(alpha[species]) + 
+                             sigma[2]*A*epsilon_a) +  
+                             sigma[3]*A*epsilon_p[plot]) .* 
                         (DBH ./ (betaDBH[species] + DBH))), 
-                        sigmaR) ; // Likelihood
-  epsilon ~ std_normal() ;
+                        sigma[1]) ; // Likelihood
+  epsilon_a ~ std_normal() ;
+  epsilon_p ~ std_normal() ;
   betaDBH ~ lognormal(0,1) ;
-  delta ~ normal(0, sigmaP) ;
-  sigmaP ~ normal(0, 1) ;
-  sigmaG ~ cauchy(0, 1) ;
-  sigmaR ~ normal(0, 1) ;
+  sigma ~ normal(0, 1) ;
 }
 generated quantities{
-  real Vp = variance(delta) ;
-  real Vg = variance(log(alpha_i) - log(alpha_s[species])) ;
-  real Vd = variance(log((DBH ./ (betaDBH[species] + DBH)))) ;
-  real Vr = variance(log(Trait) - log((A*alpha_i +  delta[plot]) .* (DBH ./ (betaDBH[species] + DBH)))) ;
+  real Vg = square(sigma[2]) ;
+  real Vp = square(sigma[3]) ;
+  real Vr = square(sigma[1]) ;
 }

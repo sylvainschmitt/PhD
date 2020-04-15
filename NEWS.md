@@ -1,3 +1,6 @@
+# PhD 0.1.9171
+* symcapture: Animal fix begin
+
 # PhD 0.1.9170
 * variance: begins & CLONAPIN
 * symcapture: Msc growth M&M & Res v2 + introgression

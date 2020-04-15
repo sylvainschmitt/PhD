@@ -1,4 +1,4 @@
-```{r setup_envgenom, include=FALSE}
+```{r setup_envgenom, include=FALSE, eval=T}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -13,7 +13,7 @@ rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
-  cache = T, cache.lazy = F)
+  cache = T, cache.lazy = F, eval=T)
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
@@ -140,50 +140,71 @@ K <- as.matrix(K)
 trees <- trees %>% 
   filter(IID %in% colnames(K)) %>% 
   mutate(popNum = as.numeric(as.factor(pop))) 
-mdata <- function(data, variable) {
-  K <- K[trees$IID, trees$IID]
-  K[K < 0] <- 0
-  K <- K*2
-  K <- as.matrix(Matrix::nearPD(K)$mat)
-  list(N = nrow(data),
-       P = length(unique(data$pop)),
-       Y = unlist(data[variable])/sd(unlist(data[variable])),
-       population = data$popNum,
-       K = K) 
-}
+mdata <- lapply(c("TWI", "NCI"), function(variable) {
+                K <- K[trees$IID, trees$IID]
+                K[K < 0] <- 0
+                K <- K*2
+                K <- as.matrix(Matrix::nearPD(K)$mat)
+                return(list(N = nrow(trees),
+                            P = length(unique(trees$pop)),
+                            y = as.vector(scale(trees[variable], center = F)),
+                                          population = trees$popNum,
+                                          K = K))})
+names(mdata) <- c("TWI", "NCI")
+save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))
 ```
 
 ## Genetic variance
 
 We used between individual kinship and a lognormal Animal model [@Wilson2010] to estimate genetic variance associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. Animal model is calculated for the environemental values $y$ of the $N$ individuals with following formula:
 
-
-$$y \sim \mathcal{logN}(a,\sigma_R) \\ a \sim \mathcal{MVlogN_N}(\mu_{Population},\sigma_GK)$$
+$$y_{p,i} \sim \mathcal{logN}(log(a_i),\sigma_1) \\ a_i \sim \mathcal{MVlogN_N}(log(\mu_p),\sigma_2.K)$$
 
 where individual is defined as a normal law centered on the individual genetic additive effects $a$ and associated individual remaining variance $\sigma_R$. Additive genetic variance $a$ follow a multivariate lognormal law centered on the population mean $\mu_{Population}$ of covariance $\sigma_G K$.
 
-For both topography (TWI) and neighboring (NCI), most of the variability was not explained either by population or genotype with 41% and 96% of remaining variability respectivelly for TWI and NCI. Thus most of individual environment is determined through plastic response. Nevertheless the variability for topography was also strongly explained by the population (41%) and 18% of the remaining variability was explained by the genotype (Tab. \@ref(tab:EnvAnimalLog) and Fig. \@ref(fig:envKinshipLogG1) and \@ref(fig:envKinshipLogG2)).
+We fitted the equivalent model with following priors:
 
-```{r EnvAnimalLog, fig.cap="Genetic variance modelling for environmental variables."}
-# animal <- stan_model("./symcapture_models/AnimalLog.stan")
-# fitEnvKin <- lapply(c("TWI", "NCI"), function(var)
-#   sampling(animal, chains = 2, data = mdata(trees, var), save_warmup = F,
-#            control = list(adapt_delta = 0.99)))
-# names(fitEnvKin) <- c("TWI", "NCI")
-# save(fitEnvKin, file = file.path("symcapture_save", 'envkinLog.Rdata'))
-load(file.path("symcapture_save", 'envkinLog.Rdata'))
-lapply(fitEnvKin, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
+$$y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \sigma_2.A.\epsilon_i, \sigma_1) \\ \epsilon \sim \mathcal{N}(0,1) \\ \mu_p \sim \mathcal{logN}(0,1) \\  (\sigma_1,\sigma_2) \sim \mathcal N(0,1) \\V_P = Var(\mu_p) \\V_G=\sigma_2^2\\V_R=\sigma_1^2$$
+Results... pending !
+<!-- For both topography (TWI) and neighboring (NCI), most of the variability was not explained either by population or genotype with 41% and 96% of remaining variability respectivelly for TWI and NCI. Thus most of individual environment is determined through plastic response. Nevertheless the variability for topography was also strongly explained by the population (41%) and 18% of the remaining variability was explained by the genotype (Tab. \@ref(tab:EnvAnimalLog) and Fig. \@ref(fig:envKinshipLogG1) and \@ref(fig:envKinshipLogG2)). -->
+
+```{bash envGenoCluster, eval=F}
+vars=(TWI NCI)
+for var in "${vars[@]}" ; do for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript EnvGeno.R $chain $var" ; done ; done > EnvGeno.sh
+sarray -J Env -o out/%j.Env.out -e out/%j.Env.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL EnvGeno.sh
+```
+
+```{r envGenoTab, fig.cap="Genetic variance of individual growth potential with a lognormal animal model."}
+fitEnv <- list(TWI = list(), NCI = list())
+for(var in c("TWI", "NCI")){
+  for(sim in list.files("symcapture_save/EnvGeno", 
+                        pattern = var, full.names = T)){
+    load(sim)
+    fitEnv[[var]] <- c(fitEnv[[var]], fit)
+  }
+}
+fitEnv <- lapply(fitEnv, sflist2stanfit)
+lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
        droppars = NULL, rhat = T) %>% 
   bind_rows(.id = "Variable") %>% 
   separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
-  mutate(population = recode(population, "1" = "S.globuliferaParacou", "2" = "S.globuliferaRegina", "3" = "S.sp1")) %>% 
+  mutate(population = recode(population, "1" = "S. globulifera Paracou",
+                             "2" = "S. globulifera Regina", "3" = "S. sp1")) %>% 
   mutate(population = ifelse(is.na(population), "", population)) %>% 
   kable(caption = "Summary table of the kinship growth model",
-        col.names = c("Variable", "Parameter",  "Population", "Estimate", "$\\sigma$", "$\\hat{R}$"))
+        col.names = c("Variable", "Parameter",  "Population", 
+                      "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
-```{r envKinshipLogG1, fig.cap="Marginal and conditional $R^2$ for environmental variables."}
-lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("R2")) %>% 
+```{r envGenoTrace, fig.cap="Traceplot for environmental variables."}
+cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
+                                     regex_pars = c("sigma"), 
+                                     facet_args = list(nrow = 1)),
+                   nrow = 2, labels = names(fitEnv))
+```
+
+```{r envGenoR2, fig.cap="Marginal and conditional $R^2$ for environmental variables."}
+lapply(fitEnv, mcmc_intervals_data, regex_pars = c("R2")) %>% 
   bind_rows(.id = "variable") %>% 
   mutate(index = recode(parameter, 
                         "R2m" = "Marginal", "R2c" = "Conditional")) %>%
@@ -198,8 +219,8 @@ lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("R2")) %>%
   scale_color_discrete(guide = "none")
 ```
 
-```{r envKinshipLogG2, fig.cap="Genetic variance partitionning for environmental variables."}
-lapply(fitEnvKin, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+```{r envGenoVarPart, fig.cap="Genetic variance partitionning for environmental variables."}
+lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
   bind_rows(.id = "variable") %>% 
   mutate(parameter = recode(parameter, "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
   group_by(variable) %>%

@@ -9,7 +9,7 @@ rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
-  cache = F, cache.lazy = F)
+  cache = T, cache.lazy = F)
 path <- "../../../data/CLONAPIN/"
 ```
 
@@ -44,6 +44,14 @@ sigmaG <- 0.3
 sigmaR <- 0.2
 epsilonG <- rnorm(N)
 muP <- rnorm(P, sd = sigmaP)
+mdata <- list(N = N, K = K, population = ped.df$pop,
+              ynorm = rnorm(N, muP[ped.df$pop] + 
+                              sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+                            sigmaR),
+              ylognorm = rlnorm(N, 
+                                muP[ped.df$pop] + 
+                                  sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+                                sigmaR))
 ```
 
 #### Normal distribution 1
@@ -56,13 +64,28 @@ Than we can rewrite as:
 
 $$y \sim \mathcal N(\mu_P + \sigma_G.A.a,\sigma_R)\\ a \sim \mathcal{N}(0,1)\\|~u =\sigma_G.A.a$$
 
-```{r simnormal1, fig.cap="Normal simulated data.", echo = T}
+```{r simnormdistnorm1data, echo = T}
 u <- sigmaG*as.vector(t(chol(K)) %*% epsilonG) 
 y <- rnorm(N, muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
            sigmaR)
 ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
        aes(u, y, col = pop)) +
-  geom_point() + geom_smooth(method = "lm", se = F)
+  geom_point() + geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = muP[ped.df$pop], linetype = "dotted")
+```
+
+```{r simnormdistnorm1fit, echo = T}
+mNN <- stan_model("variance_models/methods/VarNormDistNorm.stan")
+fNN <- sampling(mNN, chains = 2, save_warmup = F, data = mdata,
+                control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fNN, ess = T, rhat = T, 
+                estimate.method = "median", droppars = F,
+                pars = c("mu", "sigma", "lp__"))
+mcmc_trace(as.array(fNN, pars = c("mu", "sigma"))) +
+   geom_hline(aes(yintercept = expected), col = "red", 
+           data = data.frame(parameter = c("mu[1]", "mu[2]", 
+                                           "sigma[1]", "sigma[2]"), 
+                               expected = c(muP, sigmaR, sigmaG)))
 ```
 
 #### Normal distribution 2
@@ -75,7 +98,9 @@ Than we can rewrite as:
 
 $$y \sim \mathcal N(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' =\mu_P + \sigma_G.A.a\\u=\sigma_G.A.a$$
 
-```{r simnormal2, fig.cap="Normal simulated data.", echo = T}
+Once non-centered it's totally the same model as the previous one.
+
+```{r simnormdistnorm2data, echo = T}
 up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG) 
 u <- up - muP[ped.df$pop]
 y <- rnorm(N, 
@@ -83,10 +108,11 @@ y <- rnorm(N,
            sigmaR)
 ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
        aes(u, y, col = pop)) +
-  geom_point() + geom_smooth(method = "lm", se = F)
+  geom_point() + geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = muP[ped.df$pop], linetype = "dotted")
 ```
 
-#### Lognormal distribution
+#### Lognormal distribution 1
 
 And if we know use a lognormal distribution
 
@@ -94,9 +120,9 @@ $$e^y \sim \mathcal {logN}(u',\sigma_R)\\u' \sim \mathcal{MVN}(\mu_P,\sigma_G.K)
 
 Than we can rewrite as:
 
-$$e^y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' = \mu_P + \sigma_G.A.a\\u=\mu_P + \sigma_G.A.a-\mu_p$$
+$$e^y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' = \mu_P + \sigma_G.A.a\\u= \sigma_G.A.a$$
 
-```{r simnormal3, fig.cap="Normal simulated data.", echo = T}
+```{r simnormdistlognorm1data, echo = T}
 up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG)
 u <- up - muP[ped.df$pop]
 expy <- rlnorm(N, 
@@ -105,7 +131,86 @@ expy <- rlnorm(N,
 y <- log(expy)
 ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
        aes(u, y, col = pop)) +
-  geom_point() + geom_smooth(method = "lm", se = F)
+  geom_point() + geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = muP[ped.df$pop], linetype = "dotted")
+```
+
+```{r simnormdistlognorm1fit, echo = T}
+mNLn <- stan_model("variance_models/methods/VarNormDistLognorm.stan")
+fNLn <- sampling(mNLn, chains = 2, save_warmup = F, data = mdata,
+                 control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fNLn, ess = T, rhat = T, 
+                estimate.method = "median", droppars = F,
+                pars = c("mu", "sigma", "lp__"))
+mcmc_trace(as.array(fNLn, pars = c("mu", "sigma"))) +
+   geom_hline(aes(yintercept = expected), col = "red", 
+           data = data.frame(parameter = c("mu[1]", "mu[2]", 
+                                           "sigma[1]", "sigma[2]"), 
+                               expected = c(muP, sigmaR, sigmaG)))
+```
+
+#### Lognormal distribution 2
+
+And if we know use a lognormal distribution with location on the median :
+
+$$e^y \sim \mathcal {logN}(log(u''),\sigma_R)\\log(u'') \sim \mathcal{MVN}(\mu_P,\sigma_G.K)\\u'= log(u'')=u+\mu_p$$
+
+Equivalent to:
+
+$$e^y \sim \mathcal {logN}(log(u''),\sigma_R)\\ u'' \sim \mathcal{MVlogN}(\mu_P,\sigma_G.K)\\ u''=e^u.e^\mu_p$$
+
+Equivalent to:
+
+$$e^y \sim \mathcal {logN}(log(u''),\sigma_R)\\ u'' \sim \mathcal{MVlogN}(log(\mu_P'),\sigma_G.K)\\ log(\mu_p') = \mu_p \\ u''=e^u.e^\mu_p=e^u.\mu_p'$$
+
+Than we can rewrite as:
+
+$$e^y \sim \mathcal {logN}(log(e^{log(\mu_P') + \sigma_G.A.a}),\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u'' = e^{log(\mu_P') + \sigma_G.A.a}\\log(\mu_p') = \mu_p\\e^u=\frac{u''}{\mu_P'}$$
+
+Equivalent to:
+
+$$e^y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u'' = e^{log(\mu_P') + \sigma_G.A.a}\\u = log(u'') - log(\mu_p') = \sigma_G.A.a$$
+
+Once non-centered it's totally the same model as the previous one.
+
+```{r simnormdistlognorm2data, fig.cap="Normal simulated data.", echo = T}
+u <- sigmaG*as.vector(t(chol(K)) %*% epsilonG)
+expy <- rlnorm(N, 
+               log(exp(muP[ped.df$pop])) + sigmaG*as.vector(t(chol(K)) %*% epsilonG),
+               sigmaR)
+y <- log(expy)
+ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
+       aes(u, y, col = pop)) +
+  geom_point() + geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = muP[ped.df$pop], linetype = "dotted")
+```
+
+#### Comparison
+
+```{r simnormcomparison, echo = T}
+lapply(lapply(c(fNN, fNLn), get_elapsed_time), data.frame) %>%
+  bind_rows(.id = "model") %>% 
+  mutate(model = recode_factor(model, 
+                               "1" = "Normal distribution",
+                               "2" = "Lognormal distribution")) %>% 
+  mutate(total = warmup + sample) %>% 
+  arrange(total)
+lapply(c(fNN, fNLn), mcmc_intervals_data, pars = "lp__") %>% 
+  bind_rows(.id = "model") %>% 
+  mutate(model = recode_factor(model, 
+                               "1" = "Normal distribution",
+                               "2" = "Lognormal distribution")) %>% 
+  ggplot(aes(x = model, xend = model,
+             color = model, fill = model)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  xaxis_title(F) + 
+  ylab("Loglikelihood") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
 ```
 
 ### Lognormal data
@@ -120,7 +225,7 @@ Than we can rewrite as:
 
 $$log(y) \sim \mathcal N(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' =\mu_P + \sigma_G.A.a\\u=\sigma_G.A.a$$
 
-```{r simlognormal1, fig.cap="Logormal simulated data.", echo = T}
+```{r simlognormaldistnorm1, fig.cap="Logormal simulated data.", echo = T}
 up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG) 
 u <- up - muP[ped.df$pop]
 logy <- rnorm(N, 
@@ -129,10 +234,25 @@ logy <- rnorm(N,
 y <- exp(logy)
 ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
        aes(u, y, col = pop)) +
-  geom_point() + geom_smooth(method = "lm", se = F)
+  geom_point() + geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = exp(muP[ped.df$pop]), linetype = "dotted")
 ```
 
-#### Lognormal distribution
+```{r simlognormdistnorm1fit, echo = T}
+mLnN <- stan_model("variance_models/methods/VarLognormDistNorm.stan")
+fLnN <- sampling(mLnN, chains = 2, save_warmup = F, data = mdata,
+                 control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fLnN, ess = T, rhat = T, 
+                estimate.method = "median", droppars = F,
+                pars = c("mu", "sigma", "lp__"))
+mcmc_trace(as.array(fLnN, pars = c("mu", "sigma"))) +
+   geom_hline(aes(yintercept = expected), col = "red", 
+           data = data.frame(parameter = c("mu[1]", "mu[2]", 
+                                           "sigma[1]", "sigma[2]"), 
+                               expected = c(muP, sigmaR, sigmaG)))
+```
+
+#### Lognormal distribution 1
 
 And if we know use a lognormal distribution
 
@@ -140,9 +260,9 @@ $$y \sim \mathcal {logN}(u',\sigma_R)\\u' \sim \mathcal{MVN}(\mu_P,\sigma_G.K)\\
 
 Than we can rewrite as:
 
-$$y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' = \mu_P + \sigma_G.A.a\\u=\mu_P + \sigma_G.A.a-\mu_p$$
+$$y \sim \mathcal {logN}(\mu_P + \sigma_G.A.a,\sigma_R)\\a \sim \mathcal{N}(0,1)\\|~u' = \sigma_G.A.a\\u=\mu_P + \sigma_G.A.a$$
 
-```{r simlognormal2, fig.cap="Normal simulated data.", echo = T}
+```{r simlognormaldistlognorm1, fig.cap="Normal simulated data.", echo = T}
 up <- muP[ped.df$pop] + sigmaG*as.vector(t(chol(K)) %*% epsilonG)
 u <- up - muP[ped.df$pop]
 y <- rlnorm(N, 
@@ -150,120 +270,48 @@ y <- rlnorm(N,
             sigmaR)
 ggplot(data.frame(y = y, u = u, pop = as.factor(ped.df$pop)), 
        aes(u, y, col = pop)) +
-  geom_point() + geom_smooth(method = "lm", se = F)
+  geom_point() + geom_smooth(method = "lm", se = F) +
+  geom_hline(yintercept = exp(muP[ped.df$pop]), linetype = "dotted")
 ```
 
-<!-- ## Genetic variance estimate -->
+```{r simlognormdistlognorm1fit, echo = T}
+mLnLn <- stan_model("variance_models/methods/VarLognormDistLognorm.stan")
+fLnLn <- sampling(mLnLn, chains = 2, save_warmup = F, data = mdata,
+                 control = list(adapt_delta = 0.99, max_treedepth = 12))
+broom::tidyMCMC(fLnLn, ess = T, rhat = T, 
+                estimate.method = "median", droppars = F,
+                pars = c("mu", "sigma", "lp__"))
+mcmc_trace(as.array(fLnLn, pars = c("mu", "sigma"))) +
+   geom_hline(aes(yintercept = expected), col = "red", 
+           data = data.frame(parameter = c("mu[1]", "mu[2]", 
+                                           "sigma[1]", "sigma[2]"), 
+                               expected = c(muP, sigmaR, sigmaG)))
+```
 
-<!-- ### Data simulation -->
+#### Comparison
 
-<!-- Let's consider a set of $P=3$ populations including each $Fam=6$ families composed of $I = 14$ individuals with arbitrar relationships. -->
-
-<!-- ```{r simnormal, fig.cap="Normal simulated data."} -->
-<!-- sigmaPnorm <- 0.5 -->
-<!-- sigmaGnorm <- 0.3 -->
-<!-- sigmaRnorm <- 0.2 -->
-<!-- pnorm <- rnorm(P, mean = 10, sd = sigmaPnorm) -->
-<!-- anorm <- sigmaGnorm*rnorm(N) -->
-<!-- ynorm <- rnorm(N, mean = pnorm[ped.df$pop] + as.vector(t(chol(K)) %*% anorm), sd = sigmaRnorm) -->
-<!-- Vpnorm <- var(pnorm) -->
-<!-- Vgnorm <- var(anorm) -->
-<!-- Vrnorm <- var(ynorm - as.vector(t(chol(K)) %*% anorm)) -->
-<!-- ggplot(data.frame(y = ynorm, a = anorm, pop = as.factor(ped.df$pop)),  -->
-<!--        aes(a, y, col = pop)) + -->
-<!--   geom_point() + geom_smooth(method = "lm", se = F) + -->
-<!--   xlab("Breeding values") + ylab("Observed values") + -->
-<!--   ggtitle("Normal data", -->
-<!--           paste0("Vp = ", round(Vpnorm,2),  -->
-<!--                  ", Vg = ", round(Vgnorm,2),  -->
-<!--                  ", Vr = ", round(Vrnorm,2))) -->
-<!-- ``` -->
-
-<!-- ```{r simlognormal, fig.cap="Lognormal simulated data."} -->
-<!-- sigmaPlognorm <- 0.5 -->
-<!-- sigmaGlognorm <- 0.3 -->
-<!-- sigmaRlognorm <- 0.2 -->
-<!-- plognorm <- rlnorm(P, sd = sqrt(sigmaPlognorm)) -->
-<!-- alognorm <- exp(log(plognorm[ped.df$pop]) + sigmaGlognorm*rnorm(N)) -->
-<!-- ylognorm <- rlnorm(N, meanlog = log(as.vector(t(chol(K)) %*% alognorm)),  -->
-<!--                    sdlog = sigmaRlognorm) -->
-<!-- Vplognorm <- var(plognorm) -->
-<!-- Vglognorm <- var(log(alognorm) - log(plognorm[ped.df$pop])) -->
-<!-- Vrlognorm <- var(log(ylognorm) - log(as.vector(t(chol(K)) %*% alognorm))) -->
-<!-- ggplot(data.frame(y = ylognorm, a = alognorm, pop = as.factor(ped.df$pop)),  -->
-<!--        aes(a, y, col = pop)) + -->
-<!--   geom_point() + geom_smooth(method = "lm", se = F) + -->
-<!--   xlab("Breeding values") + ylab("Observed values") + -->
-<!--   ggtitle("Lognormal data", -->
-<!--           paste0("Vp = ", round(Vplognorm,2),  -->
-<!--                  ", Vg = ", round(Vglognorm,2),  -->
-<!--                  ", Vr = ", round(Vrlognorm,2))) -->
-<!-- ``` -->
-
-<!-- ### Normal Animal Model -->
-
-<!-- $$log(y) \sim \mathcal N(\mu_P + \sigma_G.A.\epsilon,\sigma_R) \\ (\mu_P,\epsilon) \sim \mathcal N^{P+1}(0,1) \\ (\sigma_G,\sigma_R) \sim \mathcal C^2(0,1) \\ V_g=\sigma_G^2~,Vr=\sigma_R^2$$ -->
-
-<!-- ```{r VarAnNorm} -->
-<!-- Anorm <- stan_model("variance_models/methods/AnimalNormal.stan") -->
-<!-- fitAnormDnorm <- sampling(Anorm, chains = 2,  -->
-<!--                            data = list(N = N, y = ynorm,  -->
-<!--                                        K = K, population = ped.df$pop),  -->
-<!--                            include = F, pars = c("a", "epsilon"), -->
-<!--                            save_warmup = F,  -->
-<!--                            control = list(adapt_delta = 0.99, max_treedepth = 12)) -->
-<!-- fitAnormDlognorm <- sampling(Anorm, chains = 2,  -->
-<!--                              data = list(N = N, y = log(ylognorm),  -->
-<!--                                          K = K, population = ped.df$pop),  -->
-<!--                              include = F, pars = c("a", "epsilon"), -->
-<!--                              save_warmup = F,  -->
-<!--                              control = list(adapt_delta = 0.99, max_treedepth = 12)) -->
-<!-- lapply(c(fitAnormDnorm, fitAnormDlognorm),  -->
-<!--        broom::tidyMCMC, ess = T, rhat = T,  -->
-<!--        estimate.method = "median", droppars = F) %>%  -->
-<!--   bind_rows() -->
-<!-- mcmc_trace(as.array(fitAnormDnorm, pars = c("Vp", "Vg", "Vr"))) + -->
-<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
-<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
-<!--                                expected = c(Vpnorm, Vgnorm, Vrnorm))) -->
-<!-- mcmc_trace(as.array(fitAnormDlognorm, pars = c("Vp", "Vg", "Vr"))) + -->
-<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
-<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
-<!--                                expected = c(Vplognorm, Vglognorm, Vrlognorm))) -->
-<!-- ``` -->
-
-<!-- ### Lognormal Animal Model -->
-
-<!-- $$y \sim \mathcal {logN}(log(A.exp^{log(\mu_P) + \sigma_G.\epsilon},\sigma_R)) \\ (\mu_P,\epsilon) \sim \mathcal N^{P+1}(0,1) \\ (\sigma_G,\sigma_R) \sim \mathcal C^2(0,1) \\ V_g=Var(log(a))~,Vr=Var(log(y)-log(A.a))$$ -->
-
-<!-- ```{r VarAnLognorm} -->
-<!-- Alognorm <- stan_model("variance_models/methods/AnimalLognormal.stan") -->
-<!-- fitAlognormDnorm <- sampling(Alognorm, chains = 2,  -->
-<!--                              data = list(N = N, y = ynorm,  -->
-<!--                                          K = K, population = ped.df$pop),  -->
-<!--                              include = F, pars = c("a", "epsilon"), -->
-<!--                              save_warmup = F,  -->
-<!--                              control = list(adapt_delta = 0.99,  -->
-<!--                                             max_treedepth = 12)) -->
-<!-- fitAlognormDlognorm <- sampling(Alognorm, chains = 2,  -->
-<!--                                 data = list(N = N, y = ylognorm,  -->
-<!--                                             K = K, population = ped.df$pop),  -->
-<!--                                 include = F, pars = c("a", "epsilon"), -->
-<!--                                 save_warmup = F,  -->
-<!--                                 control = list(adapt_delta = 0.99,  -->
-<!--                                                max_treedepth = 12)) -->
-<!-- lapply(c(fitAlognormDnorm, fitAlognormDlognorm),  -->
-<!--        broom::tidyMCMC, ess = T, rhat = T,  -->
-<!--        estimate.method = "median", droppars = F) %>%  -->
-<!--   bind_rows() -->
-<!-- mcmc_trace(as.array(fitAlognormDnorm, pars = c("Vp", "Vg", "Vr"))) + -->
-<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
-<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
-<!--                                expected = c(Vpnorm, Vgnorm, Vrnorm))) -->
-<!-- mcmc_trace(as.array(fitAlognormDlognorm, pars = c("Vp", "Vg", "Vr"))) + -->
-<!--   geom_hline(aes(yintercept = expected), col = "red",  -->
-<!--              data = data.frame(parameter = c("Vp", "Vg", "Vr"),  -->
-<!--                                expected = c(Vplognorm, Vglognorm, Vrlognorm))) -->
-<!-- ``` -->
-
- 
+```{r simlognormcomparison, echo = T}
+lapply(lapply(c(fLnN, fLnLn), get_elapsed_time), data.frame) %>%
+  bind_rows(.id = "model") %>% 
+  mutate(model = recode_factor(model, 
+                               "1" = "Normal distribution",
+                               "2" = "Lognormal distribution")) %>% 
+  mutate(total = warmup + sample) %>% 
+  arrange(total)
+lapply(c(fNN, fNLn), mcmc_intervals_data, pars = "lp__") %>% 
+  bind_rows(.id = "model") %>% 
+  mutate(model = recode_factor(model, 
+                               "1" = "Normal distribution",
+                               "2" = "Lognormal distribution")) %>% 
+  ggplot(aes(x = model, xend = model,
+             color = model, fill = model)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  xaxis_title(F) + 
+  ylab("Loglikelihood") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```

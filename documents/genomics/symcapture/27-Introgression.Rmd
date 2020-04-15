@@ -309,7 +309,36 @@ fit <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi =
                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)))
 plot(fit) +
   ggtitle("Beta regression: hybrid index ~ log(Gmax) + TWI + NCI + species pair")
+# fit.pure <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
+#                data = left_join(hi.index, trees) %>%
+#                  mutate_at(c("TWI", "NCI"), scale, center = F) %>%
+#                  mutate_at(c("TWI", "NCI"), as.vector) %>% 
+#                  mutate(h = 1-h) %>% 
+#                  mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
+#                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)) %>% 
+#                  filter(h > 0.95 | h < 0.05))
+# fit.hyb5 <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
+#                data = left_join(hi.index, trees) %>%
+#                  mutate_at(c("TWI", "NCI"), scale, center = F) %>%
+#                  mutate_at(c("TWI", "NCI"), as.vector) %>% 
+#                  mutate(h = 1-h) %>% 
+#                  mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
+#                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)) %>% 
+#                  filter(h < 0.95, h > 0.05))
+# fit.hyb10 <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
+#                data = left_join(hi.index, trees) %>%
+#                  mutate_at(c("TWI", "NCI"), scale, center = F) %>%
+#                  mutate_at(c("TWI", "NCI"), as.vector) %>% 
+#                  mutate(h = 1-h) %>% 
+#                  mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
+#                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)) %>% 
+#                  filter(h < 0.9, h > 0.1))
+# 
+# plot(fit.pure)
+# plot(fit.hyb5)
+# plot(fit.hyb10)
 ```
+
 
 ```{r introgressGmaxLm, fig.cap="Quick linear model of the logarithm of individual growth potential (Gmax) with hybrid index (S. sp1 ancestry), topographic wetness index (TWI), neighbor crowding index (NCI) and species pair."}
 lm(log(Gmax) ~ h + pair + TWI + NCI, data = left_join(hi.index, trees) %>%
@@ -323,38 +352,3 @@ lm(log(Gmax) ~ h + pair + TWI + NCI, data = left_join(hi.index, trees) %>%
 
 <!-- See [PhD 0.1.9.142 - Population Structure](https://github.com/sylvainschmitt/PhD/blob/6fe49a59f2c61ad0864a2ab3bebba7395d9320e6/documents/genomics/symcapture/18-PopulationStructure.Rmd) -->
 
-<!-- ```{r 1000Genomes} -->
-<!-- library(PopGenome) -->
-<!-- genome <- readData(file.path(".././../data/Symphonia_Paracou/Sequences/", -->
-<!--                              "variantCalling", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.vcf.gz"),  -->
-<!--                    format = "VCF") -->
-<!-- fam <- read_tsv(file.path(path, "..", "variantCalling", "globulifera", -->
-<!--                           "symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.fam"), -->
-<!--          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>%  -->
-<!--   mutate(Ind = gsub(".g.vcf", "", IID)) -->
-<!-- symcapture.admix <- readQ(list.files(file.path(path, "admixture", "globulifera"),  -->
-<!--                                      full.names = T, pattern = ".Q"), indlabfromfile=F) -->
-<!-- symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind) -->
-<!-- SgParacou = symcapture.admix$symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.2.Q %>%  -->
-<!--   mutate(Ind = paste0(row.names(.), ".g.vcf")) %>%  -->
-<!--   filter(Cluster1 < 0.5) %>%  -->
-<!--   dplyr::select(Ind) %>%  -->
-<!--   unlist() %>% unname() -->
-<!-- SgRegina = symcapture.admix$symcapture.all.biallelic.snp.filtered.nonmissing.globulifera.renamed.2.Q %>%  -->
-<!--     mutate(Ind = paste0(row.names(.), ".g.vcf")) %>%  -->
-<!--     filter(Cluster1 > 0.5) %>%  -->
-<!--     dplyr::select(Ind) %>%  -->
-<!--     unlist() %>% unname() -->
-<!-- Ssp1 = read_tsv(file.path(path, "..", "variantCalling", "sp1", -->
-<!--                             "symcapture.all.biallelic.snp.filtered.nonmissing.sp1.fam"), col_names = F) %>% -->
-<!--     dplyr::select(X2) %>% -->
-<!--     unlist() %>% unname() -->
-<!-- pop <- list(SgParacou, SgRegina, Ssp1) -->
-<!-- genome <- set.populations(genome, pop, diploid = T) -->
-<!-- genome <- set.outgroup(genome, "FO23.g.vcf", diploid = T) -->
-<!-- genome <- sliding.window.transform(genome, width = 50) -->
-<!-- genome <- introgression.stats(genome, l.smooth = T, do.D = T) -->
-<!-- genome <- weighted.jackknife(genome, per.region = F) -->
-<!-- ``` -->
-
-<!-- Non singificant and low Patterson’s $D$ (`r round(genome@D.z, 3)`, P= `r round(genome@D.pval, 3)`) and @Pfeifer2019's $d_f$ (`r round(genome@df.z, 3)`, P= `r round(genome@df.pval, 3)`). But two genomics area have a significant P-value < 0.01 adjusted with Benjamin-Hochberg correction for $d_f$ in 50 bp window (Fig. \@ref(fig:popgenomeG)). One with significant positive values indicates introgressions of *S. globulifera type Regina* with *S. globulifera type Paracou* whereas the other with negative values indicates introgressions of *S. sp1* with *S. globulifera type Parcou*. -->
