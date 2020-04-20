@@ -1,5 +1,5 @@
 ```{r setup_growthanimal, include=FALSE}
-# rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
@@ -66,7 +66,11 @@ heatmap(simK()$K)
 
 We used the following animal model with a lognormal distribution to estimate population and genotypic variance:
 
-$$y_{p,i} \sim \mathcal{logN}(log(a_i),\sigma_1) \\ a_i \sim \mathcal{MVlogN_N}(log(\mu_p),\sigma_2.K)$$
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(a_i),\sigma_1) \\
+  a_i \sim \mathcal{MVlogN_N}(log(\mu_p),\sigma_2.K)
+  (\#eq:animallogth)
+\end{equation} 
 
 ```{r simanimal}
 simAnimal <- function(
@@ -80,54 +84,124 @@ simAnimal <- function(
   N <- nrow(K$K)
   epsilonG <- rnorm(N)
   p <- rlnorm(P, sd = sigmaP)
-  mdata <- list(N = N, K = K$K, population = K$df$pop,
+  mdata <- list(N = N, P = P, K = K$K, population = K$df$pop,
                 y = rlnorm(N, 
                            log(p[K$df$pop]) + 
                              sigmaG*as.vector(t(chol(K$K)) %*% epsilonG),
                            sigmaR))
-  return(list(p = p, 
-              sigmaR = sigmaR, 
-              sigmaG = sigmaG, 
+  return(list(mu = p,
+              Vp = var(log(p[K$df$pop])), 
+              Vg = var(sigmaG*as.vector(t(chol(K$K)) %*% epsilonG)), 
+              Vr = sigmaR^2, 
+              Vy = var(log(mdata$y)),
               mdata = mdata))
 }
 ```
 
 We fitted the equivalent model with following priors:
 
-$$y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \sigma_2.A.\epsilon_i, \sigma_1) \\ \epsilon \sim \mathcal{N}(0,1) \\ \mu_p \sim \mathcal{logN}(0,1) \\  (\sigma_1,\sigma_2) \sim \mathcal N(0,1) \\V_P = Var(\mu_p) \\V_G=\sigma_2^2\\V_R=\sigma_1^2$$
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \hat{\sigma_2}.A.\epsilon_i, \sigma_1) \\ 
+  \epsilon_i \sim \mathcal{N}(0,1) \\ 
+  ~ \\
+  \mu_p \sim \mathcal{logN}(log(1),1) \\  
+  \sigma_1 \sim \mathcal N_T(0,1) \\ 
+  \hat{\sigma_2} = \sqrt(V_G)
+  ~ \\
+  V_Y = Var(log(y)) \\
+  V_P = Var(log(\mu_p)) \\
+  V_G = V_Y - V_P - V_R \\
+  V_R=\sigma_1^2
+  (\#eq:animallogthstan)
+\end{equation} 
 
 ```{r animalTable}
-# mdata <- simAnimal()
+# mdata <- simAnimal(P = 3, Fam = 3)
 # animal <- stan_model("symcapture_models/AnimalLog.stan")
-# fitAnimal <- sampling(animal, chains = 2, save_warmup = F, data = mdata$mdata)
+# fitAnimal <- sampling(animal, chains = 2, save_warmup = F, data = mdata$mdata,
+#                       init = "0",
+#                       control = list(adapt_delta = 0.99, max_treedepth = 12))
 # save(mdata, fitAnimal, file = file.path("symcapture_save", "animal.Rdata"))
 load(file.path("symcapture_save", "animal.Rdata"))
-broom::tidyMCMC(fitAnimal, pars = c("mu", "sigma", "Vp", "lp__"), 
+broom::tidyMCMC(fitAnimal, pars = c("mu", "Vp", "Vg", "Vr", "lp__"), 
                 droppars = NULL, rhat = T) %>% 
-  mutate(expected = c(mdata$p, mdata$sigmaR, mdata$sigmaG, 
-                      var(mdata$p), NA)) %>% 
-  dplyr::select(term, estimate, std.error, expected, rhat) %>% 
+  mutate(expected = with(mdata, c(mu, Vp, Vg, Vr, NA))) %>% 
+  dplyr::select(term, estimate, expected, std.error, rhat) %>% 
   kable(caption = "Animal model fitted versus expected values.",
-        col.names = c("Parameter", "Estimate", "Standard error", 
-                      "Expected", "$\\hat R$"))
+        col.names = c("Parameter", "Estimate", "Expected",
+                      "Standard error", "$\\hat R$"))
 ```
 
 ```{r animalTrace, fig.cap="Parameters for Animal model traceplot and expected value in red."}
-mcmc_trace(as.array(fitAnimal, pars = c("mu", "sigma", "Vp", "lp__")),
+mcmc_trace(as.array(fitAnimal, pars = c("mu", "Vp", "Vg", "Vr", "lp__")),
            np = nuts_params(fitAnimal)) +
-    geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c(paste0("mu[", 1:length(mdata$p), "]"), 
-                                             paste0("sigma[", 1:2, "]"), 
-                                             "Vp", "lp__"), 
-                               expected = c(mdata$p, mdata$sigmaR,
-                                            mdata$sigmaG, var(mdata$p), NA)))
+  geom_hline(aes(yintercept = expected), col = "red", 
+             data = data.frame(parameter = c(paste0("mu[", 1:length(mdata$mu), "]"), 
+                                             "Vp", "Vg", "Vr"), 
+                               expected = with(mdata, c(mu, Vp, Vg, Vr))))
 ```
+
+## Animal & Environment
+
+We used the following animal model with a lognormal distribution to estimate population and genotypic variance:
+
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p + a_i + e_i + \beta.Env_i),\sigma_1) \\
+  a_i \sim \mathcal{MVlogN_N}(log(1),\sigma_2.K) \\
+  e_i \sim \mathcal{MVlogN_N}(log(1),\sigma_3.K.E) \\
+  (\#eq:animallogth)
+\end{equation} 
+
+```{r simanimalenv, echo=T}
+load(file.path("symcapture_save", "growthPar.Rdata"))
+Env <- mdata$NCI
+hist(Env)
+K <- mdata$K
+heatmap(K)
+E <- as.matrix(dist(Env))
+heatmap(E)
+matrixcalc::is.positive.definite(K*E)
+GE <- as.matrix(Matrix::nearPD(K*E)$mat)
+all.equal(K*E, GE)
+max(K*E)
+barplot(eigen(K*E)$values)
+barplot(eigen(GE)$values)
+```
+
+We fitted the equivalent model with following priors:
+
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p + \hat{a_i} + \hat{e_i} + \beta.Env_i), \sigma_1) \\ 
+  \epsilon_{1,i} \sim \mathcal{N}(0,1) \\ 
+  \epsilon_{2,i} \sim \mathcal{N}(0,1) \\ 
+  ~ \\
+  \mu_p \sim \mathcal{logN}(log(1),1) \\  
+  \beta \sim \mathcal N(0,1) \\
+  \sigma_1 \sim \mathcal N_T(0,1) \\ 
+  ~ \\
+  \hat{a_i} = e^{\hat{\sigma_2}.A_1.\epsilon_{1,i}} \\
+  \hat{e_i} = e^{\sigma_3.A_2.\epsilon_{2,i}} \\
+  \hat{\sigma_2} = \sqrt(V_G) \\
+  V_Y = Var(log(y)) \\
+  V_P = Var(log(\mu_p)) \\
+  V_G = V_Y - V_P - V_R \\
+  V_R=\sigma_1^2
+  (\#eq:animallogenvthstan)
+\end{equation} 
 
 ## Gmax
 
 We used the following growth model with a lognormal distribution to estimate individual growth potential:
 
-$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \theta1_i.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta2_p})}{\theta3_p}]^2)), \sigma_1) \\ \theta1_i \sim \mathcal {logN}(\theta1_p, \sigma_2) \\ \theta2_p \sim \mathcal {logN}(\theta2,\sigma_3) \\ \theta3_p \sim \mathcal {logN}(\theta3,\sigma_4)$$
+\begin{equation} 
+  DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \\
+  \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \theta_{1,p,i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta_{2,p}})}{\theta_{3,p}}]^2)), \sigma_1) \\ 
+  \theta_{1,p,i} \sim \mathcal {logN}(log(\theta_{1,p}), \sigma_2) \\ 
+  \theta_{2,p} \sim \mathcal {logN}(log(\theta_2),\sigma_3) \\ 
+  \theta_{3,p} \sim \mathcal {logN}(log(\theta_3),\sigma_4)
+  (\#eq:gmaxth)
+\end{equation} 
+
 
 ```{r simgmax}
 simGmax <- function(
@@ -167,7 +241,23 @@ simGmax <- function(
 
 We fitted the equivalent model with following priors:
 
-$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( log(\sum _{y=y_0} ^{y=today} \theta1_i . exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta2_p})}{\theta3_p}]^2)), \sigma_1) \\  \theta1_i = e^{log(\theta1_p) + \sigma_2.\epsilon1_i} \\ \theta2_p  = e^{log(\theta2) + \sigma_3.\epsilon2_i} \\ \theta3_p  = e^{log(\theta3) + \sigma_4.\epsilon3_i} \\ (\epsilon1, \epsilon2, \epsilon3, \epsilon4) \sim \mathcal{N}(0,1) \\ (\theta1_p, \theta2, \theta3) \sim \mathcal{logN}(0,1) \\ (\sigma_1, \sigma_2, \sigma_3, \sigma_4) \sim \mathcal{N}(0,1) \\ V_P = Var(\mu_p) \\ V_R=\sigma_2^2$$
+\begin{equation} 
+  DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \\
+  \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \hat{\theta_{1,p,i}}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\hat{\theta_{2,p}}})}{\hat{\theta_{3,p}}}]^2)), \sigma_1) \\ 
+  \hat{\theta_{1,p,i}} = e^{log(\theta_{1,p}) + \sigma_2.\epsilon_{1,i}} \\ 
+  \hat{\theta_{2,p}}  = e^{log(\theta_2) + \sigma_3.\epsilon_{2,p}} \\ 
+  \hat{\theta_{3,p}}  = e^{log(\theta_3) + \sigma_4.\epsilon_{3,p}} \\  
+  \epsilon_{1,i} \sim \mathcal{N}(0,1) \\
+  \epsilon_{2,p} \sim \mathcal{N}(0,1) \\
+  \epsilon_{3,p} \sim \mathcal{N}(0,1) \\
+  ~ \\
+  (\theta_{1,p}, \theta_2, \theta_3) \sim \mathcal{logN}^3(log(1),1) \\ 
+  (\sigma_1, \sigma_2, \sigma_3, \sigma_4) \sim \mathcal{N}^4_T(0,1) \\ 
+    ~ \\
+  V_P = Var(log(\mu_p)) \\ 
+  V_R=\sigma_2^2
+  (\#eq:gmaxthstan)
+\end{equation} 
 
 ```{r gmaxTable}
 # mdata <- simGmax()
@@ -247,11 +337,38 @@ simGmaxGeno <- function(
 
 We used the following growth model with a lognormal distribution to estimate individual growth potential and associated genotypic variation:
 
-$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( log(\sum _{y=y_0} ^{y=today} \theta1_i . exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{\theta2_p})}{\theta3_p}]^2)), \sigma_1) \\  \theta1_i \sim \mathcal{logN}(log(a1_i), \sigma_2) \\ \theta2_p \sim \mathcal{logN}(log(\theta2), \sigma_2) \\ \theta3_p  \sim \mathcal{logN}(log(\theta3) ,\sigma_4) \\ a1_i \sim \mathcal{MVlogN}(log(\theta1_p), \sigma_5.K)$$
+\begin{equation} 
+  DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \\
+  \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \theta_{1,p,i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta_{2,p}})}{\theta_{3,p}}]^2)), \sigma_1) \\ 
+  \theta_{1,p,i} \sim \mathcal {logN}(log(a_{1,p,i}), \sigma_2) \\ 
+  \theta_{2,p} \sim \mathcal {logN}(log(\theta_2),\sigma_3) \\ 
+  \theta_{3,p} \sim \mathcal {logN}(log(\theta_3),\sigma_4) \\
+  a_{1,p,i} \sim \mathcal{MVlogN}(log(\theta_{1,p}), \sigma_5.K)
+  (\#eq:gmaxgenoth)
+\end{equation} 
 
 We fitted the equivalent model with following priors:
 
-$$DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \mathcal{logN} ( log(\sum _{y=y_0} ^{y=today} \theta1_i . exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{\theta2_p})}{\theta3_p}]^2)), \sigma_1) \\  \theta1_i = e^{log(a1_i) + \sigma_2.\epsilon1_i} \\ \theta2_p  = e^{log(\theta2) + \sigma_3.\epsilon2_i} \\ \theta3_p  = e^{log(\theta3) + \sigma_4.\epsilon3_i} \\ \\ a1_i = e^{log(\theta1_p) + \sigma_5.A.\epsilon4_i} \\ (\epsilon1, \epsilon2, \epsilon3, \epsilon4) \sim \mathcal{N}(0,1) \\ (\theta1_p, \theta2, \theta3) \sim \mathcal{logN}(0,1) \\ (\sigma_1, \sigma_2, \sigma_3, \sigma_4, \sigma_5) \sim \mathcal{N}(0,1) \\ V_P = Var(\mu_p) \\V_G=\sigma_5^2\\V_R=\sigma_2^2$$
+\begin{equation} 
+  DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \\
+  \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \hat{\theta_{1,p,i}}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\hat{\theta_{2,p}}})}{\hat{\theta_{3,p}}}]^2)), \sigma_1) \\ 
+  \hat{\theta_{1,p,i}} = e^{log(a_{1,p,i}) + \sigma_2.\epsilon_{1,i}} \\ 
+  \hat{\theta_{2,p}}  = e^{log(\theta_2) + \sigma_3.\epsilon_{2,p}} \\ 
+  \hat{\theta_{3,p}}  = e^{log(\theta_3) + \sigma_4.\epsilon_{3,p}} \\  
+  \hat{a_{1,p,i}} = e^{log(\theta_{1,p}) + \sigma_5.A.\epsilon_{4,i}} \\
+  \epsilon_{1,i} \sim \mathcal{N}(0,1) \\
+  \epsilon_{2,p} \sim \mathcal{N}(0,1) \\
+  \epsilon_{3,p} \sim \mathcal{N}(0,1) \\
+  \epsilon_{4,i} \sim \mathcal{N}(0,1) \\
+  ~ \\
+  (\theta_{1,p}, \theta_2, \theta_3) \sim \mathcal{logN}^3(log(1),1) \\ 
+  (\sigma_1, \sigma_2, \sigma_3, \sigma_4, \sigma_5) \sim \mathcal{N}^5_T(0,1) \\ 
+    ~ \\ 
+    V_P = Var(log(\mu_p)) \\
+    V_G=\sigma_5^2\\
+    V_R=\sigma_2^2
+  (\#eq:gmaxgenothstan)
+\end{equation} 
 
 ```{r gmaxgenoTable}
 # mdata <- simGmaxGeno()
