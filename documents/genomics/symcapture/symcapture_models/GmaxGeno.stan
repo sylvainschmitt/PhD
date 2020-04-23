@@ -24,11 +24,10 @@ parameters {
 }
 transformed parameters {
   vector<lower=0>[I] DBH = rep_vector(1, I) ;
-  real<lower=0> Vp = variance(thetap1) ;
-  vector<lower=0>[I] a = exp(log(thetap1[pop]) + sigma[5]*A*epsilon_a) ; 
-  vector<lower=0>[I] thetai1 = exp(log(a) + sigma[2]*epsilon_i) ; 
-  vector<lower=0>[P] thetap2 = exp(log(theta2) + sigma[3]*epsilon_p2) ; 
-  vector<lower=0>[P] thetap3 = exp(log(theta3) + sigma[4]*epsilon_p3) ; 
+  vector[I] alog = sigma[5]*A*epsilon_a ; 
+  vector[I] thetai1 = exp(log(thetap1[pop]) + alog + sigma[2]*epsilon_i) ; 
+  vector[P] thetap2 = exp(log(theta2) + sigma[3]*epsilon_p2) ; 
+  vector[P] thetap3 = exp(log(theta3) + sigma[4]*epsilon_p3) ; 
   for(t in 1:Y-1) {
     for(i in 1:I) {
       if(years[t] == Y0[i])
@@ -50,8 +49,7 @@ model {
   sigma ~ normal(0, 1) ;
 }
 generated quantities{
+  real Vp = variance(log(thetap1[pop])) ;
   real Vg = square(sigma[5]) ;
   real Vr = square(sigma[2]) ;
-  real R2m = Vp / (Vp + Vg + Vr) ;
-  real R2c = (Vp + Vr) / (Vp + Vg + Vr) ;
 }

@@ -19,7 +19,7 @@ parameters {
 }
 transformed parameters {
   vector<lower=0>[I] DBH = rep_vector(1, I) ;
-  real<lower=0> Vp = variance(thetap1) ;
+  real<lower=0> Vp = variance(log(thetap1[pop])) ;
   vector<lower=0>[I] thetai1 = exp(log(thetap1[pop]) + sigma[2]*epsilon1) ; 
   vector<lower=0>[P] thetap2 = exp(log(theta2) + sigma[3]*epsilon2) ; 
   vector<lower=0>[P] thetap3 = exp(log(theta3) + sigma[4]*epsilon3) ; 

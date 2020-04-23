@@ -125,6 +125,14 @@ We obtained relatilevely low levels of admixture (Fig. \@ref(fig:introgress)) wi
 #   --extract LD.prune.in --maf 0.05 --geno 0 --out paracou.filtered --make-bed --recode structure
 paracou <- data.table::fread(file.path(path, "..", "variantCalling", "paracou", "paracou.filtered.recode.strct_in"), skip = 2) %>% as.tbl()
 inds <- gsub(".g.vcf", "", paracou$V1)
+fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                                              "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+symcapture.admix <- pophelper::readQ(list.files(file.path(path, "admixture", "paracou"), 
+                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
+symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
+symcapture.admix <- pophelper::alignK(symcapture.admix)
 pops <- symcapture.admix[[3]] %>% 
   rownames_to_column(var = "Ind") %>%
   mutate(type = "admixed") %>% 
@@ -134,7 +142,7 @@ pops <- symcapture.admix[[3]] %>%
   mutate(type = ifelse(type == "admixed" & Cluster3 < 0.1, "admixedSP", type)) %>% 
   mutate(type = ifelse(type == "admixed", "admixedSR", type))
 paracou <- paracou[-c(1:2)]
-cl <- parallel::makeCluster(getOption("cl.cores", 2))
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
 parallel::clusterExport(cl, list("paracou"))
 admix <- parallel::parLapply(cl, seq(1:(ncol(paracou)/2)), 
                              function(i) paste(unlist(paracou[,i]), unlist(paracou[,(i+1)]), sep = "/"))
@@ -148,22 +156,45 @@ loci <- readr::read_tsv(file.path(path, "..", "variantCalling", "paracou", "para
   dplyr::mutate(type = "C") %>%
   dplyr::select(locus, type, contig, pos) %>%
   as.matrix()
-count.matrix <- list(sp = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "SgRegina", type != "admixedSR")$Ind),]), 
-                                       parental1 = t(admix[which(inds %in% filter(pops, type == "Ssp1")$Ind),]),
-                                       parental2 = t(admix[which(inds %in% filter(pops, type == "SgParacou")$Ind),]),
-                                       loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F),
-                     sr = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "SgParacou", type != "admixedSP")$Ind),]), 
-                                       parental1 = t(admix[which(inds %in% filter(pops, type == "Ssp1")$Ind),]),
-                                       parental2 = t(admix[which(inds %in% filter(pops, type == "SgRegina")$Ind),]),
-                                       loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F))
-cl <- parallel::makeCluster(getOption("cl.cores", 2))
+count.matrix <- list(
+  sp = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "SgRegina", type != "admixedSR")$Ind),]), 
+                    parental1 = t(admix[which(inds %in% filter(pops, type == "Ssp1")$Ind),]),
+                    parental2 = t(admix[which(inds %in% filter(pops, type == "SgParacou")$Ind),]),
+                    loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F),
+  sr = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "SgParacou", type != "admixedSP")$Ind),]), 
+                    parental1 = t(admix[which(inds %in% filter(pops, type == "Ssp1")$Ind),]),
+                    parental2 = t(admix[which(inds %in% filter(pops, type == "SgRegina")$Ind),]),
+                    loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F),
+  pr = prepare.data(admix.gen = t(admix[which(inds %in% filter(pops, type != "Ssp1", type != "admixedSP", type != "admixedSR")$Ind),]), 
+                    parental1 = t(admix[which(inds %in% filter(pops, type == "SgParacou")$Ind),]),
+                    parental2 = t(admix[which(inds %in% filter(pops, type == "SgRegina")$Ind),]),
+                    loci.data = loci, pop.id = F, ind.id = F, fixed = F, sep.rows = F))
+cl <- parallel::makeCluster(getOption("cl.cores", 3))
 parallel::clusterExport(cl, list("count.matrix", "loci"))
-hi.index <- parallel::parLapply(cl, count.matrix, function(m) introgress::est.h(introgress.data = m, loci.data = loci, fixed = F))
+hi.index <- parallel::parLapply(cl, count.matrix, function(m)
+  introgress::est.h(introgress.data = m, loci.data = loci, fixed = F))
 parallel::stopCluster(cl) ; rm(cl)
 hi.index$sp$Ind <- inds[which(inds %in% filter(pops, type != "SgRegina", type != "admixedSR")$Ind)]
 hi.index$sr$Ind <- inds[which(inds %in% filter(pops, type != "SgParacou", type != "admixedSP")$Ind)]
+hi.index$pr$Ind <- inds[which(inds %in% filter(pops, type != "Ssp1", type != "admixedSP", type != "admixedSR")$Ind)]
 hi.index <- bind_rows(hi.index, .id = "pair")
 save(symcapture.admix, hi.index, file = file.path("symcapture_save", "introgress.Rdata"))
+cl <- parallel::makeCluster(getOption("cl.cores", 3))
+parallel::clusterExport(cl, list("count.matrix", "loci", "hi.index"))
+clines <- parallel::parLapply(cl, names(count.matrix), function(pair){
+  library(tidyverse)
+  introgress::genomic.clines(introgress.data = count.matrix[[pair]], 
+                             hi.index = hi.index %>% 
+                               filter(pair == pair) %>% 
+                               dplyr::select(lower, h, upper),
+                             loci.data = loci,
+                             sig.test = T, method = "permutation")
+})
+parallel::stopCluster(cl) ; rm(cl)
+names(clines) <- names(count.matrix)
+clines <- clines$sp$Summary.data
+save(symcapture.admix, hi.index, clines,
+     file = file.path("symcapture_save", "introgress.Rdata"))
 ```
 
 ```{r introgressT}
@@ -186,14 +217,20 @@ hi.index %>%
 
 ```{r introgress, fig.cap="Population structure and fraction of the genome inherited from S. sp1 for each individual (hybrid index or admixture coefficient). Population structure assessed with ADMIXTURE is represented with the color bar for each individual, with the percentage of membership to S. sp1 genepools represented by the bar height. The hybdrid index and it's confidence interval is represented by the black line and the white area. The white dashed line indicates levels used to define previous genepools and parental alleles frequencies."}
 hi.index %>% 
-  mutate(pair = recode(pair, sp = "S. sp1 - S. globulifera type Paracou", 
-                       sr = "S. sp1 - S. globulifera type Regina")) %>% 
+  mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
+  mutate(pair = recode(pair, 
+                       sp = "S. sp1 - S. globulifera type Paracou", 
+                       sr = "S. sp1 - S. globulifera type Regina",
+                       pr = "S. globulifera type Paracou - S. globulifera type Regina")) %>% 
   left_join(symcapture.admix[[3]] %>% 
               rownames_to_column(var = "Ind") %>%
               reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
-              mutate(genepool = recode(genepool, Cluster1 = "S. sp1", Cluster2 = "S. globulifera type Paracou", 
-                                       Cluster3 = "S. globulifera type Regina"))) %>% 
-  ggplot(aes(reorder(Ind, h), group = NA)) +
+              mutate(genepool = recode(genepool, Cluster1 = "S. sp1", 
+                                       Cluster2 = "S. globulifera type Paracou", 
+                                       Cluster3 = "S. globulifera type Regina"))) %>%
+  arrange(pair, desc(h)) %>%
+  mutate(order = 1:nrow(.)) %>% 
+  ggplot(aes(reorder(Ind, order), group = NA)) +
   geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +
   geom_hline(yintercept = c(0.1, 0.9), linetype = "dashed", col = "white") +
   geom_ribbon(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.5, fill = "white") +
@@ -202,14 +239,141 @@ hi.index %>%
         axis.title.x = element_blank(), axis.line.x = element_blank()) +
   scale_fill_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
   scale_color_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
-  ylab("S. sp1 ancestry") +
-  facet_wrap(~ pair, scale = "free", nrow = 2) +
-  theme(legend.position = "bottom")
+  ylab("H index") +
+  facet_wrap(~ pair, nrow = 3) +
+  theme(legend.position = "bottom") 
 ```
 
 ## Loci
 
+[@Burgarella2019; @Racimo2016a; @Pfeifer2019; @Pfeifer2019b]
+
 **Use `bgc`**
+
+```{bash bgcSHdataPrep, eval=F, echo=T}
+plink=~/Tools/plink_high_contig/plink 
+$plink \
+  --bfile ../paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
+  --allow-extra-chr \
+  --set-missing-var-ids @_snp# \
+  --mind 0.9 \
+  --geno 0 \
+  --recode A-transpose \
+  --make-bed \
+  --out bgc
+```
+
+
+```{r bgcRdataPrep, eval=F}
+snps <- vroom::vroom(file.path(path, "..", "variantCalling", "bgc", "bgc.traw")) %>% 
+  reshape2::melt(id.vars = c("CHR", "SNP", "(C)M", "POS", "COUNTED", "ALT"), 
+                 variable.name = "IID", value.name = "MA1") %>% 
+  dplyr::rename(REF = COUNTED) %>% 
+  dplyr::select(CHR, POS, SNP, ALT, REF, IID, MA1) %>% 
+  mutate(IID = gsub("0_", "", IID)) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  mutate(MA2 = 2-MA1) %>% 
+  mutate(SNP = paste("locus", 1:nrow(.)))
+for(p in unique(trees$pop.hybrid)[1:3]){
+  t <- filter(snps, Ind %in% filter(trees, pop.hybrid == p)$Ind) %>% 
+    group_by(SNP) %>% 
+    summarise(MA1 = sum(MA1), MA2 = sum(MA2))
+  t2 <- data.frame(X1 = rep(NA, 2*nrow(t)), 
+                   X2 = rep(NA, 2*nrow(t)))
+  for(i in 1:nrow(t)){
+    t2[(i*2-1),1] <- t$SNP[i]
+    t2[(i*2-1),2] <- ""
+    t2[(i*2),1] <- as.character(t$MA1[i])
+    t2[(i*2),2] <- as.character(t$MA2[i])
+  }
+  write_tsv(t2, file.path(path, "..", "variantCalling", "bgc",
+                          paste0(gsub("\\s", "", p), ".txt")),
+            col_names = F)
+}
+for(p in unique(trees$pop)[1:3]){                                
+  t <- filter(snps, Ind %in% filter(trees, pop != p)$Ind) %>% 
+    dplyr::select(SNP, MA1, MA2) %>% 
+    arrange(SNP)
+  lapply(unique(snps$SNP), function(s)
+    rbind(data.frame(MA1 = c(s, "pop0"), MA2 = c("", ""),
+                     stringsAsFactors = F),
+          filter(t, SNP == s)[c("MA1", "MA2")])) %>% 
+    bind_rows() %>% 
+    write_tsv(file.path(path, "..", "variantCalling", "bgc",
+                            paste0("no.", gsub("\\s", "", p), ".txt")),
+              col_names = F)
+}
+rm(snps) ; gc()
+```
+
+> No linkage map as contigs are too shot !
+
+```{bash bgcSHrun, eval=F, echo=T}
+bgc=~/Tools/bgcdist/bgc
+$bgc \
+  -a S.sp1pure.txt \
+  -b S.globuliferaParacoupure.txt \
+  -h no.S.gobuliferaRegina.txt \
+  -F admixed.sp \
+  -q 1
+```
+
+```{r pfeiferCode, eval=F}
+# plink=~/Tools/plink_high_contig/plink 
+# $plink --bfile symcapture.all.biallelic.snp.filtered.nonmissing --allow-extra-chr --set-missing-var-ids @_snp#  --recode vcf-iid --out all --make-bed
+# bgzip all.vcf 
+# tabix -p vcf all.vcf.gz
+library(PopGenome)
+bim <- vroom::vroom(file.path(path, "..", "variantCalling", "nonmissing", "all.bim"),
+             col_names = c("CHR", "SNP", "CM", "POS", "A1", "A2"))
+fam <- vroom::vroom(file.path(path, "..", "variantCalling", "nonmissing", "all.fam"),
+             col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
+  left_join(trees) %>% 
+  mutate(pop = ifelse(is.na(pop), "outgroup", pop))
+pops.paracou <- lapply(unique(fam$pop)[-c(1,4)], 
+       function(i) filter(fam, pop == i)$IID)
+genome <- lapply(unique(bim$CHR), function(chr)
+  readVCF(file.path("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/variantCalling/nonmissing/all.vcf.gz"), 
+          numcols = 10^5,
+          tid = chr,
+          include.unknown = T,
+          frompos = 1, topos = 10^6))
+genome <- concatenate.classes(genome)
+genome@region.names <- unique(bim$CHR)
+genome <- concatenate.regions(genome)
+# get.sum.data(genome)
+genome <- set.populations(genome, pops.paracou, diploid = T)
+genome <- set.outgroup(genome, filter(fam, Ind %in% c("F023", "FO24"))$IID, 
+                       diploid = T)
+# genome.sl <- sliding.window.transform(genome)
+genome.sl <- sliding.window.transform(genome, type = 2,
+                                      width = 100, jump = 10)
+genome.sl <- introgression.stats(genome.sl, l.smooth = F)
+genome.sl <- weighted.jackknife(genome.sl, per.region = F)
+df <- data.frame(region.names = genome.sl@region.names,
+           df = as.numeric(genome.sl@df)) %>% 
+  na.omit() %>% 
+  mutate(Z = (df - mean(genome.sl@df, na.rm = T)) / genome.sl@df.SE) %>% 
+  mutate(P = 2*(pnorm(-abs(Z)))) %>% 
+  mutate(adjP = p.adjust(P, "BH")) %>% 
+  rowwise() %>% 
+  mutate(pos = mean(as.numeric(strsplit(as.character(region.names)," ")[[1]][c(1,3)])))
+save(genome, df, file = "symcapture_save/df.Rdata")
+```
+
+```{r pfeiferFig, eval=F}
+load("symcapture_save/df.Rdata")
+ggplot(df, aes(pos, df)) +
+  geom_hline(yintercept = 0, col = "lightgrey", type = "dashed") +
+  geom_line() +
+  geom_point(aes(col = (adjP)<0.01, alpha = (adjP)<0.01)) +
+  xlab("Genome position (bp)") +
+  ylab(expression(d[f])) +
+  scale_color_discrete("P < 0.01") +
+  scale_alpha_discrete("P < 0.01")
+```
+
 
 ## Environment
 
@@ -235,20 +399,24 @@ trees %>%
 
 ```{r introgressTWIScatter, fig.cap="TWI and NCI vs hybrid index (S. sp1 ancestry) between population-pairs."}
 hi.index %>% 
+  filter(pair != "pr") %>% 
   mutate(pair = recode_factor(pair,
                               "sp" = "S. sp1 - S. globulifera Paracou",
                               "sr" = "S. sp1 - S. globulifera Regina")) %>% 
   left_join(trees) %>% 
+  filter(pop != "Admixed") %>% 
+  mutate_at(c("h", "lower", "upper"), ~ifelse(pop == "S. sp1", 1-., .)) %>% 
   dplyr::select(Ind, pop, pop.hybrid, TWI, NCI, pair, lower, h, upper, Gmax) %>% 
   reshape2::melt(id.vars = c("Ind", "pop", "pop.hybrid", "Gmax",
                              "pair", "lower", "h", "upper")) %>% 
-  ggplot(aes(x = value, col = Gmax)) +
-  geom_smooth(aes(y = 1-h), col = "grey", 
-              se = F, linetype = "dashed") +
+  group_by(variable, pop) %>% 
+  mutate(diffmeanpop = mean(value) - value) %>% 
+  ggplot(aes(x = diffmeanpop, col = Gmax)) +
   geom_point(aes(y = 1 - h)) +
-  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper)) +
-  facet_grid(pair ~ variable, scales = "free") +
-  ylab("Hybrid index - S. sp1 ancestry") + ylab("") +
+  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.5) +
+  facet_grid(pop ~ variable, scales = "free") +
+  ylab("Hybrid index") +
+  xlab("Difference with population mean") +
   viridis::scale_color_viridis()
 ```
 
@@ -276,79 +444,20 @@ trees %>%
 
 ```{r introgressGmaxScatter, fig.cap="Individual growth potential (Gmax) and hybrid index (S. sp1 ancestry) between population-pairs."}
 hi.index %>% 
+    filter(pair != "pr") %>% 
   mutate(pair = recode_factor(pair,
                               "sp" = "S. sp1 - S. globulifera Paracou",
                               "sr" = "S. sp1 - S. globulifera Regina")) %>% 
   left_join(trees) %>% 
-  ggplot(aes(x = log(Gmax), col = pop)) +
-  geom_smooth(aes(y = 1-h), col = "grey", 
-              se = F, linetype = "dashed") +
+  filter(pop != "Admixed") %>% 
+  mutate_at(c("h", "lower", "upper"), ~ifelse(pop == "S. sp1", 1-., .)) %>% 
+  mutate(diffmeanpop = mean(log(Gmax)) - log(Gmax)) %>%
+  ggplot(aes(x = diffmeanpop, col = DBHtoday)) +
   geom_point(aes(y = 1 - h)) +
-  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper)) +
-  facet_wrap(~ pair) +
-  xlab("Logarithm of individual growth potential Gmax") +
-  ylab("Hybrid index - S. sp1 ancestry") +
-  scale_color_manual("", values =  c("lightgrey", "#0000EE", "#1E90FF", "#CD2626")) +
+  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.5) +
+  facet_wrap(~ pop, scales = "free") +
+  xlab("Difference with mean population logarithm of individual growth potential") +
+  ylab("Hybrid index") +
+  viridis::scale_color_viridis() +
   theme(legend.position = "bottom")
 ```
-
-## Quick modelling
-
-A quick beta regression with `rstanarm` confirmed a strong negative effect of the tropographic wetness index (TWI) on *S. sp1* ancestry (h) for both species pairs (Fig. \@ref(fig:introgressAllBetaReg)). Introgression of the two *S. globulifera* populations into *S. sp1* seemed to increase *S. sp1* tolerance to wetness. On the opposite the neighbor crowding index (NCI) had a small positive effect. 
-
-Individual growth potential (Gmax) had a small negative effect on the hybrid index (h) \@ref(fig:introgressAllBetaReg)) but linear regression didn't validate the effect of the hybrid index (h) on the growth potential (Gmax) (Fig. \@ref(fig:introgressGmaxLm)
-).
-
-```{r introgressAllBetaReg, fig.cap="Hybrid index (S. sp1 ancestry) beta regression with individual growth potential (Gmax), topographic wetness index (TWI), neighbor crowding index (NCI) and species pair."}
-fit <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
-               data = left_join(hi.index, trees) %>%
-                 mutate_at(c("TWI", "NCI"), scale, center = F) %>%
-                 mutate_at(c("TWI", "NCI"), as.vector) %>% 
-                 mutate(h = 1-h) %>% 
-                 mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
-                 mutate(h = ifelse(h == 1, 1 - 10^-6, h)))
-plot(fit) +
-  ggtitle("Beta regression: hybrid index ~ log(Gmax) + TWI + NCI + species pair")
-# fit.pure <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
-#                data = left_join(hi.index, trees) %>%
-#                  mutate_at(c("TWI", "NCI"), scale, center = F) %>%
-#                  mutate_at(c("TWI", "NCI"), as.vector) %>% 
-#                  mutate(h = 1-h) %>% 
-#                  mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
-#                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)) %>% 
-#                  filter(h > 0.95 | h < 0.05))
-# fit.hyb5 <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
-#                data = left_join(hi.index, trees) %>%
-#                  mutate_at(c("TWI", "NCI"), scale, center = F) %>%
-#                  mutate_at(c("TWI", "NCI"), as.vector) %>% 
-#                  mutate(h = 1-h) %>% 
-#                  mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
-#                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)) %>% 
-#                  filter(h < 0.95, h > 0.05))
-# fit.hyb10 <- stan_betareg(h ~ log(Gmax) + TWI + NCI + pair, link = "logit", link.phi = "log", chains = 2,
-#                data = left_join(hi.index, trees) %>%
-#                  mutate_at(c("TWI", "NCI"), scale, center = F) %>%
-#                  mutate_at(c("TWI", "NCI"), as.vector) %>% 
-#                  mutate(h = 1-h) %>% 
-#                  mutate(h = ifelse(h == 0, 10^-6, h)) %>% 
-#                  mutate(h = ifelse(h == 1, 1 - 10^-6, h)) %>% 
-#                  filter(h < 0.9, h > 0.1))
-# 
-# plot(fit.pure)
-# plot(fit.hyb5)
-# plot(fit.hyb10)
-```
-
-
-```{r introgressGmaxLm, fig.cap="Quick linear model of the logarithm of individual growth potential (Gmax) with hybrid index (S. sp1 ancestry), topographic wetness index (TWI), neighbor crowding index (NCI) and species pair."}
-lm(log(Gmax) ~ h + pair + TWI + NCI, data = left_join(hi.index, trees) %>%
-     mutate(h = 1-h) %>% 
-     mutate_at(c("TWI", "NCI"), scale, center = F) %>%
-     mutate_at(c("TWI", "NCI"), as.vector)) %>% 
-  summary()
-```
-
-<!-- ## Introgression estimate [@Pfeifer2019] -->
-
-<!-- See [PhD 0.1.9.142 - Population Structure](https://github.com/sylvainschmitt/PhD/blob/6fe49a59f2c61ad0864a2ab3bebba7395d9320e6/documents/genomics/symcapture/18-PopulationStructure.Rmd) -->
-

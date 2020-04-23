@@ -1,3 +1,8 @@
+# PhD 0.1.9172
+* symcapture: all updated models
+* variance removed
+* symcapture: transcripto removed
+
 # PhD 0.1.9171
 * symcapture: Animal fix begin
 

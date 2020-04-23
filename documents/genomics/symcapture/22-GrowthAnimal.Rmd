@@ -32,11 +32,11 @@ pairs_stan <- function(chain, stan_model, pars) {
 
 # Growth & Animal models
 
-The aim of this document is to explore animal and growth model with generated data to validate their behavior and use it on *Symphonia* and *Eschweilera* real data. Let's consider a set of $P=2$ populations including each $Fam=3$ families composed of $I = 14$ individuals with arbitrar relationships (it's only 84 individuals to do quick tests).
+The aim of this document is to explore animal and growth model with generated data to validate their behavior and use it on *Symphonia* and *Eschweilera* real data. Let's consider a set of $P=3$ populations including each $Fam=3$ families composed of $I = 14$ individuals with arbitrar relationships (it's only 126 individuals to do quick tests).
 
 ```{r simkinship, fig.cap="Kinship matrix"}
 simK <- function(
-  P = 2, 
+  P = 3, 
   Fam = 3
 ){
   I <- 14 # Individuals
@@ -67,14 +67,14 @@ heatmap(simK()$K)
 We used the following animal model with a lognormal distribution to estimate population and genotypic variance:
 
 \begin{equation} 
-  y_{p,i} \sim \mathcal{logN}(log(a_i),\sigma_1) \\
-  a_i \sim \mathcal{MVlogN_N}(log(\mu_p),\sigma_2.K)
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p.a_{i}),\sigma_1) \\
+  a_{p,i} \sim \mathcal{MVlogN_N}(log(1),\sigma_2.K)
   (\#eq:animallogth)
 \end{equation} 
 
 ```{r simanimal}
 simAnimal <- function(
-  P = 2, 
+  P = 3, 
   Fam = 3,
   sigmaP = 0.5,
   sigmaG = 0.3,
@@ -82,18 +82,16 @@ simAnimal <- function(
 ){
   K <- simK(P, Fam)
   N <- nrow(K$K)
-  epsilonG <- rnorm(N)
-  p <- rlnorm(P, sd = sigmaP)
-  mdata <- list(N = N, P = P, K = K$K, population = K$df$pop,
-                y = rlnorm(N, 
-                           log(p[K$df$pop]) + 
-                             sigmaG*as.vector(t(chol(K$K)) %*% epsilonG),
-                           sigmaR))
-  return(list(mu = p,
-              Vp = var(log(p[K$df$pop])), 
-              Vg = var(sigmaG*as.vector(t(chol(K$K)) %*% epsilonG)), 
-              Vr = sigmaR^2, 
-              Vy = var(log(mdata$y)),
+  epsilon <- rnorm(N)
+  mu <- rlnorm(P, sd = sigmaP)
+  y <- rlnorm(N, 
+              log(mu[K$df$pop]) + sigmaG*as.vector(t(chol(K$K)) %*% epsilon), 
+              sigmaR)
+  mdata <- list(N = N, P = P, K = K$K, population = K$df$pop, y = y)
+  return(list(mu = mu,
+              Vp = var(log(mu[K$df$pop])), 
+              Vg = var(sigmaG*as.vector(t(chol(K$K)) %*% epsilon)), 
+              Vr = sigmaR^2,
               mdata = mdata))
 }
 ```
@@ -101,17 +99,17 @@ simAnimal <- function(
 We fitted the equivalent model with following priors:
 
 \begin{equation} 
-  y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \hat{\sigma_2}.A.\epsilon_i, \sigma_1) \\ 
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p.\hat{a_{i}}), \sigma_1) \\ 
+  \hat{a_{i}} = e^{\sqrt{V_G}.A.\epsilon_i} \\
   \epsilon_i \sim \mathcal{N}(0,1) \\ 
   ~ \\
   \mu_p \sim \mathcal{logN}(log(1),1) \\  
   \sigma_1 \sim \mathcal N_T(0,1) \\ 
-  \hat{\sigma_2} = \sqrt(V_G)
   ~ \\
   V_Y = Var(log(y)) \\
   V_P = Var(log(\mu_p)) \\
+  V_R=\sigma_1^2 \\
   V_G = V_Y - V_P - V_R \\
-  V_R=\sigma_1^2
   (\#eq:animallogthstan)
 \end{equation} 
 
@@ -138,56 +136,8 @@ mcmc_trace(as.array(fitAnimal, pars = c("mu", "Vp", "Vg", "Vr", "lp__")),
   geom_hline(aes(yintercept = expected), col = "red", 
              data = data.frame(parameter = c(paste0("mu[", 1:length(mdata$mu), "]"), 
                                              "Vp", "Vg", "Vr"), 
-                               expected = with(mdata, c(mu, Vp, Vg, Vr))))
+                               expected = with(mdata, c(mu, Vp, Vg, Vr)))) 
 ```
-
-## Animal & Environment
-
-We used the following animal model with a lognormal distribution to estimate population and genotypic variance:
-
-\begin{equation} 
-  y_{p,i} \sim \mathcal{logN}(log(\mu_p + a_i + e_i + \beta.Env_i),\sigma_1) \\
-  a_i \sim \mathcal{MVlogN_N}(log(1),\sigma_2.K) \\
-  e_i \sim \mathcal{MVlogN_N}(log(1),\sigma_3.K.E) \\
-  (\#eq:animallogth)
-\end{equation} 
-
-```{r simanimalenv, echo=T}
-load(file.path("symcapture_save", "growthPar.Rdata"))
-Env <- mdata$NCI
-hist(Env)
-K <- mdata$K
-heatmap(K)
-E <- as.matrix(dist(Env))
-heatmap(E)
-matrixcalc::is.positive.definite(K*E)
-GE <- as.matrix(Matrix::nearPD(K*E)$mat)
-all.equal(K*E, GE)
-max(K*E)
-barplot(eigen(K*E)$values)
-barplot(eigen(GE)$values)
-```
-
-We fitted the equivalent model with following priors:
-
-\begin{equation} 
-  y_{p,i} \sim \mathcal{logN}(log(\mu_p + \hat{a_i} + \hat{e_i} + \beta.Env_i), \sigma_1) \\ 
-  \epsilon_{1,i} \sim \mathcal{N}(0,1) \\ 
-  \epsilon_{2,i} \sim \mathcal{N}(0,1) \\ 
-  ~ \\
-  \mu_p \sim \mathcal{logN}(log(1),1) \\  
-  \beta \sim \mathcal N(0,1) \\
-  \sigma_1 \sim \mathcal N_T(0,1) \\ 
-  ~ \\
-  \hat{a_i} = e^{\hat{\sigma_2}.A_1.\epsilon_{1,i}} \\
-  \hat{e_i} = e^{\sigma_3.A_2.\epsilon_{2,i}} \\
-  \hat{\sigma_2} = \sqrt(V_G) \\
-  V_Y = Var(log(y)) \\
-  V_P = Var(log(\mu_p)) \\
-  V_G = V_Y - V_P - V_R \\
-  V_R=\sigma_1^2
-  (\#eq:animallogenvthstan)
-\end{equation} 
 
 ## Gmax
 
@@ -205,13 +155,13 @@ We used the following growth model with a lognormal distribution to estimate ind
 
 ```{r simgmax}
 simGmax <- function(
-  P = 2, 
-  I = 3*14,
+  P = 3, 
+  I = 3*3*14,
   Y = 33, # Nb years
   Gmax = c(0.53, 0.54, 0.36),
   Dopt = 0.25,
   Ks = 0.7,
-  sigma = c(0.10, 0.67, 0.2, 0.2)
+  sigma = c(0.2, 0.67, 0.2, 0.2)
 ){
   Gmax <- Gmax[1:P]
   years <- 1984:(1984+Y-1)
@@ -234,6 +184,7 @@ simGmax <- function(
   DBHtoday <- DBH0 + rlnorm(I, meanlog = log(DBH), sdlog = sigma[1])
   return(list(Gmax = Gmax, Dopt = Dopt, Ks = Ks, 
               sigmaR = sigma[2], sigma = sigma[1],
+              Vr = sigma[2]^2, Vp = var(log(Gmax[pop])),
               mdata = list(I = I, Y = Y, P = P, years = years, DBH0 = DBH0,
                            Y0 = Y0, DBHtoday = DBHtoday, pop = pop)))
 }
@@ -267,11 +218,10 @@ We fitted the equivalent model with following priors:
 # save(mdata, fitGmax, file = file.path("symcapture_save", "gmax.Rdata"))
 load(file.path("symcapture_save", "gmax.Rdata"))
 broom::tidyMCMC(fitGmax, pars = c("thetap1", "theta2", "theta3",
-                                  "sigma[1]", "sigma[2]", "Vp", "lp__"), 
+                                  "Vp", "Vr", "lp__"), 
                 droppars = NULL, rhat = T) %>% 
-  mutate(expected = c(mdata$Gmax, mdata$Dopt, mdata$Ks,  
-                      mdata$sigma, mdata$sigmaR, 
-                      var(mdata$Gmax), NA)) %>% 
+  mutate(expected = with(mdata, c(Gmax, Dopt, Ks,  
+                                  Vp, Vr, NA))) %>% 
   dplyr::select(term, estimate, std.error, expected, rhat) %>% 
   kable(caption = "Animal model fitted versus expected values.",
         col.names = c("Parameter", "Estimate", "Standard error", 
@@ -279,32 +229,27 @@ broom::tidyMCMC(fitGmax, pars = c("thetap1", "theta2", "theta3",
 ```
 
 ```{r gmaxTrace, fig.cap="Parameters for Growth model traceplot and expected value in red."}
-load(file.path("symcapture_save", "gmax.Rdata"))
 mcmc_trace(as.array(fitGmax, pars = c("thetap1", "theta2", "theta3",
-                                      "sigma[1]", "sigma[2]", "Vp", "lp__")),
+                                      "Vp", "Vr", "lp__")),
            np = nuts_params(fitGmax)) +
   geom_hline(aes(yintercept = expected), col = "red", 
              data = data.frame(parameter = c(paste0("thetap1[", 
                                                     1:length(mdata$Gmax), "]"),
-                                             "theta2", "theta3", 
-                                             paste0("sigma[", 1:2, "]"), 
-                                             "Vp", "lp__"), 
-                               expected = c(mdata$Gmax, mdata$Dopt, mdata$Ks,  
-                                            mdata$sigma, mdata$sigmaR, 
-                                            var(mdata$Gmax), NA)))
+                                             "theta2", "theta3", "Vp", "Vr"), 
+                               expected = with(mdata, c(Gmax, Dopt, Ks,  Vp, Vr))))
 ```
 
 ## Gmax & Animal
 
 ```{r simgmaxgeno}
 simGmaxGeno <- function(
-  P = 2, 
+  P = 3, 
   Fam = 3,
   Y = 33, # Nb years
   Gmax = c(0.53, 0.54, 0.36),
   Dopt = 0.25,
   Ks = 0.7,
-  sigma = c(0.10, 0.67, 0.2, 0.2, 0.4)
+  sigma = c(0.20, 0.67, 0.2, 0.2, 0.4)
 ){
   K <- simK(P, Fam)
   I <- nrow(K$K)
@@ -314,7 +259,8 @@ simGmaxGeno <- function(
   Init <- sample_n(trees, I)
   DBH0 <- Init$DBH0
   Y0 <- Init$Y0
-  a <- exp(log(Gmax[pop]) + sigma[5]*as.vector(t(chol(K$K)) %*% rnorm(I)))
+  epsilonG <- rnorm(I)
+  a <- exp(log(Gmax[pop]) + sigma[5]*as.vector(t(chol(K$K)) %*% epsilonG))
   Gmaxi <- rlnorm(I, meanlog = log(a), sdlog = sigma[2])
   Doptp <- rlnorm(P, meanlog = log(Dopt), sdlog = sigma[3])
   Ksp <- rlnorm(P, meanlog = log(Ks), sdlog = sigma[4])
@@ -330,6 +276,9 @@ simGmaxGeno <- function(
   DBHtoday <- DBH0 + rlnorm(I, meanlog = log(DBH), sdlog = sigma[1])
   return(list(Gmax = Gmax, Dopt = Dopt, Ks = Ks, 
               sigmaR = sigma[2], sigmaG = sigma[5], sigma = sigma[1],
+              Vp = var(log(Gmax[pop])), 
+              Vg = var(sigma[5]*as.vector(t(chol(K$K)) %*% epsilonG)), 
+              Vr = sigma[2]^2, 
               mdata = list(I = I, Y = Y, P = P, years = years, DBH0 = DBH0,
                            Y0 = Y0, DBHtoday = DBHtoday, pop = pop, K = K$K)))
 }
@@ -340,10 +289,10 @@ We used the following growth model with a lognormal distribution to estimate ind
 \begin{equation} 
   DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \\
   \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \theta_{1,p,i}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\theta_{2,p}})}{\theta_{3,p}}]^2)), \sigma_1) \\ 
-  \theta_{1,p,i} \sim \mathcal {logN}(log(a_{1,p,i}), \sigma_2) \\ 
+  \theta_{1,p,i} \sim \mathcal {logN}(log(\theta_{1,p}.a_{1,i}), \sigma_2) \\ 
   \theta_{2,p} \sim \mathcal {logN}(log(\theta_2),\sigma_3) \\ 
   \theta_{3,p} \sim \mathcal {logN}(log(\theta_3),\sigma_4) \\
-  a_{1,p,i} \sim \mathcal{MVlogN}(log(\theta_{1,p}), \sigma_5.K)
+  a_{1,i} \sim \mathcal{MVlogN}(log(1), \sigma_5.K)
   (\#eq:gmaxgenoth)
 \end{equation} 
 
@@ -352,10 +301,10 @@ We fitted the equivalent model with following priors:
 \begin{equation} 
   DBH_{y=today,p,i}  - DBH_{y=y0,p,i} \sim \\
   \mathcal{logN} (log(\sum _{y=y_0} ^{y=today} \hat{\theta_{1,p,i}}.exp(-\frac12.[\frac{log(\frac{DBH_{y,p,i}}{100.\hat{\theta_{2,p}}})}{\hat{\theta_{3,p}}}]^2)), \sigma_1) \\ 
-  \hat{\theta_{1,p,i}} = e^{log(a_{1,p,i}) + \sigma_2.\epsilon_{1,i}} \\ 
+  \hat{\theta_{1,p,i}} = e^{log(\theta_{1,p}.\hat{a_{1,i}}) + \sigma_2.\epsilon_{1,i}} \\ 
   \hat{\theta_{2,p}}  = e^{log(\theta_2) + \sigma_3.\epsilon_{2,p}} \\ 
   \hat{\theta_{3,p}}  = e^{log(\theta_3) + \sigma_4.\epsilon_{3,p}} \\  
-  \hat{a_{1,p,i}} = e^{log(\theta_{1,p}) + \sigma_5.A.\epsilon_{4,i}} \\
+  \hat{a_{1,i}} = e^{\sigma_5.A.\epsilon_{4,i}} \\
   \epsilon_{1,i} \sim \mathcal{N}(0,1) \\
   \epsilon_{2,p} \sim \mathcal{N}(0,1) \\
   \epsilon_{3,p} \sim \mathcal{N}(0,1) \\
@@ -378,12 +327,10 @@ We fitted the equivalent model with following priors:
 # save(mdata, fitGmaxGeno, file = file.path("symcapture_save", "gmaxgeno.Rdata"))
 load(file.path("symcapture_save", "gmaxgeno.Rdata"))
 broom::tidyMCMC(fitGmaxGeno, pars = c("thetap1", "theta2", "theta3",
-                                  "sigma[1]", "sigma[2]", "sigma[5]",
-                                  "Vp", "lp__"), 
+                                      "Vp", "Vg", "Vr", "lp__"), 
                 droppars = NULL, rhat = T) %>% 
-  mutate(expected = c(mdata$Gmax, mdata$Dopt, mdata$Ks,  
-                      mdata$sigma, mdata$sigmaR, mdata$sigmaG,
-                      var(mdata$Gmax), NA)) %>% 
+  mutate(expected = with(mdata, c(Gmax, Dopt, Ks,  
+                                  Vp, Vg, Vr, NA))) %>% 
   dplyr::select(term, estimate, std.error, expected, rhat) %>% 
   kable(caption = "Animal model fitted versus expected values.",
         col.names = c("Parameter", "Estimate", "Standard error", 
@@ -392,69 +339,11 @@ broom::tidyMCMC(fitGmaxGeno, pars = c("thetap1", "theta2", "theta3",
 
 ```{r gmaxgenoTrace, fig.cap="Parameters for Growth & Animal model traceplot and expected value in red."}
 mcmc_trace(as.array(fitGmaxGeno, pars = c("thetap1", "theta2", "theta3",
-                                      "sigma[1]", "sigma[2]", "sigma[5]",
-                                      "Vp", "lp__")),
+                                          "Vp", "Vg", "Vr", "lp__")), 
            np = nuts_params(fitGmaxGeno)) +
   geom_hline(aes(yintercept = expected), col = "red", 
-             data = data.frame(parameter = c(paste0("thetap1[", 
+                          data = data.frame(parameter = c(paste0("thetap1[", 
                                                     1:length(mdata$Gmax), "]"),
-                                             "theta2", "theta3", 
-                                             paste0("sigma[", c(1:2,5), "]"), 
-                                             "Vp", "lp__"), 
-                               expected = c(mdata$Gmax, mdata$Dopt, mdata$Ks,  
-                                            mdata$sigma, mdata$sigmaR,  mdata$sigmaG,
-                                            var(mdata$Gmax), NA)))
+                                             "theta2", "theta3", "Vp", "Vg", "Vr"), 
+                               expected = with(mdata, c(Gmax, Dopt, Ks, Vp, Vg, Vr))))
 ```
-
-<!-- ```{r gmaxdata, fig.height=10, fig.width=10} -->
-<!-- pars <- data.frame(sigmaR1 = rep(seq(from = 0.1, to = 1, length.out = 5), each = 5), -->
-<!--                    sigma = rep(seq(from = 0.1, to = 1, length.out = 5), 5), -->
-<!--                    sim = 1:25) -->
-<!-- # mdata <- mapply(function(sigmaR1, sigma)  -->
-<!-- #   gdata(I = 332, P = 1, Gmax = 0.54, sigmaR = c(sigmaR1, 0, 0), sigma = sigma), -->
-<!-- #   sigmaR1 = pars$sigmaR1, sigma = pars$sigma, SIMPLIFY = F) -->
-<!-- # names(mdata) <- paste0(pars$sigmaR1, "-", pars$sigma) -->
-<!-- # save(mdata, file = file.path("symcapture_save", "gmaxData.Rdata")) -->
-<!-- load(file = file.path("symcapture_save", "gmaxData.Rdata"))  -->
-<!-- lapply(mdata, function(x) x$data) %>%  -->
-<!--   bind_rows(.id = "pars") %>%  -->
-<!--   separate(pars, c("sigmaR1", "sigma"), "-", convert = T, remove = F) %>%  -->
-<!--   ggplot() +  -->
-<!--   geom_point(aes(x = DBH0, y = DBHtoday, col = Y0)) +  -->
-<!--   geom_abline() +  -->
-<!--   geom_text(aes(label = pars), x = 60, y = 20, size = 3) +  -->
-<!--   xlab("DBH at recruitment") + ylab("DBH today") + -->
-<!--   viridis::scale_color_viridis(guide = "none") + -->
-<!--   facet_wrap(~ sigmaR1 + sigma, scales = "free") + -->
-<!--   theme(strip.background = element_blank(), strip.text.x = element_blank())  -->
-<!-- ``` -->
-
-<!-- ```{bash fitGmaxCluster, eval=F, echo=T} -->
-<!-- for sim in $(seq 25) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript Gmax.R $sim" ; done > Gmax.sh -->
-<!-- sarray -J Gmax -o out/%j.Gmax.out -e out/%j.Gmax.err -t 36:00:00 --constraint=broadwell --cpus-per-task=2 --mail-type=BEGIN,END,FAIL Gmax.sh -->
-<!-- ``` -->
-
-<!-- ```{r gamxTab} -->
-<!-- fitsGmax <- list() -->
-<!-- sims <- c(1:25) -->
-<!-- for(sim in sims){ -->
-<!--   load(paste0("./symcapture_save/gmax/gmax", sim, ".Rdata")) -->
-<!--   fitsGmax[[sim]] <- fit -->
-<!-- } -->
-<!-- broom::tidyMCMC(fitsGmax[[1]], pars = c("theta", "sigmaR", "sigma", "lp__"),  -->
-<!--                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>%  -->
-<!--   mutate(expected = c(unlist(mdata[[1]]$params)[c(1:4, 7)], NA)) %>%  -->
-<!--   dplyr::select(term, estimate, std.error, expected, rhat, ess) %>%  -->
-<!--   kable(caption = "Individual growth model combined with population animal model fitted versus expected values.", -->
-<!--         col.names = c("Parameter", "Estimate", "Standard error",  -->
-<!--                       "Expected", "$\\hat R$", "$N_{eff}$"))  -->
-<!-- ``` -->
-
-<!-- ```{r gmaxTraceSigma, fig.height=6, fig.width=10} -->
-<!-- cowplot::plot_grid(plotlist = lapply(sims, function(sim) -->
-<!--   mcmc_trace(as.array(fitsGmax[[sim]], pars = c("sigmaR", "sigma"))) +  -->
-<!--     geom_hline(aes(yintercept = expected), col = "red",  -->
-<!--                data = data.frame(parameter = c("sigmaR", "sigma"), -->
-<!--                                  expected = unlist(mdata[[sim]]$params)[c(4,7)])) + -->
-<!--     theme(legend.position = "none") + ylim(0, 1.5)), labels = names(mdata)) -->
-<!-- ``` -->

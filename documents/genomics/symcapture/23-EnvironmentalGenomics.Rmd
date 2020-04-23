@@ -29,7 +29,6 @@ We explored and selected environmental descriptors to be used in environmental g
 
 * the modele Animal to explore genetic variance associated to the environemntal variable 
 * linear mixed models (LMM) used to identify major effect SNPs  associated to the environemntal variable 
-* bayesian sparse linear mixed models (BSLMM) used to identify the polygenic architecture  associated to the environemntal variable 
 
 ## Descriptors
 
@@ -37,7 +36,11 @@ The topographic wetness index (TWI) was selected among several abiotic descripto
 
 Biotic descriptors included the Neighborhood Crowding Index [NCI; @Uriarte2004] and the Annual Crowding Rate, both integrated over time. The Neighborhood Crowding Index $NCI_i$ from tree individual $i$ was calculated with following formula:
 
-$$NCI_i = (\int_{t_0} ^{2015} \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}.dt).\frac1{\Delta t}$$
+\begin{equation} 
+  NCI_i = (\int_{t_0} ^{2015} \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}.dt).\frac1{\Delta t}
+  (\#eq:ncienv)
+\end{equation} 
+
 with $DBH_j$ the diameter from neighboring tree $j$ and $\delta_{i,j}$ its distance to individual tree $i$. $NCI_i$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface. The decrease of neighbors $DBH$ effect with distance was set to 0.25 here to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters. $NCI$ represents biotic asymmetric competition through tree neighborhood over time. Both correlations and principal component analyses showed non colinear TWI and NCI that we selected for further analyses (Fig. \@ref(fig:correlationsEnvGenom)).
 
 ```{r DataEnvGenom, eval=F}
@@ -122,14 +125,6 @@ trees %>%
   write_tsv(file.path(path, "gemma", "NCI", "NCI.env"), col_names = F)
 ```
 
-```{r correlationsEnvGenom, fig.cap="Environmental descriptors correlations."}
-trees %>% 
-  dplyr::select(TWI, NCI, NCIcon, NCIhetero, ANCR, ANCRcon, ANCRhetero) %>% 
-  na.omit() %>% 
-  cor(.) %>% 
-  corrplot::corrplot.mixed()
-```
-
 ```{r Envmdata}
 ids <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king.id"))
 K <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king"),
@@ -158,15 +153,32 @@ save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))
 
 We used between individual kinship and a lognormal Animal model [@Wilson2010] to estimate genetic variance associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. Animal model is calculated for the environemental values $y$ of the $N$ individuals with following formula:
 
-$$y_{p,i} \sim \mathcal{logN}(log(a_i),\sigma_1) \\ a_i \sim \mathcal{MVlogN_N}(log(\mu_p),\sigma_2.K)$$
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(a_{p,i}),\sigma_1) \\
+  a_{p,i} \sim \mathcal{MVlogN_N}(log(\mu_p),\sigma_2.K)
+  (\#eq:animalenv)
+\end{equation} 
 
 where individual is defined as a normal law centered on the individual genetic additive effects $a$ and associated individual remaining variance $\sigma_R$. Additive genetic variance $a$ follow a multivariate lognormal law centered on the population mean $\mu_{Population}$ of covariance $\sigma_G K$.
 
 We fitted the equivalent model with following priors:
 
-$$y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \sigma_2.A.\epsilon_i, \sigma_1) \\ \epsilon \sim \mathcal{N}(0,1) \\ \mu_p \sim \mathcal{logN}(0,1) \\  (\sigma_1,\sigma_2) \sim \mathcal N(0,1) \\V_P = Var(\mu_p) \\V_G=\sigma_2^2\\V_R=\sigma_1^2$$
-Results... pending !
-<!-- For both topography (TWI) and neighboring (NCI), most of the variability was not explained either by population or genotype with 41% and 96% of remaining variability respectivelly for TWI and NCI. Thus most of individual environment is determined through plastic response. Nevertheless the variability for topography was also strongly explained by the population (41%) and 18% of the remaining variability was explained by the genotype (Tab. \@ref(tab:EnvAnimalLog) and Fig. \@ref(fig:envKinshipLogG1) and \@ref(fig:envKinshipLogG2)). -->
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \hat{\sigma_2}.A.\epsilon_i, \sigma_1) \\ 
+  \epsilon_i \sim \mathcal{N}(0,1) \\ 
+  ~ \\
+  \mu_p \sim \mathcal{logN}(log(1),1) \\  
+  \sigma_1 \sim \mathcal N_T(0,1) \\ 
+  \hat{\sigma_2} = \sqrt(V_G)
+  ~ \\
+  V_Y = Var(log(y)) \\
+  V_P = Var(log(\mu_p)) \\
+  V_G = V_Y - V_P - V_R \\
+  V_R=\sigma_1^2
+  (\#eq:animalenvstan)
+\end{equation} 
+
+The model converged (Fig. \@ref(fig:envGenoTrace)) well for TWI but had some known diffuclties (see previous chapter) for NCI due to a low residual variation ($V_{R,NCI}=0.04$). We had two constrated results with most of the explained variation mainly attributed to the genotype for NCI (85%) and the majority attributed to population for TWI (42%). Still population explained 12% of NCI and genotype 4% of TWI. Finally, remaining variattion was almost null (3%) for NCI whereas important for TWI (54%) (Tab. \@ref(tab:envGenoTab) and Fig. \@ref(fig:envGenoR2) and \@ref(fig:envGenoVarPart)).
 
 ```{bash envGenoCluster, eval=F}
 vars=(TWI NCI)
@@ -192,15 +204,15 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"),
                              "2" = "S. globulifera Regina", "3" = "S. sp1")) %>% 
   mutate(population = ifelse(is.na(population), "", population)) %>% 
   kable(caption = "Summary table of the kinship growth model",
-        col.names = c("Variable", "Parameter",  "Population", 
+        col.names = c("Variable", "Parameter",  "Population",  
                       "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
 ```{r envGenoTrace, fig.cap="Traceplot for environmental variables."}
 cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
-                                     regex_pars = c("sigma"), 
+                                     regex_pars = c("Vp", "Vg", "Vr"), 
                                      facet_args = list(nrow = 1)),
-                   nrow = 2, labels = names(fitEnv))
+                   nrow = 2, labels = names(fitEnv)) 
 ```
 
 ```{r envGenoR2, fig.cap="Marginal and conditional $R^2$ for environmental variables."}
@@ -234,200 +246,74 @@ lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>%
   scale_fill_discrete(expression(sigma^2)) 
 ```
 
-## Major effect SNPs
+## Association
 
 We used per SNP linear mixed models implemented in `GEMMA` [Genome-wide Efficient Mixed Model Analysis, @Zhou2012a] to identify major effect SNPs. Linear mixed models are calculated for the environemental values $y$ of the $N$ individuals with following formula:
 
-$$y \sim \mathcal N(\mu + x\beta + Zu, \sigma_E)$$
-$$u \sim \mathcal{MVN_N}(0,\sigma_GK)$$
-$$\sigma_P = \sigma_G + \sigma_E$$
+\begin{equation} 
+  y_i \sim \mathcal N(\mu + x_i.\beta + Z.u_i, \sigma_E) \\
+  u_i \sim \mathcal{MVN_N}(0,\sigma_G.K) \\
+  \sigma_P = \sigma_G + \sigma_E
+  (\#eq:lmmenv)
+\end{equation} 
+
 
 where $N$ is the number of individuals, $y$ is the vector of environmental variable values for the $N$ individual, $\mu$ is the intercept representing the mean environmental variable, $x$ is a SNP, $\beta$ is the effect size of the SNP, $Z$ is the loading matrix (computed with Cholesky decomposition of $K$) and $u$ is the vector of random effects corresponding to individuals kinship relations ($u$ thus represents individuals breeding values), $u$ values are centered on 0, covary with known kinship matrix $K$ with an associated genetic variance $\sigma_G$, $\sigma_E$ is the residual variance, and the sum of residual $\sigma_E$ and genetic $\sigma_G$ variances is equal to the phenotypic variance $\sigma_P$. $\beta$ significance is calculated with Wald test. And p-values are corrected for multiple testing with false discovery rate, resulting in q-values. 
 
-We detected 3 outlier SNPs for ANCR (2 hitchhikers and 1 anonymous) and 15 for TWI (3 genic, 10 hitchhikers and 2 anonymous, 
-Fig. \@ref(fig:envMLM)).
+Within each population, we didb't detect any outliers SNPs both with TWI and NCI (Fig. \@ref(fig:envMLM)).
 
 ```{bash EnvGemma, eval=F, echo=T}
 module load bioinfo/plink-v1.90b5.3
 module load bioinfo/gemma-v0.97
-cat paracou3pop.popmap | awk '{print"0\t"$1"\t0\t0\t0\t-9"}' > paracou3pop.fam
-for par in $(seq 1 3) ; do plink \
-  --bfile ../../../variantCalling/paracou3pop/symcapture.all.biallelic.snp.filtered.nonmissing.paracou3pop \
-  --allow-extra-chr --keep paracou3pop.fam \
-  --extract ../../../variantCalling/paracou3pop/LD.prune.in \
-  --maf 0.05 --pheno env.phenotype --mpheno $par --out paracou3pop.$par --make-bed ; done
-gemma -bfile paracou3pop.1 -gk 1 -o kinship
-for par in $(seq 1 3) ; do  gemma -bfile paracou3pop.$par -k output/kinship.cXX.txt -lmm 1 -o LMM.$par & done
-for par in $(seq 1 3) ; do  gemma -bfile paracou3pop.$par -k -bslmm 1  -o BSLMM.$par & done
-cat LMM.snps | cut -f1 > snps.list
-plink --bfile paracou3pop.1 --allow-extra-chr --extract snps.list --out outliers --recode A
+pops=(globuliferaTypeParacou globuliferaTypeRegina sp1)
+for var in $(seq 2)
+  do
+  for pop in "${pops[@]}" ; 
+    do 
+      plink \
+        --bfile env \
+        --allow-extra-chr \
+        --keep  $pop.fam \
+        --extract env.prune.in \
+        --maf 0.05 \
+        --pheno env.phenotype --mpheno $var \
+        --out $pop.var$var --make-bed ; 
+      gemma -bfile $pop.var$var -gk 1 -o kinship.$pop.var$var ;
+      gemma -bfile $pop.var$var -lmm 1 \
+        -k output/kinship.$pop.var$var.cXX.txt \
+        -o LMM.$pop.var$var ;
+  done
+done
 ```
 
 ```{r envMLM, fig.cap="q-value of major effect SNPs associated to environmental variables. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
-lmm <- lapply(list.files(file.path(path, "gemma", "env"), pattern = ".assoc.txt$", full.names = T), read_tsv)%>% 
-  bind_rows(.id = "parameter") %>% 
-  mutate(parameter = recode(parameter, "1" = "TWI",  "2" = "NCI",  "3" = "ANCR")) %>% 
+lmm <- lapply(list.files(file.path(path, "gemma", "env"), 
+                         pattern = ".assoc.txt$", full.names = T),
+              function(file) read_tsv(file) %>% mutate(file = file)) %>% 
+  bind_rows() %>% 
+  mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//gemma/env/LMM.", "", file)) %>% 
+  mutate(file = gsub(".assoc.txt", "", file)) %>%
+  separate(file, c("population", "variable"), sep = ".var") %>% 
+  mutate(variable = recode(variable, "1" = "TWI",  "2" = "NCI")) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>%
   arrange(chr, ps) %>% 
   mutate(snp = 1:nrow(.)) %>% 
-  na.omit(qval) %>% 
-  mutate(model = "LMM")
-filter(lmm , qval < 0.05) %>% 
-  dplyr::select(rs, parameter) %>% 
-  write_tsv(file.path(path, "gemma", "env", "LMM.snps"), col_names = F)
+  na.omit(qval)
+# filter(lmm , qval < 0.05) %>% 
+#   dplyr::select(rs, population, variable) %>% 
+#   write_tsv(file.path(path, "gemma", "env", "LMM.snps"), col_names = F)
 ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
   ggrepel::geom_text_repel(data = lmm[lmm$qval < 0.05,]) +
   ylab(expression(-log[10]("q-value"))) +
-  facet_wrap(~ parameter) +
+  facet_grid(variable ~ population) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   xlab("SNP number") +
-  scale_color_discrete("SNP type")
-```
-
-## Polygenic structure
-
-We used Bayesian Sparse Linear Mixed Models [BSLMM, @Zhou2013] implemented in `GEMMA` to identify polygenic structure associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. The objective of BSLMM is to merge the hypothesis of Bayesian Variable Sparse Regression (BVSR), which assume few SNPs with large effects, with the hypothesis of Linear Mixed Models (LMM), which assume numerous small effects SNPs, because a priori knowledge of the genomic structure associated to our studied variable is not obvious. Bayesian Sparse Linear Mixed Models is calculated for the environemental values $y$ of the $N$ individuals with following formula:
-
-$$y \sim \mathcal N (\mu + X\widetilde\beta + Zu, \sigma^2_E)$$
-$$u \sim \mathcal{MVN_N}(0,\sigma_b^2 K)$$
-$$\widetilde\beta_i \sim \pi \mathcal N(0,\sigma_a^2)+(1-\pi)\delta_0$$
-$$\sigma^2_P = \sigma^2_a + \sigma^2_b + \sigma^2_E$$
-where $N$ is the number of individuals, $y$ is the vector of environmental variable values for the $N$ individual, $\mu$ is the intercept representing the mean environmental variable, $X$ is the matrix of SNPs ($n$ individuals and $p$ markers coded as 0, 1 or 2 copies of a reference allele), $\widetilde\beta$  correspond to SNPs sparse effects, $Z$ is the loading matrix (computed with Cholesky decomposition of $K$) and $u$ is the vector of random effects corresponding to individuals kinship relations ($u$ thus represents individuals breeding values), $u$ values are centered on 0, covary with known kinship matrix $K$ with an associated genetic variance $\sigma^2_b$, $\sigma^2_a$ is the genetic variance associated to sparse effects, $\sigma^2_E$ is the residual variance, the sum of residual $\sigma^2_E$, kinship $\sigma^2_b$ and SNPs $sigma^2_a$ variances is equal to the phenotypic variance $\sigma^2_P$, $\pi$ is the proportion of non-zero $\widetilde \beta$ and $\delta_0$ denotes a point mass at zero (Dirac Delta distribution). In a nutshell:
-
-* $\mu$ and $\sigma^2_E$ control environmental variable mean and residual variance
-* $\pi$ controls the proportion of $\widetilde \beta$ values that are non-zero
-* $\sigma_a$ control the expected magnitude of non-zero $\widetilde \beta$
-* $\sigma_b$ controls the expected magnitude of the random effects $u$
-
-Models inference were done with following priors:
-
-$$\sigma^{-2}_E \sim \Gamma (k_1,k_2)$$
-$$\mu|\sigma^2_E \sim \mathcal N(0, \sigma^2_E)$$
-$$log(\pi) \sim \mathcal U(-log(p),log(1))$$
-$\sigma_a$ and $\sigma_b$ priors specification were done with reparametrization. To this end the Propotion of Variance Explained by the specific sparse effects and random effects terms together (PVE) and the proportion of genetic variance explained by the sparse effects terms (PGE) were defined as follow:
-
-$$PVE(\widetilde\beta,u,\tau) = \frac{V(X\widetilde\beta+u)}{V(X\widetilde\beta+u)+\tau^{-1}}$$
-$$PVE(\widetilde\beta,u) = \frac{V(X\widetilde\beta)}{V(X\widetilde\beta+u)}$$
-Expectations of PVE and PGE are approximated with $h$ and $rho$, defined as follow:
-
-$$h:=\frac{p \pi s_a \sigma_a^2 + s_b \sigma_b^2}{p \pi s_a \sigma_a^2 + s_b \sigma_b^2+1}$$
-$$\rho:=\frac{p \pi s_a \sigma_a^2}{p \pi s_a \sigma_a^2 + s_b \sigma_b^2}$$
-where $s_a$ is the average variance of genotypes across markers, and $s_b$ is the mean of diagonal elements in $K$. $\rho$ correspond to the ratio between a models based on few SNPs with large effects ($\rho = 1$ correspond to BVSR) against a model based on many SNPs with small effects ($\rho = 0$ correspond to LMM). Both $h$ and $rho$ were defined a priori following a uniform distribution on $[0,1]$.
-
-To facilitate computation, the model used a binary indicator $\gamma=(\gamma_1,...,\gamma_p)\in[0,1]^p$ indicating wether the corresponding $\widetilde\beta$ are non-zero. $\widetilde\beta$ can thus be written as:
-$$\gamma_i \sim \mathcal B(\pi)$$
-$$\widetilde\beta_\gamma \sim \mathcal{MVN_{|\gamma|}}(0,\sigma_a^2\tau^{-1}\mathbb I_{|\gamma|})$$
-$$\widetilde\beta_{-\gamma}\sim\delta_0$$
-where $\widetilde\beta_\gamma$ correspond to the $\widetilde\beta$ with $\gamma_i=1$; $\widetilde\beta_{-\gamma}$ correspond to the $\widetilde\beta$ with $\gamma_i=0$; and $|\gamma|$ or $n_\gamma$ correspond to the number of non-zero $\gamma$.
-
-<style>
-div.blue { background-color:#e6f0ff; border-radius: 5px; padding: 20px;}
-</style>
-<div class = "blue">
-
-In summary, to interpret subsequent BSLMM results, we should remember that:
-
-* PVE is the observed variable variance explained by sparse effects $\beta$ and random effects $u$
-* PGE is the observed variable genetic variance explained by sparse effects alone
-* $\pi$ is the porportion of the SNPs having a polygenic effect on the phenotype
-* $n_\gamma$ or $|\gamma|$ is the number of non-zeros SNPs 
-* $\beta\gamma$ is the effect size estimate for the additive effect
-
-</div>
-
-We detected only 1 anonymous outlier SNP for NCI (Fig. \@ref(fig:envBSLMM)). Moreover, polygenic modelling with bayesian sparse linear mixed models (BSLMM) didn’t converged due to a small number of individuals (Fig. \@ref(fig:envBSLMMConvergence)).
-
-```{r envBSLMMConvergence, fig.cap="Traceplot of hyper-parameters chain for Baysian Sparse Linear Mixed Model (BSLMM)."}
-cowplot::plot_grid(plotlist = lapply(list.files(file.path(path, "gemma", "growth"), pattern = ".hyp.txt$", full.names = T), 
-       function(file) read_tsv(file) %>% 
-         dplyr::select(pge, n_gamma) %>% 
-         dplyr::rename(PGE = pge, `n[gamma]` = n_gamma) %>% 
-         mutate(iteration = 1:n()) %>% 
-         filter(row_number() %% 100 == 0) %>% 
-         dplyr::select(-iteration) %>% 
-         mcmc_combo()), labels = c("TWI", "NCI", "ANCR"), nrow = 3)  
-```
-
-```{r envBSLMM, fig.cap="Effect of SNPs associated to environmental variables with a polygenic model. SNP were detected using bayesian sparse linear mixed models (BSLMM) with individual kiniship as random effect. SNP significance was assessed with the $\\gamma$ parameter and highlighted here with SNPs having at least 90% chance of having an effect on the phenotype."}
-bslmm <- lapply(list.files(file.path(path, "gemma", "growth"), pattern = ".param.txt$", full.names = T), read_tsv) %>% 
-  bind_rows(.id = "parameter") %>% 
-  mutate(parameter = recode(parameter, "1" = "TWI",  "2" = "NCI",  "3" = "ANCR")) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
-              dplyr::rename(rs = snp)) %>% 
-  arrange(chr, ps) %>% 
-  mutate(snp = 1:nrow(.)) %>% 
-  mutate(model = "BSLMM")
-filter(bslmm , gamma > 0.5) %>% 
-  dplyr::select(rs, parameter) %>% 
-  write_tsv(file.path(path, "gemma", "env", "BSLMM.snps"), col_names = F)
-ggplot(bslmm, aes(snp, beta*gamma, label = snp, col = type, alpha = gamma > 0.5)) +
-  geom_point() +
-  ggrepel::geom_text_repel(data = bslmm[bslmm$gamma > 0.5,]) +
-  scale_y_continuous(trans="S_sqrt") +
-  facet_wrap(~ parameter) +
-  ylab(expression(beta*gamma))
-```
-
-## Outliers
-
-Only one gene associated to outliers SNPs had a significant enrichment of a gene ontology ($qval=0.03244626$), the hitchhiker SNP of ANCR was significantly enriched in a gene implicated in the regulation of flower development (Fig. \@ref(fig:envGO)).
-
-```{r envGO, fig.cap="Term enrichment of Gene Ontology (GO) for outliers genes."}
-trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
-              dplyr::select(scf, snp, trsc) %>% 
-  bind_rows(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>% # inclusion to be discussed
-  unique() %>% 
-  inner_join(dplyr::rename(lmm, snpNum = snp, snp = rs), .)
-
-GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
-                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
-  tbl("Transcript") %>% 
-  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
-  dplyr::select(gene_id, transcript_id, annotation) %>% 
-  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
-  collect() %>% 
-  separate(annotation, paste0("X", 1:16), "\t") %>% 
-  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
-  dplyr::select(trsc, gene, orf, GO) %>% 
-  filter(GO != ".") %>% 
-  left_join(trsc) %>% 
-  group_by(model, parameter, gene, GO) %>% 
-  summarise(qval = min(qval)) %>% 
-  ungroup() %>% 
-  dplyr::select(model, parameter, gene, qval, GO) %>% 
-  separate_rows(GO, sep = "`") %>% 
-  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
-
-enrichment <- function(x) {
-  y <- clusterProfiler::enricher(unique(filter(x, qval < 0.05)$gene),
-                                            pvalueCutoff = 0.2, 
-                                            pAdjustMethod = "BH",
-                                            unique(x$gene),
-                                            minGSSize = 10, 
-                                            maxGSSize = 500, 
-                                            qvalueCutoff = 0.2, 
-                                            dplyr::select(x, GOid, gene),
-                                            TERM2NAME = dplyr::select(x, GOid, GOname))
-  if(is.null(y)){
-    data.frame()
-  } else {
-    y@result
-  }
-}
-
-group_by(GO, model, parameter) %>% 
-  do(enrichment(.)) %>% 
-  filter(qvalue < 0.8) %>% 
-  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
-  geom_bar(stat = "identity") +
-  coord_flip() +
-  facet_wrap(~ model + parameter, labeller = "label_both", nrow = 2, scales = "free") +
-  viridis::scale_fill_viridis() +
-  theme(axis.title = element_blank())
+  scale_color_discrete("SNP type") +
+  theme(legend.position = "bottom")
 ```

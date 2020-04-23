@@ -51,20 +51,20 @@ model_data <- function(Trait){
   K <- K*2
   K <- as.matrix(Matrix::nearPD(K)$mat)
   list(I = nrow(trees),
-       S = length(unique(trees$popNum)),
-       P = length(unique(trees$plotNum)),
+       P = length(unique(trees$popNum)),
+       Pl = length(unique(trees$plotNum)),
        Trait = as.vector(scale(trees[,Trait], center = F)),
        DBH = trees$DBH,
        TWI = as.vector(scale(trees$TWI, center =F)),
        NCI = as.vector(scale(trees$NCI, center =F)),
-       species = trees$popNum,
+       population = trees$popNum,
        plot = trees$plotNum,
        K = K)
 }
 traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
 mdata <- lapply(traits, model_data)
 names(mdata) <- traits
-save(mdata, file = file.path("symcapture_save", 'dataFT.Rdata'))
+save(mdata, file = file.path("symcapture_save", 'dataFT.Rdata')) 
 ```
 
 
@@ -72,11 +72,32 @@ save(mdata, file = file.path("symcapture_save", 'dataFT.Rdata'))
 
 We used the following model to asses genetic varaince associated to leaf functional traits once we accounted for ontogenetic variation through DBH:
 
-$$Trait_{t,s,i} \sim \mathcal{logN}(log((\alpha_{t,i}+\delta_P).\frac{DBH_i}{{\beta_{DBH}}_{t,s} + DBH_i}), \sigma_3) \\ \alpha_{t,i} \sim \mathcal{MVlogN}(log(\alpha_{t,s}), \sigma_2.K) \\ \delta_P\sim\mathcal {logN}(0,\sigma_3)$$
+\begin{equation} 
+  Trait_{t,p,plot,i} \sim \mathcal{logN}(log(\alpha_{t,p}.a_{t,i}.\delta_{plot}.\frac{DBH_i}{{\beta_{DBH}}_{t,p} + DBH_i}), \sigma_3) \\
+  a_{t,i} \sim \mathcal{MVlogN}(log(1), \sigma_2.K) \\
+  \delta_{plot}\sim \mathcal {logN}(log(1),\sigma_3)
+  (\#eq:ftgeno)
+\end{equation} 
 
 We fitted the equivalent model with following priors:
 
-$$Trait_{t,s,i} \sim \mathcal{logN}(log((e^{log(\alpha_{t,s}) +\sigma_2.A.\epsilon1_i+\sigma_3.\epsilon2_p}).\frac{DBH_i}{{\beta_{DBH}}_{t,s} + DBH_i}), \sigma_3) \\ (\epsilon1, \epsilon2) \sim \mathcal N(0,1) \\ \beta_{DBH} \sim \mathcal{logN}(0,1) \\ (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal{N}(0,1) \\ V_s = Var(\alpha_s) \\V_G=\sigma_2^2\\V_P=\sigma_3^2\\V_R=\sigma_1^2$$
+\begin{equation} 
+  Trait_{t,p,plot,i} \sim \mathcal{logN}(log(\alpha_{t,p}.\hat{a_{t,i}}.\hat{\delta_{plot}}.\frac{DBH_i}{{\beta_{DBH}}_{t,p} + DBH_i}), \sigma_3) \\
+  \hat{a_{t,i}} = e^{\sigma_2.A.\epsilon_{1,i}} \\
+  \hat{\delta_{plot}} = e^{\sigma_3.\epsilon_{2,plot}} \\
+  \epsilon_{1,i} \sim \mathcal N(0,1) \\
+  \epsilon_{2,plot} \sim \mathcal N(0,1) \\
+  ~ \\
+  \beta_{DBH} \sim \mathcal{logN}(log(1),1) \\
+  (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal{N}_T^3(0,1) \\
+  ~ \\
+  V_P = Var(log(\alpha_{t,p})) \\
+  V_G = \sigma_2^2 \\
+  V_{DBH} = Var(log(\frac{DBH_i}{{\beta_{DBH}}_{t,p} + DBH_i})) \\
+  V_{plot}= \sigma_3^2 \\
+  V_R = \sigma_1^2
+  (\#eq:ftgenostan)
+\end{equation} 
 
 ```{bash ftGenoCluster, eval=F}
 traits=(LMA LDMC LT invLA CC)
@@ -84,7 +105,7 @@ for trait in "${traits[@]}" ; do for chain in $(seq 8) ; do echo "module purge ;
 sarray -J FT -o out/%j.FT.out -e out/%j.FT.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL FTGeno.sh
 ```
 
-```{r ftGenoTab, fig.cap="Genetic variance of individual growth potential with a normal animal model."}
+```{r ftGenoTab, fig.cap="Genetic variance of individual growth potential with a normal animal model.", eval=F}
 fitFT <- list(LMA = list(), LDMC = list(), LT = list(),
                invLA = list(), CC = list())
 for(trait in c("LMA", "LDMC", "LT", "invLA", "CC")){
@@ -94,9 +115,7 @@ for(trait in c("LMA", "LDMC", "LT", "invLA", "CC")){
     fitFT[[trait]] <- c(fitFT[[trait]], fit)
   }
 }
-fitFT$CC <- NULL # for the moment
 fitFT <- lapply(fitFT, sflist2stanfit)
-
 lapply(fitFT, broom::tidyMCMC, c("alpha", "betaDBH", "Vp", "Vg", "Vr"), 
        droppars = NULL, rhat = T) %>% 
   bind_rows(.id = "Variable") %>% 
@@ -109,14 +128,14 @@ lapply(fitFT, broom::tidyMCMC, c("alpha", "betaDBH", "Vp", "Vg", "Vr"),
                       "Estimate", "$\\sigma$", "$\\hat{R}$"))
 ```
 
-```{r ftGenoTrace, fig.cap="Traceplot."}
+```{r ftGenoTrace, fig.cap="Traceplot.", eval=F}
 cowplot::plot_grid(plotlist = lapply(fitFT, mcmc_trace, 
                                      regex_pars = c("sigma"), 
                                      facet_args = list(nrow = 1)),
-                   labels = names(fitFT), nrow = 4)
+                   labels = names(fitFT), nrow = 5)
 ```
 
-```{r ftGenoVar, fig.cap="Genetic variance partitionning."}
+```{r ftGenoVar, fig.cap="Genetic variance partitionning.", eval=F}
 lapply(fitFT, mcmc_intervals_data, regex_pars = c("Vs", "Vg", "Vp", "Vr")) %>% 
   bind_rows(.id = "variable") %>% 
   mutate(variance = recode_factor(parameter, 
@@ -131,8 +150,48 @@ lapply(fitFT, mcmc_intervals_data, regex_pars = c("Vs", "Vg", "Vp", "Vr")) %>%
   facet_wrap(~ variable, scales = "free", nrow = 1) +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), 
-        axis.ticks.x = element_blank()) +
+        axis.ticks.x = element_blank(),
+        legend.position = "bottom") +
   scale_fill_discrete(expression(sigma^2))
 ```
 
 ## Genotype & Environment
+
+We used the following model to asses genetic and environmental variances associated to leaf functional traits once we accounted for ontogenetic variation through DBH:
+
+\begin{equation} 
+  Trait_{t,p,plot,i} \sim \mathcal{logN}(log(\alpha_{t,p}.a_{t,i}.\delta_{plot}.\beta_1.TWI_i.\beta_2.NCI_i.\frac{DBH_i}{{\beta_{DBH}}_{t,p} + DBH_i}), \sigma_3) \\
+  a_{t,i} \sim \mathcal{MVlogN}(log(1), \sigma_2.K) \\
+  \delta_{plot}\sim \mathcal {logN}(log(1),\sigma_3)
+  (\#eq:ftgenoenv)
+\end{equation} 
+
+We fitted the equivalent model with following priors:
+
+\begin{equation} 
+  Trait_{t,p,plot,i} \sim \mathcal{logN}(log(\alpha_{t,p}.\hat{a_{t,i}}.\hat{\delta_{plot}}.\beta_1.TWI_i.\beta_2.NCI_i.\frac{DBH_i}{{\beta_{DBH}}_{t,p} + DBH_i}), \sigma_3) \\
+  \hat{a_{t,i}} = e^{\sigma_2.A.\epsilon_{1,i}} \\
+  \hat{\delta_{plot}} = e^{\sigma_3.\epsilon_{2,plot}} \\
+  \epsilon_{1,i} \sim \mathcal N(0,1) \\
+  \epsilon_{2,plot} \sim \mathcal N(0,1) \\
+  ~ \\
+  \beta_{DBH} \sim \mathcal{logN}(log(1),1) \\
+  (\beta_1,\beta_2) \sim \mathcal{N}^2(0,1) \\
+  (\sigma_1,\sigma_2,\sigma_3) \sim \mathcal{N}_T^3(0,1) \\
+  ~ \\
+  V_P = Var(log(\alpha_{t,p})) \\
+  V_G = \sigma_2^2 \\
+  V_{DBH} = Var(log(\frac{DBH_i}{{\beta_{DBH}}_{t,p} + DBH_i})) \\
+  V_{TWI} = Var(log(\beta_1.TWI_i)) \\
+  V_{NCI} = Var(log(\beta_2.NCI_i)) \\
+  V_{plot}= \sigma_3^2 \\
+  V_R = \sigma_1^2
+  (\#eq:ftgenoenvstan)
+\end{equation} 
+
+```{bash ftGenoEnvCluster, eval=F}
+traits=(LMA LDMC LT invLA CC)
+for trait in "${traits[@]}" ; do for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript FTGenoEnv.R $chain $trait" ; done ; done > FTGenoEnv.sh
+sarray -J FTge -o out/%j.FTge.out -e out/%j.FTge.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL FTGenoEnv.sh
+```
+

@@ -7,24 +7,22 @@ data {
 }
 transformed data{
   matrix[N, N] A = cholesky_decompose(K) ; // cholesky-decomposed kinship
+  real Vy = variance(log(y)) ;
 }
 parameters {
   vector<lower=0>[P] mu ; // intercept
   vector[N] epsilon ; // genotypic noise
-  vector<lower=0>[2] sigma ; // genetic variance
+  real<lower=0, upper=sqrt(Vy)> sigma ; // genetic variance
 }
 transformed parameters {
-  real<lower=0> Vp = variance(mu) ; // population variance
+  real<lower=0> Vp = variance(log(mu[population])) ; // population variance
+  real Vr = square(sigma) ;
+  real Vg = Vy - Vp - Vr ;
+  vector[N] alog = sqrt(Vg)*A*epsilon ;
 }
 model {
-  y ~ lognormal(log(mu[population]) + sigma[2]*A*epsilon, sigma[1]) ;
-  mu ~ lognormal(0, 1) ;
+  y ~ lognormal(log(mu[population]) + alog, sigma) ;
   epsilon ~ std_normal() ;
+  mu ~ lognormal(0, 1) ;
   sigma ~ normal(0, 1) ;
-}
-generated quantities{
-  real Vg = square(sigma[2]) ;
-  real Vr = square(sigma[1]) ;
-  real R2m = Vp / (Vp + Vg + Vr) ;
-  real R2c = (Vp + Vg) / (Vp + Vg + Vr) ;
 }
