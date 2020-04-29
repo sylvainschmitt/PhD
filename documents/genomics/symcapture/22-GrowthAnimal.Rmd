@@ -28,6 +28,9 @@ pairs_stan <- function(chain, stan_model, pars) {
   GGally::ggpairs(df, title = paste0("Chain", chain), 
                   lower = list(continuous = GGally::wrap("points", alpha = 0.2)))                    
 } 
+pars <- data.frame(sim = 1:25,
+                   sigmaG = rep(seq(0.1, 1, length.out = 5), each = 5),
+                   sgmaR = rep(seq(0.1, 1, length.out = 5), 5))
 ```
 
 # Growth & Animal models

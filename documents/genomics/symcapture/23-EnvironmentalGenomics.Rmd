@@ -161,6 +161,8 @@ We used between individual kinship and a lognormal Animal model [@Wilson2010] to
 
 where individual is defined as a normal law centered on the individual genetic additive effects $a$ and associated individual remaining variance $\sigma_R$. Additive genetic variance $a$ follow a multivariate lognormal law centered on the population mean $\mu_{Population}$ of covariance $\sigma_G K$.
 
+### Version 1
+
 We fitted the equivalent model with following priors:
 
 \begin{equation} 
@@ -215,23 +217,107 @@ cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace,
                    nrow = 2, labels = names(fitEnv)) 
 ```
 
-```{r envGenoR2, fig.cap="Marginal and conditional $R^2$ for environmental variables."}
-lapply(fitEnv, mcmc_intervals_data, regex_pars = c("R2")) %>% 
-  bind_rows(.id = "variable") %>% 
-  mutate(index = recode(parameter, 
-                        "R2m" = "Marginal", "R2c" = "Conditional")) %>%
-  ggplot(aes(x = index, xend = index, col = variable, fill = variable)) +
-  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = ll, yend = hh),
+```{r envgenoR2, fig.cap="R2 for environmental variable"}
+lapply(fitEnv, pars = c("Vp", "Vg", "Vr"), as.data.frame) %>% 
+  bind_rows(.id = "model") %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vg, Vr))) %>% 
+  mutate(Vexp = sum(c(Vp, Vg))) %>% 
+  mutate_at(c("Vp", "Vg", "Vexp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = "model") %>% 
+  group_by(model, variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vg" = "Genotype", 
+                           "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
                size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
-  facet_wrap(~ variable, labeller = label_parsed) +
-  xlab("") + ylab(expression(R^2)) +
-  scale_fill_discrete(guide = "none") +
-  scale_color_discrete(guide = "none")
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +  
+  theme(axis.title.y = element_blank()) +
+  facet_wrap(~ model, nrow = 2) +
+  coord_flip()
 ```
 
 ```{r envGenoVarPart, fig.cap="Genetic variance partitionning for environmental variables."}
+lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(parameter = recode(parameter, "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
+  group_by(variable) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = variable, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2)) 
+```
+
+### Version 2
+
+We fitted the equivalent model with following priors:
+
+\begin{equation} 
+  y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \sigma_2.A.\epsilon_i, \hat{\sigma_1}) \\ 
+  \epsilon_i \sim \mathcal{N}(0,1) \\ 
+  ~ \\
+  \mu_p \sim \mathcal{logN}(log(1),1) \\  
+  \sigma_1 \sim \mathcal N_T(0,1) \\ 
+  \hat{\sigma_1} = \sqrt(V_R)
+  ~ \\
+  V_Y = Var(log(y)) \\
+  V_P = Var(log(\mu_p)) \\
+  V_G = \sigma_2^2 \\
+  V_R = V_Y - V_P - V_G
+  (\#eq:animalenvstan)
+\end{equation} 
+
+```{bash envGenoCluster2, eval=F}
+vars=(TWI NCI)
+for var in "${vars[@]}" ; do for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript EnvGeno2.R $chain $var" ; done ; done > EnvGeno2.sh
+sarray -J Env2 -o out/%j.Env2.out -e out/%j.Env2.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL EnvGeno2.sh
+```
+
+```{r envGenoTab2, fig.cap="Genetic variance of individual growth potential with a lognormal animal model."}
+fitEnv <- list(TWI = list(), NCI = list())
+for(var in c("TWI", "NCI")){
+  for(sim in list.files("symcapture_save/EnvGeno2", 
+                        pattern = var, full.names = T)){
+    load(sim)
+    fitEnv[[var]] <- c(fitEnv[[var]], fit)
+  }
+}
+fitEnv <- lapply(fitEnv, sflist2stanfit)
+lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
+       droppars = NULL, rhat = T) %>% 
+  bind_rows(.id = "Variable") %>% 
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+  mutate(population = recode(population, "1" = "S. globulifera Paracou",
+                             "2" = "S. globulifera Regina", "3" = "S. sp1")) %>% 
+  mutate(population = ifelse(is.na(population), "", population)) %>% 
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Variable", "Parameter",  "Population",  
+                      "Estimate", "$\\sigma$", "$\\hat{R}$"))
+```
+
+```{r envGenoTrace2, fig.cap="Traceplot for environmental variables."}
+cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
+                                     regex_pars = c("Vp", "Vg", "Vr"), 
+                                     facet_args = list(nrow = 1)),
+                   nrow = 2, labels = names(fitEnv)) 
+```
+
+```{r envGenoVarPart2, fig.cap="Genetic variance partitionning for environmental variables."}
 lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
   bind_rows(.id = "variable") %>% 
   mutate(parameter = recode(parameter, "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 

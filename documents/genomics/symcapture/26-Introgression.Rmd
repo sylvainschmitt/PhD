@@ -199,6 +199,7 @@ save(symcapture.admix, hi.index, clines,
 
 ```{r introgressT}
 load(file = file.path("symcapture_save", "introgress.Rdata"))
+rm(clines)
 hi.index %>% 
   dplyr::select(Ind, pair, h) %>% 
   reshape2::dcast(Ind ~ pair) %>% 
@@ -244,6 +245,26 @@ hi.index %>%
   theme(legend.position = "bottom") 
 ```
 
+```{r kinshipintrogressed, fig.cap="Kinship relationships between introgressed individuals."}
+ids <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king.id"))
+K <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame() %>% 
+  mutate(Ind1 = gsub(".g.vcf", "", ids$IID)) %>% 
+  reshape2::melt(id.vars = "Ind1", variable.name = "Ind2", value.name = "kinship") %>% 
+  mutate(Ind2 = gsub(".g.vcf", "", Ind2))
+lapply(unique(trees$pop.hybrid)[4:5], function(p)
+  filter(K, 
+         Ind1 %in% filter(trees, pop.hybrid %in% p)$Ind,
+         Ind2 %in% filter(trees, pop.hybrid %in% p)$Ind) %>% 
+    ggplot(aes(Ind1, Ind2, fill = kinship)) +
+    geom_tile() +
+    coord_equal() +
+    viridis::scale_fill_viridis()) %>% 
+  cowplot::plot_grid(plotlist = ., nrow = 2,
+                     labels = unique(trees$pop.hybrid)[4:5])
+```
+
 ## Loci
 
 [@Burgarella2019; @Racimo2016a; @Pfeifer2019; @Pfeifer2019b]
@@ -266,14 +287,15 @@ $plink \
 
 ```{r bgcRdataPrep, eval=F}
 snps <- vroom::vroom(file.path(path, "..", "variantCalling", "bgc", "bgc.traw")) %>% 
+  # sample_n(10^3) %>%
+  mutate(SNP = paste("locus", 1:nrow(.))) %>% 
   reshape2::melt(id.vars = c("CHR", "SNP", "(C)M", "POS", "COUNTED", "ALT"), 
                  variable.name = "IID", value.name = "MA1") %>% 
   dplyr::rename(REF = COUNTED) %>% 
   dplyr::select(CHR, POS, SNP, ALT, REF, IID, MA1) %>% 
   mutate(IID = gsub("0_", "", IID)) %>% 
   mutate(Ind = gsub(".g.vcf", "", IID)) %>% 
-  mutate(MA2 = 2-MA1) %>% 
-  mutate(SNP = paste("locus", 1:nrow(.)))
+  mutate(MA2 = 2-MA1)
 for(p in unique(trees$pop.hybrid)[1:3]){
   t <- filter(snps, Ind %in% filter(trees, pop.hybrid == p)$Ind) %>% 
     group_by(SNP) %>% 
@@ -290,8 +312,10 @@ for(p in unique(trees$pop.hybrid)[1:3]){
                           paste0(gsub("\\s", "", p), ".txt")),
             col_names = F)
 }
-for(p in unique(trees$pop)[1:3]){                                
-  t <- filter(snps, Ind %in% filter(trees, pop != p)$Ind) %>% 
+inds <- list(sp = filter(trees, pop.hybrid %in% unique(trees$pop.hybrid)[5:6])$Ind,
+             sr = filter(trees, pop.hybrid %in% unique(trees$pop.hybrid)[c(4,7)])$Ind)
+for(p in names(inds)){                                
+  t <- filter(snps, Ind %in% inds[[p]]) %>% 
     dplyr::select(SNP, MA1, MA2) %>% 
     arrange(SNP)
   lapply(unique(snps$SNP), function(s)
@@ -300,7 +324,7 @@ for(p in unique(trees$pop)[1:3]){
           filter(t, SNP == s)[c("MA1", "MA2")])) %>% 
     bind_rows() %>% 
     write_tsv(file.path(path, "..", "variantCalling", "bgc",
-                            paste0("no.", gsub("\\s", "", p), ".txt")),
+                            paste0("admixed.", p, ".txt")),
               col_names = F)
 }
 rm(snps) ; gc()
@@ -313,9 +337,48 @@ bgc=~/Tools/bgcdist/bgc
 $bgc \
   -a S.sp1pure.txt \
   -b S.globuliferaParacoupure.txt \
-  -h no.S.gobuliferaRegina.txt \
+  -h admixed.sp.txt \
   -F admixed.sp \
+  -p 2 \
   -q 1
+$bgc \
+  -a S.sp1pure.txt \
+  -b S.globuliferaReginapure.txt \
+  -h admixed.sr.txt \
+  -F admixed.sr \
+  -p 2 \
+  -q 1
+```
+
+```{r bgclp, fig.cap="bgc loglikelihood."}
+lapply(c("sp", "sr"), function(folder)
+  vroom::vroom(file.path(path, "..", "variantCalling", "bgc", folder, "LnL.txt"), 
+             delim = " ", col_names = folder)) %>% 
+  bind_cols() %>% 
+  mcmc_trace(facet_args = list(nrow = 3)) +
+  ggtitle("Loglikelihood")
+```
+
+```{r bgcparameters, fig.cap="bgc parameters.", fig.cap="bgc $\\alpha$ and $\\beta$ parameters."}
+pars <- lapply(c("sp", "sr"), function(pair) {
+  lapply(c("alpha", "beta"), function(par) {
+    vroom::vroom(file.path(path, "..", "variantCalling", "bgc", pair, paste0(par, ".txt")),
+             col_names = as.character(1:1000)) %>% 
+        mutate(SNP = 1:nrow(.)) %>% 
+      reshape2::melt(id.var= "SNP", variable.name = "iteration", value.name = par)
+  }) %>% 
+    plyr::join_all() %>% 
+    reshape2::melt(c("SNP", "iteration"))
+}) %>% 
+  bind_rows(.id = "pair")
+pars %>% 
+  group_by(pair, variable, SNP) %>% 
+  summarise(l = quantile(value, 0.05), m = median(value), 
+            h = quantile(value, 0.95)) %>%  
+  ggplot(aes(x = SNP)) +
+  geom_ribbon(aes(ymin = l, ymax = h), alpha = 0.5, col = "lightgrey") +
+  geom_line(aes(y = m), alpha = 1) +
+  facet_grid(variable ~ pair, scales = "free")
 ```
 
 ```{r pfeiferCode, eval=F}
@@ -373,7 +436,6 @@ ggplot(df, aes(pos, df)) +
   scale_color_discrete("P < 0.01") +
   scale_alpha_discrete("P < 0.01")
 ```
-
 
 ## Environment
 

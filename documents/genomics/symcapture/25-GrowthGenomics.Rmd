@@ -158,7 +158,7 @@ for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ;
 sarray -J Gmax -o out/%j.Gmax.out -e out/%j.Gmax.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL Gmax.sh
 ```
 
-```{r gmaxParTab, eval=F}
+```{r gmaxParTab}
 fitGmax <- list()
 for(sim in list.files("symcapture_save/Gmax", full.names = T)){
   load(sim)
@@ -177,29 +177,29 @@ fitGmax <- sflist2stanfit(fitGmax)
 #   write_tsv(file.path(path, "gemma", "gmax", "gmax.phenotype"),
 #             col_names = F) # for genomic scans
 broom::tidyMCMC(fitGmax, pars = c("thetap1", "theta2", "theta3",
-                                   "sigmaR", "sigma", "lp__"), 
+                                   "sigma", "lp__"), 
                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Individual growth potential model.",
         col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$"))
 ```
 
-```{r gmaxParTrace, fig.cap="Traceplot of model parameters.", eval=F}
+```{r gmaxParTrace, fig.cap="Traceplot of model parameters."}
 mcmc_trace(as.array(fitGmax, pars = c("thetap1", "theta2", "theta3",
-                                       "sigmaR", "sigma", "lp__")),
+                                      "sigma", "lp__")),
            np = nuts_params(fitGmax)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
-```{r gmaxParPairs, message=FALSE, fig.cap="Pairs of model parameters.", eval=F}
-pairs_stan(1, fitGmax, c("sigmaR", "sigma"))
+```{r gmaxParPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+pairs_stan(1, fitGmax, c("sigma"))
 ```
 
-```{r gmaxParEnergy, fig.cap="Energy of the model.", eval=F}
+```{r gmaxParEnergy, fig.cap="Energy of the model."}
 mcmc_nuts_energy(nuts_params(fitGmax))
 ```
 
-```{r gmaxParPred, fig.cap="Species predicted growth curve.", eval=F}
+```{r gmaxParPred, fig.cap="Species predicted growth curve."}
 ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
   geom_vline(xintercept = mdata$DBH0, alpha = 0.1) +
   stat_function(aes(col = "S. globulifera Paracou"), fun = function(.x) 
@@ -216,11 +216,33 @@ ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
                  median(as.array(fitGmax, "thetap3[3]")))^2))
 ```
 
-```{r gmaxR2, fig.cap="$R^2$ for Gmax.", eval=F}
-mcmc_intervals(fitGmax, "R2m")
+```{r GmaxR2, fig.cap="R2 for Gmax."}
+as.data.frame(fitGmax, c("Vp", "Vr")) %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vr))) %>% 
+  mutate_at(c("Vp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = NULL) %>% 
+  group_by(variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
 ```
 
-```{r GmaxVarPart, fig.cap="Genetic variance partitionning for Gmax.", eval=F}
+```{r GmaxVarPart, fig.cap="Genetic variance partitionning for Gmax."}
  mcmc_intervals_data(fitGmax, regex_pars = c("Vp", "Vr")) %>% 
   mutate(parameter = recode(parameter, "Vp" = "Population", "Vr" = "Residual")) %>% 
   mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
@@ -274,7 +296,7 @@ for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ;
 sarray -J GmaxGeno -o out/%j.GmaxGeno.out -e out/%j.GmaxGeno.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL GmaxGeno.sh
 ```
 
-```{r gmaxgenoParTab, eval=F}
+```{r gmaxgenoParTab}
 fitGmaxGeno <- list()
 for(sim in list.files("symcapture_save/GmaxGeno", full.names = T)){
   load(sim)
@@ -289,22 +311,22 @@ broom::tidyMCMC(fitGmaxGeno, pars = c("thetap1", "theta2", "theta3", "sigma", "l
                       "$\\hat R$", "$N_{eff}$"))
 ```
 
-```{r gmaxgenoParTrace, fig.cap="Traceplot of model parameters.", eval=F}
+```{r gmaxgenoParTrace, fig.cap="Traceplot of model parameters."}
 mcmc_trace(as.array(fitGmaxGeno, 
                     pars = c("thetap1", "theta2", "theta3", "sigma", "lp__")),
            np = nuts_params(fitGmaxGeno)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
-```{r gmaxgenoParPairs, message=FALSE, fig.cap="Pairs of model parameters.", eval=F}
+```{r gmaxgenoParPairs, message=FALSE, fig.cap="Pairs of model parameters."}
 pairs_stan(1, fitGmaxGeno, c("sigma"))
 ```
 
-```{r gmaxgenoParEnergy, fig.cap="Energy of the model.", eval=F}
+```{r gmaxgenoParEnergy, fig.cap="Energy of the model."}
 mcmc_nuts_energy(nuts_params(fitGmaxGeno))
 ```
 
-```{r gmaxgeno1ParPred, fig.cap="Species predicted growth curve.", eval=F}
+```{r gmaxgeno1ParPred, fig.cap="Species predicted growth curve."}
 ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
   geom_vline(xintercept = mdata$DBH0, alpha = 0.1) +
   stat_function(aes(col = "S. globulifera Paracou"), fun = function(.x) 
@@ -321,11 +343,36 @@ ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
                  median(as.array(fitGmaxGeno, "thetap3[3]")))^2))
 ```
 
-```{r gmaxgenoR2, fig.cap="$R^2$ for Gmax.", eval=F}
-mcmc_intervals(fitGmaxGeno, c("R2m", "R2c"))
+```{r GmaxGenoR2, fig.cap="R2 for Gmax."}
+as.data.frame(fitGmaxGeno, c("Vp", "Vg", "Vr")) %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vg, Vr))) %>% 
+  mutate(Vexp = sum(c(Vp, Vg))) %>% 
+  mutate_at(c("Vp", "Vg", "Vexp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = NULL) %>% 
+  group_by(variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vg" = "Genotype", 
+                           "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
 ```
 
-```{r GmaxGenoVarPart, fig.cap="Genetic variance partitionning for Gmax.", eval=F}
+```{r GmaxGenoVarPart, fig.cap="Genetic variance partitionning for Gmax."}
  mcmc_intervals_data(fitGmaxGeno, regex_pars = c("Vp", "Vg", "Vr")) %>% 
   mutate(parameter = recode(parameter, "Vp" = "Population", 
                             "Vg" = "Genotype", "Vr" = "Residual")) %>% 
@@ -336,6 +383,35 @@ mcmc_intervals(fitGmaxGeno, c("R2m", "R2c"))
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
   scale_fill_discrete(expression(sigma^2)) 
+```
+
+```{r aNCInGmax, fig.cap="Multiplicative genetic values for NCI vs Gmax"}
+fitNCI <- list()
+for(sim in list.files("symcapture_save/EnvGeno", 
+                      pattern = "NCI", full.names = T)){
+  load(sim)
+  fitNCI <- c(fitNCI, fit)
+}
+fitNCI <- sflist2stanfit(fitNCI)
+lapply(c(fitNCI, fitGmaxGeno), function(fit)
+  as.data.frame(fit, "alog") %>% 
+  summarise_all(median) %>% 
+  reshape2::melt(NULL)) %>% 
+  bind_cols() %>% 
+  separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
+  mutate(aNCI = exp(value), aGmax = exp(value1)) %>% 
+  dplyr::select(IndNum, aNCI, aGmax) %>% 
+  left_join(trees) %>% 
+  ggplot(aes(aNCI, aGmax, col = pop, size = DBHtoday)) +
+  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_point(alpha = 0.4) +
+  theme(legend.position = "bottom") +
+  scale_size_continuous(guide = "none") +
+  scale_color_discrete("Population") +
+  xlab("Multiplicative genetic value for NCI") +
+  ylab("Multiplicative genetic value for Gmax") +
+  geom_smooth(method = "lm", aes(gruop = NA))
 ```
 
 ## Gmax, Genotype & Environment
@@ -382,39 +458,39 @@ for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ;
 sarray -J GmGE -o out/%j.GmGE.out -e out/%j.GmGE.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL GmaxGenoEnv.sh
 ```
 
-```{r gmaxgenoenvTab, eval=F}
+```{r gmaxgenoenvTab}
 fitGmaxGenoEnv <- list()
 for(sim in list.files("symcapture_save/GmaxGenoEnv", full.names = T)){
   load(sim)
   fitGmaxGenoEnv <- c(fitGmaxGenoEnv, fit)
 }
 fitGmaxGenoEnv <- sflist2stanfit(fitGmaxGenoEnv)
-broom::tidyMCMC(fitGmaxGenoEnv, pars = c("thetap1", "betaTWI", "betaNCI",
+broom::tidyMCMC(fitGmaxGenoEnv, pars = c("thetap1", "beta", 
                                          "theta2", "theta3",
-                                      "sigmaR", "sigmaG", "sigma", "lp__"), 
+                                         "sigma", "lp__"), 
                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Individual growth potential model.",
         col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$"))
 ```
 
-```{r gmaxgenoenvTrace, fig.cap="Traceplot of model parameters.", eval=F}
-mcmc_trace(as.array(fitGmaxGenoEnv, pars = c("thetap1", "betaTWI", "betaNCI",
+```{r gmaxgenoenvTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitGmaxGenoEnv, pars = c("thetap1", "beta",
                                            "theta2", "theta3",
-                                          "sigmaR", "sigmaG", "sigma", "lp__")),
+                                          "sigma", "lp__")),
            np = nuts_params(fitGmaxGenoEnv)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
-```{r gmaxgenoenvPairs, message=FALSE, fig.cap="Pairs of model parameters.", eval=F}
-pairs_stan(1, fitGmaxGenoEnv, c("sigmaR", "sigma"))
+```{r gmaxgenoenvPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+pairs_stan(1, fitGmaxGenoEnv, c("sigma"))
 ```
 
-```{r gmaxgenoenvEnergy, fig.cap="Energy of the model.", eval=F}
+```{r gmaxgenoenvEnergy, fig.cap="Energy of the model."}
 mcmc_nuts_energy(nuts_params(fitGmaxGenoEnv))
 ```
 
-```{r gmaxgenoenvPred, fig.cap="Species predicted growth curve.", eval=F}
+```{r gmaxgenoenvPred, fig.cap="Species predicted growth curve."}
 ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
   geom_vline(xintercept = mdata$DBH0, alpha = 0.1) +
   stat_function(aes(col = "S. globulifera Paracou"), fun = function(.x) 
@@ -431,7 +507,37 @@ ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
                  median(as.array(fitGmaxGenoEnv, "thetap3[3]")))^2))
 ```
 
-```{r gmaxgenoenvVar, fig.cap="Genetic variance partitionning for ontogenetic parameters.", eval=F}
+```{r GmaxGenoEnvR2, fig.cap="R2 for Gmax."}
+as.data.frame(fitGmaxGenoEnv, c("Vp", "Vg", "Vnci", "Vtwi", "Vr")) %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vg, Vnci, Vtwi, Vr))) %>% 
+  mutate(Vexp = sum(c(Vp, Vg, Vnci, Vtwi))) %>% 
+  mutate_at(c("Vp", "Vg", "Vnci", "Vtwi", "Vexp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = NULL) %>% 
+  group_by(variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vg" = "Genotype", 
+                           "Vnci" = "NCI", "Vtwi" = "TWI",
+                           "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
+```
+
+```{r gmaxgenoenvVar, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
 mcmc_intervals_data(fitGmaxGenoEnv, regex_pars = c("Vp", "Vg", "Vnci", "Vtwi", "Vr")) %>% 
   mutate(variance = recode_factor(parameter, 
                            "Vp" = "Population", "Vg" = "Genotype", 

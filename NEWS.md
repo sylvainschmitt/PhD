@@ -1,3 +1,7 @@
+# PhD 0.1.9173
+* symcapture: revised models
+* symcapture: manuscript M&M and Res v3 + SupMat extended
+
 # PhD 0.1.9172
 * symcapture: all updated models
 * variance removed

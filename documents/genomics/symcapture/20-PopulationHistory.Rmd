@@ -162,27 +162,44 @@ for m in $(seq 10) ; do treemix -i treemix.frq.gz -root Madagascar -m $m -g out.
 grep Exiting *.llik > migration.llik
 ```
 
-```{r treemixPlot, fig.cap="Drift-based phylogeny of *Symphonia* and *Pentadesma* populations with `treemix`. Subfigure A. present the tree log-likelihood depending on the number of allowed migration events per snp type, suggesting 1 migration event to better represent the tree than none. Other figures represent the phylogeny per snp type depending on the drift parameters with a red arrow to represent the migration event from *Sp.1* and Brazil most common ancestors to *S. globulifera* most commaon ancestors.", fig.width=10}
+```{r treemixPlot, fig.cap="Drift-based phylogeny of *Symphonia* and *Pentadesma* populations with `treemix` [@Pickrell2012]. Subfigure **A** present the log-likelihood of the phylogeny topology depending on the number of allowed migration events per SNP type, suggesting 1 migration event to better represent the phylogeny topology than none. Others subfigures represent the phylogeny for anonymous (**B**), genic (**C**) and putatively-hitchhiker (**D**) SNPs. The red arrow represents the most likely migration event. Population are named by their localities, including *Symphonia* species only or *Symphonia* and *Pentadesma* species in Africa. At the exception of the three Paracou populations: *S. sp1*, *S. globulifera type Paracou* and *S. globulifera type Regina* respectivelly named Ssp1, SgParacou and SgRegina."}
+cols <- c("#984EA3", "#377EB8", "#4DAF4A")
+names(cols) <- c("neutral", "functional", "hitchhiker")
+cols2 <- cols
+names(cols2) <- c("anonymous", "genic", "hitchhiker")
 g.llik <- lapply(c("neutral", "hitchhiker", "functional"), function(type)
-  read_tsv(file.path(path, "treemix", paste0("migration.", type, ".llik")), col_names = F) %>% 
+  read_tsv(file.path(path, "treemix", paste0("migration.", type, ".llik")), 
+           col_names = F) %>% 
     mutate(type = type)) %>% 
   bind_rows() %>% 
   separate(X1, c("M", "what", "likelihood"), ":", convert = T) %>% 
   mutate(M = as.numeric(gsub("out", "", gsub(".llik", "", M)))) %>% 
+  mutate(type = recode(type, 
+                       "functional" = "genic",
+                       "neutral" = "anonymous", 
+                       "hitchhiker" = "hitchhiker")) %>% 
   ggplot(aes(M, likelihood, col = type)) +
   geom_point() +
   geom_line() +
-  xlab("Migration events") + ylab("Log-likelihhod") +
-  geom_vline(xintercept = 1) + labs(tag = "A.") +
-  theme(legend.position = c(0.6,0.4))
-g.tree <- lapply(c("neutral", "hitchhiker", "functional"), function(type)
-  ggtree(ape::read.tree(file.path(path, "treemix", type, "out1.treeout")), layout = "slanted") +
-  geom_taxalink(13, 15, curvature = 0, col = "red",
-                arrow = arrow(angle = 10, length = unit(0.1, "inches"))) +
-  geom_tiplab() + theme_tree2() + xlab("Drift parameter") + labs(tag = type))
-gridExtra::grid.arrange(g.llik, g.tree[[1]], g.tree[[2]], g.tree[[3]], 
-                        widths = c(1, 3),
-                        layout_matrix = rbind(c(1, 2), c(1, 3), c(1,4)))
+  xlab("Migration events") + 
+  ylab("Log-likelihhod") +
+  geom_vline(xintercept = 1, col = "red") + 
+  theme(legend.position = c(0.6,0.4)) +
+  scale_color_manual(values = cols2)
+g.tree <- lapply(c("neutral", "functional", "hitchhiker"),
+                 function(type)
+                   ggtree::ggtree(ape::read.tree(file.path(path, "treemix", 
+                                                           type, "out1.treeout")),
+                                  layout = "slanted", col = cols[type]) +
+                   ggtree::geom_taxalink(13, 15, curvature = 0, col = "red",
+                                         arrow = arrow(angle = 10, 
+                                                       length = unit(0.1, "inches"))) +
+                   ggtree::geom_tiplab() + 
+                   ggtree::theme_tree2() + 
+                   xlim(0,0.035) +
+                   xlab("Drift parameter"))
+cowplot::plot_grid(g.llik, g.tree[[1]], g.tree[[2]], g.tree[[3]], 
+                   labels = LETTERS[1:4])
 ```
 
 ## Population diversity
