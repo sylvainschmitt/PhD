@@ -28,6 +28,7 @@ pairs_stan <- function(chain, stan_model, pars) {
   GGally::ggpairs(df, title = paste0("Chain", chain), 
                   lower = list(continuous = GGally::wrap("points", alpha = 0.2)))
 }
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 ```
 
 # Growth genomics
@@ -67,13 +68,76 @@ trees <- trees %>%
 trees <- trees %>%
   left_join(env)
 rm(env)
-save(trees, file = "./symcapture_save/Env2.Rdata")
+save(trees, file = "./symcapture_save/Env2.Rdata") 
 ```
+
+```{r P16Env, eval=F}
+p16 <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot == 1) %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(Xfield > 20, Xfield < 250-20, Yfield > 20, Yfield < 250-20) %>% 
+  collect() # ! individuals on edge to be removed
+p16XY <- p16
+coordinates(p16XY) <- ~Xutm + Yutm
+proj4string(p16XY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+p16XY <- spTransform(p16XY, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+p16$TWI <- raster::extract(wetness, p16XY)
+rm(dem, wetness, p16XY)
+p16$TWI[p16$TWI < 0] <- 0
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("p16"))
+NC <- parallel::parLapply(cl, 1:nrow(p16), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(p16$Plot[ind])) %>% 
+    filter(idTree != local(p16$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(p16$Xutm[ind]) - Xutm)^2+(local(p16$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(con = ifelse(Genus == local(p16$Genus[ind]) && Species == local(p16$Species[ind]), 1, 0)) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    collect() %>% 
+    group_by(CensusYear) %>% 
+    summarise(NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>% 
+    summarise(idTree = local(p16$idTree[ind]),
+              NCI = mean(NCI))})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+p16 <- left_join(p16, NC)
+rm(NC)
+DBH <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot == 1) %>% 
+  filter(Xfield > 20, Xfield < 250-20, Yfield > 20, Yfield < 250-20) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect() %>% 
+  group_by(idTree) %>% 
+  mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
+         DBHtoday = dplyr::last(DBH)) %>%  
+  ungroup() %>% 
+  dplyr::select(idTree, Y0, DBH0, DBHtoday) %>% 
+  unique() %>% 
+  mutate(DBHtoday = ifelse(DBHtoday == DBH0, DBHtoday + 0.1, DBHtoday))
+p16 <- left_join(p16, DBH)
+rm(DBH)
+save(p16, file = "./symcapture_save/p16.Rdata")
+```
+
 
 ```{r mdata}
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed
-  mutate(IndNum = as.numeric(as.factor(Ind)), popNum = as.numeric(as.factor(pop)))
+  mutate(IndNum = 1:nrow(.), popNum = as.numeric(as.factor(pop)))
 # write_tsv(dplyr::select(trees, IID),
 #           file.path(path, "populations", "growth.ind"), col_names = F)
 # awk '{print "0\t"$1"\t0\t0\t0\t-9"}' growth.ind > growth.fam
@@ -117,7 +181,7 @@ model_data <- function(data) {
        K = K)
 }
 mdata <- model_data(trees)
-save(mdata, file = file.path("symcapture_save", "growthPar.Rdata"))
+save(mdata, file = file.path("symcapture_save", "dataGrowthPar.Rdata")) 
 ```
 
 ## Gmax
@@ -385,7 +449,7 @@ as.data.frame(fitGmaxGeno, c("Vp", "Vg", "Vr")) %>%
   scale_fill_discrete(expression(sigma^2)) 
 ```
 
-```{r aNCInGmax, fig.cap="Multiplicative genetic values for NCI vs Gmax"}
+```{r VarVsGenetic, fig.cap="Long legend...", fig.height=8, fig.width=8}
 fitNCI <- list()
 for(sim in list.files("symcapture_save/EnvGeno", 
                       pattern = "NCI", full.names = T)){
@@ -393,25 +457,109 @@ for(sim in list.files("symcapture_save/EnvGeno",
   fitNCI <- c(fitNCI, fit)
 }
 fitNCI <- sflist2stanfit(fitNCI)
-lapply(c(fitNCI, fitGmaxGeno), function(fit)
+fitTWI <- list()
+for(sim in list.files("symcapture_save/EnvGeno", 
+                      pattern = "TWI", full.names = T)){
+  load(sim)
+  fitTWI <- c(fitTWI, fit)
+}
+fitTWI <- sflist2stanfit(fitTWI)
+t <- lapply(c(fitNCI, fitTWI, fitGmaxGeno), function(fit)
   as.data.frame(fit, "alog") %>% 
   summarise_all(median) %>% 
   reshape2::melt(NULL)) %>% 
-  bind_cols() %>% 
+  bind_rows(.id = "fit") %>% 
+  mutate(fit = recode(fit, "1" = "aNCI", "2" = "aTWI", "3" = "aGmax")) %>% 
   separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
-  mutate(aNCI = exp(value), aGmax = exp(value1)) %>% 
-  dplyr::select(IndNum, aNCI, aGmax) %>% 
-  left_join(trees) %>% 
-  ggplot(aes(aNCI, aGmax, col = pop, size = DBHtoday)) +
+  mutate(value = exp(value)) %>% 
+  reshape2::dcast(IndNum ~ fit, value.var = "value") %>% 
+    left_join(trees) %>% 
+  left_join(read_tsv(file.path(path, "gemma", "gmax", "gmax.phenotype"),
+                     col_names = c("FID", "IID", "Gmax")))
+## Up
+g.a.NCI.Gmax <- ggplot(t, aes(aGmax, aNCI, size = DBHtoday)) +
   geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
   geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
-  geom_point(alpha = 0.4) +
-  theme(legend.position = "bottom") +
+  geom_smooth(method = "lm", col = "black") +
+  geom_point(aes(col = pop), alpha = 0.4) +
   scale_size_continuous(guide = "none") +
-  scale_color_discrete("Population") +
-  xlab("Multiplicative genetic value for NCI") +
-  ylab("Multiplicative genetic value for Gmax") +
-  geom_smooth(method = "lm", aes(gruop = NA))
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  theme(axis.title = element_blank()) +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.85)
+g.a.TWI.Gmax <- ggplot(t, aes(aGmax, aTWI, size = DBHtoday)) +
+  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_smooth(method = "lm", col = "darkgrey") +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  theme(axis.title = element_blank()) +  ggtitle("Gmax") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.8, col = "darkgrey")
+g.a.TWI.NCI <- ggplot(t, aes(aNCI, aTWI, size = DBHtoday)) +
+  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_smooth(method = "lm", col = "darkgrey") +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  theme(axis.title = element_blank()) +  ggtitle("NCI") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.8, label.y = 0.85, col = "darkgrey")
+## Diag
+g.TWI <- ggplot(t, aes(aTWI, TWI, col = pop, size = DBHtoday)) +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_point(alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  theme(axis.title.x = element_blank()) +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  ylab("TWI") + ggtitle("TWI") +
+  annotate("text", x = 0.9, y = 7, label = expression(R[m]^2==0.35)) +
+  annotate("text", x = 0.9, y = 6, label = expression(R[c]^2==0.44))
+g.NCI <- ggplot(t, aes(aNCI, NCI/10^4, col = pop, size = DBHtoday)) +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_point(alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+    theme(axis.title = element_blank()) +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+    annotate("text", x = 0.9, y = 0.7, label = expression(R[m]^2==0.06)) +
+  annotate("text", x = 0.9, y = 0.6, label = expression(R[c]^2==0.24))
+g.gmax <- ggplot(t, aes(aGmax, (DBHtoday - DBH0)/(2017-Y0), 
+                        col = pop, size = DBHtoday)) +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_point(alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+    theme(axis.title = element_blank()) +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+      annotate("text", x = 0.5, y = 1.1, label = expression(R[m]^2==0.10)) +
+  annotate("text", x = 0.5, y = 0.9, label = expression(R[c]^2==0.53))
+## Down
+load(file = "./symcapture_save/p16.Rdata")
+g.var.DBH.NCI <- ggplot(t, aes(NCI/10^4, (DBHtoday - DBH0)/(2017-Y0), 
+                               size = DBHtoday)) +
+  geom_hex(data = p16, fill = "lightgrey", alpha = 0.6, bins = 50) +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  theme(axis.title = element_blank())
+g.var.DBH.TWI <- ggplot(t, aes(TWI, (DBHtoday - DBH0)/(2017-Y0), 
+                        size = DBHtoday)) +
+  geom_hex(data = p16, fill = "lightgrey", alpha = 0.6) +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  theme(axis.title.x = element_blank()) +
+  ylab("Gmax")
+g.var.NCI.TWI <- ggplot(t, aes(TWI, NCI/10^4, size = DBHtoday)) +
+  geom_hex(data = p16, fill = "lightgrey", alpha = 0.6) +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  theme(axis.title.x = element_blank()) +
+  ylab("NCI")
+# all
+cowplot::plot_grid(g.TWI, g.a.TWI.NCI, g.a.TWI.Gmax,
+                   g.var.NCI.TWI, g.NCI, g.a.NCI.Gmax,
+                   g.var.DBH.TWI, g.var.DBH.NCI, g.gmax,
+                   ncol=3, labels = LETTERS[1:9])
 ```
 
 ## Gmax, Genotype & Environment
@@ -471,7 +619,7 @@ broom::tidyMCMC(fitGmaxGenoEnv, pars = c("thetap1", "beta",
                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Individual growth potential model.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$"))
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
 ```
 
 ```{r gmaxgenoenvTrace, fig.cap="Traceplot of model parameters."}
@@ -479,15 +627,15 @@ mcmc_trace(as.array(fitGmaxGenoEnv, pars = c("thetap1", "beta",
                                            "theta2", "theta3",
                                           "sigma", "lp__")),
            np = nuts_params(fitGmaxGenoEnv)) +
-  viridis::scale_color_viridis(discrete = T)
+  viridis::scale_color_viridis(discrete = T) 
 ```
 
 ```{r gmaxgenoenvPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-pairs_stan(1, fitGmaxGenoEnv, c("sigma"))
+pairs_stan(1, fitGmaxGenoEnv, c("sigma")) 
 ```
 
 ```{r gmaxgenoenvEnergy, fig.cap="Energy of the model."}
-mcmc_nuts_energy(nuts_params(fitGmaxGenoEnv))
+mcmc_nuts_energy(nuts_params(fitGmaxGenoEnv)) 
 ```
 
 ```{r gmaxgenoenvPred, fig.cap="Species predicted growth curve."}
@@ -504,7 +652,7 @@ ggplot(data.frame(DBH = 0:200, AGR = 2), aes(x = DBH, y = AGR)) +
     stat_function(aes(col = "S. sp1"), fun = function(.x) 
     median(as.array(fitGmaxGenoEnv, "thetap1[3]"))*
       exp(-.5*(log(.x/(100*median(as.array(fitGmaxGenoEnv, "thetap2[3]"))))/
-                 median(as.array(fitGmaxGenoEnv, "thetap3[3]")))^2))
+                 median(as.array(fitGmaxGenoEnv, "thetap3[3]")))^2)) 
 ```
 
 ```{r GmaxGenoEnvR2, fig.cap="R2 for Gmax."}
@@ -534,7 +682,7 @@ as.data.frame(fitGmaxGenoEnv, c("Vp", "Vg", "Vnci", "Vtwi", "Vr")) %>%
   geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
   ylab(expression(R^2)) +
   theme(axis.title.y = element_blank()) +
-  coord_flip()
+  coord_flip() 
 ```
 
 ```{r gmaxgenoenvVar, fig.cap="Genetic variance partitionning for ontogenetic parameters."}
@@ -550,7 +698,7 @@ mcmc_intervals_data(fitGmaxGenoEnv, regex_pars = c("Vp", "Vg", "Vnci", "Vtwi", "
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), 
         axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2)) 
+  scale_fill_discrete(expression(sigma^2))  
 ```
 
 ## Associations

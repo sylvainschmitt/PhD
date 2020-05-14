@@ -33,7 +33,7 @@ individuals <- googlesheets::gs_title("Parvicapture") %>%
                       "squamata" = "other", "pedicellata" = "other", "grandiflora" = "other",
                       "micrantha" = "other", "parviflora" = "other", 
                       "congestiflora" = "outgroup"))
-a <- read_tsv(file.path(pathCluster, "Sequences", "unmerged", "libraries", "libraries.txt"),
+a <- read_tsv(file.path(pathCluster, "Sequences", "denovo", "libraries.txt"),
          col_names = "Library") %>%
   separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
   dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>%
@@ -59,6 +59,7 @@ reference=$3
 echo "Reference: $reference"
 
 # modules
+cd runs/$reference
 module load bioinfo/Trimmomatic-0.36
 module load bioinfo/bwa-0.7.15
 module load bioinfo/picard-2.14.1
@@ -68,8 +69,8 @@ module load bioinfo/bedtools2-2.29.0
 # trimming
 echo "Step: Trimming"
 java -jar $TRIM_HOME/trimmomatic.jar PE \
-  $raw/"$file"_R1_001.fastq.gz \
-  $raw/"$file"_R2_001.fastq.gz \
+  ../../$raw/"$file"_R1_001.fastq \
+  ../../$raw/"$file"_R2_001.fastq \
   trimmed/paired/"$file"_R1_paired.fq.gz \
   trimmed/unpaired/"$file"_R1_unpaired.fq.gz \
   trimmed/paired/"$file"_R2_paired.fq.gz \
@@ -80,8 +81,8 @@ java -jar $TRIM_HOME/trimmomatic.jar PE \
 # mapping
 echo "Step: mapping"
 bwa mem -M -R "@RG\tID:$file\tSM:$file\tPL:HiSeq4K" \
-  -t 2 \
-  $reference \
+  -t 1 \
+  ../../reference/$reference.fasta \
   trimmed/paired/"$file"_R1_paired.fq.gz 	\
   trimmed/paired/"$file"_R2_paired.fq.gz \
   > mapped/sam/$file.sam
@@ -103,7 +104,7 @@ rm mapped/bam.paired/$file.bam mapped/bam.paired/$file.bam.bai
 
 # extracting reads
 bedtools bamtofastq -i mapped/bam.paired.sorted/$file.bam \
-  -fq filtered.reads/"$file"_R1_001.fastq -fq2 filtered.reads/"$file"__001.fastq
+  -fq filtered.reads/"$file"_R1_001.fastq -fq2 filtered.reads/"$file"_R2_001.fastq
 rm mapped/bam.paired.sorted/$file.bam
 ```
 
@@ -123,6 +124,47 @@ sbatch denovo.sh
 for lib in $(ls *.R2); do mv $lib ${lib%.*}_R2_001.fastq  ; done
 ```
 
+## Reference
+
+3730 target sequences in `reference.fasta.fai` that we will split in 37 jobs of ca 37 sequences.
+
+```{bash, eval=F, echo=T}
+mkdir reference
+cut ../../reference/reference.fasta.fai -f1 > reference.sequence.list
+split -l 100 -d reference.sequence.list reference.sequence_ --additional-suffix=.list
+rm reference.sequence.list
+module load bioinfo/seqtk-1.2
+reference=../../reference/reference.fasta
+for list in $(ls *.list); do seqtk subseq $reference $list > ${list%.*}.fasta ; done
+module load bioinfo/bwa-0.7.15
+for ref in $(ls *.fasta); do bwa index $ref ; done
+```
+
+
+## Libraries subset
+
+```{bash, eval=F, echo=T}
+mkdir runs
+for ref in $(ls reference/*.list); do mkdir runs/$(basename ${ref%.*}) ; done
+for ref in $(ls runs); 
+  do 
+  mkdir runs/$ref/trimmed runs/$ref/trimmed/paired runs/$ref/trimmed/unpaired
+  mkdir runs/$ref/mapped runs/$ref/mapped/sam runs/$ref/mapped/bam runs/$ref/mapped/bam.paired runs/$ref/mapped/bam.paired.sorted
+  mkdir runs/$ref/filtered.reads
+done
+for ref in $(ls runs); do for lib in $(cat libraries.txt); do echo "bash raw2filtered2.sh $lib filtered.reads $ref"; done ; done > runFiltered.sh
+split -l 1000 -d runFiltered.sh runFiltered_ --additional-suffix=.sh
+rm runFiltered_all.sh # very important against infinite loop because if runFilttered-all.sh exists in the next command it will run itself in an inifinite loop until filling disk memory
+for runs in $(ls runFiltered_*); do echo "sarray  --wait -J haplo -o out/%j.out -e out/%j.err -t 10:00:00 --mem=4G --cpus-per-task=1 --mail-type=BEGIN,END,FAIL $runs ;"; done > runFiltered_all.sh # we may number outputs in out/ and remove them as soon as they end to avoid an excessive number of files and mail might be removed and kept only in the general sbatch
+for ref in $(ls runs); do rm -r runs/$ref/trimmed runs/$ref/mapped ; done
+for ref in $(ls runs); do cp params.txt runs/$ref/ ; done
+for ref in $(ls runs); do echo "cd runs/$ref ; module load system/Miniconda3-4.4.10 ; module load bioinfo/ipyrad-0.7.28 ; ipyrad -p params.txt -s 1234567 -c 4 ;"; done > runDenovo.sh
+# test
+head -n 1 runDenovo.sh > runDenovo.test.sh
+sarray -J denovo -o out/denovo.%j.out -e out/denovo.%j.err -t 48:00:00 --mem=40G --cpus-per-task=4 --mail-type=BEGIN,END,FAIL runDenovo.test.sh ;
+```
+
+
 ## PCA
 
 ```{bash pcaSH, eval=F, echo=T}
@@ -134,7 +176,6 @@ $plink \
   --mind 0.95 \
   --missing --het --freqx --pca var-wts \
   --make-bed --out denovo
-
 ```
 
 

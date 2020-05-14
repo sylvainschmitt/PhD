@@ -1,3 +1,8 @@
+# PhD 0.1.9174
+* symcapture: take home message firs draft
+* symcapture: fixed NCI mistake & New figure
+* parvicapture: splitting reference for denovo
+
 # PhD 0.1.9173
 * symcapture: revised models
 * symcapture: manuscript M&M and Res v3 + SupMat extended

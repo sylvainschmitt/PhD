@@ -19,8 +19,8 @@ crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
-load("./symcapture_save/Env.Rdata")
-load(file.path("symcapture_save", 'AnimalModels.Rdata'))
+load("./symcapture_save/Env.Rdata") 
+load(file.path("symcapture_save", 'AnimalModels.Rdata'))  
 ```
 
 # Environmental genomics
@@ -80,49 +80,34 @@ projection(wetness) <- projection(dem)
 wetness <- projectRaster(wetness, crs = crs)
 trees$TWI <- raster::extract(wetness, treesXY)
 rm(dem, wetness, treesXY)
-cl <- parallel::makeCluster(getOption("cl.cores", 2))
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
 parallel::clusterExport(cl, list("trees"))
 NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
   library(tidyverse)
   src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
-  tbl("Paracou") %>% 
-  filter(Plot == local(trees$Plot[ind])) %>% 
-  filter(idTree != local(trees$idTree[ind])) %>% 
-  mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
-  filter(dij < 20) %>% 
-  mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
-  mutate(DBH = CircCorr/pi) %>% 
-  collect() %>% 
-  group_by(CensusYear) %>% 
-  summarise(NCIcon = sum(DBH*DBH*exp(-0.25*dij)*con),
-            NCIhetero = sum(DBH*DBH*exp(-0.25*dij)*(1-con))) %>% 
-  ungroup() %>% 
-  arrange(CensusYear) %>%
-  mutate(NCI = NCIcon + NCIhetero,
-         dt = CensusYear - lag(CensusYear)) %>% 
-  mutate(ANCRcon = NCIcon-lag(NCIcon),
-         ANCRhetero = NCIhetero-lag(NCIhetero),
-         ANCR = NCI-lag(NCI)) %>% 
-  summarise(idTree = local(trees$idTree[ind]),
-            NCIcon = sum(NCIcon/dt, na.rm = T),
-            NCIhetero = sum(NCIcon/dt, na.rm = T),
-            NCI = sum(NCI/dt, na.rm = T),
-            ANCRcon = sum(ANCRcon/dt, na.rm = T),
-            ANCRhetero = sum(ANCRhetero/dt, na.rm = T),
-            ANCR = sum(ANCR/dt, na.rm = T))})
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    collect() %>% 
+    group_by(CensusYear) %>% 
+    summarise(NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>% 
+    summarise(idTree = local(trees$idTree[ind]),
+              NCI = mean(NCI))})
 parallel::stopCluster(cl) ; rm(cl)
 NC <- bind_rows(NC)
 trees <- left_join(trees, NC)
 rm(NC)
 save(trees, file = "./symcapture_save/Env.Rdata")
 trees %>%
-  dplyr::select(FID, IID, TWI) %>%
+  dplyr::select(FID, IID, TWI, NCI) %>%
   mutate(TWI = RNOmni::rankNorm(TWI)) %>%
-  write_tsv(file.path(path, "gemma", "TWI", "TWI.env"), col_names = F)
-trees %>%
-  dplyr::select(FID, IID, NCI) %>%
-    mutate(NCI = RNOmni::rankNorm(NCI)) %>%
-  write_tsv(file.path(path, "gemma", "NCI", "NCI.env"), col_names = F)
+  mutate(NCI = RNOmni::rankNorm(NCI)) %>%
+  write_tsv(file.path(path, "gemma", "env", "env.phenotype"), col_names = F)
 ```
 
 ```{r Envmdata}
@@ -134,7 +119,7 @@ row.names(K) <- ids$IID
 K <- as.matrix(K)
 trees <- trees %>% 
   filter(IID %in% colnames(K)) %>% 
-  mutate(popNum = as.numeric(as.factor(pop))) 
+  mutate(IndNum = 1:nrow(.), popNum = as.numeric(as.factor(pop)))
 mdata <- lapply(c("TWI", "NCI"), function(variable) {
                 K <- K[trees$IID, trees$IID]
                 K[K < 0] <- 0
@@ -146,7 +131,7 @@ mdata <- lapply(c("TWI", "NCI"), function(variable) {
                                           population = trees$popNum,
                                           K = K))})
 names(mdata) <- c("TWI", "NCI")
-save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))
+save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))   
 ```
 
 ## Genetic variance
@@ -160,8 +145,6 @@ We used between individual kinship and a lognormal Animal model [@Wilson2010] to
 \end{equation} 
 
 where individual is defined as a normal law centered on the individual genetic additive effects $a$ and associated individual remaining variance $\sigma_R$. Additive genetic variance $a$ follow a multivariate lognormal law centered on the population mean $\mu_{Population}$ of covariance $\sigma_G K$.
-
-### Version 1
 
 We fitted the equivalent model with following priors:
 
@@ -207,14 +190,14 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"),
   mutate(population = ifelse(is.na(population), "", population)) %>% 
   kable(caption = "Summary table of the kinship growth model",
         col.names = c("Variable", "Parameter",  "Population",  
-                      "Estimate", "$\\sigma$", "$\\hat{R}$"))
+                      "Estimate", "$\\sigma$", "$\\hat{R}$"))   
 ```
 
 ```{r envGenoTrace, fig.cap="Traceplot for environmental variables."}
 cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
                                      regex_pars = c("Vp", "Vg", "Vr"), 
                                      facet_args = list(nrow = 1)),
-                   nrow = 2, labels = names(fitEnv)) 
+                   nrow = 2, labels = names(fitEnv))   
 ```
 
 ```{r envgenoR2, fig.cap="R2 for environmental variable"}
@@ -245,7 +228,7 @@ lapply(fitEnv, pars = c("Vp", "Vg", "Vr"), as.data.frame) %>%
   ylab(expression(R^2)) +  
   theme(axis.title.y = element_blank()) +
   facet_wrap(~ model, nrow = 2) +
-  coord_flip()
+  coord_flip()   
 ```
 
 ```{r envGenoVarPart, fig.cap="Genetic variance partitionning for environmental variables."}
@@ -260,76 +243,58 @@ lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>%
   facet_wrap(~ variable, scales = "free") +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2)) 
+  scale_fill_discrete(expression(sigma^2))  
 ```
 
-### Version 2
-
-We fitted the equivalent model with following priors:
-
-\begin{equation} 
-  y_{p,i} \sim \mathcal{logN}(log(\mu_p) + \sigma_2.A.\epsilon_i, \hat{\sigma_1}) \\ 
-  \epsilon_i \sim \mathcal{N}(0,1) \\ 
-  ~ \\
-  \mu_p \sim \mathcal{logN}(log(1),1) \\  
-  \sigma_1 \sim \mathcal N_T(0,1) \\ 
-  \hat{\sigma_1} = \sqrt(V_R)
-  ~ \\
-  V_Y = Var(log(y)) \\
-  V_P = Var(log(\mu_p)) \\
-  V_G = \sigma_2^2 \\
-  V_R = V_Y - V_P - V_G
-  (\#eq:animalenvstan)
-\end{equation} 
-
-```{bash envGenoCluster2, eval=F}
-vars=(TWI NCI)
-for var in "${vars[@]}" ; do for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript EnvGeno2.R $chain $var" ; done ; done > EnvGeno2.sh
-sarray -J Env2 -o out/%j.Env2.out -e out/%j.Env2.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL EnvGeno2.sh
-```
-
-```{r envGenoTab2, fig.cap="Genetic variance of individual growth potential with a lognormal animal model."}
-fitEnv <- list(TWI = list(), NCI = list())
-for(var in c("TWI", "NCI")){
-  for(sim in list.files("symcapture_save/EnvGeno2", 
-                        pattern = var, full.names = T)){
-    load(sim)
-    fitEnv[[var]] <- c(fitEnv[[var]], fit)
-  }
-}
-fitEnv <- lapply(fitEnv, sflist2stanfit)
-lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
-       droppars = NULL, rhat = T) %>% 
-  bind_rows(.id = "Variable") %>% 
-  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
-  mutate(population = recode(population, "1" = "S. globulifera Paracou",
-                             "2" = "S. globulifera Regina", "3" = "S. sp1")) %>% 
-  mutate(population = ifelse(is.na(population), "", population)) %>% 
-  kable(caption = "Summary table of the kinship growth model",
-        col.names = c("Variable", "Parameter",  "Population",  
-                      "Estimate", "$\\sigma$", "$\\hat{R}$"))
-```
-
-```{r envGenoTrace2, fig.cap="Traceplot for environmental variables."}
-cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
-                                     regex_pars = c("Vp", "Vg", "Vr"), 
-                                     facet_args = list(nrow = 1)),
-                   nrow = 2, labels = names(fitEnv)) 
-```
-
-```{r envGenoVarPart2, fig.cap="Genetic variance partitionning for environmental variables."}
-lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
-  bind_rows(.id = "variable") %>% 
-  mutate(parameter = recode(parameter, "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
-  group_by(variable) %>%
-  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
-  ggplot(aes(x = variable, fill = parameter)) +
-  geom_col(aes(y = m)) +
-  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
-  facet_wrap(~ variable, scales = "free") +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2)) 
+```{r aTWInNCI, fig.cap="Multiplicative", fig.height=8, fig.width=8}
+t <- lapply(fitEnv, function(fit)
+  as.data.frame(fit, "alog") %>% 
+    summarise_all(median) %>% 
+    reshape2::melt(NULL)) %>% 
+  bind_rows(.id = "fit") %>% 
+  separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
+  mutate(value = exp(value)) %>% 
+  reshape2::dcast(IndNum ~ fit, value.var = "value") %>% 
+  left_join(trees, by = "IndNum", suffix = c(".a", ".var")) %>% 
+  mutate(DBH = CircCorr/pi)
+g.main <- ggplot(t, aes(NCI.a, TWI.a, size = DBH)) +
+  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_smooth(method = "lm", col = "black") +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  xlab("Multiplicative genetic value for NCI") +
+  ylab("Multiplicative genetic value for TWI") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.9, label.y = 0.9)
+g.NCI <- ggplot(t, aes(NCI.a, NCI.var/10^4, col = pop, size = DBH)) +
+  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_point(alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual("", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  ylab("Individual NCI (/10^4)") +
+  scale_x_continuous(position = "top") +
+  theme(axis.title.x = element_blank(),
+        legend.position = c(0.5, 0.9))
+g.TWI <- ggplot(t, aes(TWI.var,  TWI.a, col = pop, size = DBH)) +
+  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
+  geom_point(alpha = 0.4) +
+  scale_size_continuous("DBH 2017") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  xlab("TWI") +
+  scale_y_continuous(position = "right") +
+  theme(axis.title.y = element_blank(),
+        legend.position = c(0.9, 0.2))
+g.comp <- ggplot(t, aes(TWI.var, NCI.var/10^4, size = DBH)) +
+  geom_point(aes(col = pop), alpha = 0.4) +
+  scale_size_continuous(guide = "none") +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  scale_y_continuous(position = "right") +
+  scale_x_continuous(position = "top") +
+  theme(axis.title = element_blank()) +
+  ggpubr::stat_cor(method = "pearson", label.x = 4, label.y = 0.7)
+cowplot::plot_grid(g.TWI, g.main, g.comp, g.NCI, 
+                   ncol=2, labels = c("A", "B", "C", "D")) 
 ```
 
 ## Association
@@ -370,6 +335,8 @@ for var in $(seq 2)
         -o LMM.$pop.var$var ;
   done
 done
+cat LMM.snps | cut -f1 > snps.list
+plink --bfile env --allow-extra-chr --extract snps.list --out outliers --recode A
 ```
 
 ```{r envMLM, fig.cap="q-value of major effect SNPs associated to environmental variables. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
@@ -387,9 +354,9 @@ lmm <- lapply(list.files(file.path(path, "gemma", "env"),
   arrange(chr, ps) %>% 
   mutate(snp = 1:nrow(.)) %>% 
   na.omit(qval)
-# filter(lmm , qval < 0.05) %>% 
-#   dplyr::select(rs, population, variable) %>% 
-#   write_tsv(file.path(path, "gemma", "env", "LMM.snps"), col_names = F)
+filter(lmm , qval < 0.05) %>%
+  dplyr::select(rs, population, variable) %>%
+  write_tsv(file.path(path, "gemma", "env", "LMM.snps"), col_names = F)
 ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
@@ -403,3 +370,80 @@ ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)
   scale_color_discrete("SNP type") +
   theme(legend.position = "bottom")
 ```
+
+
+```{r outliersEnv, fig.cap="TWI distribution for outliers genes."}
+read_delim(file.path(path, "gemma", "env", "outliers.raw"), delim = " ") %>% 
+  left_join(read_tsv(file.path(path, "gemma", "env", "env.phenotype"), 
+         col_names = c("FID", "IID", "TWI", "NCI"))) %>% 
+  left_join(dplyr::select(trees, IID, pop)) %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
+  reshape2::melt(id.vars = c("pop", "IID", "TWI"),
+                 variable.name = "snp", value.name = "allele") %>% 
+  na.omit(allele) %>% 
+  mutate(allele = as.factor(allele)) %>% 
+  mutate(snp = gsub("_[[:alnum:]]$", "", snp)) %>% 
+  right_join(dplyr::select(lmm[lmm$qval < 0.05,], population, rs) %>% 
+               dplyr::rename(snp = rs, pop = population)) %>% 
+  ggplot(aes(allele, TWI, fill = pop)) +
+  geom_boxplot() +
+  stat_summary(fun.data = function(y) 
+    data.frame(y = max(y)+0.1, label = paste(length(y))),
+    geom = "text", hjust = 0.5, vjust = 0.9) + 
+  coord_flip() +
+  facet_wrap(~ pop + snp, scales = "free") +
+  scale_fill_discrete("") + ylab("TWI") + xlab("Major allele copies") +
+  theme(strip.text = element_blank(), legend.position = "bottom")
+```
+
+```{r envGO, fig.cap="Term enrichment of Gene Ontology (GO) for outliers genes."}
+trsc <- read_tsv(file.path(path, "..", "annotation", "snpsFunc.annotation")) %>% 
+              dplyr::select(scf, snp, trsc) %>% 
+  bind_rows(read_tsv(file.path(path, "..", "annotation", "snpsHitch.annotation"))) %>%
+  unique() %>% 
+  inner_join(dplyr::rename(lmm, snpNum = snp, snp = rs), .)
+GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Niklas_transcripts",
+                     "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
+  tbl("Transcript") %>% 
+  filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
+  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
+  collect() %>% 
+  separate(annotation, paste0("X", 1:16), "\t") %>% 
+  dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
+  dplyr::select(trsc, gene, orf, GO) %>% 
+  filter(GO != ".") %>% 
+  left_join(trsc) %>% 
+  group_by(population, gene, GO) %>% 
+  summarise(qval = min(qval)) %>% 
+  ungroup() %>% 
+  dplyr::select(population, gene, qval, GO) %>% 
+  separate_rows(GO, sep = "`") %>% 
+  separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
+enrichment <- function(x) {
+  y <- clusterProfiler::enricher(unique(filter(x, qval < 0.05)$gene),
+                                            pvalueCutoff = 0.2, 
+                                            pAdjustMethod = "BH",
+                                            unique(x$gene),
+                                            minGSSize = 10, 
+                                            maxGSSize = 500, 
+                                            qvalueCutoff = 0.2, 
+                                            dplyr::select(x, GOid, gene),
+                                            TERM2NAME = dplyr::select(x, GOid, GOname))
+  if(is.null(y)){
+    data.frame()
+  } else {
+    y@result
+  }
+}
+group_by(GO, population) %>% 
+  do(enrichment(.)) %>% 
+  filter(qvalue < 0.8) %>% 
+  ggplot(aes(reorder(Description, qvalue), Count, fill = -log(qvalue))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  facet_wrap(~ population, labeller = "label_both", nrow = 2, scales = "free") +
+  viridis::scale_fill_viridis() +
+  theme(axis.title = element_blank())
+```
+
