@@ -1,7 +1,6 @@
 # PhD 0.1.9175
 * functional: sp autocorr & plot random effects following minor review
-* symcapture: fixed NCI mistake & New figure
-* parvicapture: splitting reference for denovo
+* symcapture: outlines version 2
 
 # PhD 0.1.9173
 * symcapture: revised models
