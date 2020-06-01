@@ -125,19 +125,22 @@ preds <- lapply(models, function(model){
   TWIs <- data_trait$TWIs
   TWIis <- data_trait$TWIis
   species <- as.numeric(as.factor(data_trait$Species))
+  plots <-  as.numeric(as.factor(data_trait$Plot))
   
   alpha <- as.matrix(fits[[model]], pars = "alpha_s")
   betaDBH <- as.matrix(fits[[model]], pars = "betaDBH")
   betaTWI <- as.matrix(fits[[model]], pars = "betaTWI")
   gammaTWI <- as.matrix(fits[[model]], pars = "gammaTWI")
+  delta <- as.matrix(fits[[model]], pars = "delta")
   
-  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * TWIs +  gammaTWI[n,species] * TWIis) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
+  Yp <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + delta[n,plots] + betaTWI[n] * TWIs +  gammaTWI[n,species] * TWIis) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
   Yalpha <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * mean(TWIs) +  gammaTWI[n,species] * mean(TWIis)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
   Ydbh <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * mean(TWIs) +  gammaTWI[n,species] * mean(TWIis)) * (DBH / (betaDBH[n,species] + DBH)), simplify = F))
   Ytwis <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * TWIs +  gammaTWI[n,species] * mean(TWIis)) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
   Ytwiis <- do.call("rbind", sapply(1: nrow(alpha), function(n) (alpha[n,species] + betaTWI[n] * mean(TWIs) +  gammaTWI[n,species] * TWIis) * (mean(DBH) / (betaDBH[n,species] + mean(DBH))), simplify = F))
 
   data.frame(
+    idTree = data_trait$idTree,
     Model = model,
     Trait = trait,
     Complex = complex,
@@ -343,6 +346,47 @@ preds %>%
   geom_line(aes(y = Ytwiis)) +
   facet_grid(Trait ~ Complex, scales = "free", labeller = label_parsed) +
   xlab(expression(TWI["i|s"]))  
+```
+
+### Spatial auto-correlation
+
+```{r residuals}
+res <- preds %>% 
+  mutate(residual = Y - Yp) %>% 
+  left_join(Individuals) %>% 
+  dplyr::select(Model, Trait, Complex, SpeciesLong, idTree, residual) %>% 
+  left_join(src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2017) %>% 
+  filter(idTree %in% local(Individuals$idTree)) %>% 
+  dplyr::select(idTree, Xutm, Yutm) %>% 
+  collect()) %>% 
+  na.omit()
+```
+
+
+```{r Map}
+ggplot(res, aes(Xutm, Yutm, col = residual)) +
+  geom_point() +
+  coord_equal() +
+  facet_wrap(~ Model) +
+  viridis::scale_color_viridis()
+```
+
+```{r MoranI}
+cor <- lapply(unique(res$Model), function(m) 
+  pgirmess::correlog(data.frame(filter(res, Model == m)$Xutm, 
+                                filter(res, Model == m)$Yutm), 
+                     filter(res, Model == m)$residual, 
+                     method = "Moran", nbclass = 80) %>% 
+    as.data.frame())
+cor %>% 
+  bind_rows(.id = "Model") %>% 
+  mutate(Model = unique(res$Model)[as.numeric(Model)]) %>% 
+  ggplot(aes(x = dist.class, y = coef, col = Model)) + geom_hline(yintercept = 0) +
+  geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
+  scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + xlim(0, 250) + ylim(-0.5, 0.5) +
+  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Model")
 ```
 
 ## Supplementary materials

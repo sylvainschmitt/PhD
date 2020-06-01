@@ -1,17 +1,17 @@
 ---
 title: Supplementary Materials
 output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: no
+    toc_float: no
+  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::word_document2: default
-  bookdown::html_document2:
-    number_sections: false
-    toc: no
-    toc_float: no
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -33,6 +33,7 @@ library(knitr)
 library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(raster)
 library(tidyverse)
 library(ggfortify)
 library(broom)
@@ -40,7 +41,7 @@ library(rstan)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, 
-               fig.height = 8, fig.width = 8,
+               fig.height = 6, fig.width = 6,
                cache = T, cache.lazy = F)
 path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
 ```
@@ -75,7 +76,18 @@ species <- lapply(models, function(model){
     filter(Genus == complex) %>% 
     mutate(species = as.numeric(as.factor(Species))) %>% 
     mutate(SpeciesLong = paste(substr(complex, 1, 1), Species)) %>% 
-    select(Genus, Species, SpeciesLong, species) %>% 
+   dplyr:: select(Genus, Species, SpeciesLong, species) %>% 
+    unique()
+}) %>% bind_rows() %>% 
+  unique() %>% 
+  mutate(complex = Genus)
+plots <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex) %>% 
+    mutate(PlotNum = as.numeric(as.factor(Plot))) %>% 
+   dplyr:: select(Genus, Plot, PlotNum) %>% 
     unique()
 }) %>% bind_rows() %>% 
   unique() %>% 
@@ -83,6 +95,7 @@ species <- lapply(models, function(model){
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
+fits0 <- fits
 ```
 
 <!-- SUPPLEMENTARY MATERIALS -->
@@ -191,6 +204,60 @@ lapply(fits, function(fit)
   scale_y_log10() +
   scale_colour_brewer(guide = "none", palette = "Set1") +
   scale_fill_brewer(guide = "none", palette = "Set1")
+```
+
+```{r NicheBreadth, fig.cap="Species niche breadth along the topographic wetness index (TWI) for all species from Paracou. Niche breadth has been calculated as the difference between the 95th quantile and the 5th quantile of TWI for all species from Paracou with at least 20 individuals. Dashed vertical lines represent niche breadth value for species from this study indicated by line color. E. coriacea and the two Symphonia species have bigger niche breadth than most Paracou species but E. sagotiana and E. coriacea have niche breadth similar to the majority of Paracou species.", fig.height=3}
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2017) %>% 
+  collect() %>% 
+  mutate(SpeciesLong = paste(Genus, Species))
+env <- paracou %>%
+   dplyr::select(SpeciesLong, idTree, Xutm, Yutm) %>%
+   unique() %>% 
+  na.omit()
+coordinates(env) <- ~Xutm + Yutm
+proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+env <- spTransform(env, CRSobj = crs)
+twi <- raster(file.path(path, "topography", "TWI_1m.tif"))
+twi <- projectRaster(twi, crs = crs)
+env <- data.frame(cbind(env@data, twi = raster::extract(twi, env)))
+env %>% 
+  group_by(SpeciesLong) %>% 
+  filter(n() > 20) %>% 
+  summarise(TWIbreadth = quantile(twi, 0.95) - quantile(twi, 0.05)) %>% 
+  ggplot(aes(TWIbreadth)) + 
+  geom_histogram(fill = "lightgrey", col = NA) + 
+  geom_vline(aes(xintercept = breadth, col = Species), linetype = "dashed", 
+               data = data.frame(breadth = c(4.12 - 0.97, 6.31 - 1.59, 3.52 - 1.06, 4.92 - 0.96, 2.78 - 1.06),
+                               Species = c("S. sp1", "S. globulifera", "E. sagotiana", "E. coriacea", "E. decolorans"))) +
+  scale_x_sqrt() +
+  ylab("N") + xlab("Species niche breadth along the topographic wetness index (TWI)") + scale_color_discrete("Studied species") +
+  theme(legend.text = element_text(face = "italic"))
+```
+
+```{r Plot, fig.cap="Caption.", fig.height=8}
+fits <- fits0
+lapply(fits, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "delta"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
+  mutate(PlotNum = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(PlotNum = gsub("([[:alpha:]])", "", PlotNum)) %>% 
+  mutate(PlotNum = as.numeric(PlotNum)) %>% 
+  left_join(plots) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(x = Plot,
+             xend = Plot)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(trait ~ Genus, labeller = label_parsed) +
+  ylab("")
 ```
 
 <!-- old supp -->

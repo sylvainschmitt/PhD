@@ -110,6 +110,46 @@ trees %>%
   write_tsv(file.path(path, "gemma", "env", "env.phenotype"), col_names = F)
 ```
 
+```{r NCspCorr, fig.cap="Temporal autocorrelation for NCI."}
+# cl <- parallel::makeCluster(getOption("cl.cores", 4))
+# parallel::clusterExport(cl, list("trees"))
+# NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+#   library(tidyverse)
+#   src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+#     tbl("Paracou") %>% 
+#     filter(Plot == local(trees$Plot[ind])) %>% 
+#     filter(idTree != local(trees$idTree[ind])) %>% 
+#     mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+#     filter(dij < 20) %>% 
+#     mutate(DBH = CircCorr/pi) %>% 
+#     collect() %>% 
+#     group_by(CensusYear) %>% 
+#     summarise(idTree = local(trees$idTree[ind]),
+#               NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+#     ungroup()})
+# parallel::stopCluster(cl) ; rm(cl)
+# NC <- bind_rows(NC)
+# save(NC, file = "./symcapture_save/NC.Rdata")
+load(file = "./symcapture_save/NC.Rdata")
+t <- NC %>%
+  filter(idTree %in% filter(trees, Plot %in% 1:12)$idTree) %>% 
+  reshape2::dcast(CensusYear ~ idTree, value.var = "NCI") %>% 
+    reshape2::melt(id.var = "CensusYear", variable.name =  "idTree", value.name = "NCI") %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  mutate(NCI = ifelse(is.na(NCI), (lag(NCI)+lead(NCI))/2, NCI)) %>% 
+  # filter(is.na(NCI)) %>% 
+  reshape2::dcast(CensusYear ~ idTree, value.var = "NCI") %>% 
+  column_to_rownames("CensusYear") %>% 
+  as.matrix()
+sapply(1:nrow(t)-1, function(n) 
+  data.frame(lag = n, r = unlist(sapply((1+n):nrow(t), function(i) cor(t[i,], t[i-n,]), simplify = F))), simplify = F) %>% 
+  bind_rows() %>% 
+  ggplot(aes(x = lag, y = r)) + geom_boxplot(aes(group = lag)) + geom_smooth() +
+  xlab("Lag (year)") + ylab("Correlation between NCI(t) & NCI(t-lag)") +
+  geom_vline(xintercept = c(5, 10), col = "lightgrey", linetype = "dashed")
+```
+
 ```{r Envmdata}
 ids <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king.id"))
 K <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king"),
@@ -132,6 +172,13 @@ mdata <- lapply(c("TWI", "NCI"), function(variable) {
                                           K = K))})
 names(mdata) <- c("TWI", "NCI")
 save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))   
+```
+
+```{r, eval=F}
+# quick idea not working
+mutate(trees, He = as.numeric(unlist(read_delim(file.path(path, "..", "variantCalling", "growth", "growth.het"), delim = " ")["           F"]))) %>% 
+  ggplot(aes(NCI, He)) + geom_point() + geom_smooth() +
+  ggpubr::stat_cor(method = "pearson", label.x = 6000, label.y = -0.5)
 ```
 
 ## Genetic variance

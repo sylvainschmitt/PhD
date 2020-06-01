@@ -133,7 +133,6 @@ rm(DBH)
 save(p16, file = "./symcapture_save/p16.Rdata")
 ```
 
-
 ```{r mdata}
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed
@@ -561,6 +560,23 @@ cowplot::plot_grid(g.TWI, g.a.TWI.NCI, g.a.TWI.Gmax,
                    g.var.DBH.TWI, g.var.DBH.NCI, g.gmax,
                    ncol=3, labels = LETTERS[1:9])
 ```
+
+```{r spcorrelo, fig.cap="Spatial autocorrelogram (Moran\'s I) of variables and associated genetic multiplicative values."}
+cor <- lapply(c("TWI", "NCI", "aTWI", "aNCI", "aGmax"), function(var) 
+  pgirmess::correlog(data.frame(t$Xutm, t$Yutm), t[,var], method = "Moran", nbclass = 100) %>% 
+    as.data.frame())
+cor %>% 
+  bind_rows(.id = "var") %>% 
+  mutate(var = recode(var, "1" = "TWI", "2" = "NCI", "3" = "aTWI", "4" = "aNCI", "5" = "aGmax")) %>% 
+  filter(dist.class < 10^3) %>% 
+  ggplot(aes(x = dist.class, y = coef, col = var)) + geom_hline(yintercept = 0) +
+  geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
+  scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
+  geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
+  geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
+  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
+```
+
 
 ## Gmax, Genotype & Environment
 

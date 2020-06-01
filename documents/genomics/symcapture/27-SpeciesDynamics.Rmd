@@ -1,0 +1,120 @@
+```{r setup_spdyn, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(gganimate)
+library(raster)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+# Species dynamics
+
+The aim of this chapter is to model the species spatio-temporal availbale space based on their environmental niche and spatio-temporal dynamics of the environment.
+
+## Species environmental space
+
+```{r spenvsp, fig.cap="Species environmental space."}
+load("./symcapture_save/Env2.Rdata")
+ggplot(trees, aes(TWI, NCI/10^4, col = pop, fill = pop)) +
+  geom_density_2d(bins = 8) +
+  geom_point() +
+  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  scale_fill_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  ylab("NCI") + xlab("TWI")
+```
+
+
+## Spatio-temporal space
+
+```{r P1t, eval=F}
+p1 <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot == 1) %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(Xfield > 20, Xfield < 250-20, Yfield > 20, Yfield < 250-20) %>% 
+  mutate(DBH = CircCorr/pi) %>%
+  dplyr::select(-CensusYear) %>% 
+  collect() # ! individuals on edge to be removed
+p1XY <- p1
+coordinates(p1XY) <- ~Xutm + Yutm
+proj4string(p1XY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+p1XY <- spTransform(p1XY, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+p1$TWI <- raster::extract(wetness, p1XY)
+rm(dem, wetness, p1XY)
+p1$TWI[p1$TWI < 0] <- 0
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("p1"))
+NC <- parallel::parLapply(cl, 1:nrow(p1), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>%
+    tbl("Paracou") %>%
+    filter(Plot == local(p1$Plot[ind])) %>%
+    filter(idTree != local(p1$idTree[ind])) %>%
+    mutate(dij = sqrt((local(p1$Xutm[ind]) - Xutm)^2+(local(p1$Yutm[ind]) - Yutm)^2)) %>%
+    filter(dij < 20) %>%
+    mutate(DBH = CircCorr/pi) %>%
+    collect() %>%
+    group_by(CensusYear) %>%
+    summarise(idTree = local(p1$idTree[ind]),
+              NCI = sum(DBH*DBH*exp(-0.25*dij))) %>%
+    ungroup()})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+p1 <- left_join(p1, NC)
+save(NC, p1, file = "./symcapture_save/P1t.Rdata")
+```
+
+```{r P1TWI, fig.cap="Spatio-temporal variation of the topograhic wetness index (TWI)."}
+load(file = "./symcapture_save/P1t.Rdata")
+ggplot(p1, aes(x = Xfield, y = Yfield, col = sqrt(TWI))) +
+  geom_point() +
+  viridis::scale_color_viridis(direction = -1) +
+  gganimate::transition_time(CensusYear) +
+  labs(title = "Census Year: {frame_time}")
+```
+
+```{r P1NCI, fig.cap="Spatio-temporal variation of the neighbor crowding index (NCI)."}
+load(file = "./symcapture_save/P1t.Rdata")
+ggplot(p1, aes(x = Xfield, y = Yfield, col = log(NCI))) +
+  geom_point() +
+  viridis::scale_color_viridis(direction = -1) +
+  gganimate::transition_time(CensusYear) +
+  labs(title = "Census Year: {frame_time}")
+```
+
+## Species spatio-temporal space
+
+Need to define environmental space from first figure to limit available space.
+
+```{r P1SpN, fig.cap="Species potential headcount per census year."}
+p1 %>% 
+  mutate(sp1 = TWI < quantile(trees$TWI[trees$pop=="sp1"], c(0.95), na.rm = T), 
+         globuliferaTypeRegina = TWI > quantile(trees$TWI[trees$pop=="globuliferaTypeRegina"], c(0.05), na.rm = T), 
+         globuliferaTypeParacou = (TWI < quantile(trees$TWI[trees$pop=="globuliferaTypeParacou"], c(0.95), na.rm = T) & 
+                                     TWI > quantile(trees$TWI[trees$pop=="globuliferaTypeParacou"], c(0.05), na.rm = T))) %>% 
+  dplyr::select(CensusYear, sp1, globuliferaTypeRegina, globuliferaTypeParacou) %>% 
+  reshape2::melt("CensusYear", variable.name = "Species", value.name = "N") %>% 
+  mutate(N = as.numeric(N)) %>% 
+  group_by(CensusYear, Species) %>% 
+  summarise(N = sum(N)) %>% 
+  ggplot(aes(CensusYear, N, group = Species, color = Species)) +
+  geom_line() +
+  labs(x = "Census Year", y = "N") +
+  theme(legend.position = "top")
+```
+

@@ -1,5 +1,5 @@
-# PhD 0.1.9174
-* symcapture: take home message firs draft
+# PhD 0.1.9175
+* functional: sp autocorr & plot random effects following minor review
 * symcapture: fixed NCI mistake & New figure
 * parvicapture: splitting reference for denovo
 

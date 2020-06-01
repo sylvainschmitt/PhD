@@ -17,7 +17,6 @@ pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
 path <- "../../../data/Eschweilera_Paracou/"
 ```
 
-
 # *de novo*
 
 ## Libraries
@@ -109,7 +108,7 @@ rm mapped/bam.paired.sorted/$file.bam
 ```
 
 ```{bash denovoLibSh, eval=F, echo=T}
-raw=../raw/
+raw=../raw
 reference=../reference/reference.fasta
 mkdir trimmed trimmed/paired trimmed/unpaired
 mkdir mapped mapped/sam mapped/bam mapped/bam.paired mapped/bam.paired.sorted
@@ -118,10 +117,8 @@ mkdir out
 for lib in $(cat libraries.txt); do echo "bash raw2filtered.sh $lib $raw $reference"; done > runFiltered.sh
 sarray -J haplo -o out/%j.out -e out/%j.err \
   -t 10:00:00 --mem=8G --cpus-per-task=2 --mail-type=BEGIN,END,FAIL runFiltered.sh
-rm -r trimmed mapped out
-sbatch denovo.sh
-
-for lib in $(ls *.R2); do mv $lib ${lib%.*}_R2_001.fastq  ; done
+rm -r trimmed mapped 
+rm out/* runFiltered.sh
 ```
 
 ## Reference
@@ -152,35 +149,45 @@ for ref in $(ls runs);
   mkdir runs/$ref/mapped runs/$ref/mapped/sam runs/$ref/mapped/bam runs/$ref/mapped/bam.paired runs/$ref/mapped/bam.paired.sorted
   mkdir runs/$ref/filtered.reads
 done
-for ref in $(ls runs); do for lib in $(cat libraries.txt); do echo "bash raw2filtered2.sh $lib filtered.reads $ref"; done ; done > runFiltered.sh
-split -l 1000 -d runFiltered.sh runFiltered_ --additional-suffix=.sh
-rm runFiltered_all.sh # very important against infinite loop because if runFilttered-all.sh exists in the next command it will run itself in an inifinite loop until filling disk memory
-for runs in $(ls runFiltered_*); do echo "sarray  --wait -J haplo -o out/%j.out -e out/%j.err -t 10:00:00 --mem=4G --cpus-per-task=1 --mail-type=BEGIN,END,FAIL $runs ;"; done > runFiltered_all.sh # we may number outputs in out/ and remove them as soon as they end to avoid an excessive number of files and mail might be removed and kept only in the general sbatch
+for ref in $(ls runs); do for lib in $(cat libraries.txt); do echo "bash raw2filtered2.sh $lib filtered.reads $ref"; done > runFiltered_${ref//[^0-9]/} ; done
+for runs in $(ls runFiltered_*); do echo "cat haplo${runs//[^0-9]/} ; sarray  --wait -J haplo${runs//[^0-9]/} -o out/haplo${runs//[^0-9]/}.%j.out -e out/haplo${runs//[^0-9]/}.%j.err -t 10:00:00 --mem=4G --cpus-per-task=1 --mail-type=BEGIN,END,FAIL $runs ;"; done > runFiltered_all.sh # we may number outputs in out/ and remove them as soon as they end to avoid an excessive number of files and mail might be removed and kept only in the general sbatch
 for ref in $(ls runs); do rm -r runs/$ref/trimmed runs/$ref/mapped ; done
 for ref in $(ls runs); do cp params.txt runs/$ref/ ; done
-for ref in $(ls runs); do echo "cd runs/$ref ; module load system/Miniconda3-4.4.10 ; module load bioinfo/ipyrad-0.7.28 ; ipyrad -p params.txt -s 1234567 -c 4 ;"; done > runDenovo.sh
-# test
-head -n 1 runDenovo.sh > runDenovo.test.sh
-sarray -J denovo -o out/denovo.%j.out -e out/denovo.%j.err -t 48:00:00 --mem=40G --cpus-per-task=4 --mail-type=BEGIN,END,FAIL runDenovo.test.sh ;
-```
+for ref in $(ls runs); do echo "echo denovo${ref//[^0-9]/} ; cd runs/$ref ; module load system/Miniconda3-4.4.10 ; module load bioinfo/ipyrad-0.7.28 ; ipyrad -p params.txt -s 1234567 -c 4 ;"; done > runDenovo.sh
+sarray -J denovo2 -o out/denovo2.%j.out -e out/denovo2.%j.err -t 48:00:00 --mem=40G --cpus-per-task=4 --mail-type=BEGIN,END,FAIL runDenovo2.sh ;
+mkdir vcfs
+for ref in $(ls runs); do awk '{gsub(/locus/, "ref""'"${ref//[^0-9]/}"'""_locus"); print}' runs/$ref/denovo_outfiles/denovo.vcf > vcfs/ref"${ref//[^0-9]/}".vcf ; done
+find -name 'ref*' -size 0 -delete # waiting for all files
 
+for ref in $(ls runs); do printf "echo denovo${ref//[^0-9]/}\ncd runs/$ref\nipyrad -p params.txt -s 1234567 -c 10\nwait\ncd ../../\n\n"; done > runDenovo.sh
+
+```
 
 ## PCA
 
-```{bash pcaSH, eval=F, echo=T}
-plink=~/Tools/plink_linux_x86_64_20190617/plink 
+```{bash pcaSH1, eval=F, echo=T}
+# plink=~/Tools/plink_linux_x86_64_20190617/plink 
+plink=~/Tools/plink_high_contig/plink # too many contigs
+mkdir beds
+for vcf in $(ls vcfs); do $plink --vcf vcfs/$vcf --const-fid --allow-extra-chr --set-missing-var-ids @_snp# --make-bed --out beds/${vcf%.*} ; done
+mkdir bed00
+mv beds/*00* bed00
+ls beds/*.bed | awk '{gsub(/.bed/, ""); print}' > bedfiles.txt
+mkdir raw
+$plink --bfile bed00/ref00 --allow-extra-chr --merge-list bedfiles.txt --make-bed --out raw/denovo
+rm -r beds bed00
+rm bedfiles.txt
+mkdir filtered
 $plink \
-  --vcf denovo.vcf \
-  --const-fid --allow-extra-chr \
-  --set-missing-var-ids @_snp# \
-  --mind 0.95 \
+  --bfile raw/denovo \
+  --allow-extra-chr \
+  --mind 0.98 \
   --missing --het --freqx --pca var-wts \
-  --make-bed --out denovo
+  --make-bed --out filtered/denovo
 ```
 
-
-```{r genotype}
-read_delim(file.path(path, "Sequences", "denovo", "denovo_outfiles",
+```{r genotypeAll}
+g <- read_delim(file.path(path, "Sequences", "denovo", "filtered",
                               "denovo.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
@@ -193,14 +200,18 @@ read_delim(file.path(path, "Sequences", "denovo", "denovo_outfiles",
   geom_point(size=2, alpha = 0.5) +
   scale_color_discrete("Species") +
   theme(legend.position = "bottom")
-read_delim(file.path(path, "Sequences", "denovo", "denovo_outfiles",
+g
+# plotly::ggplotly(g)
+```
+
+```{r genotypetest, eval=F}
+read_delim(file.path(path, "Sequences", "denovo_test",
                               "denovo.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
   dplyr::select(Sample, IdGenetic, Lane, PCA1, PCA2) %>% 
   left_join(individuals) %>%
-  filter(PCA1 < 0) %>% 
   ggplot(aes(x = PCA1, y = PCA2, col = Species, 
              label = Sample)) +
   geom_line(aes(group = IdGenetic)) +

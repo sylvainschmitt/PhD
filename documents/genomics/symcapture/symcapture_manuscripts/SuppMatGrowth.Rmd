@@ -231,6 +231,7 @@ Variances of phenotype $V_Y$ and of population means $V_P$ are defined as the va
 Residual variance $V_R$ is defined as the square of $\sigma_1$.
 And genetic variance is defined as the phenotypic variance minus population and residual variances.
 We used the corresponding `stan` [@Carpenter2017] code below, and we obtained the results shown in table \@ref(tab:EnvGenoTab).
+Genomic scan result is showed in figure \@ref(fig:envMLM).
 
 ```{stan Env, eval=F, echo=T, output.var="animal", cache=F}
 data {
@@ -291,6 +292,43 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"),
                 full_width = F)
 ```
 
+```{r envMLM, fig.cap="q-value of major effect SNPs associated to environmental variables. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+lmm <- lapply(list.files(file.path(path, "gemma", "env"), 
+                         pattern = ".assoc.txt$", full.names = T),
+              function(file) read_tsv(file) %>% mutate(file = file)) %>% 
+  bind_rows() %>% 
+  mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//gemma/env/LMM.", "", file)) %>% 
+  mutate(file = gsub(".assoc.txt", "", file)) %>%
+  separate(file, c("population", "variable"), sep = ".var") %>% 
+  mutate(variable = recode(variable, "1" = "TWI",  "2" = "NCI")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval) %>% 
+    mutate(type = recode(type, 
+                       "functional" = "genic",
+                       "neutral" = "anonymous", 
+                       "hitchhiker" = "putatively-hitchhiker ")) %>% 
+    mutate(population = recode(population, 
+                             "globuliferaTypeParacou" = "S. globulifera Paracou",
+                             "globuliferaTypeRegina" = "S. globulifera Regina", 
+                             "sp1" = "S. sp1"))
+ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ggrepel::geom_text_repel(data = lmm[lmm$qval < 0.05,]) +
+  ylab(expression(-log[10]("q-value"))) +
+  facet_grid(variable ~ population) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type") +
+  theme(legend.position = "bottom")
+```
+
 # Growth
 
 We investigated effects of ecological and evolutionary processes on individual growth, using populations, kinship, topographic wetnes index and neighbor crowding index.
@@ -337,8 +375,6 @@ Variances of population mean growth potential $V_P$, of TWI $V_{TWI}$ and NCI $V
 Residual variance $V_R$ is defined as the square of $\sigma_2$.
 And genetic variance $V_G$ is defined as the square of $\sigma_5$.
 We used the corresponding `stan` [@Carpenter2017] code below, and we obtained the results shown in table \@ref(tab:EnvGenoTab).
-We additionally fitted a model without environmental effects to assess population and genotypic variances with the covariation of environmental effects (in particular due to the high covariation of topographic wetness index ($TWI$) and population), and we obtained varaince partionning shown in figure \@ref(fig:.Ppart0).
-To further explore covariation of genotypic effects between neighbor crowding index ($NCI$) and individual growth potential ($Gmax$), we plotted multiplicative additive values from individuals against each other (Fig. \@ref(fig:aNCInGmax)).
 Finally, genomic scans revealed 3 significant major effect SNP for individual growth potential (2 for *S. globulifera type Regina* and 1 for *S. sp1*, Fig. \@ref(fig:growthLMM)). 
 
 ```{stan Gmax, eval=F, echo=T, output.var="animal", cache=F}
@@ -436,84 +472,6 @@ broom::tidyMCMC(fitGmaxGenoEnv, pars = c("thetap1", "beta",
     kable_styling(c("striped", "condensed"), 
                 latex_options = "striped", 
                 full_width = F)
-```
-
-```{r Ppart0, fig.cap="Posteriors of conditional and marginal $R^2$ (**A**) and variance partitioning (**B**) for individual maximum growth potential (Gmax). Variation of individual maximum growth (**B**) has been partitioned into between-population (orange), between-genotype (purple),  neighbor crowding (green) and topographic wetness effects (blue), and residual (grey) variation. Variations have been used to compute corresponding $R^2$ (**A**) between-population (orange), between-genotype (purple), and the two as marginal  $R^2$ (red). Variance partitioning is based on the median of parameters estimate, whereas circles represent the median estimate, thick lines the 50% confidence interval, and thin lines the 90% confidence interval for $R^2$.", fig.height=4}
-fitGmaxGeno <- list()
-for(sim in list.files("../symcapture_save/GmaxGeno", full.names = T)){
-  load(sim)
-  fitGmaxGeno <- c(fitGmaxGeno, fit)
-}
-fitGmaxGeno <- rstan::sflist2stanfit(fitGmaxGeno)
-g1 <- as.data.frame(fitGmaxGeno, pars = c("Vp", "Vg", "Vr")) %>% 
-  rowwise() %>% 
-  mutate(Vtot = sum(c(Vp, Vg, Vr))) %>% 
-  mutate(Vexp = sum(c(Vp, Vg))) %>% 
-  mutate_at(c("Vp", "Vg", "Vexp"), funs(./Vtot)) %>% 
-  dplyr::select(-Vtot, -Vr) %>% 
-  reshape2::melt(id.vars = NULL) %>% 
-  group_by(variable) %>% 
-  summarise(q5 = quantile(value, 0.05),
-            q25 = quantile(value, 0.25),
-            mean = mean(value),
-            median = median(value),
-            sd = sd(value),
-            q75 = quantile(value, 0.75),
-            q95 = quantile(value, 0.95)) %>% 
-    mutate(variable = recode_factor(variable, 
-                           "Vexp" = "Marginal",
-                           "Vg" = "Genotype", "Vp" = "Population")) %>% 
-  ggplot(aes(x = variable, xend = variable, col = variable)) +
-  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = q5, yend = q95),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
-  ylab(expression(R^2)) +
-  scale_color_manual(guide = "none", 
-                     values = RColorBrewer::brewer.pal(5, "Set1")[c(1,4:5)]) +
-  theme(axis.title.y = element_blank()) +
-  coord_flip()
-g2 <- mcmc_intervals_data(fitGmaxGeno, regex_pars = c("Vp", "Vg", "Vr")) %>%
-  mutate(variance = recode_factor(parameter, 
-                           "Vp" = "Population", "Vg" = "Genotype", 
-                           "Vr" = "Residual")) %>% 
-  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
-  ggplot(aes(x = "Gmax", fill = variance)) +
-  geom_col(aes(y = m)) +
-  geom_text(aes(y = m, label = pct), col = "white", 
-            position = position_stack(vjust = .5)) +
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), 
-        axis.ticks.x = element_blank()) +
-  ylab(expression(sigma^2)) +
-  scale_fill_manual("", 
-                    values = c(RColorBrewer::brewer.pal(5, "Set1")[c(5,4)],
-                               "grey")) 
-cowplot::plot_grid(g1, g2, labels = LETTERS[1:2])
-```
-
-```{r aNCInGmax, fig.cap="Multiplicative genetic values for neighbor crowding index (NCI) and individual growth potential (Gmax)."}
-fitNCI <- list()
-for(sim in list.files("../symcapture_save/EnvGeno", 
-                      pattern = "NCI", full.names = T)){
-  load(sim)
-  fitNCI <- c(fitNCI, fit)
-}
-fitNCI <- rstan::sflist2stanfit(fitNCI)
-lapply(c(fitNCI, fitGmaxGeno), function(fit)
-  as.data.frame(fit, "alog") %>% 
-  summarise_all(median) %>% 
-  reshape2::melt(NULL)) %>% 
-  bind_cols() %>% 
-  separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
-  mutate(aNCI = exp(value), aGmax = exp(value1)) %>% 
-  ggplot(aes(aNCI, aGmax)) +
-  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
-  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
-  geom_point(alpha = 0.4) +
-  theme(legend.position = "bottom") +
-  xlab("Multiplicative genetic values for NCI") +
-  ylab("Multiplicative genetic values for Gmax")
 ```
 
 ```{r growthLMM, fig.cap="q-value of major effect SNPs associated to individual growth parameters. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate.", fig.height=4}
