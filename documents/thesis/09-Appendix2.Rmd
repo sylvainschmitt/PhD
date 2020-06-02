@@ -1,0 +1,241 @@
+```{r setupA2, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(ggrepel)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
+load("rdata/Ch1SupMat.Rdata")
+```
+
+# Appendix 2: Chapter 1 Supplementary Materials
+
+```{r A2correlations, fig.cap="Correlation of abiotic topographic variables and neighbor crowding indexes (NCI). All variables, relative elevation (RelEl), slope, curvature (Curv), aspect, topographic ruggedness index (TRI), and topographic wetness index (TWI) are derived from the digital elevation model (DEM) obtained through LiDAR campaign in 2015, the digital canopy model (DCM) has been obtained in the same campaign, and neighbor crowding index (NCI) of heterospecific (NCIh) or conspecific (NCIc) are derived from Paracou census campaign of 2015."}
+data %>% 
+  dplyr::select(DEM, RelativeElevation, Slope, Curvature, TRI, TWI,
+                MNC, NCIhetero, NCIcon) %>% 
+  rename(DCM = MNC, NCIh = NCIhetero, NCIc = NCIcon, 
+         RelEl = RelativeElevation, Curv = Curvature) %>% 
+  na.omit() %>% 
+  cor(.) %>% 
+  corrplot::corrplot.mixed()
+```
+
+```{r A2ModelsTable, render="pandoc"}
+data.frame(
+  Name = c("$B_0$", "$B_{\\alpha}$", "$B_{\\alpha, \\alpha_2}$", "$B_{\\alpha, \\beta}$",
+           "$B_{\\alpha, \\beta}2$", "$B_{\\alpha, \\beta}3$"),
+  Formula = c("$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment+\\alpha_2*Environment^2))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*Environment+Environment^{\\beta}))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+\\alpha*(Environment+Environment^{\\beta})))$",
+              "$Presence \\sim \\mathcal{B}ernoulli(logit^{-1}(\\alpha_0+Environment^{\\alpha}+Environment^{\\beta}))$")  
+) %>% 
+  kable(caption = "Model tested for species complex distribution.", format = "pandoc", escape = F, booktabs = T)
+```
+
+```{r A2Predictions, fig.cap="Habitat suitability of single taxa model for every model form (see Supplementary Material S2) and three theoretical species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is an intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range. Blue and red dots represent simulated presences and absences respectively, whereas the black line represents the fitted corresponding model with its credibility interval in grey. The model B,2shows the best behavior with the three distribution cases."}
+preds %>% 
+  mutate(model = recode_factor(model, B0 = "B[0]", Balpha = "B[alpha]",
+                               Balpha2 = "B[alpha][.][alpha][2]",
+                               Bbeta = "B[alpha][.][beta]",
+                               Bbeta2 = "B[alpha][.][beta][2]",
+                               Bbeta3 = "B[alpha][.][beta][3]")) %>% 
+  ggplot(aes(x = Environment)) +
+  geom_point(aes(y = Presence, col = as.factor(Presence))) +
+  geom_point(aes(y = mu)) +
+  geom_ribbon(aes(ymin = `5%`, ymax = `95%`), color = 'red', alpha = 0.2) +
+  geom_line(aes(y = `5%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  geom_line(aes(y = `95%`), col = "red", alpha = 1, size = 0.5, linetype = "dashed") +
+  facet_grid(model ~ type, scales = "free", labeller = label_parsed) +
+  ylab("Habitat suitabtility") + scale_color_discrete("Presence")
+```
+
+```{r A2ComplexPar, eval=F}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(complex, term, descriptor, estimate) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "_{TWI}$", `2` = "_{NCI}$")) %>%
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = recode_factor(term, alpha = "$\\alpha$", 
+                              beta = "$\\beta", 
+                              gamma = "$\\gamma")) %>% 
+  mutate(term = paste0(term, descriptor)) %>% 
+  reshape2::dcast(complex ~ term, value.var = "estimate") %>% 
+  kable(caption = "Model parameters for each complex with scaled descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1)  
+```
+
+```{r A2Speciespar}
+lapply(fits, function(fit)
+  broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "complex") %>% 
+  mutate(index = gsub("([[:alpha:]])", "", term)) %>% 
+  mutate(index = gsub("([[:punct:]])", "", index)) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(species = as.numeric(substr(index, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(SpeciesLong = gsub("P ", "E ", SpeciesLong)) %>% 
+  mutate(descriptor = substr(index, 2, 2)) %>% 
+  dplyr::select(complex, term, SpeciesLong, descriptor, estimate) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "{TWI}$", `2` = "{NCI}$")) %>% 
+  mutate(term = recode_factor(term, alpha = "$\\alpha$", 
+                              beta = "$\\beta_", 
+                              gamma = "$\\gamma_")) %>% 
+  mutate(term = paste0(term, descriptor)) %>% 
+  reshape2::dcast(SpeciesLong ~ term, value.var = "estimate") %>%
+  kable(caption = "Model parameters for each complex with scaled descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:3)
+```
+
+*Supplementary Material S6: Stan code for the inference of species complex presence*
+
+```{r, render="pandoc"}
+model <- "
+functions {
+  real scale(vector x) {
+    return sqrt(sum(x .* x)/(num_elements(x) - 1)) ;
+  }
+}
+data {
+  int<lower=1> N ;                // # of individuals
+  int<lower=1> K ;                // # of environmental descriptors
+  int<lower=0, upper=1> Y[N] ;    // individuals presence or absence (0-1)
+  matrix[N,K] X ;                 // environmental descriptors
+  int<lower=1> N_pred ;
+  matrix[N_pred,K] X_pred ;            
+}
+transformed data {
+  matrix[N,K] X_std ;
+  matrix[N_pred,K] X_pred_std ;
+  for(k in 1:K) {
+    X_std[,k] = X[,k] / scale(X[,k]) ;  
+    X_pred_std[,k] = X_pred[,k] / scale(X[,k]) ;  
+  }
+}
+parameters {
+  real alpha ;       // intercept
+  vector[K] beta ;   // sigmoidal slope
+  vector[K] gamma ;  // quadratic form
+}
+model {
+  alpha ~ normal(0, 1) ;
+  beta ~ normal(0, 1) ;
+  gamma ~ normal(0, 1) ;
+  Y ~ bernoulli_logit(alpha + X_std * beta + (X_std .* X_std) * gamma) ;
+}
+generated quantities {
+  vector[N_pred] Y_pred ;
+  Y_pred = inv_logit(alpha + X_pred_std * beta + (X_pred_std .* X_pred_std) * gamma) ;
+}
+"
+kable(data.frame(code = model), format = "latex", booktabs = T)
+```
+
+
+```{stan singlemodel, eval=F, echo=T, cache=F, output.var="m1"}
+functions {
+  real scale(vector x) {
+    return sqrt(sum(x .* x)/(num_elements(x) - 1)) ;
+  }
+}
+data {
+  int<lower=1> N ;                // # of individuals
+  int<lower=1> K ;                // # of environmental descriptors
+  int<lower=0, upper=1> Y[N] ;    // individuals presence or absence (0-1)
+  matrix[N,K] X ;                 // environmental descriptors
+  int<lower=1> N_pred ;
+  matrix[N_pred,K] X_pred ;            
+}
+transformed data {
+  matrix[N,K] X_std ;
+  matrix[N_pred,K] X_pred_std ;
+  for(k in 1:K) {
+    X_std[,k] = X[,k] / scale(X[,k]) ;  
+    X_pred_std[,k] = X_pred[,k] / scale(X[,k]) ;  
+  }
+}
+parameters {
+  real alpha ;       // intercept
+  vector[K] beta ;   // sigmoidal slope
+  vector[K] gamma ;  // quadratic form
+}
+model {
+  alpha ~ normal(0, 1) ;
+  beta ~ normal(0, 1) ;
+  gamma ~ normal(0, 1) ;
+  Y ~ bernoulli_logit(alpha + X_std * beta + (X_std .* X_std) * gamma) ;
+}
+generated quantities {
+  vector[N_pred] Y_pred ;
+  Y_pred = inv_logit(alpha + X_pred_std * beta + (X_pred_std .* X_pred_std) * gamma) ;
+}
+```
+
+*Supplementary Material S7: Stan code for the inference of species joint-presence*
+
+```{stan jointmodel, eval=F, echo=T, cache=F, output.var="m2"}
+functions {
+  real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
+    real alpha_plus = sum(alpha);
+    return lgamma(alpha_plus) + sum(lgamma(alpha + to_vector(y)))
+                - lgamma(alpha_plus+sum(y)) - sum(lgamma(alpha));
+  }
+  real scale(vector x) {
+    return sqrt(sum(x .* x)/(num_elements(x) - 1)) ;
+  }
+}
+data {
+  int<lower = 1> N  ;       // # of individuals
+  int<lower = 1> S  ;       // # of species
+  int<lower = 1> K  ;       // # of environmental descriptors
+  int<lower = 0, upper=1> Y[N, S]  ; // individuals presence or absence for each species
+  matrix[N,K] X ;           // environmental descriptors
+  int<lower=0> N_pred ;
+  matrix[N_pred,K] X_pred ;
+}
+transformed data {
+  matrix[N,K] X_std ;
+  matrix[N_pred,K] X_pred_std ;
+  for(k in 1:K) {
+    X_std[,k] = X[,k] / scale(X[,k]) ;  
+    X_pred_std[,k] = X_pred[,k] / scale(X[,k]) ;  
+  }
+}
+parameters {
+  vector[S] alpha ; // intercept
+  matrix[S,K] beta ; // sigmoidal slope
+  matrix[S,K] gamma ; // quadratic form
+}
+model {
+  alpha ~ normal(0,1) ;  
+  for(k in 1:K){
+    beta[,k] ~ normal(0,1) ;
+    gamma[,k] ~ normal(0,1) ;
+  }
+  for (n in 1:N)
+    Y[n] ~ dirichlet_multinomial(softmax(alpha + beta*to_vector(X_std[n,]) + gamma*to_vector(X_std[n,] .* X_std[n,])))  ; // likelihood
+}
+generated quantities {
+  matrix[N_pred,S] Y_pred ;
+  for(n in 1:N_pred)
+    Y_pred[n,] = to_row_vector(softmax(alpha + beta*to_vector(X_pred_std[n,]) + gamma*to_vector(X_pred_std[n,] .* X_pred_std[n,]))) ;
+}
+```
+

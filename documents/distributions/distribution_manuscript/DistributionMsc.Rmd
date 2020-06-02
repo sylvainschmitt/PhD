@@ -325,7 +325,7 @@ trees %>%
 <!-- figures -->
 
 ```{r ComplexesDistribution, fig.cap="Parameters posteriors (**A**) and predicted relative abundance (**B**) for species complexes. Subplot **A** represent  parameters posteriors for species complexes as their position in the $\\beta$-$\\gamma$ space for each descriptor ($TWI$ and $NCI$), with the point representing the mean value of the parameter posterior, thin lines the 80% confidence interval. The color indicates the sign of anddetermining the shape of the distribution represented by the 4 subplots with corresponding colors. Subplot **B**, represent species complex predicted relative abundance with solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex whereas the dashed lines represent the mean relative abundance of the complex in Paracou.", fig.height=8, fig.width=8}
-data <- trees %>% 
+dataComplex <- trees %>% 
   left_join(env) %>% 
   left_join(Competition) %>% 
   left_join(Complexes) %>% 
@@ -333,13 +333,13 @@ data <- trees %>%
   filter(TWI >= 0) %>% 
   mutate(Complex = ifelse(is.na(Complex), "no", Complex))
 load(file = "../distribution_save/complexesData.Rdata")
-fits <- list()
+fitsComplex <- list()
 for(complex in complexes){
   load(paste0("../distribution_save/complexes", complex, ".Rdata"))
-  fits[[complex]] <- fit
+  fitsComplex[[complex]] <- fit
 }
-preds <- lapply(names(fits), function(complex)
-  as.data.frame(fits[[complex]], pars = "Y_pred") %>% 
+preds <- lapply(names(fitsComplex), function(complex)
+  as.data.frame(fitsComplex[[complex]], pars = "Y_pred") %>% 
     reshape2::melt(NULL) %>% 
     group_by(variable) %>% 
     summarise(mean = mean(value), 
@@ -348,10 +348,10 @@ preds <- lapply(names(fits), function(complex)
     cbind(data.frame(mdata[[complex]]$X_pred) %>% 
                 mutate(variable = rep(c("TWI", "NCI"), each = 100))) %>% 
     mutate(complex = complex) %>% 
-    filter(TWI <= max(filter(data, Complex == complex)$TWI),
-           TWI >= min(filter(data, Complex == complex)$TWI),
-           NCI <= max(filter(data, Complex == complex)$NCI),
-           NCI >= min(filter(data, Complex == complex)$NCI))
+    filter(TWI <= max(filter(dataComplex, Complex == complex)$TWI),
+           TWI >= min(filter(dataComplex, Complex == complex)$TWI),
+           NCI <= max(filter(dataComplex, Complex == complex)$NCI),
+           NCI >= min(filter(dataComplex, Complex == complex)$NCI))
   ) %>% bind_rows() %>% 
   mutate(value = ifelse(variable == "TWI", TWI, NCI))
 col <- RColorBrewer::brewer.pal(4, name = "Set1")
@@ -374,7 +374,7 @@ subg_nn <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
 subg_np <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
   stat_function(fun = function(x) arm::invlogit(- x + x^2), col = col[4]) +
   theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
-g1 <- lapply(lapply(fits, as.array, pars = c("beta", "gamma")), 
+g1 <- lapply(lapply(fitsComplex, as.array, pars = c("beta", "gamma")), 
        bayesplot::mcmc_intervals_data, prob_outer = 0.8) %>% 
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
@@ -424,7 +424,7 @@ g1 <- lapply(lapply(fits, as.array, pars = c("beta", "gamma")),
                                        descriptor = "NCI"),
                      xmin = -3, xmax = -2, ymin = -2.4, ymax = -1.4)
 g2 <- preds %>% 
-  left_join(group_by(data, Complex) %>% 
+  left_join(group_by(dataComplex, Complex) %>% 
               summarise(Yo = n()/nrow(.)),
             by = c("complex" = "Complex")) %>% 
   ggplot(aes(x = value, col = complex)) +
@@ -441,11 +441,6 @@ g2 <- preds %>%
 cowplot::plot_grid(g1, g2, nrow = 2,
                    labels = LETTERS[1:2], label_x = 0.1)
 ```
-
-```{r}
-
-```
-
 
 ```{r speciesParameters, fig.cap="$TWI$ and $NCI$ effects on species relative distribution within species complexes. Parameters posteriors for species within species complexes is represented as their position in the $\\beta$-$\\gamma$ space for each descriptor and each complex, with the point representing the mean value of the parameter posterior, thin lines the 80% confidence interval. The color indicates the sign of anddetermining the shape of the distribution represented by the 4 subplots with corresponding colors.", fig.width=6, fig.height=12} 
 data <- trees %>% 
@@ -575,4 +570,8 @@ predSpecies %>%
                                 RColorBrewer::brewer.pal(8, "Dark2")[1:8],
                                 RColorBrewer::brewer.pal(3, "Dark2")[1:2],
                                 RColorBrewer::brewer.pal(3, "Dark2")[1:3]))
+```
+
+```{r thesis, eval=F, echo=T}
+save(list = ls(), file = "../../thesis/rdata/Ch1Msc.Rdata")
 ```

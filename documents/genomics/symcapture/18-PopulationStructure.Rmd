@@ -431,3 +431,49 @@ leaflet() %>%
              label = kinship$Ind) %>% 
   addLegend(pal = colorFactor("viridis", kinship$type), values = kinship$type, title = 'Gene Pool')
 ```
+
+## Spatial auto-correlation
+
+```{bash spagediSympho, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+$plink \
+  --bfile ../paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
+  --allow-extra-chr \
+  --keep sp1.fam \
+  --recode vcf-iid \
+  --thin-count 10000 \
+  --out sp1
+```
+
+```{r spagedisymphofile, eval=F, echo=T}
+snps <- vroom::vroom(file.path(path, "..", "variantCalling", "spagedi", "sp1.genpop"), skip = 10002, 
+                     col_names = c("Lib", "Lat", "Long", paste0("SNP", 1:10000)))
+XY <- mutate(snps, Ind = gsub(".g.vcf", "", Lib)) %>% 
+  dplyr::select(Ind) %>% 
+  left_join(dplyr::select(trees, Ind, Xutm, Yutm))
+snps$Lat <- XY$Xutm
+snps$Long <- XY$Yutm
+write_tsv(snps, path = file.path(path, "..", "variantCalling", "spagedi", "sp1.spagedi.in"), col_names = T)
+```
+
+```{bash spagedi header, eval=F, echo=T}
+// #ind #cat #coord #loci #dig/loc #ploidy// this an example (lines beginning by // are comment lines)
+230	0	2	10000	3	2
+6	10	25	50	100	150	200
+```
+
+Locus	intra-individual (inbreeding coef)	1	2	3	4	5	6	7	average	0-2704.88	b-lin(slope linear dist)	b-log(slope log dist)
+ALL LOCI	-0.0480	0.0079	0.0049	0.0046	0.0036	0.0035	0.0023	-0.0001	0.0001		-1.34448E-06	-0.00128963
+
+```{r}
+read_tsv(file.path(path, "..", "variantCalling", "spagedi", "sp1.spagedi.out"), skip = 40528,
+         col_names = c("Ind1", "Ind2", "N1", "N2", "distance", "NA", "kinship")) %>%
+  mutate(distance = as.numeric(distance)) %>% 
+  filter(!is.na(distance)) %>% 
+  ggplot(aes(distance, kinship)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  ggpubr::stat_regline_equation(label.y = 0.16) +
+  ggpubr::stat_cor(label.y = 0.12)
+```
+

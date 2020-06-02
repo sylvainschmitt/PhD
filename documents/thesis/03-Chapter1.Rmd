@@ -1,0 +1,349 @@
+```{r setupCh1, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(ggrepel)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
+load("rdata/Ch1Msc.Rdata")
+```
+
+# Chapter 1: Topography shapes the local coexistence of tree species within species complexes of Neotropical forests
+
+> Submitted the 7th of April 2020 and under review in Oecologia
+
+1. Sylvain Schmitt
+    - Corresponding author
+    - sylvain.m.schmitt@gmail.com
+    - orcid.org/0000-0001-7759-7106
+    - Univ. Bordeaux, INRAE, BIOGECO, 69 route d’Arcachon, 33610 Cestas France
+1. Niklas Tysklind
+    - Niklas.Tysklind@ecofog.gf
+    - INRAE, UMR EcoFoG (Agroparistech, CNRS, Cirad, Université des Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana
+1. Géraldine Derroire
+    - geraldine.derroire@cirad.fr
+    - orcid.org/0000-0001-7239-2881
+    - Cirad, UMR EcoFoG (Agroparistech, CNRS, INRAE, Université des Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana
+1. Myriam Heuertz
+    - myriam.heuertz@inrae.fr
+    - orcid.org/0000-0002-6322-3645
+    - Univ. Bordeaux, INRAE, BIOGECO, 69 route d’Arcachon, 33610 Cestas France
+1. Bruno Hérault
+    - orcid.org/0000-0002-6950-7286
+    - CIRAD, UPR Forêts et Sociétés, Yamoussoukro, Côte d'Ivoire
+    - Forêts et Sociétés, Univ Montpellier, CIRAD, Montpellier, France
+    - Institut National Polytechnique Félix Houphouët-Boigny, INP-HB, Yamoussoukro, Côte d'Ivoire
+    
+\newpage 
+
+## Abstract
+
+Lowland Amazonia includes around five thousands described tree species belonging to more than height hundred genera, resulting in many species-rich genera. Numerous species-rich tree genera share a large amount of genetic variation either because of recent common ancestry and/or recurrent hybridization, forming species complexes. Despite the key role that species complexes play  in understanding Neotropical diversification, and the need for exploiting a diversity of niches for species complexes to thrive, little is known about local coexistence of Neotropical species complexes in sympatry.
+
+By taking advantage of a study site in a hyperdiverse tropical forest of the Guiana Shield, we explored the fine-scale distribution of five species complexes and 22 species within species complexes across wetness and neighbor crowding gradients representing abiotic and biotic environments respectively. Combining full forest inventories, high-quality botanical determination, and LiDAR-derived topographic data over 120ha of permanent plots, we used a Bayesian modelling framework to test the role of fine-scale topography and tree neighbourhood on the presence of species complexes and the relative distribution of species within complexes.
+
+Species complexes of Neotropical trees were widely spread across topography at the local-scale. Species within species complexes showed pervasive niche differentiation along topographic position, water accumulation, and competition gradients. Moreover, habitat preferences along topography and competition were coordinated among species within several species complexes: species more tolerant to competition for resources grow in drier and less fertile plateaux and slopes as opposed to wet and fertile bottom-lands, where species less tolerant to competition for resources are more abundant. If supported by at least partial reproductive isolation of species and adaptive introgression at the complex level, our results suggest that both habitat specialisation of species within species complexes and the broad ecological distribution of species complexes might explain the success of these Neotropical species complexes at the regional scale.
+
+### Keywords
+
+species distribution; syngameon; habitat specialisation; Paracou
+
+\newpage 
+
+## Introduction 
+
+Tropical forests shelter the highest level of biodiversity worldwide [@Gaston2000], as already showcased by @connell_diversity_1978. Lowland Amazonia includes around 5,000 described tree species belonging to 810 genera [@TerSteege2013], resulting in many species-rich genera. To understand the processes leading to such diversity, it is pivotal to understand what ecological mechanisms lead to the relative success of these species-rich genera. Among them, many have been shown to have a higher level of genetic polymorphism than species-poor genera, oftentimes sharing haplotypes among species, which is likely related to introgression among congeneric species [@Caron2019]. Indeed, interspecific hybrids occur in 16% of genera, and more often so in species-rich genera [@Whitney2010]. Hybrids are often sterile or less fertile than their parents, although some survive and reproduce allowing the transfer of adaptive variance across species boundaries [@Runemark2019]. Species that are morphologically similar, or have blurry morphological differences, and/or share large amounts of genetic variation due to recent common ancestry and/or hybridization are defined as species complexes [@Pernes1984]. Species complexes can result from adaptive radiation and segregation among species in the use of environmental variable gradients, through a combination and reshuffling of genetic features among species in hybrid swarms [@Seehausen2004], which may multiply the number of potential ecological niches, in turn reducing competition among the species and helping the species gain reproductive isolation [@Runemark2019]. The establishment of a hybrid or derived species requires some degree of reproductive isolation from its progenitors to avoid becoming an evolutionary melting pot. Nevertheless, simulations suggest that low hybridization success among congeneric species promotes coexistence of species in the community by allowing the survival or rare species through hybridisation [@Cannon2015b]. Furthermore, the way we perceive the role of genetic connectivity among populations and species is quickly changing, where species-specific adaptations may be maintained or even maximised despite high levels of gene flow, especially if selective pressures are spatially and/or temporally variable  [@Tigano2016]. When closely related but distinct species that live in sympatry are connected by limited, but recurrent, interspecific gene flow, they are called a syngameon (Suarez-Gonzalez et al. 2018). Syngameons are particular in that they evolve responding to two contrasting evolutionary pressures, those acting at the species level maximizing species-level adaptations to a niche that reduces competition among species, and those acting at the syngameon level which benefit all constituent species.  Syngameons as a whole might thus have a selective advantage, decreasing the overall risk of genus extinction, maximising population size, all the while allowing adaptation of their distinct species to specific niches and reducing competition among species [@Cannon2015b]. Consequently, and in juxtaposition to other types of species complexes, syngameons are not necessarily a transitional or incipient phase of a process towards complete speciation but may be a highly successful evolutionary status *per se* [@Cannon2015b].  In one of the best known syngameons, the European white oak, the constituent species lack private cpDNA haplotypes indicating extensive hybridisation [@Petit2002], but each of its constituent species has unique ecological preferences, including drought and cold tolerance, and adaptation to alkaline soils [@Cannon2019a; @Leroy2019]. The maintenance of the different species is orchestrated, in part, by the genes allowing survival in their ecological niche preferences [@Leroy2019]. 
+
+Similarly, Neotropical tree species show pervasive species-habitat associations [@Esteves2013; @Fine2004]. Specifically, congeneric species pairs may have contrasting preferences for topography and soil type [@Allie2015; @Crystal2003; @Lan2016], and sometimes may grow in the same abiotic habitat but segregate according to light access [@Yamasaki2013]. Habitat specialization may thus support congeneric species coexistence in sympatry. Among Neotropical congeneric tree species, many share genetic variation [@Caron2019], which leads us to hypothesize that they may operate as syngameons. 
+
+Despite the key role of species complexes and syngameons in Neotropical ecology, diversification, and evolution [@Pinheiro2018], little is known of the ecological drivers creating and maintaining diversity within Neotropical species complexes [@baraloto_using_2012-1; @Cannon2019a; @Levi2019; @TerSteege2013]. Particularly, the generality of niche specialisation to environmental variables among species within species complexes, as a potential driver of speciation and maintenance of species complexes, has not been addressed.
+
+Here, we assessed the relative importance of the abiotic environment and biotic interactions in shaping species distribution within and among species complexes. We took advantage of the Paracou study site with more than 75,000 censused and geolocalized individual trees in a highly diverse tropical forest site located within the Guiana Shield in Amazonia. The Paracou site encompasses a diversity of micro-habitats through topographic variation ranging from seasonally flooded bottomlands to drier plateaus [@Gourlet-Fleury2004] and displays variation in canopy gap size distribution [@Goulamoussene2017] and forest turn-over [@Ferry2010]. Combining tree inventories and LiDAR-derived topographic data, we used Bayesian modelling to address the following questions: (1) Are species complexes widely spread across biotic and abiotic environments, i.e. as generalists, or do they occupy specific niches, i.e. as specialists? (2) Do species within complexes also behave as generalists or does the biotic and abiotic environment favor niche differentiation within species complexes ?
+
+## Material and Methods
+
+### Study site
+
+The study was conducted in the northernmost part of the Guiana Plateau region, at the Paracou field station. The site is characterized by an average of 3,102 mm annual rainfall and mean air temperature of 25.7°C [@Aguilos2018]. Old tropical forest with an exceptional richness (e.g. over 750 woody species) develops in this area across a succession of small hills rising to 10–40 m *a.s.l.* [@Gourlet-Fleury2004]. We used seven undisturbed permanent inventory plots from Paracou (i.e. six plots of 6.25 ha and one of 25 ha) which have been censused (i.e. diameter at breast height > 10 cm) every 1-2 years since 1984.
+
+### Species complexes
+
+From the Paracou database, we identified five species complexes based on evidence for low (phylo-)genetic resolution or plastid DNA sharing in the clade [@baraloto_using_2012-1; @Caron2019; @Gonzalez2009]: *Eschweilera clade Parvifolia* [Lecythidaceae; Chave et al. unpublished; @Heuertz2020]; *Licania* [Chrysobalanaceae; @Bardon2016]; *Iryanthera* (Myristicaceae); *Symphonia* (Clusiaceae; @Torroba-Balmori2017]; and *Talisia* (Sapindaceae). We removed species with less than ten individuals in Paracou in 2015, which resulted in five species complexes each including two to nine species (Tab. \@ref(tab:Ch1SpeciesTab)). The species in the five species complexes are dispersed by animals and/or birds (*Eschweilera* see @Mori1993; *Iryanthera* see @Howe1983; *Licania*  see @Graham1966, *Symphonia* see @Forget2007; *Talisia* see @Julliot1996 and @Larpin1993). In addition, *Eschweilera*, *Licania*, and *Talisia*  share haplotypes between species pairs [@Caron2019] and *Symphonia* shows introgression between species pairs (S. Schmitt in prep.), suggesting interspecific gene flow characteristic of syngameons.
+
+```{r Ch1SpeciesTab}
+trees %>% 
+  left_join(Complexes, by = c("Genus", "Species")) %>% 
+  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>% 
+  filter(!is.na(Complex)) %>% 
+  group_by(Complex, Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  arrange(Complex, desc(N)) %>% 
+  kable(caption = "Identified species complexes with species including more than 10 individuals in Paracou.", 
+        format = "pandoc", booktab = T)
+```
+
+### Environmental variables
+
+Two near-uncorrelated (Pearson’s $r = 0.12$, see supplementary material S1) environmental descriptors were chosen to depict the distribution of species complexes and that of species within complexes. Topographic wetness index ($TWI$) identifies water accumulation areas and is thus critical for species distribution at local scale in tropical ecosystems [@Allie2015; @Ferry2010]. $TWI$ was derived from a 1-m resolution digital elevation model built based on data from a LiDAR campaign done in 2015 using SAGA-GIS [@Conrad2015].
+
+A neighbourhood crowding index [NCI; @Uriarte2004a] was calculated from field censuses and used as a descriptor of the biotic interactions among trees.  Although we recognize their potential non-negligible role in explaining species distributions, other biotic effects, such as variance in herbivory pressure and pathogen species richness, were not directly included into our analyses. The neighbourhood crowding index $NCI_i$ for each tree individual $i$ was calculated with the following formula:
+
+\begin{equation}
+    NCI_i = \sum _{j|\delta_{i,j}<20m} ^{J_i} DBH_j ^2 e^{-\frac{1}{4}\delta_{i,j}}
+   (\#eq:Ch1NCI)
+\end{equation}
+
+where $DBH_j$ is the diameter of neighbouring tree $j$ and $i,j$ its distance to individual tree $i$. $NCI_i$ is computed for neighbours at a distance $i,j$ of up to 20m because $NCI$ showed negligible effect beyond 20m in preliminary analysis. The size effect of neighbours was taken as their squared $DBH$, and hence proportional to their basal area. The distance effect of neighbours was set to -1/4, corresponding to neighbours beyond 20m having less than 1% effect compared to the effect of neighbours at 0m.
+
+### Analyses
+
+#### Distribution of complexes
+
+The distribution of each species complex was inferred separately. We considered the occurrences of all individuals from species belonging to the species complex as presences, and all occurrences of trees belonging to other species as pseudo-absences. The presence of each species complex Presencespecies complexk was inferred with a logistic regression within a Bernoulli distribution (which corresponds to the best model form among several forms tested, see supplementary material S2 and S3):
+
+\begin{equation}
+    {Presence_{species~complex}}_k \sim Bernoulli[logit^{-1}(\alpha_k + \beta_k*X+\gamma_k*X^2)]
+   (\#eq:Ch1Complex)
+\end{equation}
+
+were $X$ is the matrix of environmental descriptors ($TWI$ and $NCI$), $\alpha$ is the intercept, $\beta$ is a vector representing the slope of environmental descriptors and $\gamma$ is a vector representing the quadratic form of effects of environmental descriptors for every species complex $k$.
+
+#### Distribution of species
+
+Joint distributions of species were inferred within each species complex. We used a softmax regression within a conjugated Dirichlet Process and Multinomial distribution:
+
+\begin{equation}
+    Presence_{species_i|species~complex_k} \sim Dirichlet~Multinomial(softmax(\alpha_i + \beta_i*X + \gamma_i*X^2))
+   (\#eq:Ch1Species)
+\end{equation}
+
+were $Presence_{species_i|species~complex_k}$ represents the species $i$ for every individual as a simplex of 0s and 1s (i.e. 0 for all other species from the species complex and 1 for the considered species), $X$ is the matrix of environmental descriptors (i.e. $TWI$ and $NCI$),  $\alpha$ is the vector of species intercepts, $\beta$ is a matrix representing the slope of environmental descriptors and $\gamma$ is a matrix representing the quadratic form of effects of environmental descriptor for every species iof the species complex $k$. 
+
+Environmental descriptors were all reduced in order to ease model inference and compare the strength of the effects among environmental descriptors. A Bayesian method was used to infer parameters of all models using stan language [@Carpenter2017, see supplementary material S6 and S7] and rstan package [@Team2018] in the R environment [@RCoreTeam2020].
+
+## Results
+
+The topographic wetness index ($TWI$) and the neighbourhood crowding index ($NCI$) had globally null or weak effects on the abundance of species complexes, at the exception of an effect of TWI on *Eschweilera clade Parvifolia*, *Licania*, and *Iryanthera* (Fig. \@ref(fig:Ch1ComplexesDistribution)). Wet habitats ($TWI>4$) resulted in increased abundance of the species complexe Iryanthera but a decreased abundance of  the species complexes *Licania* and *Eschweilera clade Parvifolia* (Fig. 1B). Despite $TWI$ did not change species complex ranking in abundance. 
+
+```{r Ch1ComplexesDistribution, fig.cap="Parameters posteriors (**A**) and predicted relative abundance (**B**) for species complexes. Subplot **A** represent  parameters posteriors for species complexes as their position in the $\\beta$-$\\gamma$ space for each descriptor ($TWI$ and $NCI$), with the point representing the mean value of the parameter posterior, thin lines the 80% confidence interval. The color indicates the sign of anddetermining the shape of the distribution represented by the 4 subplots with corresponding colors. Subplot **B**, represent species complex predicted relative abundance with solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex whereas the dashed lines represent the mean relative abundance of the complex in Paracou.", fig.height=8, fig.width=8}
+col <- RColorBrewer::brewer.pal(4, name = "Set1")
+names(col) <- c("pp", "pn", "nn", "np")
+annotation_custom2 <- function (grob, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, data) 
+  layer(data = data, stat = StatIdentity, position = PositionIdentity, 
+        geom = ggplot2:::GeomCustomAnn,
+        inherit.aes = TRUE, params = list(grob = grob, 
+                                          xmin = xmin, xmax = xmax, 
+                                          ymin = ymin, ymax = ymax))
+subg_pp <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(x + x^2), col = col[1]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+subg_pn <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(x - x^2), col = col[2]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+subg_nn <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(- x - x^2), col = col[3]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+subg_np <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(- x + x^2), col = col[4]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+g1 <- lapply(lapply(fitsComplex, as.array, pars = c("beta", "gamma")), 
+       bayesplot::mcmc_intervals_data, prob_outer = 0.8) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `2` = "NCI", `1` = "TWI")) %>%
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>%
+  dplyr::select(complex, parameter, descriptor, ll, l, m, h, hh) %>% 
+  reshape2::melt(id.vars = c("complex", "parameter", "descriptor")) %>% 
+  mutate(parameter = paste0(parameter, "_", variable)) %>%
+  reshape2::dcast(complex + descriptor ~ parameter) %>% 
+  mutate(form = 10*as.numeric(beta_m > 0) + as.numeric(gamma_m > 0)) %>% 
+  mutate(form = recode(form, "11" = "pp", "1" = "np", 
+                       "10" = "pn", "0" = "nn")) %>% 
+  ggplot(aes(label = complex, col = form)) +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(x = beta_m, y = gamma_m), alpha = 1) +
+  geom_segment(aes(x = beta_ll, xend = beta_hh, 
+                   y = gamma_m, yend = gamma_m), alpha = 0.3) +
+  geom_segment(aes(x = beta_m, xend = beta_m, 
+                   y = gamma_ll, yend = gamma_hh), alpha = 0.3) +
+  geom_text_repel(aes(x = beta_m, y = gamma_m), 
+                  size = 2.5, point.padding = 1) +
+  facet_wrap(~ descriptor) +
+  xlab(expression(beta)) + ylab(expression(gamma)) +
+  scale_color_manual(guide = "none", values = col) +
+  coord_equal() +
+  annotation_custom2(ggplotGrob(subg_pp),
+                     data = data.frame(complex = "Iryanthera",
+                                       form = "pp",
+                                       descriptor = "TWI"),
+                     xmin = 0.5, xmax = 1.5, ymin = 0.5, ymax = 1.5) +
+  annotation_custom2(ggplotGrob(subg_np),
+                     data = data.frame(complex = "Iryanthera",
+                                       form = "pp",
+                                       descriptor = "NCI"),
+                     xmin = -3, xmax = -2, ymin = 0.5, ymax = 1.5) +
+  annotation_custom2(ggplotGrob(subg_pn),
+                     data = data.frame(complex = "Iryanthera",
+                                       form = "pp",
+                                       descriptor = "TWI"),
+                     xmin = 0.5, xmax = 1.5, ymin = -2.4, ymax = -1.4) +
+  annotation_custom2(ggplotGrob(subg_nn),
+                     data = data.frame(complex = "Iryanthera",
+                                       form = "pp",
+                                       descriptor = "NCI"),
+                     xmin = -3, xmax = -2, ymin = -2.4, ymax = -1.4)
+g2 <- preds %>% 
+  left_join(group_by(dataComplex, Complex) %>% 
+              summarise(Yo = n()/nrow(.)),
+            by = c("complex" = "Complex")) %>% 
+  ggplot(aes(x = value, col = complex)) +
+  geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.2) +
+  geom_hline(aes(yintercept = Yo, col = complex), lty = "dashed") +
+  geom_line(aes(y = mean)) +
+  facet_wrap(~ variable, nrow = 1, scales = "free_x") + 
+  xlab("") + ylab("Species complex relative abundance") +
+  scale_y_sqrt() +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text.x = element_blank())
+cowplot::plot_grid(g1, g2, nrow = 2,
+                   labels = LETTERS[1:2], label_x = 0.1)
+```
+
+Conversely, the $TWI$ strongly influenced the species distribution within complexes with a shift in species dominance, while the  effect of the $NCI$ was substantial but did not shift species dominance within species complex. $TWI$ and $NCI$ effects are illustrated by a gradient of response from positive and parameters (*i.e.* increasing curve) to negative and parameters (*i.e.* decreasing curve) within each complex, besides a few positive-negative associations of parameters indicating a bell curve with a local extremum (Fig. \@ref(fig:Ch1SpeciesParameters)). For instance, *I. hostmanii*, *E. coriacea*, and *S. globulifera* species relative abundances increased with water accumulation ($TWI$) when it decreased for *I. sagotiana*, *E. sagotiana*, and *S. sp1* within *Iryanthera*, *Eschweilera clade Parvifolia* and *Symphonia* species complexes respectively (Fig. \@ref(fig:Ch1SpeciesDistribution)). The change of relative abundance along the topography gradient even led to a shift of dominance between aforementioned species within *Symphonia*, *Eschweilera clade Parvifolia* and *Iryanthera* species complexes, revealing a strong effect of topography. Similarly,  *L. membranacea*, *E. sagotiana*, and *S. sp1* species relative abundances increased with neighbour crowding ($NCI$) when it decreased for *L. alba*, *E. coriacea*, and *S. globulifera* within *Licania*, *Eschweilera clade Parvifolia* and *Symphonia* species complexes respectively (Fig. \@ref(fig:Ch1SpeciesDistribution)). Thus, two species complexes included species with opposed preference of $TWI$ and $NCI$. For instance, *S. sp1* more tolerant to neighbor crowding grow preferentially in drier habitats such as plateaux when *S. globulifera* is more abundant with decreased neighbor crowding and dominates in wet habitat such as bottom-lands.
+
+```{r Ch1SpeciesParameters, fig.cap="$TWI$ and $NCI$ effects on species relative distribution within species complexes. Parameters posteriors for species within species complexes is represented as their position in the $\\beta$-$\\gamma$ space for each descriptor and each complex, with the point representing the mean value of the parameter posterior, thin lines the 80% confidence interval. The color indicates the sign of anddetermining the shape of the distribution represented by the 4 subplots with corresponding colors.", fig.width=4, fig.height=8} 
+col <- RColorBrewer::brewer.pal(4, name = "Set1")
+names(col) <- c("pp", "pn", "nn", "np")
+annotation_custom2 <- function (grob, xmin = -Inf, xmax = Inf, ymin = -Inf, ymax = Inf, data) 
+  layer(data = data, stat = StatIdentity, position = PositionIdentity, 
+        geom = ggplot2:::GeomCustomAnn,
+        inherit.aes = TRUE, params = list(grob = grob, 
+                                          xmin = xmin, xmax = xmax, 
+                                          ymin = ymin, ymax = ymax))
+subg_pp <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(x + x^2), col = col[1]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+subg_pn <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(x - x^2), col = col[2]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+subg_nn <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(- x - x^2), col = col[3]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+subg_np <- ggplot(data.frame(x= c(0, 1), y = c(0,1)), aes(x, y)) +
+  stat_function(fun = function(x) arm::invlogit(- x + x^2), col = col[4]) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), axis.ticks = element_blank())
+lapply(lapply(fits, as.array, pars = c("beta", "gamma")), 
+       bayesplot::mcmc_intervals_data, prob_outer = 0.8) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(SpeciesLong = gsub("P ", "E ", SpeciesLong)) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", `2` = "NCI")) %>% 
+  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+  reshape2::melt(id.vars = c("complex", "parameter", "descriptor", "SpeciesLong")) %>% 
+  mutate(parameter = paste0(parameter, "_", variable)) %>%
+  reshape2::dcast(complex + descriptor + SpeciesLong ~ parameter) %>% 
+  mutate(form = 10*as.numeric(beta_m > 0) + as.numeric(gamma_m > 0)) %>% 
+  mutate(form = recode(form, "11" = "pp", "1" = "np", "10" = "pn", "0" = "nn")) %>% 
+  ggplot(aes(label = SpeciesLong, col = form)) +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(x = beta_m, y = gamma_m), alpha = 1) +
+  geom_segment(aes(x = beta_ll, xend = beta_hh, y = gamma_m, yend = gamma_m), alpha = 0.3) +
+  geom_segment(aes(x = beta_m, xend = beta_m, y = gamma_ll, yend = gamma_hh), alpha = 0.3) +
+  geom_text_repel(aes(x = beta_m, y = gamma_m), size = 3, point.padding = 1) +
+  facet_grid(complex ~ descriptor) +
+  # facet_wrap(~ complex + descriptor) +
+  coord_equal() +
+  xlab(expression(beta)) + ylab(expression(gamma)) +
+  scale_color_manual(guide = "none", values = col) +
+  annotation_custom2(ggplotGrob(subg_pp),
+                     data = data.frame(complex = "Iryanthera", form = "pp",
+                                       descriptor = "NCI", SpeciesLong = "I. hostmanii"),
+                     xmin = 1, xmax = 3, ymin = 1.1, ymax = 3.1) +
+  annotation_custom2(ggplotGrob(subg_np),
+                     data = data.frame(complex = "Iryanthera", form = "np",
+                                       descriptor = "TWI", SpeciesLong = "I. hostmanii"),
+                     xmin = -3, xmax = -1, ymin = 1.1, ymax = 3.1) +
+  annotation_custom2(ggplotGrob(subg_pn),
+                     data = data.frame(complex = "Talisia", form = "pn",
+                                       descriptor = "NCI", SpeciesLong = "I. hostmanii"),
+                     xmin = 3, xmax = 1, ymin = -3, ymax = -1) +
+  annotation_custom2(ggplotGrob(subg_nn),
+                     data = data.frame(complex = "Talisia",  form = "nn",
+                                       descriptor = "TWI", SpeciesLong = "I. hostmanii"),
+                     xmin = -3, xmax = -1, ymin = -3, ymax = -1)
+```
+
+```{r Ch1SpeciesDistribution, fig.cap="Relative abundance of species within species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex.", fig.height=8}
+predSpecies %>%
+  group_by(complex) %>% 
+  left_join(data %>%
+              group_by(Complex) %>%
+              mutate(N_complex = n()) %>%
+              group_by(Complex, N_complex, Genus, Species) %>%
+              summarise(N_species = n()) %>%
+              mutate(RelAbund = N_species / N_complex),
+            by = c("complex" = "Complex", "Species" = "Species")) %>%
+  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>%
+  mutate(Species = paste0(substr(Genus, 1,1), ". ", Species)) %>%
+  ggplot(data = ., aes(x = value, col = Species)) + 
+  geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.2) +
+  geom_line(aes(y = mean), lwd = 1.3) +
+  geom_hline(aes(yintercept = RelAbund, col = Species), linetype = "dashed") +
+  facet_grid(complex ~ variable, scales = "free_x") +
+  guides(col = guide_legend(nrow=6)) +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  ylab("Species relative abundance") + xlab("Standardized value") +
+  scale_y_sqrt() +
+  scale_color_manual(values = c(RColorBrewer::brewer.pal(6, "Dark2")[1:6], 
+                                RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+                                RColorBrewer::brewer.pal(8, "Dark2")[1:8],
+                                RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+                                RColorBrewer::brewer.pal(3, "Dark2")[1:3]))
+```
+
+## Discussion
+
+Understanding the the eco-evolutionary processes creating and maintaining  species complexes, such as how species within species complexes segregate in their ecological niche exploitation [@Runemark2019], is paramount to further our knowledge of Neotropical diversification processes [@Pinheiro2018]. Nevertheless, the ecological processes  governing species complexes distributions in the Neotropics have received relatively little attention [@Baraloto2012; @Levi2019; @TerSteege2013]. Here, we show that species complexes of Neotropical trees as a whole span all the topography and  competition gradients and are thus widely spread across light, water, and nutrient habitats at fine-scale. Conversely, most species within species complexes show pervasive niche differentiation along topographic position, water accumulation, and competition gradients. Habitat preferences along topography and competition were coordinated among species within several species complexes: species more tolerant to competition for resources grow in drier and less fertile plateaux and slopes as opposed to wet and fertile bottom-lands, where species less tolerant to competition for resources are more frequently found. Consequently, if supported by as least partial ecological reproductive isolation of species, but with occasional adaptive introgression at the complex level, our results suggest that both widespread distribution of species complexes combined with habitat specialisation of species within species complex might explain the success of these Neotropical species complexes at the regional scale [@TerSteege2013].
+
+### Species complexes are widely spread across habitats
+
+The general null or weak effects of biotic and abiotic environmental variables considered here on species complexes distribution suggest that species complexes are widely spread across light, water, and nutrient habitats at the local-scale, and that the species complexes are capable of exploiting the whole range of environmental conditions studied here, supporting our hypothesis of widespread species complexes at the local scale. Topographic wetness index ($TWI$) indicates the topographic position where water accumulates. Neighbourhood crowding index ($NCI$) represents competition with neighbours and thus access to light, water, and nutrients. Consequently, $TWI$ and $NCI$ represent the combined effects of abiotic and biotic environment in defining local scale habitats for species and species complexes distributions. In our study, $TWI$ and $NCI$ had no effect on species complexes distribution, at the exception of a weak effect of $TWI$ on *Iryanthera*, *Licania*, and *Eschweilera clade Parvifolia* abundances, emphasizing the generality of the widespread distribution of species complexes across local habitats. In a nutshell, species complexes span the whole light, water, and nutrients gradients with either segregated species with ecological preferences or generalist species.
+
+The higher abundance of *Iryanthera* species complex in wet habitats has been already evidenced experimentally [@Ferry2007].  Species complexes increased or decreased abundance at high $TWI$ values might be due to variations in species complex-specific adaptations to a more constraining habitat such as anoxia. 
+
+### Species show pervasive niche differentiation within species complexes
+
+The repeated opposed response of species relative distribution within species complexes to biotic and abiotic environments showed a pervasive niche differentiation of species within four locally abundant species complexes. Indeed, species within *Iryanthera*, *Licania*, *Symphonia*, and *Eschweilera clade Parvifolia* species complexes are segregated along a gradient from wet to drier habitats and a gradient from low crowding to increased crowding. 
+
+Habitat segregation along topography and wetness gradients correspond to the well known bottomland to plateau gradient observed in Amazonia [@Ferry2010; @kraft_functional_2008]. Species within species complexes segregate between  seasonally flooded habitats resulting in anoxia but increased soil fertility and drier habitats more susceptible to suffering from drought and reduced fertility, besides few species growing preferentially in intermediate habitat (*e.g.* *Licania membranacea*, Fig. 3). Indeed, water-use strategies and edaphic conditions shape divergent habitat associations between congeneric species pairs [@Baltzer2005a].  Our results are in agreement with previous evidence of  species-habitat association with topography between sympatric congeneric species at local scale [@Allie2015; @Crystal2003; @Lan2016; but see @Baldeck2013]. But, we tested topography in our study but not edaphic properties. Besides covariation with topography, edaphic properties have independent effect on the species distribution [@Baldeck2013a], which may increase species niche differentiation within species complexes.
+
+Moreover, species within species complexes segregate also between high crowding resulting in decreased access to light, water, and nutrients and low neighboring with less competition for resources. [@Yamasaki2013] already evidenced segregation with light access between two congeneric species at local scale, but growing in the same topography. In our study, at least four species showed more tolerance to competition for resources (*i.e.* high $NCI$) and grow in drier and less fertile habitats (*i.e.* low $TWI$), whereas species growing in wet habitats also grow preferentially with less competition for resources.
+
+### Conclusion
+
+We found Neotropical tree species complexes to be widespread across habitats at local scale, while the species composing them showed pervasive habitat differentiation along topography and competition gradients. The pervasive niche differentiation among species within species complex might be related to repeated functional strategy adaptation to local environment [@Baltzer2005a; @Ferry2007] with several diversification events across taxa (*e.g.* [@Fine2004] for Protiae). Habitat specialisation reduces competition among the species and thus helps the species gain reproductive isolation for their establishment within species complex [@Runemark2019], especially in our study for animal dispersed species with reduced dispersion. Meanwhile, porous genomes allow for the transfer of adaptive genes through introgression that may benefit one or several species, allowing coevolution at the species complex level [@Cannon2015b]. Consequently, if habitat specialisation allow at least partial reproductive isolation and porous genomes allow adaptive introgression, our results suggest that both habitat specialisation of species within species complex and widespread distribution of species complexes might explain the success of these Neotropical species complex at the regional scale [@TerSteege2013]. 
+
+## Acknowledgements
+
+We thank the University of Bordeaux for a PhD grant to Sylvain Schmitt. We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification. This study was partially funded by an Investissement d’Avenir grant of the ANR: CEBA (ANR-10-LABEX-0025).
+
+## Authors’ contributions
+
+NT and SS conceived the ideas; SS, BH, and NT designed methodology; SS and BH analysed model outputs; SS, NT and MH led the writing of the manuscript. All authors contributed critically to the drafts and gave final approval for publication.
+
+## Data accessibility
+
+TWI and spatial positions of individuals were extracted from the Paracou Station database, for which access is modulated by the scientific director of the station (https://paracou.cirad.fr).
