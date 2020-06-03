@@ -1,4 +1,4 @@
-```{r setupCh1, include=FALSE}
+```{r Ch1Setup, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(tidyverse)
@@ -11,7 +11,7 @@ load("rdata/Ch1Msc.Rdata")
 
 # Chapter 1: Topography shapes the local coexistence of tree species within species complexes of Neotropical forests
 
-> Submitted the 7th of April 2020 and under review in Oecologia
+> **Submitted the 7th of April 2020 and under review in Oecologia**
 
 1. Sylvain Schmitt
     - Corresponding author
@@ -85,7 +85,7 @@ trees %>%
 
 ### Environmental variables
 
-Two near-uncorrelated (Pearson’s $r = 0.12$, see supplementary material S1) environmental descriptors were chosen to depict the distribution of species complexes and that of species within complexes. Topographic wetness index ($TWI$) identifies water accumulation areas and is thus critical for species distribution at local scale in tropical ecosystems [@Allie2015; @Ferry2010]. $TWI$ was derived from a 1-m resolution digital elevation model built based on data from a LiDAR campaign done in 2015 using SAGA-GIS [@Conrad2015].
+Two near-uncorrelated (Pearson’s $r = 0.12$, see supplementary material Fig. \@ref(fig:A2correlations)) environmental descriptors were chosen to depict the distribution of species complexes and that of species within complexes. Topographic wetness index ($TWI$) identifies water accumulation areas and is thus critical for species distribution at local scale in tropical ecosystems [@Allie2015; @Ferry2010]. $TWI$ was derived from a 1-m resolution digital elevation model built based on data from a LiDAR campaign done in 2015 using SAGA-GIS [@Conrad2015].
 
 A neighbourhood crowding index [NCI; @Uriarte2004a] was calculated from field censuses and used as a descriptor of the biotic interactions among trees.  Although we recognize their potential non-negligible role in explaining species distributions, other biotic effects, such as variance in herbivory pressure and pathogen species richness, were not directly included into our analyses. The neighbourhood crowding index $NCI_i$ for each tree individual $i$ was calculated with the following formula:
 
@@ -100,7 +100,7 @@ where $DBH_j$ is the diameter of neighbouring tree $j$ and $i,j$ its distance to
 
 #### Distribution of complexes
 
-The distribution of each species complex was inferred separately. We considered the occurrences of all individuals from species belonging to the species complex as presences, and all occurrences of trees belonging to other species as pseudo-absences. The presence of each species complex Presencespecies complexk was inferred with a logistic regression within a Bernoulli distribution (which corresponds to the best model form among several forms tested, see supplementary material S2 and S3):
+The distribution of each species complex was inferred separately. We considered the occurrences of all individuals from species belonging to the species complex as presences, and all occurrences of trees belonging to other species as pseudo-absences. The presence of each species complex Presencespecies complexk was inferred with a logistic regression within a Bernoulli distribution (which corresponds to the best model form among several forms tested, see supplementary material Tab. \@ref(tab:A2ModelsTable) and Fig. \@ref(fig:A2Predictions)):
 
 \begin{equation}
     {Presence_{species~complex}}_k \sim Bernoulli[logit^{-1}(\alpha_k + \beta_k*X+\gamma_k*X^2)]
@@ -120,7 +120,7 @@ Joint distributions of species were inferred within each species complex. We use
 
 were $Presence_{species_i|species~complex_k}$ represents the species $i$ for every individual as a simplex of 0s and 1s (i.e. 0 for all other species from the species complex and 1 for the considered species), $X$ is the matrix of environmental descriptors (i.e. $TWI$ and $NCI$),  $\alpha$ is the vector of species intercepts, $\beta$ is a matrix representing the slope of environmental descriptors and $\gamma$ is a matrix representing the quadratic form of effects of environmental descriptor for every species iof the species complex $k$. 
 
-Environmental descriptors were all reduced in order to ease model inference and compare the strength of the effects among environmental descriptors. A Bayesian method was used to infer parameters of all models using stan language [@Carpenter2017, see supplementary material S6 and S7] and rstan package [@Team2018] in the R environment [@RCoreTeam2020].
+Environmental descriptors were all reduced in order to ease model inference and compare the strength of the effects among environmental descriptors. A Bayesian method was used to infer parameters of all models using stan language [@Carpenter2017, see supplementary material [Species complex code](#A2singlemodel) and [Species code](#A2jointmodel)] and rstan package [@Team2018] in the R environment [@RCoreTeam2020].
 
 ## Results
 

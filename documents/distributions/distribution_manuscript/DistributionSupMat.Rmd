@@ -131,7 +131,7 @@ mdata <- lapply(data, function(x) list(N = nrow(x),
                                        Presence = x$Presence,
                                        Environment = x$Environment))
 load("../distribution_save/SingleModel.Rdata")
-preds <- lapply(names(fits), function(model){
+predsNull <- lapply(names(fits), function(model){
   lapply(as.list(names(data)), function(type)
     cbind(type = type, data[[type]],
           mu = apply(as.matrix(fits[[model]][[type]], pars = "theta"), 2, mean),
@@ -140,7 +140,7 @@ preds <- lapply(names(fits), function(model){
     bind_rows() %>% 
     mutate(model = model)
 }) %>% bind_rows()
-preds %>% 
+predsNull %>% 
   mutate(model = recode_factor(model, B0 = "B[0]", Balpha = "B[alpha]",
                                Balpha2 = "B[alpha][.][alpha][2]",
                                Bbeta = "B[alpha][.][beta]",
@@ -157,12 +157,12 @@ preds %>%
 ```
 
 ```{r ComplexPar}
-fits <- list()
+fitsComplex <- list()
 for(complex in c("Parvifolia", "Licania", "Iryanthera", "Talisia", "Symphonia")){
   load(paste0("../distribution_save/complexes", complex, ".Rdata"))
-  fits[[complex]] <- fit
+  fitsComplex[[complex]] <- fit
 }
-lapply(fits, function(fit)
+lapply(fitsComplex, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
@@ -235,12 +235,12 @@ species <- lapply(mdata, function(data)
              Species = colnames(data$Y))
   ) %>% bind_rows(.id = "complex") %>% 
   mutate(SpeciesLong = paste(substr(complex, 1, 1), Species))
-fits <- list()
+fitsSpecies <- list()
 for(complex in c("Parvifolia", "Licania", "Iryanthera", "Talisia", "Symphonia")){
   load(paste0("../distribution_save/species", complex, ".Rdata"))
-  fits[[complex]] <- fit
+  fitsSpecies[[complex]] <- fit
 }
-lapply(fits, function(fit)
+lapply(fitsSpecies, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 

@@ -95,7 +95,7 @@ plots <- lapply(models, function(model){
 S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
-fits0 <- fits
+fitsModel <- fits
 ```
 
 <!-- SUPPLEMENTARY MATERIALS -->
@@ -130,7 +130,7 @@ Individuals %>%
 ```
 
 ```{r DBH, fig.cap='Diameter at breast height (DBH) distribution between sampled indivduals and other *Symphonia* and *Eschweilera* individuals of Paracou.'}
-src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+DBHdata <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   tbl("Paracou") %>%
   filter(Genus %in% c("Lecythis", "Eschweilera") & 
            Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
@@ -142,8 +142,8 @@ src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   mutate(Sample = as.numeric(idTree %in% Individuals$idTree)) %>% 
   mutate(Sample = recode_factor(Sample, 
                               `0` = "Other Symphonia and Eschweilera",
-                              `1` = "Sampled individuals")) %>% 
-  ggplot(aes(DBH)) +
+                              `1` = "Sampled individuals"))
+ggplot(DBHdata, aes(DBH)) +
   geom_histogram(position = "dodge") +
   facet_wrap(~ Sample, scale = "free", nrow = 2) +
   xlab("Diameter at breast height (dbh, cm)")
@@ -177,7 +177,7 @@ lapply(models, function(model)
 ```
 
 ```{r DBH90, fig.cap="Effect of tree diameter on leaf functional trait variation. The posterior distribution of species diameter at breast height for which a given trait reaches 90% of its maximum value ($DBH_{90}$) was estimated for every trait for all species in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter and (ii) and (iii) 95th percentile of diameter for *Eschweilera* and *Symphonia*, respectively."}
-lapply(fits, function(fit) 
+lapply(fitsModel, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "betaDBH"))) %>% 
   bind_rows(.id = "model") %>% 
@@ -237,9 +237,8 @@ env %>%
   theme(legend.text = element_text(face = "italic"))
 ```
 
-```{r Plot, fig.cap="Caption.", fig.height=8}
-fits <- fits0
-lapply(fits, function(fit) 
+```{r Plot, fig.cap="Random effects of plots on leaf functional trait variation. The posterior distribution of plot effect was estimated for every trait for all plots in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.", fig.height=8}
+lapply(fitsModel, function(fit) 
   mcmc_intervals_data(as.array(fit,
                                pars = "delta"))) %>% 
   bind_rows(.id = "model") %>% 
@@ -327,4 +326,8 @@ ggplot(t, aes(as.factor(n), cv, fill = Trait)) +
   xlab("Number of tree sampled") +
   ylab("Coefficient of variation (%).") +
   scale_y_sqrt()
+```
+
+```{r thesis, eval=F, echo=T}
+save(list = ls(), file = "../../thesis/rdata/Ch2SupMat.Rdata")
 ```

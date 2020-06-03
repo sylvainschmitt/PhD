@@ -7,10 +7,12 @@ library(ggrepel)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
-load("rdata/Ch1SupMat.Rdata")
+load("rdata/Ch1SupMat.Rdata") 
 ```
 
 # Appendix 2: Chapter 1 Supplementary Materials
+
+## Figures and tables
 
 ```{r A2correlations, fig.cap="Correlation of abiotic topographic variables and neighbor crowding indexes (NCI). All variables, relative elevation (RelEl), slope, curvature (Curv), aspect, topographic ruggedness index (TRI), and topographic wetness index (TWI) are derived from the digital elevation model (DEM) obtained through LiDAR campaign in 2015, the digital canopy model (DCM) has been obtained in the same campaign, and neighbor crowding index (NCI) of heterospecific (NCIh) or conspecific (NCIc) are derived from Paracou census campaign of 2015."}
 data %>% 
@@ -22,6 +24,8 @@ data %>%
   cor(.) %>% 
   corrplot::corrplot.mixed()
 ```
+
+\newpage
 
 ```{r A2ModelsTable, render="pandoc"}
 data.frame(
@@ -37,8 +41,8 @@ data.frame(
   kable(caption = "Model tested for species complex distribution.", format = "pandoc", escape = F, booktabs = T)
 ```
 
-```{r A2Predictions, fig.cap="Habitat suitability of single taxa model for every model form (see Supplementary Material S2) and three theoretical species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is an intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range. Blue and red dots represent simulated presences and absences respectively, whereas the black line represents the fitted corresponding model with its credibility interval in grey. The model B,2shows the best behavior with the three distribution cases."}
-preds %>% 
+```{r A2Predictions, fig.cap="Habitat suitability of single taxa model for every model form (see Supplementary Material Tab. \\@ref(tab:A2ModelsTable)) and three theoretical species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is an intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range. Blue and red dots represent simulated presences and absences respectively, whereas the black line represents the fitted corresponding model with its credibility interval in grey. The model B,2 shows the best behavior with the three distribution cases."}
+predsNull %>% 
   mutate(model = recode_factor(model, B0 = "B[0]", Balpha = "B[alpha]",
                                Balpha2 = "B[alpha][.][alpha][2]",
                                Bbeta = "B[alpha][.][beta]",
@@ -54,8 +58,8 @@ preds %>%
   ylab("Habitat suitabtility") + scale_color_discrete("Presence")
 ```
 
-```{r A2ComplexPar, eval=F}
-lapply(fits, function(fit)
+```{r A2ComplexPar}
+lapply(fitsComplex, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
@@ -78,7 +82,7 @@ lapply(fits, function(fit)
 ```
 
 ```{r A2Speciespar}
-lapply(fits, function(fit)
+lapply(fitsSpecies, function(fit)
   broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
@@ -104,52 +108,11 @@ lapply(fits, function(fit)
   collapse_rows(columns = 1:3)
 ```
 
-*Supplementary Material S6: Stan code for the inference of species complex presence*
+## Codes
 
-```{r, render="pandoc"}
-model <- "
-functions {
-  real scale(vector x) {
-    return sqrt(sum(x .* x)/(num_elements(x) - 1)) ;
-  }
-}
-data {
-  int<lower=1> N ;                // # of individuals
-  int<lower=1> K ;                // # of environmental descriptors
-  int<lower=0, upper=1> Y[N] ;    // individuals presence or absence (0-1)
-  matrix[N,K] X ;                 // environmental descriptors
-  int<lower=1> N_pred ;
-  matrix[N_pred,K] X_pred ;            
-}
-transformed data {
-  matrix[N,K] X_std ;
-  matrix[N_pred,K] X_pred_std ;
-  for(k in 1:K) {
-    X_std[,k] = X[,k] / scale(X[,k]) ;  
-    X_pred_std[,k] = X_pred[,k] / scale(X[,k]) ;  
-  }
-}
-parameters {
-  real alpha ;       // intercept
-  vector[K] beta ;   // sigmoidal slope
-  vector[K] gamma ;  // quadratic form
-}
-model {
-  alpha ~ normal(0, 1) ;
-  beta ~ normal(0, 1) ;
-  gamma ~ normal(0, 1) ;
-  Y ~ bernoulli_logit(alpha + X_std * beta + (X_std .* X_std) * gamma) ;
-}
-generated quantities {
-  vector[N_pred] Y_pred ;
-  Y_pred = inv_logit(alpha + X_pred_std * beta + (X_pred_std .* X_pred_std) * gamma) ;
-}
-"
-kable(data.frame(code = model), format = "latex", booktabs = T)
-```
+### Stan code for the inference of species complex presence {#A2singlemodel}
 
-
-```{stan singlemodel, eval=F, echo=T, cache=F, output.var="m1"}
+```{stan A2singlemodel, eval=F, echo=T, cache=F, output.var="m1"}
 functions {
   real scale(vector x) {
     return sqrt(sum(x .* x)/(num_elements(x) - 1)) ;
@@ -188,9 +151,9 @@ generated quantities {
 }
 ```
 
-*Supplementary Material S7: Stan code for the inference of species joint-presence*
+### Stan code for the inference of species joint-presence {#A2jointmodel}
 
-```{stan jointmodel, eval=F, echo=T, cache=F, output.var="m2"}
+```{stan A2jointmodel, eval=F, echo=T, cache=F, output.var="m2"}
 functions {
   real dirichlet_multinomial_lpmf(int[] y, vector alpha) {
     real alpha_plus = sum(alpha);
@@ -230,12 +193,15 @@ model {
     gamma[,k] ~ normal(0,1) ;
   }
   for (n in 1:N)
-    Y[n] ~ dirichlet_multinomial(softmax(alpha + beta*to_vector(X_std[n,]) + gamma*to_vector(X_std[n,] .* X_std[n,])))  ; // likelihood
+    Y[n] ~ dirichlet_multinomial(softmax(alpha + beta*to_vector(X_std[n,]) 
+                                 + gamma*to_vector(X_std[n,] .* X_std[n,])))  ; 
+                                 // likelihood
 }
 generated quantities {
   matrix[N_pred,S] Y_pred ;
   for(n in 1:N_pred)
-    Y_pred[n,] = to_row_vector(softmax(alpha + beta*to_vector(X_pred_std[n,]) + gamma*to_vector(X_pred_std[n,] .* X_pred_std[n,]))) ;
+    Y_pred[n,] = to_row_vector(softmax(alpha + beta*to_vector(X_pred_std[n,]) 
+                               + gamma*to_vector(X_pred_std[n,] .* X_pred_std[n,]))) ;
 }
 ```
 

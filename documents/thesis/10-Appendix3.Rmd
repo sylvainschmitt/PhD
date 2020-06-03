@@ -1,0 +1,132 @@
+```{r setupA3, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
+load("rdata/Ch2SupMat.Rdata")
+```
+
+# Appendix 3: Chapter 2 Supplementary Materials
+
+```{r A2abiotic, fig.cap='Principal Component Analysis (PCA) of abiotic topographic variables. All variables, slope, curvature, aspect, topgraphic rudgeness index (TRI), and topgraphic wetness index (TWI) are derived from the digital evlevation model (DEM) obtaine through LiDAR campaign in 2015.', fig.width=12, fig.height=12}
+factoextra::fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature +
+                          Aspect + TRI + TWI, Individuals, cor = T),
+               axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
+```
+
+```{r A2Dawkins, fig.cap='Diameter at breast height (DBH) and Dawkins index correlation. Box colors indicates the Dawkins index. DBH and Dawkins index correlation has been investigated by Anova. **** indicates a $p-value < 0.0001$. Letters indicate post-hoc groups investigated by Tukey Honest Significant Differences.'}
+Individuals %>% 
+  dplyr::select(Dawkins, DBH) %>% 
+  drop_na(Dawkins) %>% 
+  mutate(Dawkins = substr(Dawkins, 1, 1)) %>% 
+  left_join(tHSD) %>% 
+  group_by(Dawkins) %>% 
+  mutate(ymax = max(DBH)) %>% 
+  ggplot(aes(Dawkins, DBH*sdDBH, fill = Dawkins, label = group)) + 
+  geom_boxplot() + 
+  geom_text(aes(y = (ymax+1)*sdDBH)) +
+  ggpubr::stat_compare_means(method = "anova", aes(label = paste0("Anova", ..p.signif..))) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ylab("Diameter at breast hiaght (dbh, cm)")
+```
+
+```{r A2DBH, fig.cap='Diameter at breast height (DBH) distribution between sampled indivduals and other *Symphonia* and *Eschweilera* individuals of Paracou.'}
+ggplot(DBHdata, aes(DBH)) +
+  geom_histogram(position = "dodge") +
+  facet_wrap(~ Sample, scale = "free", nrow = 2) +
+  xlab("Diameter at breast height (dbh, cm)")
+```
+
+```{r A2ontogenyModel}
+lapply(models, function(model)
+  lapply(model, function(trait)
+    broom::tidyMCMC(trait, pars = "lp__", droppars = NULL, rhat = T)
+  ) %>% bind_rows(.id = "Model")) %>% 
+  bind_rows(.id = "Form") %>% 
+  separate(Model, c("Genus", "Trait"), "-") %>% 
+  mutate(Trait = recode_factor(Trait, 
+                               LMA = "$LMA$",
+                               LDMC = "$LDMC$", 
+                               LT = "$LT$", 
+                               invLA = "$\\frac{1}{LA}$",
+                               CC = "$CC$")) %>% 
+  mutate(Form = recode_factor(Form, 
+                              linear = "Linear",
+                              michaelis = "Michaelis Menten")) %>% 
+  reshape2::dcast(Genus + Trait ~ Form, value.var = "estimate") %>% 
+  mutate(Difference = Linear - `Michaelis Menten`) %>% 
+  kable(caption = "Log-likelihood for diameter model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
+  kable_styling(full_width = F)
+```
+
+```{r A2DBH90, fig.cap="Effect of tree diameter on leaf functional trait variation. The posterior distribution of species diameter at breast height for which a given trait reaches 90% of its maximum value ($DBH_{90}$) was estimated for every trait for all species in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter and (ii) and (iii) 95th percentile of diameter for *Eschweilera* and *Symphonia*, respectively."}
+lapply(fitsModel, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "betaDBH"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
+  mutate(species = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = gsub("([[:alpha:]])", "", species)) %>% 
+   mutate(species = as.numeric(species)) %>% 
+  left_join(species) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  mutate_at(vars("ll", "l", "m", "h", "hh"), funs(.*sdDBH*9)) %>% 
+  ggplot(aes(x = SpeciesLong,
+             xend = SpeciesLong,
+             color = SpeciesLong, fill = SpeciesLong)) +
+  geom_hline(yintercept = c(10, 57, 68), color = "gray90", size = 0.5) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(trait ~ Genus, labeller = label_parsed, 
+             scales = "free_y") +
+  xaxis_title(F) +
+  ylab(expression(DBH[90]~(cm))) +
+  scale_y_log10() +
+  scale_colour_brewer(guide = "none", palette = "Set1") +
+  scale_fill_brewer(guide = "none", palette = "Set1")
+```
+
+```{r A2NicheBreadth, fig.cap="Species niche breadth along the topographic wetness index (TWI) for all species from Paracou. Niche breadth has been calculated as the difference between the 95th quantile and the 5th quantile of TWI for all species from Paracou with at least 20 individuals. Dashed vertical lines represent niche breadth value for species from this study indicated by line color. E. coriacea and the two Symphonia species have bigger niche breadth than most Paracou species but E. sagotiana and E. coriacea have niche breadth similar to the majority of Paracou species.", fig.height=3}
+env %>% 
+  group_by(SpeciesLong) %>% 
+  filter(n() > 20) %>% 
+  summarise(TWIbreadth = quantile(twi, 0.95) - quantile(twi, 0.05)) %>% 
+  ggplot(aes(TWIbreadth)) + 
+  geom_histogram(fill = "lightgrey", col = NA) + 
+  geom_vline(aes(xintercept = breadth, col = Species), linetype = "dashed", 
+               data = data.frame(breadth = c(4.12 - 0.97, 6.31 - 1.59, 3.52 - 1.06, 4.92 - 0.96, 2.78 - 1.06),
+                               Species = c("S. sp1", "S. globulifera", "E. sagotiana", "E. coriacea", "E. decolorans"))) +
+  scale_x_sqrt() +
+  ylab("N") + xlab("Species niche breadth along the topographic wetness index (TWI)") + scale_color_discrete("Studied species") +
+  theme(legend.text = element_text(face = "italic"))
+```
+
+```{r A2Plot, fig.cap="Random effects of plots on leaf functional trait variation. The posterior distribution of plot effect was estimated for every trait for all plots in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.", fig.height=8}
+lapply(fitsModel, function(fit) 
+  mcmc_intervals_data(as.array(fit,
+                               pars = "delta"))) %>% 
+  bind_rows(.id = "model") %>% 
+  separate(model, c("complex", "trait"), "-",remove = F) %>%
+  mutate(PlotNum = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(PlotNum = gsub("([[:alpha:]])", "", PlotNum)) %>% 
+  mutate(PlotNum = as.numeric(PlotNum)) %>% 
+  left_join(plots) %>% 
+  mutate(trait = recode_factor(trait, invLA = "frac(1, LA)")) %>% 
+  ggplot(aes(x = Plot,
+             xend = Plot)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_grid(trait ~ Genus, labeller = label_parsed) +
+  ylab("")
+```

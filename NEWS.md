@@ -1,4 +1,8 @@
-# PhD 0.1.9175
+# PhD 0.1.9177
+* thesis: Chapters 1 and 2
+* functional: resubmission 20200603
+
+# PhD 0.1.9176
 * thesis: begins
 
 # PhD 0.1.9175
