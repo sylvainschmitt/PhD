@@ -1,0 +1,189 @@
+```{r setup_envgenom, include=FALSE, eval=T}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(bayesplot)
+library(raster)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F, eval=T)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+load("./parvicapture_save/Env.Rdata") 
+# load(file.path("symcapture_save", 'AnimalModels.Rdata'))  
+```
+
+# Environmental genomics
+
+Summary here.
+
+```{r DataEnvGenom, eval=F}
+clades <- rbind(
+  data.frame(Clade = "Parvifolia",
+             Species = c("sagotiana", "coriacea", "decolorans", "pedicellata", "wachenheimii", "grandiflora",
+                         "grandiflora_form2")),
+  data.frame(Clade = "Chartacea",
+             Species = c("congestiflora", "simiorum"))
+)
+trees <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit() %>% 
+  left_join(clades)
+trees <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>%
+  mutate(Library = gsub(".g.vcf", "", IID)) %>% 
+  separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
+  dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>% 
+  left_join(trees)
+trees <- left_join(trees, 
+                   src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                        "trees", "Paracou.sqlite")) %>% 
+                     tbl("Paracou") %>% 
+                     filter(CensusYear == 2015) %>% 
+                     collect())
+trees <- cbind(trees, pophelper::readQ(file.path(path, "admixture", "denovo.9.Q")))
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+trees$TWI <- raster::extract(wetness, treesXY)
+rm(dem, wetness, treesXY)
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("trees"))
+NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    collect() %>% 
+    group_by(CensusYear) %>% 
+    summarise(NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>% 
+    summarise(idTree = local(trees$idTree[ind]),
+              NCI = mean(NCI))})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+trees$NCI <- NC$NCI
+rm(NC)
+save(trees, file = "./parvicapture_save/Env.Rdata")
+```
+
+## Genetic variance
+
+Besides all the uncertainty around the validity of the kinship and population matrices (K and Q), we tested the genetic variance associated to environmental variables. The idea being that if we find back the signal unraveled with *Symphonia*, the data are still quite okay. Unfortunately, both TWI and NCI revealed a low and almost nul variation with both population and genotype (Tab. \@ref(tab:envGenoTab), Fig. \@ref(fig:envgenoR2), and Fig. \@ref(fig:envGenoVarPart)). Still the 5% of genotypic variation with NCI (Fig. \@ref(fig:envgenoR2), and Fig. \@ref(fig:envGenoVarPart)) question the fact that the signal observed for *Symphonia* is still here besides a lot of noise due to difficulties in data production ?
+
+```{r Envmdata}
+ids <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.king.id"))
+K <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K <- as.matrix(K) 
+K[is.na(K)] <- 0
+mdata <- lapply(c("TWI", "NCI"), function(variable) {
+                K[K < 0] <- 0
+                K <- K*2
+                K <- as.matrix(Matrix::nearPD(K)$mat)
+                return(list(N = nrow(trees),
+                            P = 9,
+                            y = as.vector(scale(trees[variable], center = F)),
+                            Q = as.matrix(trees[paste0("denovo.9.Q.Cluster", 1:9)]),
+                            K = K))})
+names(mdata) <- c("TWI", "NCI")
+save(mdata, file = file.path("parvicapture_save", 'dataEnv.Rdata'))   
+```
+
+```{r envGenoTab, fig.cap="Genetic variance of individual growth potential with a lognormal animal model."}
+# animal <- stan_model("parvicapture_models/AnimalLog.stan")
+# fitEnv <- lapply(c("TWI", "NCI"), function(var)
+#   sampling(animal, chains = 2, data = mdata[[var]], save_warmup = F,
+#            control = list(adapt_delta = 0.99, max_treedepth = 12)))
+# names(fitEnv) <- c("TWI", "NCI")
+# save(fitEnv, file = "parvicapture_save/EnvGeno.Rdata")
+load("parvicapture_save/EnvGeno.Rdata")
+lapply(fitEnv, broom::tidyMCMC, c("Vp", "Vg", "Vr"),
+       droppars = NULL, rhat = T) %>%
+  bind_rows(.id = "Variable") %>%
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>%
+  mutate(population = ifelse(is.na(population), "", population)) %>%
+  kable(caption = "Summary table of the kinship growth model",
+        col.names = c("Variable", "Parameter",  "Population",
+                      "Estimate", "$\\sigma$", "$\\hat{R}$")) 
+```
+
+```{r envGenoTrace, fig.cap="Traceplot for environmental variables."}
+cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
+                                     regex_pars = c("Vp", "Vg", "Vr"), 
+                                     facet_args = list(nrow = 1)),
+                   nrow = 2, labels = names(fitEnv))    
+```
+
+```{r envgenoR2, fig.cap="R2 for environmental variable"}
+lapply(fitEnv, pars = c("Vp", "Vg", "Vr"), as.data.frame) %>% 
+  bind_rows(.id = "model") %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vp, Vg, Vr))) %>% 
+  mutate(Vexp = sum(c(Vp, Vg))) %>% 
+  mutate_at(c("Vp", "Vg", "Vexp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vr) %>% 
+  reshape2::melt(id.vars = "model") %>% 
+  group_by(model, variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vg" = "Genotype", 
+                           "Vp" = "Population")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +  
+  theme(axis.title.y = element_blank()) +
+  facet_wrap(~ model, nrow = 2) +
+  coord_flip()    
+```
+
+```{r envGenoVarPart, fig.cap="Genetic variance partitionning for environmental variables."}
+lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(parameter = recode(parameter, "Vp" = "Population", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
+  group_by(variable) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = variable, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))   
+```
+

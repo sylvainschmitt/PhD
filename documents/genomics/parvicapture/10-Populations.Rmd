@@ -1,0 +1,260 @@
+```{r setup_popstr, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(pophelper)
+library(dendextend)
+library(ggtree)
+library(ggdendro)
+library(raster)
+library(leaflet)
+library(introgress)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F, eval = T)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou/Sequences"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+# Population structure
+
+Summary here.
+
+```{r}
+clades <- rbind(
+  data.frame(Clade = "Parvifolia",
+             Species = c("sagotiana", "coriacea", "decolorans", "pedicellata", "wachenheimii", "grandiflora",
+                         "grandiflora_form2")),
+  data.frame(Clade = "Chartacea",
+             Species = c("congestiflora", "simiorum"))
+)
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit() %>% 
+  left_join(clades)
+```
+
+## Structure
+
+We first explored populations structure with `structure`. Strangely likelihood decreased with increasing clusters and the best identified K with Evano's method was 15 (Fig. \@ref(fig:structureLK) and Fig. \@ref(fig:structureDeltaK)). We harvested and clumped results from `structure` with `structureHarverster` and `CLUMPpack`. We obtained genepools similar to the one oberved with the previous pipeline, and that start to be totally blurred after K=10 (Fig. \@ref(fig:structureG)). Identified genepools by `structure` didn't correspond much too field indentification (Fig. \@ref(fig:structureSingle)), especially for *E. simiroum* and *E. wachenheimii*. As we don't trusted much `structure` results, we ran `admixture` too.
+
+```{r bash structure, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+plink --bfile ../../variants/kinship/denovo --allow-extra-chr --recode vcf-iid --out denovo
+mv denovo.recode.strct_in denovo0.str
+# read_delim(file.path(pathCluster, "genomics", "structure", "denovo0.str"), delim = " ", skip = 1, col_names = F) %>% 
+#   separate(X1, paste0("Y", 1:3), sep = "\t") %>% 
+#   mutate(Y1 = as.numeric(as.factor(Y1))) %>% 
+#   mutate(Y2 = 1) %>% 
+#   write_delim(file.path(pathCluster, "genomics", "structure", "denovo.str"), delim = " ", col_names = F)
+module load bioinfo/structure_v2.3.4_console
+module load system/parallel-20180122
+```
+
+```{r structureLK, fig.cap="Likelihood of clustering in K genepools."}
+include_graphics(file.path(path, "structure", "harvester", "meanLnProb.png"))
+```
+
+```{r structureDeltaK, fig.cap="Evano's method to identify the best K."}
+include_graphics(file.path(path, "structure", "harvester", "deltaK.png"))
+```
+
+```{r structureG, fig.cap="Population structure of Eschweilera."}
+fam <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>%
+  mutate(Library = gsub(".g.vcf", "", IID)) %>% 
+  separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
+  dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>% 
+  left_join(individuals)
+structure <- lapply(list.files(file.path(path, "structure", "clumpak", "outputs"), 
+                          full.names = T), read_delim, col_names = F, delim = " ")
+names(structure) <- list.files(file.path(path, "structure", "clumpak", "outputs"))
+structure <- lapply(structure, dplyr::select, -X1, -X2, -X3, -X4, -X5)
+structure <- lapply(structure, function(x){names(x) <- paste0("Cluster", 1:length(names(x))) ; return(x)})
+structure <- as.qlist(structure)
+structure <- lapply(structure, "rownames<-", fam$Label)
+names(structure) <- c(10:19,1,20,2:9)
+structure <- structure[as.character(sort(as.numeric(names(structure))))]
+structure <- alignK(structure)
+p <- plotQ(structure[2:15], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:15),
+           showindlab = F, useindlab = F, linesize = 0.8, pointsize = 4, sortind = 'all', sharedindlab = F,
+           grplab = left_join(fam, individuals) %>% dplyr::select(Species), selgrp = "Species", ordergrp = T,
+           grplabface = "italic", grplabsize = 3, grplabangle = 0)
+gridExtra::grid.arrange(p$plot[[1]])
+```
+
+```{r structureSingle, fig.height=8, fig.width=15, fig.cap="Population structure of Paracou individuals for K = 9."}
+p <- pophelper::plotQMultiline(qlist = structure, exportplot = F, returnplot = T, useindlab = F,
+                               indlabsize = 5, ordergrp=T, grplab = fam["Species"], sortind = "all")
+gridExtra::grid.arrange(p$plot[[9]][[1]])
+```
+
+## Admixture
+
+We then explored populations structure with `admixture`. 
+Strangely cross-vaidation error always decreased with increasing clusters. 
+But we could see plateaus. So we chose to kept the plateau at K=9 (Fig. \@ref(fig:admixtureCV)). 
+We obtained genepools similar to the one oberved with the previous pipeline  (Fig. \@ref(fig:admixtureG)). 
+Identified genepools by `admixture` didn't correspond much too field indentification (Fig. \@ref(fig:admixture2Single)), especially for *E. simiroum* and *E. wachenheimii*, but they seemed better than `structure`. 
+
+```{bash admixture, eval=F, echo=T}
+# read_tsv(file.path(pathCluster, "variants", "admixture", "denovo.bim"), col_names = F) %>%
+#   mutate(X1 = as.numeric(as.factor(X1))) %>%
+#   write_tsv(file.path(pathCluster, "variants", "admixture", "denovo.bim"), col_names = F)
+for i in $(seq 10) ; do for k in $(seq 25) ; do echo "module load bioinfo/admixture_linux-1.3.0 ; admixture --cv ../../variants/admixture/denovo.bed $k | tee log$k.out" ; done ; done > admixture.sh
+sarray -J admix2 -o out/%j.admixture.out -e out/%j.admixture.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL admixture.sh
+grep -h CV log*.out > CV.out
+mkdir matrices
+for file in $(ls log*.out) ; do  grep "Fst divergences between estimated populations:" -A 20 $file | head -n -2 > matrices/$file ; done
+```
+
+```{r admixtureCV, fig.cap="Cross-validation for the clustering of Eschweilera individuals. Y axis indicates corss-validation mean error, suggesting that 8 groups represent the best populations structure."}
+read_delim(file.path(path, "admixture", "CV.out"), delim = " ", col_names = F) %>%
+  dplyr::select(X3, X4) %>%
+  dplyr::rename(K = X3, CV = X4) %>%
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>%
+  mutate(K = as.numeric(gsub("):", "", K))) %>%
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(9, 14), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error")
+```
+
+```{r admixtureG, fig.cap="Population structure of Eschweilera"}
+fam <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>%
+  mutate(Library = gsub(".g.vcf", "", IID)) %>% 
+  separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
+  dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>% 
+  left_join(individuals)
+admix <- readQ(list.files(file.path(path, "admixture"), full.names = T, pattern = ".Q"), indlabfromfile = F)
+admix <- lapply(admix, "rownames<-", fam$Ind)
+admix <- alignK(admix)
+p <- plotQ(admix[2:14], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:14),
+           showindlab = F, useindlab = F, linesize = 0.8, pointsize = 4, sortind = 'all', sharedindlab = F,
+           grplab = left_join(fam, individuals) %>% dplyr::select(Species), selgrp = "Species", ordergrp = T,
+           grplabface = "italic", grplabsize = 3, grplabangle = 0)
+gridExtra::grid.arrange(p$plot[[1]])
+```
+
+```{r admixture2Single, fig.height=8, fig.width=15, fig.cap="Population structure of Paracou individuals for K = 9."}
+p <- pophelper::plotQMultiline(qlist = admix, exportplot = F, returnplot = T, useindlab = F,
+                               indlabsize = 5, ordergrp=T, grplab = fam["Species"], sortind = "all")
+gridExtra::grid.arrange(p$plot[[4]][[1]])
+```
+
+## Spatial
+
+Spatial structure of genepools didn't revealed much (Fig. \@ref(fig:popStrSpace)).
+
+```{r trees}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>% 
+  collect()
+trees <- left_join(fam, trees)
+trees <- cbind(trees, admix$denovo.9.Q)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs)
+```
+
+```{r popStrSpace, fig.cap="Membership to the *Symphonia globulifera* gene pool for Paracou individuals."}
+limits <- shapefile(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                              "limits", "OverallPlots.shp"))
+limits <- spTransform(limits, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "RelativeElevation_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+projection(relele) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+relele <- projectRaster(relele, crs = crs)
+treesXY$TWI <- raster::extract(wetness, treesXY)
+treesXY$RelativeElevation <- raster::extract(relele, treesXY)
+treesXY$DEM <- raster::extract(dem, treesXY)
+leaflet() %>%
+  addRasterImage(aggregate(wetness, 4),  group = "TWI", 
+                 colors = colorBin("Greys", domain = NULL, bins = 5, na.color = "transparent")) %>% 
+  leaflet.minicharts::addMinicharts(
+    treesXY$Xutm, treesXY$Yutm,
+    type = "pie",
+    chartdata = treesXY@data[, paste0("Cluster", 1:9)], 
+    width = treesXY$CircCorr/pi/2,
+    transitionTime = 0,
+    labelText = treesXY$Ind,
+    opacity = 1
+  )
+```
+
+## Environmental
+
+Similalry, environmental structure of genepools didn't revealed much (Fig. \@ref(fig:wetness)), besides relative elevation seems to somehow slightly differentiate major genepools.
+
+```{r wetness, fig.cap="Gene pools distribution along topgraphic wetness index and relative elevation for Paracou individuals."}
+treesXY@data %>% 
+  dplyr::select(Library, IdGenetic, TWI, RelativeElevation, starts_with("Cluster")) %>% 
+  reshape2::melt(id.vars = c("Library", "IdGenetic", "TWI", "RelativeElevation"),
+                 variable.name = "Cluster") %>% 
+  group_by(Library, IdGenetic, TWI, RelativeElevation) %>% 
+  arrange(desc(value)) %>% 
+  summarise(MainCluster = dplyr::first(Cluster)) %>% 
+  reshape2::melt(id.vars = c("Library", "IdGenetic", "MainCluster")) %>% 
+  ggplot(aes(value, fill = MainCluster, color = MainCluster)) +
+  geom_density(alpha = 0.3) +
+  facet_wrap(~ variable, scales = "free", nrow = 2) +
+  scale_x_sqrt()
+```
+
+## Kinship
+
+The kinship matrix revealed family relations for 212 individuals over 289 (Fig. \@ref(fig:kinshipHeatmap) and Fig. \@ref(fig:kinshipHeatmap2)).
+But the lack of confidence we have in the population structure, question the validity of the kinship matrix.
+
+```{r kinshipMatrix}
+ids <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.king.id"))
+K <- read_tsv(file.path(path, "..", "variants", "kinship", "denovo.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K <- as.matrix(K) 
+```
+
+```{r kinshipHeatmap}
+t <-   reshape2::melt(K) %>% 
+  dplyr::rename("Lib1" = "Var1", "Lib2" = "Var2", "kinship" = "value")
+cowplot::plot_grid(ggplot(t, aes(kinship)) + geom_histogram() + coord_flip(),
+                   ggplot(t, aes(Lib1, Lib2, fill = kinship)) + 
+                     geom_tile() +
+                     viridis::scale_fill_viridis() +
+                     theme(axis.line = element_blank(), axis.text = element_blank(),
+                           axis.title = element_blank(), axis.ticks = element_blank()),
+                   rel_widths = c(1,3)) 
+```
+
+```{r kinshipHeatmap2}
+t <-   reshape2::melt(K) %>% 
+  dplyr::rename("Lib1" = "Var1", "Lib2" = "Var2", "kinship" = "value") %>% 
+  filter(kinship > 0, kinship < 0.5)
+cowplot::plot_grid(ggplot(t, aes(kinship)) + geom_histogram() + coord_flip(),
+                   ggplot(t, aes(Lib1, Lib2, fill = kinship)) + 
+                     geom_tile() +
+                     viridis::scale_fill_viridis() +
+                     theme(axis.line = element_blank(), axis.text = element_blank(),
+                           axis.title = element_blank(), axis.ticks = element_blank()) +
+                     ggtitle(paste0("N = ", length(unique(t$Lib1)), "/289"), "N = 276/371 for Symphonia"),
+                   rel_widths = c(1,3)) 
+```

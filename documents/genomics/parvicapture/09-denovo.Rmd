@@ -17,10 +17,6 @@ pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
 path <- "../../../data/Eschweilera_Paracou/"
 ```
 
-# *de novo*
-
-## Libraries
-
 ```{r denovoLib}
 individuals <- googlesheets::gs_title("Parvicapture") %>% 
   googlesheets::gs_read("Extraction") %>% 
@@ -32,19 +28,48 @@ individuals <- googlesheets::gs_title("Parvicapture") %>%
                       "squamata" = "other", "pedicellata" = "other", "grandiflora" = "other",
                       "micrantha" = "other", "parviflora" = "other", 
                       "congestiflora" = "outgroup"))
-a <- read_tsv(file.path(pathCluster, "Sequences", "denovo", "libraries.txt"),
-         col_names = "Library") %>%
-  separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
-  dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>%
-  dplyr::select(Library, IdGenetic, Lane, Label)
-b <- googlesheets::gs_title("Parvicapture") %>%
-              googlesheets::gs_read("Extraction") %>%
-              filter(!is.na(Seq)) %>%
-              mutate(Pool = c(rep(LETTERS[1:3], each = ceiling(4*96/3))[1:(4*96)], rep("D", 534-4*96))) %>%
-  mutate(Lane = Seq) %>%
-  mutate(Label = 1:nrow(.)) # IGA label
-libraries <- left_join(a, b, by = c("IdGenetic", "Lane", "Label"))
+# a <- read_tsv(file.path(pathCluster, "Sequences", "denovo", "libraries.txt"),
+#          col_names = "Library") %>%
+#   separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
+#   dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>%
+#   dplyr::select(Library, IdGenetic, Lane, Label)
+# b <- googlesheets::gs_title("Parvicapture") %>%
+#               googlesheets::gs_read("Extraction") %>%
+#               filter(!is.na(Seq)) %>%
+#               mutate(Pool = c(rep(LETTERS[1:3], each = ceiling(4*96/3))[1:(4*96)], rep("D", 534-4*96))) %>%
+#   mutate(Lane = Seq) %>%
+#   mutate(Label = 1:nrow(.)) # IGA label
+# libraries <- left_join(a, b, by = c("IdGenetic", "Lane", "Label"))
 ```
+
+# *de novo*
+
+Summary here.
+
+## Test 
+
+We failed to produce a correct dataset with the home-made pipeline used for *Symphonia* (`baw-mem` mapping and SNP-call with `GATK` plus others). We consequently used `ipyrad` with restrictive thresholds (clustering across of 0.95 instead of 0.8) and *denovo* assembly to avoid issues of paralogs both in the reads and the original reference. We made a succesful test with 27 samples (Fig. \@ref(fig:genotypetest)).
+
+```{r genotypetest, fig.cap="PCA for SNPs obtained with the `ipyrad` test."}
+  read_delim(file.path(path, "Sequences", "denovo_test",
+                                "denovo.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  dplyr::select(Sample, IdGenetic, Lane, PCA1, PCA2) %>% 
+  left_join(individuals) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = cat, 
+             label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom") +
+  ggtitle("Denovo test")
+```
+
+## Libraries
+
+To ease *denovo* assembly we filtered reads corresponding to targets by a first mapping wiht `bwa-mem` on the reference with the scripts below.
 
 ```{bash raw2filtered, eval=F, echo=T}
 #!/bin/bash    
@@ -123,7 +148,7 @@ rm out/* runFiltered.sh
 
 ## Reference
 
-3730 target sequences in `reference.fasta.fai` that we will split in 37 jobs of ca 37 sequences.
+But the obtained dataset was too big to be run with `ipyrad` on `genologin` (see discussion on `giter/ipyrad`). So we split the 3730 target sequences from the reference in 38 sub-references to separate the work in 37 jobs.
 
 ```{bash, eval=F, echo=T}
 mkdir reference
@@ -138,7 +163,9 @@ for ref in $(ls *.fasta); do bwa index $ref ; done
 ```
 
 
-## Libraries subset
+## *de novo*
+
+We used `ipyrad` on the 38 reference parts. We still have issue for 10 of them. 
 
 ```{bash, eval=F, echo=T}
 mkdir runs
@@ -155,15 +182,15 @@ for ref in $(ls runs); do rm -r runs/$ref/trimmed runs/$ref/mapped ; done
 for ref in $(ls runs); do cp params.txt runs/$ref/ ; done
 for ref in $(ls runs); do echo "echo denovo${ref//[^0-9]/} ; cd runs/$ref ; module load system/Miniconda3-4.4.10 ; module load bioinfo/ipyrad-0.7.28 ; ipyrad -p params.txt -s 1234567 -c 4 ;"; done > runDenovo.sh
 sarray -J denovo2 -o out/denovo2.%j.out -e out/denovo2.%j.err -t 48:00:00 --mem=40G --cpus-per-task=4 --mail-type=BEGIN,END,FAIL runDenovo2.sh ;
+for ref in $(ls runs); do printf "echo denovo${ref//[^0-9]/}\ncd runs/$ref\nipyrad -p params.txt -s 1234567 -c 10\nwait\ncd ../../\n\n"; done > runDenovo.sh
 mkdir vcfs
 for ref in $(ls runs); do awk '{gsub(/locus/, "ref""'"${ref//[^0-9]/}"'""_locus"); print}' runs/$ref/denovo_outfiles/denovo.vcf > vcfs/ref"${ref//[^0-9]/}".vcf ; done
 find -name 'ref*' -size 0 -delete # waiting for all files
-
-for ref in $(ls runs); do printf "echo denovo${ref//[^0-9]/}\ncd runs/$ref\nipyrad -p params.txt -s 1234567 -c 10\nwait\ncd ../../\n\n"; done > runDenovo.sh
-
 ```
 
-## PCA
+## Library filtering
+
+We assembled back locally the obtained vcfs with `plink`. We explored different filters of libraries based on missingness per library (`--mind` in `plink`, Fig. \@ref(fig:mind)). We chose a threshold of 0.992, as it resulted in more information per library with more variation on the first plan of the PCA and more differentiated groups in the PCA (Fig. \@ref(fig:genotypeAll)). We obtained 543 455 SNPs over 289 individuals.
 
 ```{bash pcaSH1, eval=F, echo=T}
 # plink=~/Tools/plink_linux_x86_64_20190617/plink 
@@ -181,41 +208,54 @@ mkdir filtered
 $plink \
   --bfile raw/denovo \
   --allow-extra-chr \
-  --mind 0.98 \
+  --mind 0.993 \
+  --geno 0.999 \
   --missing --het --freqx --pca var-wts \
   --make-bed --out filtered/denovo
 ```
 
-```{r genotypeAll}
-g <- read_delim(file.path(path, "Sequences", "denovo", "filtered",
-                              "denovo.eigenvec"),
-           delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
-  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
-  dplyr::select(Sample, IdGenetic, Lane, PCA1, PCA2) %>% 
-  left_join(individuals) %>%
-  ggplot(aes(x = PCA1, y = PCA2, col = Species, 
-             label = Sample)) +
-  geom_line(aes(group = IdGenetic)) +
-  geom_point(size=2, alpha = 0.5) +
-  scale_color_discrete("Species") +
-  theme(legend.position = "bottom")
-g
-# plotly::ggplotly(g)
+```{r mind, fig.cap="Filtering stats depending on allowed missingness per individual (`--mind`)."}
+data.frame(
+  mind = seq(from = 1, to = 0.93, by = -0.01),
+  inds = c(510, 251, 121, 55, 27, 7, 5, 1),
+  snps = 510414,
+  geno = c(0.012, 0.023, 0.032, 0.042, 0.050, 0.065, 0.067, NA)
+) %>% reshape2::melt("mind") %>% 
+  mutate(variable = recode(variable, "inds" = "Number of individuals",
+                           "snps" = "Number of SNPs",
+                           "geno" = "Total genotyping rate")) %>% 
+  ggplot(aes(mind, value)) + 
+  geom_vline(xintercept = 0.992, col = "red") +
+  geom_point() + 
+  geom_line() + 
+  facet_wrap(~ variable, scales = "free", nrow = 3) +
+  scale_x_reverse() +
+  xlab("Allowed missingness per individual (--mind)")
 ```
 
-```{r genotypetest, eval=F}
-read_delim(file.path(path, "Sequences", "denovo_test",
+```{r genotypeAll, fig.cap="PCA for SNPs obtained after filtering libraries based on missingness."}
+read_delim(file.path(path, "Sequences", "denovo", "filtered",
                               "denovo.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>%
   separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
   dplyr::select(Sample, IdGenetic, Lane, PCA1, PCA2) %>% 
   left_join(individuals) %>%
-  ggplot(aes(x = PCA1, y = PCA2, col = Species, 
+  ggplot(aes(x = PCA1, y = PCA2, col = cat, 
              label = Sample)) +
   geom_line(aes(group = IdGenetic)) +
   geom_point(size=2, alpha = 0.5) +
-  scale_color_discrete("Species") +
+  scale_color_discrete("") +
   theme(legend.position = "bottom")
+```
+
+## SNP filtering
+
+Following weird results with the kinship matrix using `KING`, we further explored missing data per SNP. 
+We filtered SNPs with a maximum of 0.9 or 90% of missing data.
+We obtained 1 835 SNPs over 289 individuals.
+
+```{r relatedness2, eval=F, echo=T}
+module load bioinfo/plink2_high_contig_20190905
+plink2 --bfile filtered/denovo --allow-extra-chr --geno 0.9 --make-king square --make-bed --out kinship/denovo
 ```

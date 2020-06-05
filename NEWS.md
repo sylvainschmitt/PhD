@@ -1,3 +1,6 @@
+# PhD 0.1.9178
+* parvicapture: fighting with denovo
+
 # PhD 0.1.9177
 * thesis: Chapters 1 and 2
 * functional: resubmission 20200603
