@@ -1,0 +1,339 @@
+```{r setup_popstr, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(pophelper)
+library(dendextend)
+library(ggtree)
+library(ggdendro)
+library(raster)
+library(leaflet)
+library(introgress)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F, eval = T)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou/Sequences"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+```
+
+# Population structure
+
+In this chapter, we produced population structure and individual kinship data with k-means and `KING`.
+
+```{r popData}
+clades <- rbind(
+  data.frame(Clade = "Parvifolia",
+             Species = c("sagotiana", "coriacea", "decolorans", "pedicellata", "wachenheimii", "grandiflora",
+                         "grandiflora_form2")),
+  data.frame(Clade = "Chartacea",
+             Species = c("congestiflora", "simiorum"))
+)
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit() %>% 
+  left_join(clades) %>% 
+    mutate(cat = recode(Species, "wachenheimii" = "other", "grandiflora_form2" = "other",
+                      "simiorum" = "outgroup", "collina"  = "other", "persistens" = "outgroup",
+                      "squamata" = "other", "pedicellata" = "other", "grandiflora" = "other",
+                      "micrantha" = "other", "parviflora" = "other", 
+                      "congestiflora" = "outgroup"))
+limits <- shapefile(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                              "limits", "OverallPlots.shp"))
+limits <- spTransform(limits, CRSobj = crs)
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "TWI_1m.tif"))
+relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "RelativeElevation_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+projection(relele) <- projection(dem)
+wetness <- projectRaster(wetness, crs = crs)
+relele <- projectRaster(relele, crs = crs)
+```
+
+## Structure
+
+We failed to identify populations structure with `admixture`. 
+
+```{bash admixture, eval=F, echo=T}
+for filter in $(ls ../../variants/outgroup_filtered) ; do mkdir $filter ; done
+for filter in $(ls ../../variants/outgroup_filtered) ;
+  do
+  for k in $(seq 15) ; 
+    do 
+    echo "cd $filter ; module load bioinfo/admixture_linux-1.3.0 ; admixture --cv ../../../variants/outgroup_filtered/$filter/filtered.bed $k | tee log$k.out" ; 
+  done ; 
+done > admixture.sh
+mkdir out
+sarray -J admix -o out/%j.admixture.out -e out/%j.admixture.err -t 48:00:00 --mem=8G --mail-type=BEGIN,END,FAIL admixture.sh
+
+rm -r out
+rm admixture.sh
+mkdir CV
+for filter in $(ls | grep filtered) ; do grep -h CV $filter/log*.out > CV/$filter.CV.out ; done
+mkdir K9
+for Q in $(ls filtered*/filtered.9.Q) ; do cat $Q > K9/${Q%/*}.9.Q ; done
+```
+
+```{r admixtureCV, fig.cap="Cross-validation for the clustering of Eschweilera individuals. Y axis indicates corss-validation mean error."}
+lapply(list.files(file.path(path, "admixture", "CV")), function(f)
+  read_delim(file.path(path, "admixture", "CV", f), delim = " ", col_names = F) %>%
+    mutate(filter = f)) %>%  
+  bind_rows() %>% 
+    separate(filter, c("X1", "X2", "mind", "geno", "CV", "out")) %>% 
+  mutate(mind = as.numeric(paste0("0.", mind))) %>% 
+  dplyr::select(mind, geno, X3, X4) %>%
+  mutate(filter = paste0("mind=", mind, " geno=", geno)) %>% 
+  dplyr::rename(K = X3, CV = X4) %>%
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>%
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV, col = filter)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(9, 14), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error")
+```
+
+```{r admixtureG, fig.cap="Population structure of Eschweilera for filtered.0.9855.n10."}
+fam <- read_delim(file.path(path, "..", "variants",  "outgroup_filtered", "filtered.0.9855.n10", "filtered.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype"), delim = " ") %>%
+  mutate(Library = gsub(".g.vcf", "", IID)) %>% 
+  separate(Library, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>%
+  dplyr::rename(IdGenetic = X4, Lane = X5, Label = X3) %>% 
+  left_join(individuals)
+admix <- readQ(list.files(file.path(path, "admixture", "filtered.0.9855.n10"), 
+                          full.names = T, pattern = ".Q"), indlabfromfile = F)
+admix <- lapply(admix, "rownames<-", fam$Ind)
+admix <- alignK(admix)
+p <- plotQ(admix[2:14], exportplot = F, returnplot = T, imgoutput = "join", basesize = 11, splab = paste0("K=",2:14),
+           showindlab = F, useindlab = F, linesize = 0.8, pointsize = 4, sortind = 'all', sharedindlab = F,
+           grplab = left_join(fam, individuals) %>% dplyr::select(Species), selgrp = "Species", ordergrp = T,
+           grplabface = "italic", grplabsize = 3, grplabangle = 0)
+gridExtra::grid.arrange(p$plot[[1]])
+```
+
+## DAPC
+
+DAPC is a solution to be eventually run later. But due to the visual simplicity of the population structure and the longtime needed to compute DAPC, we choose to focus on a simple k-mean method on the PCA first plan. Anyways, a tutorial for DAPC is available here: https://grunwaldlab.github.io/Population_Genetics_in_R/clustering_plot.html .
+
+
+```{bash vcfsSh, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+for filter in $(ls) ; 
+  do 
+  $plink --bfile $filter/filtered \
+    --allow-extra-chr \
+    --recode vcf-iid \
+    --out $filter/filtered 
+done
+```
+
+```{r dapcR, eval=F}
+# vcfs <- lapply(list.files(file.path(path, "..", "variants", "kinship_filtered")), function(f)
+#   vcfR::read.vcfR(file.path(path, "..", "variants", "kinship_filtered", f, "filtered.vcf")))
+# vcfs <- lapply(vcfs, vcfR::vcfR2genlight)
+# names(vcfs) <- list.files(file.path(path, "..", "variants", "kinship_filtered"))
+# save(vcfs, file = "parvicapture_save/dapc.Rdata")
+load("parvicapture_save/dapc.Rdata")
+
+Ks <- lapply(vcfs, function(vcf) adegenet::find.clusters(vcf, n.pca = 40, choose.n.clust = F,  max.n.clust = 15))
+Ks2 <- lapply(vcfs, function(vcf) adegenet::find.clusters(vcf, n.pca = 2, choose.n.clust = F,  max.n.clust = 15))
+
+save(Ks, Ks2, file = "parvicapture_save/dapc2.Rdata")
+load("parvicapture_save/dapc2.Rdata")
+lapply(Ks, function(y) y$Kstat) %>% 
+  bind_cols() %>% 
+  mutate(K = 1:nrow(.)) %>% 
+  reshape2::melt("K", variable.name = "filter", value.name = "BIC") %>% 
+  ggplot(aes(y = BIC, col = filter)) +
+  geom_boxplot(aes(x = as.factor(K))) +
+  geom_smooth(aes(x = K), se = F)
+```
+
+## K-means
+
+K-means suggested a K of 3 for all filters (Fig. \@ref(fig:kmeansK)), corresponding to the visually identified three groups (Fig. \@ref(fig:kmeansPCA)). Interestingly, the cluster 3 corresponded mainly to *E. decolorans*, the cluster 2 to *E. sagotiana* and the cluster 1 to *E. coriacea* mixed with rare species (Fig. \@ref(fig:kmeans)).
+
+```{r kmeansData}
+pcas <- lapply(list.files(file.path(path, "..", "variants", "kinship_filtered")), function(f)
+  read_delim(file.path(path, "..", "variants", "kinship_filtered", f, "filtered.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals)
+kmeans <- group_by(pcas, filter) %>% 
+  cbind(group_by(pcas, filter) %>% 
+          filter(sum(PCA1) != 0) %>% 
+          dplyr::select(PCA1, PCA2) %>%
+          do(hc = cutree(hclust(dist(as.matrix(.))), k = 3)) %>% 
+          broom::tidy(hc)) %>% 
+  dplyr::rename(cluster = x)
+filter(kmeans, filter == "filtered.0.9928.n5") %>% 
+  ungroup() %>%
+  dplyr::select(Sample, cluster) %>% 
+  write_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans"))
+```
+
+```{r kmeansK}
+wss <- function(data, kmax = 15) {
+  x <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 1:kmax) x[i] <- sum(kmeans(data, centers=i)$withinss)
+  data.frame(k = 1:kmax, wss = x)
+}
+lapply(unique(kmeans$filter), function(f) 
+  wss(filter(kmeans, filter == f)[c("PCA1", "PCA2")]) %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  ggplot(aes(k, wss, col = filter)) +
+  geom_point() +
+  geom_line() +
+  xlab("K") + ylab("Within group sum of squares")
+```
+
+```{r kmeansPCA}
+ggplot(kmeans, aes(x = PCA1, y = PCA2, col = as.factor(cluster), 
+                   label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  theme(legend.position = "bottom") +
+  scale_color_discrete(guide = "none") +
+  facet_wrap(~ filter, scales = "free") +
+  theme(strip.text.x = element_text(size = 6))
+```
+
+
+```{r kmeans, fig.cap="Population structure detection in PCAs."}
+ggplot(kmeans, aes(x = Sample, y = 1, fill = cat)) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() +
+  facet_grid(cluster ~ filter, scales = "free") +
+  scale_fill_discrete("") +
+  theme(axis.title = element_blank(), axis.text = element_blank(), 
+        axis.line = element_blank(), axis.ticks = element_blank(),
+        strip.text.x = element_text(size = 6))
+```
+
+## Spatial
+
+Spatial structure of genepools corresponed to observed spatial structure of botanical identification (*E. decolorans* in the North and *E. sagotiana* in the SouthFig. \@ref(fig:popStrSpace)).
+
+```{r trees}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>% 
+  collect()
+trees <- left_join(kmeans, trees)
+treesXY <- trees
+coordinates(treesXY) <- ~Xutm + Yutm
+proj4string(treesXY) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+treesXY <- spTransform(treesXY, CRSobj = crs) 
+```
+
+```{r popStrSpace, fig.cap="Membership to the *Symphonia globulifera* gene pool for Paracou individuals."}
+treesXY$TWI <- raster::extract(wetness, treesXY)
+treesXY$RelativeElevation <- raster::extract(relele, treesXY)
+treesXY$DEM <- raster::extract(dem, treesXY)
+treespal <- colorFactor(RColorBrewer::brewer.pal(length(unique(treesXY$cluster)), "Accent"),
+                        as.factor(treesXY$cluster))
+leaflet() %>%
+  addRasterImage(aggregate(wetness, 4),  group = "TWI", 
+                 colors = colorBin("Greys", domain = NULL, bins = 5, na.color = "transparent")) %>% 
+  addCircles(data = treesXY, radius = ~CircCorr/pi/2,  label = ~cluster,
+             color = ~treespal(cluster), group = ~cluster) %>% 
+  addLegend(pal = treespal, title = 'Clusters', 
+            values = levels(as.factor(treesXY$cluster)),
+            position = "bottomright")
+```
+
+## Environmental
+
+Environmental structure of genepools revealed more differentiation along relative elevation than topographic wetness index for all filters (Fig. \@ref(fig:wetness)).
+
+```{r wetness, fig.cap="Gene pools distribution along topgraphic wetness index and relative elevation for Paracou individuals."}
+treesXY@data %>% 
+  dplyr::select(filter, Sample, IdGenetic, TWI, RelativeElevation, cluster) %>% 
+  mutate(cluster = as.factor(cluster)) %>% 
+  reshape2::melt(id.vars = c("filter", "Sample", "IdGenetic", "cluster")) %>% 
+  ggplot(aes(value, fill = cluster, color = cluster)) +
+  geom_density(alpha = 0.3) +
+    facet_grid(variable ~ filter, scales = "free") +
+  scale_x_sqrt()
+```
+
+## Kinship
+
+The kinship matrix revealed family relations for 43 individuals over 227 (Fig. \@ref(fig:kinshipPosFilter)). And kinship was correlated to PCA distance (Fig. \@ref(fig:pcavskin)), so we will use Kmeans and not the PCA position to describe population structure, to avoid cofounding with kinship.
+
+```{bash relatedness2, eval=F, echo=T}
+module load bioinfo/plink2_high_contig_20190905
+for filter in $(ls) ; 
+  do 
+  plink2 --bfile $filter/filtered \
+    --allow-extra-chr \
+    --make-king square \
+    --out $filter/filtered 
+done
+```
+
+```{r kinshipMatrix}
+K <- lapply(list.files(file.path(path, "..", "variants", "outgroup_filtered")), function(f){
+  ids <- read_tsv(file.path(path, "..", "variants", "outgroup_filtered", f, "filtered.king.id"))
+  K <- read_tsv(file.path(path, "..", "variants", "outgroup_filtered", f, "filtered.king"),
+                col_names = ids$IID) %>% 
+    as.data.frame()
+  row.names(K) <- ids$IID
+  K <- as.matrix(K) 
+  reshape2::melt(K) %>% 
+    dplyr::rename("Lib1" = "Var1", "Lib2" = "Var2", "kinship" = "value") %>% 
+    mutate(filter = f)
+}) %>% bind_rows()
+```
+
+```{r kinshipPosFilter, fig.cap="Relation between filters and percentage of positive kinship relations."}
+K %>% 
+  group_by(filter) %>% 
+  mutate(N = length(unique(Lib1))) %>% 
+  filter(kinship > 0, kinship < 0.5) %>% 
+  mutate(NkinPos = length(unique(Lib1))) %>% 
+  mutate(PctPos = NkinPos/N*100) %>% 
+  arrange(desc(PctPos)) %>% 
+  dplyr::select(filter, N, NkinPos, PctPos) %>% 
+  unique() %>% 
+  separate(filter, c("X1", "X2", "mind", "geno")) %>% 
+  mutate(mind = as.numeric(paste0("0.", mind))) %>% 
+  ggplot(aes(mind, PctPos, col = geno, label = NkinPos)) + geom_point() + geom_line() + ggrepel::geom_text_repel() 
+```
+
+```{r pcavskin, fig.cap="Kinship value versus PCA distance."}
+lapply(list.files(file.path(path, "..", "variants", "outgroup_filtered")), function(f)
+  read_delim(file.path(path, "..", "variants", "outgroup_filtered", f, "filtered.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+    dplyr::select(-X1) %>% 
+    column_to_rownames("Sample") %>% 
+    dist() %>% 
+    as.matrix() %>% 
+    reshape2::melt() %>% 
+    dplyr::rename("Lib1" = "Var1", "Lib2" = "Var2", "pcadist" = "value") %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  left_join(K) %>% 
+  filter(kinship > 0, kinship < 0.5) %>% 
+  ggplot(aes(pcadist, kinship)) + 
+  geom_point() + 
+  facet_wrap(~ filter, scales = "free") + 
+  geom_smooth(method = "lm") +
+  ggpubr::stat_cor(size = 2) +
+  theme(strip.text.x = element_text(size = 6))
+```
+

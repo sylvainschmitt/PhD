@@ -1,3 +1,6 @@
+# PhD 0.1.9179
+* parvicapture: filtering, structure, envgeno, growthgeno (wip)
+
 # PhD 0.1.9178
 * parvicapture: fighting with denovo
 

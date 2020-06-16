@@ -1,0 +1,256 @@
+```{r setup_filtering, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(parallel)
+library(tidyverse)
+library(rstan)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = F, cache.lazy = F)
+pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou"
+path <- "../../../data/Eschweilera_Paracou/"
+```
+
+```{r filtData}
+individuals <- googlesheets::gs_title("Parvicapture") %>% 
+  googlesheets::gs_read("Extraction") %>% 
+  filter(!is.na(Seq)) %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  mutate(cat = recode(Species, "wachenheimii" = "other", "grandiflora_form2" = "other",
+                      "simiorum" = "outgroup", "collina"  = "other", "persistens" = "outgroup",
+                      "squamata" = "other", "pedicellata" = "other", "grandiflora" = "other",
+                      "micrantha" = "other", "parviflora" = "other", 
+                      "congestiflora" = "outgroup"))
+```
+
+# Filtering
+
+In this chapter, we filtered raw snps with different automatic filters on libraries missingness, snps missingness, and outgroups.
+
+## Library filtering
+
+After investigating missing data per libraries count and associated number of SNPs (Fig. \@ref(fig:libmiss)), we decided to try 10 values of libraries filtering from 50 to 286  (Fig. \@ref(fig:libFilterPCA)).
+
+```{r libmiss, fig.cap="Missing data per libraries count."}
+libmiss <- read_delim(file.path(path, "Sequences", "denovo", "raw", "raw.imiss"), delim = " ") %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(missingness = as.numeric(F_MISS)) %>% 
+  mutate(snps = (1-missingness)*704485) %>% 
+  arrange(missingness) %>% 
+  mutate(libraries = 1:nrow(.))
+Nlibs <- round(seq(50, max(libmiss$libraries), length.out = 10))
+cowplot::plot_grid(
+  ggplot(libmiss, aes(missingness)) + 
+    geom_histogram() +
+    geom_vline(xintercept = libmiss$missingness[Nlibs], col = "red") +
+    ggtitle("704 485 SNPs"),
+  ggplot(libmiss, aes(libraries, missingness)) + geom_point() + geom_line()
+  + geom_vline(xintercept = Nlibs, col = "red") 
+  + geom_hline(yintercept = libmiss$missingness[Nlibs], col = "red"),
+  ggplot(libmiss, aes(libraries, snps)) + geom_point() + geom_line()
+  + geom_vline(xintercept = Nlibs, col = "red")  
+  + geom_hline(yintercept = libmiss$snps[Nlibs], col = "red"),
+  nrow = 1)
+cat("N ibraries", Nlibs)
+cat("--mind", libmiss$missingness[Nlibs])
+```
+
+```{bash libFilter, eval=F, echo=T}
+minds=(0.9686 0.974 0.9782 0.9811 0.9831 0.9855 0.9873 0.9891 0.9905 0.9928)
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+for mind in "${minds[@]}" ; 
+  do 
+  mkdir filtered.$mind
+  $plink \
+    --bfile ../../denovo/raw/raw \
+    --allow-extra-chr \
+    --mind $mind \
+    --missing --het --freqx --pca var-wts \
+    --make-bed --out filtered.$mind/filtered
+done
+```
+
+```{r libFilterPCA, fig.cap="PCA for SNPs obtained after filtering libraries based on missingness."}
+lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals) %>% 
+  ggplot(aes(x = PCA1, y = PCA2, col = cat, 
+             label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ filter, scales = "free")
+```
+
+## SNPs filtering
+
+After investigating missing data per snps count and associated number of libraries (Fig. \@ref(fig:snpmiss)), we decided to try 2 values of snps filtering corresponding to at least 5 and 10 libraries represented (varying `--geno`), resulting in 20 combination of filtering (Fig. \@ref(fig:snpFilterPCA)).
+
+```{r snpmiss, fig.cap="Missing data per snp count."}
+names(Nlibs) <- list.files(file.path(path, "Sequences", "variants", "libraries_filtered"))
+snpmiss <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.lmiss"), delim = " ") %>% 
+    dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+    mutate(missingness = as.numeric(F_MISS)) %>% 
+    arrange(missingness) %>%
+    mutate(Nlibs = Nlibs[f]) %>% 
+    mutate(libraries = (1-missingness)*Nlibs) %>% 
+    mutate(snps = 1:nrow(.)) %>% 
+    mutate(filter = f) %>% 
+    filter(snps %in% seq(1, 704485, length.out = 100))) %>% 
+  bind_rows()
+snpmissN <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.lmiss"), delim = " ") %>% 
+    dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+    mutate(missingness = as.numeric(F_MISS)) %>% 
+    arrange(missingness) %>%
+    mutate(Nlibs = Nlibs[f]) %>% 
+    mutate(libraries = round((1-missingness)*Nlibs)) %>% 
+    mutate(snps = 1:nrow(.)) %>% 
+    mutate(filter = f) %>% 
+    filter(libraries %in% c(5,10))) %>% 
+  bind_rows()
+snpmissN <- group_by(snpmissN, filter, libraries) %>% 
+  summarise(snps = max(snps), missingness = max(missingness))
+ggplot(snpmiss, aes(snps, libraries, col = filter)) + 
+  geom_point() + 
+  geom_line() +
+  scale_x_log10() +
+  scale_y_log10() +
+  geom_hline(yintercept = c(5, 10)) +
+  geom_vline(aes(xintercept = snps, col = filter), linetype = "dotted", data = snpmissN)
+cat("Nmin=5: --geno", filter(snpmissN, libraries == 5)$missingness)
+cat("Nmin=10: --geno", filter(snpmissN, libraries == 10)$missingness)
+```
+
+```{bash snpFilter, eval=F, echo=T}
+minds=(0.9686 0.974 0.9782 0.9811 0.9831 0.9855 0.9873 0.9891 0.9905 0.9928)
+genos5=(0.898 0.9342 0.9505 0.9615 0.9677 0.9722 0.9756 0.9785 0.9807 0.9825)
+genos10=(0.7959 0.8684 0.901 0.9231 0.9355 0.9444 0.9512 0.9571 0.9614 0.96498)
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+for i in $(seq 0 9) ; 
+  do 
+  mkdir filtered.${minds[$i]}.n5
+  $plink \
+    --bfile ../libraries_filtered/filtered.${minds[$i]}/filtered \
+    --allow-extra-chr \
+    --geno ${genos5[$i]} \
+    --missing --het --freqx --pca var-wts \
+    --make-bed --out filtered.${minds[$i]}.n5/filtered
+done
+for i in $(seq 0 9) ; 
+  do 
+  mkdir filtered.${minds[$i]}.n10
+  $plink \
+    --bfile ../libraries_filtered/filtered.${minds[$i]}/filtered \
+    --allow-extra-chr \
+    --geno ${genos10[$i]} \
+    --missing --het --freqx --pca var-wts \
+    --make-bed --out filtered.${minds[$i]}.n10/filtered
+done
+```
+
+```{r snpFilterPCA, fig.cap="PCA for SNPs obtained after filtering libraries based on missingness."}
+pcas <- lapply(list.files(file.path(path, "Sequences", "variants", "snps_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "snps_filtered", f, "filtered.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals)
+ggplot(pcas, aes(x = PCA1, y = PCA2, col = cat, 
+                 label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ filter, scales = "free") +
+  theme(strip.text.x = element_text(size = 6))
+```
+
+## Outgroup filtering
+
+We removed spurious PCA with no spatial clustering. Then, we decided to automatically removed outgroups with clustering (Fig. \@ref(fig:outgroupsDetection)), to avoid biasing the decision. And we ran new PCAs to determine population structure (Fig. \@ref(fig:outgroupFilterPCA)).
+
+```{r outgroupsDetection, fig.cap="Outgroup detection in not spurious PCAs."}
+pcasoutgroup <- group_by(pcas, filter) %>% 
+  filter(sum(PCA1) != 0) %>% 
+  cbind(group_by(pcas, filter) %>% 
+          filter(sum(PCA1) != 0) %>% 
+          dplyr::select(., PCA1, PCA2) %>% 
+          do(hc = cutree(hclust(dist(as.matrix(.))), k = 2)) %>% 
+          broom::tidy(hc)) %>% 
+  dplyr::rename(cluster = x) %>% 
+  group_by(filter, cluster) %>% 
+  mutate(N = n()) %>%
+  group_by(filter) %>% 
+  mutate(Nmin = min(N)) %>% 
+  mutate(cluster = ifelse(N == Nmin, "outgroup", "parvifolia")) %>% 
+  dplyr::select(-N, -Nmin) %>% 
+  ungroup()
+ggplot(pcasoutgroup, aes(x = PCA1, y = PCA2, col = cluster, 
+                 label = Sample)) +
+      geom_line(aes(group = IdGenetic)) +
+      geom_point(size=2, alpha = 0.5) +
+      scale_color_discrete("") +
+      theme(legend.position = "bottom") +
+      facet_wrap(~ filter, scales = "free") +
+      theme(strip.text.x = element_text(size = 6))
+```
+
+```{r outgroupFilterR, eval=F, echo=T}
+lapply(unique(pcasoutgroup$filter), function(f){
+  dir.create(file.path(path, "Sequences", "variants", "outgroup_filtered", f))
+  filter(pcasoutgroup, filter == f) %>% 
+    filter(cluster == "parvifolia") %>% 
+    mutate(FID = 0) %>% 
+    dplyr::select(FID, Sample) %>% 
+    write_tsv(file.path(path, "Sequences", "variants", "outgroup_filtered", f, "keep.list"), col_names = F)
+})
+```
+
+```{bash outgroupFilterSh, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+for filter in $(ls ./) ; 
+  do
+  $plink \
+    --bfile ../snps_filtered/$filter/filtered \
+    --allow-extra-chr \
+    --keep $filter/keep.list \
+    --missing --het --freqx --pca var-wts \
+    --make-bed --out $filter/filtered
+done
+```
+
+```{r outgroupFilterPCA, fig.cap="PCA for SNPs obtained after filtering outgroups."}
+lapply(list.files(file.path(path, "Sequences", "variants", "outgroup_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "outgroup_filtered", f, "filtered.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals) %>% 
+  ggplot(aes(x = PCA1, y = PCA2, col = cat, 
+                 label = Sample)) +
+  geom_line(aes(group = IdGenetic)) +
+  geom_point(size=2, alpha = 0.5) +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom") +
+  facet_wrap(~ filter, scales = "free") +
+  theme(strip.text.x = element_text(size = 6))
+```
