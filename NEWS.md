@@ -1,3 +1,7 @@
+# PhD 0.1.9180
+* parvicapture: filtering, structure, envgeno, growthgeno v2
+* environment: TWI vs RE
+
 # PhD 0.1.9179
 * parvicapture: filtering, structure, envgeno, growthgeno (wip)
 

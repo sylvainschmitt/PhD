@@ -110,6 +110,39 @@ trees %>%
   write_tsv(file.path(path, "gemma", "env", "env.phenotype"), col_names = F)
 ```
 
+```{r NCI, eval=F}
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("trees"))
+NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    group_by(CensusYear) %>% 
+    summarise(idTree = local(trees$idTree[ind]),
+              NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>% 
+    collect()
+})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+NC %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  summarise(NCI0 = first(NCI), NCI2017 = last(NCI)) %>% 
+  left_join(trees) %>% 
+  mutate(DeltaNCI = NCI2017 - NCI0) %>% 
+  # filter(DeltaNCI < 0)
+  ggplot(aes(DeltaNCI)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 1, col = "red", linetype = "dashed") +
+  ggtitle("Symphonia", "N = 124/372 (33.3%)")
+```
+
 ```{r NCspCorr, fig.cap="Temporal autocorrelation for NCI."}
 # cl <- parallel::makeCluster(getOption("cl.cores", 4))
 # parallel::clusterExport(cl, list("trees"))

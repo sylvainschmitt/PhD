@@ -464,9 +464,9 @@ for(sim in list.files("symcapture_save/EnvGeno",
 }
 fitTWI <- sflist2stanfit(fitTWI)
 t <- lapply(c(fitNCI, fitTWI, fitGmaxGeno), function(fit)
-  as.data.frame(fit, "alog") %>% 
-  summarise_all(median) %>% 
-  reshape2::melt(NULL)) %>% 
+  as.data.frame(fit, "alog") %>%
+  summarise_all(median) %>%
+  reshape2::melt(NULL)) %>%
   bind_rows(.id = "fit") %>% 
   mutate(fit = recode(fit, "1" = "aNCI", "2" = "aTWI", "3" = "aGmax")) %>% 
   separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
@@ -559,6 +559,20 @@ cowplot::plot_grid(g.TWI, g.a.TWI.NCI, g.a.TWI.Gmax,
                    g.var.NCI.TWI, g.NCI, g.a.NCI.Gmax,
                    g.var.DBH.TWI, g.var.DBH.NCI, g.gmax,
                    ncol=3, labels = LETTERS[1:9])
+# summary(MASS::rlm(aGmax ~ aNCI, data = t, psi = "psi.huber"))
+# summary(robustbase::lmrob(aGmax ~ aNCI, data = t))
+```
+
+```{r }
+t %>% 
+  arrange(DBHtoday) %>% 
+  mutate(DBHclass = rep(1:5, each = 75)[1:371]) %>% 
+  ggplot(aes(aGmax, aNCI, size = DBHtoday)) +
+  geom_point() +
+  facet_wrap(~ DBHclass, scales = "free") +
+  geom_smooth(method = "lm", col = "black") +
+  scale_size_continuous(guide = "none") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.9)
 ```
 
 ```{r spcorrelo, fig.cap="Spatial autocorrelogram (Moran\'s I) of variables and associated genetic multiplicative values."}

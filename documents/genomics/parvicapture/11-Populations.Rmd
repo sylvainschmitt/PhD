@@ -19,6 +19,10 @@ opts_chunk$set(
 path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
 pathCluster <- "~/Remotes/genotoul/work/PhD/data/Eschweilera_Paracou/Sequences"
 crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
+eschwcol <- c("#1b9e77", "#d95f02", "#7570b3")
+names(eschwcol) <- c("E. decolorans cluster", 
+                     "E. sagotiana cluster",
+                     "E. coriacea cluster")
 ```
 
 # Population structure
@@ -56,7 +60,7 @@ dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
 projection(wetness) <- projection(dem)
 projection(relele) <- projection(dem)
 wetness <- projectRaster(wetness, crs = crs)
-relele <- projectRaster(relele, crs = crs)
+relele <- projectRaster(relele, crs = crs) 
 ```
 
 ## Structure
@@ -197,7 +201,8 @@ lapply(unique(kmeans$filter), function(f)
   ggplot(aes(k, wss, col = filter)) +
   geom_point() +
   geom_line() +
-  xlab("K") + ylab("Within group sum of squares")
+  xlab("K") + ylab("Within group sum of squares") +
+  geom_vline(xintercept = 3, linetype = "dashed")
 ```
 
 ```{r kmeansPCA}
@@ -206,21 +211,44 @@ ggplot(kmeans, aes(x = PCA1, y = PCA2, col = as.factor(cluster),
   geom_line(aes(group = IdGenetic)) +
   geom_point(size=2, alpha = 0.5) +
   theme(legend.position = "bottom") +
-  scale_color_discrete(guide = "none") +
   facet_wrap(~ filter, scales = "free") +
-  theme(strip.text.x = element_text(size = 6))
+  theme(strip.text.x = element_text(size = 6)) +
+  scale_color_manual("Cluster", values = as.vector(eschwcol), labels = names(eschwcol))
 ```
 
 
 ```{r kmeans, fig.cap="Population structure detection in PCAs."}
-ggplot(kmeans, aes(x = Sample, y = 1, fill = cat)) + 
+kmeans %>% 
+  filter(cat != "outgroup") %>% 
+  mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
+                          "2" = "E. sagotiana cluster",
+                          "1" = "E. coriacea cluster")) %>% 
+  mutate(cat = ifelse(grepl("^o", cat), cat, paste("E.", cat))) %>% 
+  filter(filter != "filtered.0.974.n10") %>% 
+  ggplot(aes(x = Sample, y = 1, fill = cat)) + 
   geom_bar(stat = "identity") + 
   coord_flip() +
   facet_grid(cluster ~ filter, scales = "free") +
-  scale_fill_discrete("") +
   theme(axis.title = element_blank(), axis.text = element_blank(), 
         axis.line = element_blank(), axis.ticks = element_blank(),
-        strip.text.x = element_text(size = 6))
+        strip.text.x = element_text(size = 6)) +
+  scale_fill_manual("Botanial\nidentification", values = c(as.vector(eschwcol)[3], as.vector(eschwcol)[1], 
+                                                           as.vector(eschwcol)[2], "grey"))
+```
+
+```{r kmeansConfusion}
+read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>% 
+    mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
+                          "2" = "E. sagotiana cluster",
+                          "1" = "E. coriacea cluster")) %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals) %>% 
+  filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>%
+  reshape2::dcast(Species ~ cluster) %>% 
+  mutate_at(names(eschwcol), funs(round(./sum(.)*100))) %>% 
+  mutate(Species = paste0("E. ", Species)) %>% 
+  kable(caption = "Confusion matrix (percentage) between genetic cluster and botanical identification")
 ```
 
 ## Spatial
@@ -244,7 +272,7 @@ treesXY <- spTransform(treesXY, CRSobj = crs)
 treesXY$TWI <- raster::extract(wetness, treesXY)
 treesXY$RelativeElevation <- raster::extract(relele, treesXY)
 treesXY$DEM <- raster::extract(dem, treesXY)
-treespal <- colorFactor(RColorBrewer::brewer.pal(length(unique(treesXY$cluster)), "Accent"),
+treespal <- colorFactor(eschwcol,
                         as.factor(treesXY$cluster))
 leaflet() %>%
   addRasterImage(aggregate(wetness, 4),  group = "TWI", 
@@ -253,6 +281,7 @@ leaflet() %>%
              color = ~treespal(cluster), group = ~cluster) %>% 
   addLegend(pal = treespal, title = 'Clusters', 
             values = levels(as.factor(treesXY$cluster)),
+            labels = names(eschwcol), 
             position = "bottomright")
 ```
 
@@ -263,12 +292,16 @@ Environmental structure of genepools revealed more differentiation along relativ
 ```{r wetness, fig.cap="Gene pools distribution along topgraphic wetness index and relative elevation for Paracou individuals."}
 treesXY@data %>% 
   dplyr::select(filter, Sample, IdGenetic, TWI, RelativeElevation, cluster) %>% 
-  mutate(cluster = as.factor(cluster)) %>% 
+    mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
+                          "2" = "E. sagotiana cluster",
+                          "1" = "E. coriacea cluster")) %>% 
   reshape2::melt(id.vars = c("filter", "Sample", "IdGenetic", "cluster")) %>% 
   ggplot(aes(value, fill = cluster, color = cluster)) +
   geom_density(alpha = 0.3) +
-    facet_grid(variable ~ filter, scales = "free") +
-  scale_x_sqrt()
+  facet_grid(variable ~ filter, scales = "free") +
+  scale_x_sqrt() +
+  scale_color_manual("Cluster", values = as.vector(eschwcol)[c(3,1,2)]) +
+  scale_fill_manual("Cluster", values = as.vector(eschwcol)[c(3,1,2)])
 ```
 
 ## Kinship

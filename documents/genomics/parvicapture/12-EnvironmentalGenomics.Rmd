@@ -20,6 +20,10 @@ S_sqrt_trans <- function() scales::trans_new("S_sqrt",
                                              function(x) sign(x)*sqrt(abs(x)),
                                              function(x) x^2*sign(x))
 load("./parvicapture_save/Env.Rdata") 
+eschwcol <- c("#1b9e77", "#d95f02", "#7570b3")
+names(eschwcol) <- c("E. decolorans cluster", 
+                     "E. sagotiana cluster",
+                     "E. coriacea cluster")
 ```
 
 # Environmental genomics
@@ -81,24 +85,115 @@ NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
     filter(idTree != local(trees$idTree[ind])) %>% 
     mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
     filter(dij < 20) %>% 
-    mutate(con = ifelse(Genus == local(trees$Genus[ind]) && Species == local(trees$Species[ind]), 1, 0)) %>% 
     mutate(DBH = CircCorr/pi) %>% 
-    collect() %>% 
     group_by(CensusYear) %>% 
     summarise(NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
     ungroup() %>% 
+    collect() %>% 
+    arrange(CensusYear) %>% 
     summarise(idTree = local(trees$idTree[ind]),
-              NCI = mean(NCI))})
+              NCImean = mean(NCI),
+              NCI0 = first(NCI),
+              NCItoday = last(NCI))
+})
 parallel::stopCluster(cl) ; rm(cl)
 NC <- bind_rows(NC)
-trees$NCI <- NC$NCI
+trees <- cbind(trees, NC[-1])
 rm(NC)
 save(trees, file = "./parvicapture_save/Env.Rdata")
 ```
 
+```{r, eval=F}
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2015) %>% 
+  filter(Genus == "Eschweilera") %>% 
+  filter(Species %in% c("coriacea", "sagotiana", "decolorans")) %>% 
+  collect() %>% 
+  sample_n(500)
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("trees"))
+NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    group_by(CensusYear) %>% 
+    summarise(NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>%
+    arrange(CensusYear) %>% 
+    summarise(idTree = local(trees$idTree[ind]),
+              NCImean = mean(NCI),
+              NCImedian = median(NCI),
+              NCIvar = var(NCI),
+              NCI0 = first(NCI),
+              NCItoday = last(NCI)) %>% 
+    collect()
+})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+trees$NCI <- NC$NCI
+data.frame(d = as.vector(dist(trees[c("Xutm", "Yutm")]))) %>% 
+  ggplot(aes(d, fill = d < 50)) + geom_histogram() +
+  scale_x_log10() +
+  ggtitle(paste0("d<50m = ", round(nrow(filter(data.frame(d = as.vector(dist(trees[c("Xutm", "Yutm")]))), d < 50))/nrow(data.frame(d = as.vector(dist(trees[c("Xutm", "Yutm")]))))*100,2), "%")) +
+  scale_y_log10()
+data.frame(d = as.vector(dist(trees[c("Xutm", "Yutm")])),
+           nci = as.vector(dist(trees["NCI"]))) %>% 
+  filter(d < 100) %>% 
+  ggplot(aes(d, nci)) + geom_point()
+pgirmess::correlog(data.frame(trees$Xutm, trees$Yutm), trees$NCI, method = "Moran", nbclass = 70) %>%
+  as.data.frame() %>%
+  filter(dist.class < 10^3) %>%
+  ggplot(aes(x = dist.class, y = coef)) + geom_hline(yintercept = 0) +
+  geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
+  scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
+  geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
+  geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
+  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
+```
+
+```{r NCI, eval=F}
+cl <- parallel::makeCluster(getOption("cl.cores", 4))
+parallel::clusterExport(cl, list("trees"))
+NC <- parallel::parLapply(cl, 1:nrow(trees), function(ind){
+  library(tidyverse)
+  src_sqlite(file.path("../../../data/Paracou/", "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(trees$Plot[ind])) %>% 
+    filter(idTree != local(trees$idTree[ind])) %>% 
+    mutate(dij = sqrt((local(trees$Xutm[ind]) - Xutm)^2+(local(trees$Yutm[ind]) - Yutm)^2)) %>% 
+    filter(dij < 20) %>% 
+    mutate(DBH = CircCorr/pi) %>% 
+    group_by(CensusYear) %>% 
+    summarise(idTree = local(trees$idTree[ind]),
+              NCI = sum(DBH*DBH*exp(-0.25*dij))) %>% 
+    ungroup() %>% 
+    collect()
+})
+parallel::stopCluster(cl) ; rm(cl)
+NC <- bind_rows(NC)
+NC %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  summarise(NCI0 = first(NCI), NCI2017 = last(NCI)) %>% 
+  left_join(trees) %>% 
+  mutate(DeltaNCI = NCI2017 - NCI0) %>% 
+  # filter(DeltaNCI < 0)
+  ggplot(aes(DeltaNCI)) + 
+  geom_histogram() +
+  geom_vline(xintercept = 1, col = "red", linetype = "dashed") +
+  ggtitle("Eschweilera", "N = 71/257 (27.6%)")
+```
+
 ## Genetic variance
 
-We found a significant effect on the genotype on NCI, RE, and TWI. And population had a stronger effect on RE (13%) tahn TWI (6%). Nevertheless, residual variation remains high (73-88%).
+We found a significant effect on the genotype on NCI, RE, and TWI. And population had a stronger effect on RE (13%) than TWI (6%). Nevertheless, residual variation remains high (73-88%).
 
 ```{r EnvMdata}
 ids <- read_tsv(file.path(path, "..", "variants", "final", "filtered.king.id"))
@@ -114,28 +209,35 @@ K <- as.matrix(Matrix::nearPD(K)$mat)
 subtrees <- trees
 rownames(subtrees) <- subtrees$IID
 subtrees <- subtrees[row.names(K),]
-mdata <- lapply(c("TWI", "RE", "NCI"), function(variable) {
+# Removing other species
+# K <- K[subtrees$Species %in% c("coriacea", "decolorans", "sagotiana"),
+#   subtrees$Species %in% c("coriacea", "decolorans", "sagotiana")]
+# subtrees <- subtrees[subtrees$Species %in% c("coriacea", "decolorans", "sagotiana"),]
+mdata <- lapply(c("TWI", "RE", "NCImean", "NCI0", "NCItoday"), 
+                function(variable) {
   return(list(N = nrow(subtrees),
               P = 3,
               y = as.vector(scale(subtrees[variable], center = F)),
               population = subtrees$cluster,
               K = K))})
-names(mdata) <- c("TWI", "RE", "NCI")
+names(mdata) <- c("TWI", "RE", "NCImean", "NCI0", "NCItoday")
 mdata$RE$y <- mdata$RE$y + 1 # for the lognormal
 save(mdata, file = file.path("parvicapture_save", 'dataEnv.Rdata'))   
 ```
 
 ```{bash envGeno2Cluster, eval=F}
-vars=(TWI RE NCI)
+vars=(TWI RE NCImean NCI0 NCItoday)
 for var in "${vars[@]}" ; do for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript EnvGeno2.R $chain $var" ; done ; done > EnvGeno2.sh
 sarray -J Env2 -o out/%j.Env2.out -e out/%j.Env2.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL EnvGeno2.sh
-tail -n 1 out/*.Env2.out | grep Iteration
+watch 'tail -n 1 out/*.Env2.out | grep Iteration'
 ```
 
 ```{r envGeno2Tab, fig.cap="Genetic variance of individual growth potential with a lognormal animal model."}
-fitEnv <- list(TWI = list(), NCI = list(), RE = list())
-for(var in c("TWI", "NCI", "RE")){
-  for(sim in list.files("parvicapture_save/EnvGeno2", 
+vars <- c("TWI", "RE", "NCImean", "NCI0", "NCItoday")
+fitEnv <- vector("list", length(vars))
+names(fitEnv) <- vars
+for(var in vars){
+  for(sim in list.files("parvicapture_save/all/EnvGeno2", 
                         pattern = var, full.names = T)){
     load(sim)
     fitEnv[[var]] <- c(fitEnv[[var]], fit)
@@ -147,6 +249,9 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"),
   bind_rows(.id = "Variable") %>% 
   separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
   mutate(population = ifelse(is.na(population), "", population)) %>% 
+  mutate(population = recode(population, "3" =  "E. decolorans cluster", 
+                          "2" = "E. sagotiana cluster",
+                          "1" = "E. coriacea cluster")) %>% 
   kable(caption = "Summary table of the kinship growth model",
         col.names = c("Variable", "Parameter",  "Population",  
                       "Estimate", "$\\sigma$", "$\\hat{R}$"))
@@ -155,8 +260,8 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"),
 ```{r envGeno2Trace, fig.cap="Traceplot for environmental variables."}
 cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
                                      regex_pars = c("Vp", "Vg", "Vr"), 
-                                     facet_args = list(nrow = 1)),
-                   nrow = 3, labels = names(fitEnv))   
+                                     facet_args = list(nrow = 3)),
+                   labels = names(fitEnv))   
 ```
 
 ```{r envgeno2R2, fig.cap="R2 for environmental variable"}
@@ -214,27 +319,33 @@ t <- lapply(fitEnv, function(fit)
   separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
   mutate(value = exp(value)) %>% 
   reshape2::dcast(IndNum ~ fit, value.var = "value") %>%
-  cbind(mutate(trees, DBH = CircCorr/pi) %>% 
-          dplyr::select(DBH, cluster, TWI, NCI, RE) %>% 
-          dplyr::rename(TWI.var = TWI, NCI.var = NCI, RE.var = RE, pop = cluster)) %>% 
-  dplyr::rename(TWI.a = TWI, NCI.a = NCI, RE.a = RE) %>% 
+  cbind(mutate(subtrees, DBH = CircCorr/pi) %>% 
+          dplyr::select(DBH, cluster, TWI, RE, NCImean, NCI0, NCItoday) %>% 
+          dplyr::rename(TWI.var = TWI, RE.var = RE, pop = cluster, NCImean.var = NCImean, 
+                        NCI0.var = NCI0, NCItoday.var = NCItoday)) %>% 
+  dplyr::rename(TWI.gen = TWI, RE.gen = RE, NCImean.gen = NCImean, 
+                NCI0.gen = NCI0, NCItoday.gen = NCItoday) %>% 
   mutate(pop = as.factor(pop))
-reshape2::melt(t, id.vars = c("IndNum", "pop", "DBH", "NCI.a", "RE.a", "TWI.a"), 
+reshape2::melt(t, id.vars = c("IndNum", "pop", "DBH", "RE.gen", "TWI.gen", 
+                              "NCImean.gen", "NCI0.gen", "NCItoday.gen"), 
                variable.name = "variable", value.name = "variable.value") %>% 
   reshape2::melt(id.vars = c("IndNum", "pop", "DBH", "variable", "variable.value"), 
                variable.name = "genetic", value.name = "genetic.value") %>% 
   mutate(variable = gsub(".var", "", variable)) %>% 
-  mutate(genetic = gsub(".a", "", genetic)) %>% 
+  mutate(genetic = gsub(".gen", "", genetic)) %>% 
   filter(variable == genetic) %>% 
+  mutate(pop = recode(pop, "3" =  "E. decolorans cluster", 
+                      "2" = "E. sagotiana cluster",
+                      "1" = "E. coriacea cluster")) %>% 
   ggplot(aes(variable.value, genetic.value, col = pop, size = DBH)) +
   geom_point() +
   facet_wrap(~ variable, scales = "free") +
   geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
   geom_point(alpha = 0.4) +
   scale_size_continuous("DBH 2017") +
-  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
+  scale_color_manual("Cluster", values = as.vector(eschwcol)[c(3,2,1)]) +
   xlab("Variable vlaue") + ylab("Genetic multiplicative value")
-dplyr::select(t, TWI.a, RE.a, NCI.a) %>% 
+dplyr::select(t, TWI.gen, RE.gen ,NCImean.gen, NCI0.gen, NCItoday.gen) %>% 
   cor %>% 
   corrplot::corrplot.mixed()
 ```

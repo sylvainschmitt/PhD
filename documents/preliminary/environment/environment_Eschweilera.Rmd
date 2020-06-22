@@ -576,4 +576,110 @@ eschweilera %>%
   xlab('Topographic ruggedness index')
 ```
 
+# TWI-RE
+
+## Correlation
+
+### Correlation Gaph
+
+```{r corTWIREGraph}
+ggplot(eschweilera@data, aes(wetness, relele)) +
+  geom_point() +
+  geom_smooth() +
+  theme_bw()
+```
+
+### Correlation Stat
+
+```{r corTWIREStat}
+cor.test(eschweilera$wetness, eschweilera$relele)
+```
+
+## Topography
+
+### Topography Graph
+
+```{r topoTWIREgraph}
+dplyr::select(eschweilera@data, wetness, relele, dem, d_creek, slope, curvature) %>% 
+  reshape2::melt(c("wetness", "relele")) %>% 
+  reshape2::melt(c("variable", "value"), variable.name = "variable2", value.name = "value2") %>% 
+  ggplot(aes(value2, value)) +
+  geom_point() +
+  facet_grid(variable ~ variable2, scales = "free") +
+  geom_smooth(method = "lm") +
+  theme_bw()
+```
+
+### Topography Stat
+
+```{r topoTWIREstat}
+dplyr::select(eschweilera@data, wetness, relele, dem, d_creek, slope, curvature) %>% 
+  reshape2::melt(c("wetness", "relele")) %>% 
+  group_by(variable) %>% 
+  do(m= aov(lm(value ~ wetness + relele, data = .))) %>% 
+  broom::tidy(m) %>% 
+  mutate(R2 = round(sumsq/sum(sumsq)*100)) %>% 
+  ggplot(aes(x = variable, fill = term)) +
+  geom_col(aes(y = R2)) +
+  geom_text(aes(y = R2, label = R2), col = "white", position = position_stack(vjust = .5)) +
+  theme_bw()
+```
+
+## Soil
+
+### Soil Graph
+
+```{r soilTWIREgraph}
+proj4string(soil) <- crs(dem)
+soil$wetness <- raster::extract(wetness, soil)
+soil$relele <- raster::extract(relele, soil)
+dplyr::select(soil@data, wetness, relele, Refus, MO, 
+              C, N, C_N, Polsen, PBray2, Al_KCl, Mg_ech, K_ech, Na_ech, S, CEC, TS) %>% 
+  reshape2::melt(c("wetness", "relele")) %>% 
+  reshape2::melt(c("variable", "value"), variable.name = "variable2", value.name = "value2") %>% 
+  ggplot(aes(value2, value)) +
+  geom_point() +
+  facet_wrap(~ variable2 + variable, scales = "free") +
+  geom_smooth(method = "lm") +
+  theme_bw()
+```
+
+### Soil Statistics
+
+```{r soilTWIREstat}
+dplyr::select(soil@data, wetness, relele, Refus, MO, 
+              C, N, C_N, Polsen, PBray2, Al_KCl, Mg_ech, K_ech, Na_ech, S, CEC, TS) %>% 
+  reshape2::melt(c("wetness", "relele")) %>% 
+  group_by(variable) %>% 
+  do(m= aov(lm(value ~ wetness + relele, data = .))) %>% 
+  broom::tidy(m) %>% 
+  mutate(R2 = round(sumsq/sum(sumsq)*100)) %>% 
+  ggplot(aes(x = variable, fill = term)) +
+  geom_col(aes(y = R2)) +
+  geom_text(aes(y = R2, label = R2), col = "white", position = position_stack(vjust = .5)) +
+  theme_bw()
+```
+
+## Hydrology
+
+### Hydrology Graph
+
+```{r hydroTWIREgraph}
+dplyr::select(eschweilera@data, wetness, relele, wtd, hydromorphy, waterlog) %>% 
+  reshape2::melt(c("wetness", "relele")) %>% 
+  reshape2::melt(c("variable", "value"), variable.name = "variable2", value.name = "value2") %>% 
+  na.omit() %>% 
+  ggplot(aes(value, value2)) +
+  geom_boxplot() +
+  coord_flip() +
+  facet_grid(variable ~ variable2, scales = "free") +
+  theme_bw()
+```
+
+### Hydrology Statistics
+
+```{r hydroTWIREstat}
+```
+
+
 # References
