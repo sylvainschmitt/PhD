@@ -1,0 +1,141 @@
+```{r setup_pogenom, include=FALSE, eval=T}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+library(bayesplot)
+library(rstan)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F, eval = T)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x))
+pairs_stan <- function(chain, stan_model, pars) {
+  energy <- as.matrix(sapply(get_sampler_params(stan_model, inc_warmup = F), 
+                             function(x) x[,"energy__"]))
+  pars <- rstan::extract(stan_model, pars = pars, permuted = F)
+  df <- data.frame(energy[,chain], pars[,chain,])
+  names(df)[1] <- "energy"
+  GGally::ggpairs(df, title = paste0("Chain", chain), 
+                  lower = list(continuous = GGally::wrap("points", alpha = 0.2)))
+}
+eschwcol <- c("#1b9e77", "#d95f02", "#7570b3")
+names(eschwcol) <- c("E. decolorans cluster", 
+                     "E. sagotiana cluster",
+                     "E. coriacea cluster") 
+```
+
+# Population genomics
+
+## $F_{st}$
+
+$F_{st}$ between population was globally high with value from 0.33 to 0.42 (Fig. \@ref(fig:FstR)).
+
+```{bash Fst, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+$plink --bfile filtered --allow-extra-chr --recode vcf-iid --out filtered
+pop=(coriacea sagotiana decolorans) 
+for i in $(seq 3) ; 
+  do
+  grep "\s$i" filtered.kmeans | cut -f1 > "${pop[i-1]}".list
+done 
+mkdir fst
+pop1=(coriacea coriacea decolorans) 
+pop2=(decolorans sagotiana sagotiana) 
+for i in $(seq 3) ; 
+  do 
+  vcftools --vcf filtered.vcf \
+    --weir-fst-pop "${pop1[i-1]}".list \
+    --weir-fst-pop "${pop2[i-1]}".list \
+    --out fst/"${pop1[i-1]}"_"${pop2[i-1]}" &
+done
+```
+
+```{r FstR, fig.cap="Between populations Fst estimated by `vcftools`."}
+lapply(list.files(file.path(path, "..", "variants", "final", "fst"), pattern = ".log"), function(file)
+  read_delim(file.path(path, "..", "variants", "final", "fst", file), skip = 15, delim = ":",
+  col_names = c("variable", "value")) %>% 
+    mutate(file = file)) %>% 
+  bind_rows() %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = as.numeric(value)) %>% 
+  mutate(variable = ifelse(grepl("mean", variable), "meanFst", "weightedFst")) %>% 
+  separate(file, c("Pop1", "Pop2", "log"), sep = "[:punct:]") %>% 
+  dplyr::select(-log) %>% 
+  ggplot(aes(Pop1, Pop2, label = value, fill = value)) +
+  geom_tile() +
+  geom_text(col = "white") +
+  facet_wrap(~ variable) +
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank()) +
+  scale_fill_gradient(high = "#132B43", low = "#56B1F7")
+```
+
+## Bayescan
+
+```{bash bayescan, eval=F, echo=T}
+module load bioinfo/plink-v1.90b5.3
+module load bioinfo/PGDSpider_2.1.1.5
+module load bioinfo/BayeScan2.1
+plink \
+  --bfile ../../variants/final/filtered \
+  --allow-extra-chr \
+  --maf 0.05 \
+  --make-bed \
+  --recode vcf-iid \
+  --out filtered
+java -Xmx100G -Xms90G -jar $PGD_HOME/PGDSpider2-cli.jar \
+	-inputfile filtered.vcf \
+	-inputformat VCF \
+	-outputfile filtered.bayescan \
+	-outputformat GESTE_BAYE_SCAN \
+	-spid vcf2baypass.spid
+BayeScan -threads 10 \
+	filtered.bayescan \
+	> filtered.bayescan.output
+plink  \
+  --bfile filtered \
+  --allow-extra-chr \
+  --extract bayescan.snps.list \
+  --recode A \
+  --out bayescan.snps
+```
+
+```{r bayescanConvergence, fig.cap="Population Fst convergence." }
+read_delim(file.path(path, "bayescan", "filtered.baye.sel"), 
+                    delim = " ", skip = 1, col_names = c("iter", "LogL", paste0("Fst", 1:3))) %>% 
+  mutate(LogL = as.numeric(LogL)) %>%
+  dplyr::select(-iter, -LogL) %>%
+  mcmc_combo()
+```
+
+```{r bayescanOutliers, fig.cap="Genotype-specific SNPs."}
+bayescan <- read.table(file.path(path, "bayescan", "filtered.baye_fst.txt")) %>% 
+  mutate(snpNb = as.numeric(row.names(.))) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
+  left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
+  mutate(snpNb = 1:nrow(.))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
+filter(bayescan, qval < 0.05) %>%
+  dplyr::select(snp) %>%
+  write_tsv(file.path(path, "bayescan", "bayescan.snps.list"), col_names = F)
+ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  ggtitle("4 020 significant SNPs (5.7%)", 
+          "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
+```

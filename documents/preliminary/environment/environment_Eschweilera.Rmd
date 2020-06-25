@@ -679,6 +679,21 @@ dplyr::select(eschweilera@data, wetness, relele, wtd, hydromorphy, waterlog) %>%
 ### Hydrology Statistics
 
 ```{r hydroTWIREstat}
+dplyr::select(eschweilera@data, wetness, relele, wtd, hydromorphy, waterlog) %>% 
+    reshape2::melt(c("wtd", "hydromorphy", "waterlog")) %>% 
+  group_by(variable) %>% 
+  do(m= aov(lm(value ~ wtd + hydromorphy + waterlog, data = .))) %>% 
+  broom::tidy(m) %>%   
+  mutate(R2 = round(sumsq/sum(sumsq)*100)) %>% 
+  ggplot(aes(x = variable, fill = term)) +
+  geom_col(aes(y = R2)) +
+  geom_text(aes(y = R2, label = R2), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme_bw()
+```
+
+```{r eval=F}
+
 ```
 
 

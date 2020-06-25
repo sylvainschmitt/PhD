@@ -79,6 +79,10 @@ dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
 projection(wetness) <- projection(dem)
 wetness <- projectRaster(wetness, crs = crs)
 trees$TWI <- raster::extract(wetness, treesXY)
+relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
+                            "topography", "RelativeElevation_1m.tif"))
+projection(relele) <- projection(dem)
+trees$RE <- raster::extract(relele, treesXY)
 rm(dem, wetness, treesXY)
 cl <- parallel::makeCluster(getOption("cl.cores", 4))
 parallel::clusterExport(cl, list("trees"))
@@ -104,9 +108,10 @@ trees <- left_join(trees, NC)
 rm(NC)
 save(trees, file = "./symcapture_save/Env.Rdata")
 trees %>%
-  dplyr::select(FID, IID, TWI, NCI) %>%
+  dplyr::select(FID, IID, TWI, NCI, RE) %>%
   mutate(TWI = RNOmni::rankNorm(TWI)) %>%
   mutate(NCI = RNOmni::rankNorm(NCI)) %>%
+  mutate(RE = RNOmni::rankNorm(RE)) %>%
   write_tsv(file.path(path, "gemma", "env", "env.phenotype"), col_names = F)
 ```
 
@@ -193,7 +198,7 @@ K <- as.matrix(K)
 trees <- trees %>% 
   filter(IID %in% colnames(K)) %>% 
   mutate(IndNum = 1:nrow(.), popNum = as.numeric(as.factor(pop)))
-mdata <- lapply(c("TWI", "NCI"), function(variable) {
+mdata <- lapply(c("TWI", "RE", "NCI"), function(variable) {
                 K <- K[trees$IID, trees$IID]
                 K[K < 0] <- 0
                 K <- K*2
@@ -203,15 +208,9 @@ mdata <- lapply(c("TWI", "NCI"), function(variable) {
                             y = as.vector(scale(trees[variable], center = F)),
                                           population = trees$popNum,
                                           K = K))})
-names(mdata) <- c("TWI", "NCI")
+names(mdata) <- c("TWI", "RE", "NCI")
+mdata$RE$y <- mdata$RE$y + 1 # for the lognormal
 save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))   
-```
-
-```{r, eval=F}
-# quick idea not working
-mutate(trees, He = as.numeric(unlist(read_delim(file.path(path, "..", "variantCalling", "growth", "growth.het"), delim = " ")["           F"]))) %>% 
-  ggplot(aes(NCI, He)) + geom_point() + geom_smooth() +
-  ggpubr::stat_cor(method = "pearson", label.x = 6000, label.y = -0.5)
 ```
 
 ## Genetic variance
@@ -246,14 +245,14 @@ We fitted the equivalent model with following priors:
 The model converged (Fig. \@ref(fig:envGenoTrace)) well for TWI but had some known diffuclties (see previous chapter) for NCI due to a low residual variation ($V_{R,NCI}=0.04$). We had two constrated results with most of the explained variation mainly attributed to the genotype for NCI (85%) and the majority attributed to population for TWI (42%). Still population explained 12% of NCI and genotype 4% of TWI. Finally, remaining variattion was almost null (3%) for NCI whereas important for TWI (54%) (Tab. \@ref(tab:envGenoTab) and Fig. \@ref(fig:envGenoR2) and \@ref(fig:envGenoVarPart)).
 
 ```{bash envGenoCluster, eval=F}
-vars=(TWI NCI)
+vars=(TWI RE NCI)
 for var in "${vars[@]}" ; do for chain in $(seq 8) ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript EnvGeno.R $chain $var" ; done ; done > EnvGeno.sh
 sarray -J Env -o out/%j.Env.out -e out/%j.Env.err -t 48:00:00 --constraint=broadwell --cpus-per-task=1 --mail-type=BEGIN,END,FAIL EnvGeno.sh
 ```
 
 ```{r envGenoTab, fig.cap="Genetic variance of individual growth potential with a lognormal animal model."}
-fitEnv <- list(TWI = list(), NCI = list())
-for(var in c("TWI", "NCI")){
+fitEnv <- list(TWI = list(), RE = list(), NCI = list())
+for(var in c("TWI", "RE", "NCI")){
   for(sim in list.files("symcapture_save/EnvGeno", 
                         pattern = var, full.names = T)){
     load(sim)
@@ -277,7 +276,7 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"),
 cowplot::plot_grid(plotlist = lapply(fitEnv, mcmc_trace, 
                                      regex_pars = c("Vp", "Vg", "Vr"), 
                                      facet_args = list(nrow = 1)),
-                   nrow = 2, labels = names(fitEnv))   
+                   nrow = 3, labels = names(fitEnv))
 ```
 
 ```{r envgenoR2, fig.cap="R2 for environmental variable"}
@@ -307,8 +306,8 @@ lapply(fitEnv, pars = c("Vp", "Vg", "Vr"), as.data.frame) %>%
   geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
   ylab(expression(R^2)) +  
   theme(axis.title.y = element_blank()) +
-  facet_wrap(~ model, nrow = 2) +
-  coord_flip()   
+  facet_wrap(~ model, nrow = 3) +
+  coord_flip()
 ```
 
 ```{r envGenoVarPart, fig.cap="Genetic variance partitionning for environmental variables."}
@@ -323,10 +322,10 @@ lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>%
   facet_wrap(~ variable, scales = "free") +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
         axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2))  
+  scale_fill_discrete(expression(sigma^2))
 ```
 
-```{r aTWInNCI, fig.cap="Multiplicative", fig.height=8, fig.width=8}
+```{r aTWInNCI, fig.cap="Multiplicative"}
 t <- lapply(fitEnv, function(fit)
   as.data.frame(fit, "alog") %>% 
     summarise_all(median) %>% 
@@ -334,47 +333,30 @@ t <- lapply(fitEnv, function(fit)
   bind_rows(.id = "fit") %>% 
   separate(variable, c("X1", "IndNum", "X2"), convert = T) %>% 
   mutate(value = exp(value)) %>% 
-  reshape2::dcast(IndNum ~ fit, value.var = "value") %>% 
-  left_join(trees, by = "IndNum", suffix = c(".a", ".var")) %>% 
-  mutate(DBH = CircCorr/pi)
-g.main <- ggplot(t, aes(NCI.a, TWI.a, size = DBH)) +
-  geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
-  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
-  geom_smooth(method = "lm", col = "black") +
-  geom_point(aes(col = pop), alpha = 0.4) +
-  scale_size_continuous(guide = "none") +
-  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
-  xlab("Multiplicative genetic value for NCI") +
-  ylab("Multiplicative genetic value for TWI") +
-  ggpubr::stat_cor(method = "pearson", label.x = 0.9, label.y = 0.9)
-g.NCI <- ggplot(t, aes(NCI.a, NCI.var/10^4, col = pop, size = DBH)) +
-  geom_vline(xintercept = 1, linetype = "dashed", col = "lightgrey") +
-  geom_point(alpha = 0.4) +
-  scale_size_continuous(guide = "none") +
+  reshape2::dcast(IndNum ~ fit, value.var = "value") %>%
+  cbind(mutate(trees, DBH = CircCorr/pi) %>% 
+          dplyr::select(DBH, pop, TWI, RE, NCI) %>% 
+          dplyr::rename(TWI.var = TWI, RE.var = RE, NCI.var = NCI)) %>% 
+  dplyr::rename(TWI.gen = TWI, RE.gen = RE, NCI.gen = NCI) %>% 
+  mutate(pop = as.factor(pop))
+reshape2::melt(t, id.vars = c("IndNum", "pop", "DBH", "RE.gen", "TWI.gen", "NCI.gen"), 
+               variable.name = "variable", value.name = "variable.value") %>% 
+  reshape2::melt(id.vars = c("IndNum", "pop", "DBH", "variable", "variable.value"), 
+               variable.name = "genetic", value.name = "genetic.value") %>% 
+  mutate(variable = gsub(".var", "", variable)) %>% 
+  mutate(genetic = gsub(".gen", "", genetic)) %>% 
+  filter(variable == genetic) %>% 
+  ggplot(aes(variable.value, genetic.value, col = pop, size = DBH)) +
+  geom_point() +
   scale_color_manual("", values = c("#1E90FF", "#0000EE", "#CD2626")) +
-  ylab("Individual NCI (/10^4)") +
-  scale_x_continuous(position = "top") +
-  theme(axis.title.x = element_blank(),
-        legend.position = c(0.5, 0.9))
-g.TWI <- ggplot(t, aes(TWI.var,  TWI.a, col = pop, size = DBH)) +
+  facet_wrap(~ variable, scales = "free") +
   geom_hline(yintercept = 1, linetype = "dashed", col = "lightgrey") +
   geom_point(alpha = 0.4) +
   scale_size_continuous("DBH 2017") +
-  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
-  xlab("TWI") +
-  scale_y_continuous(position = "right") +
-  theme(axis.title.y = element_blank(),
-        legend.position = c(0.9, 0.2))
-g.comp <- ggplot(t, aes(TWI.var, NCI.var/10^4, size = DBH)) +
-  geom_point(aes(col = pop), alpha = 0.4) +
-  scale_size_continuous(guide = "none") +
-  scale_color_manual(guide = "none", values = c("#1E90FF", "#0000EE", "#CD2626")) +
-  scale_y_continuous(position = "right") +
-  scale_x_continuous(position = "top") +
-  theme(axis.title = element_blank()) +
-  ggpubr::stat_cor(method = "pearson", label.x = 4, label.y = 0.7)
-cowplot::plot_grid(g.TWI, g.main, g.comp, g.NCI, 
-                   ncol=2, labels = c("A", "B", "C", "D")) 
+  xlab("Variable vlaue") + ylab("Genetic multiplicative value")
+dplyr::select(t, TWI.gen, RE.gen ,NCI.gen) %>% 
+  cor %>% 
+  corrplot::corrplot.mixed()
 ```
 
 ## Association
@@ -427,7 +409,7 @@ lmm <- lapply(list.files(file.path(path, "gemma", "env"),
   mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//gemma/env/LMM.", "", file)) %>% 
   mutate(file = gsub(".assoc.txt", "", file)) %>%
   separate(file, c("population", "variable"), sep = ".var") %>% 
-  mutate(variable = recode(variable, "1" = "TWI",  "2" = "NCI")) %>% 
+  mutate(variable = recode(variable, "1" = "TWI",  "2" = "NCI", "3" = "RE")) %>% 
   left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
               dplyr::rename(rs = snp)) %>% 
   mutate(qval = p.adjust(p_wald, "fdr")) %>%

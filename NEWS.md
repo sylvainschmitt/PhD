@@ -1,3 +1,10 @@
+# PhD 0.1.9181
+* parvicapture: Fst & bayescan
+* symcapture: envgenom RE
+* symcapture: manuscript: biblio, outlines 3, outlines 4
+* environment: TWI vs RE continue
+* thesis: chapter 3 4 formatting w Orcid
+
 # PhD 0.1.9180
 * parvicapture: filtering, structure, envgeno, growthgeno v2
 * environment: TWI vs RE
