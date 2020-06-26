@@ -1,3 +1,6 @@
+# PhD 0.1.9182
+* symcapture: manuscript: outlines 4 shared
+
 # PhD 0.1.9181
 * parvicapture: Fst & bayescan
 * symcapture: envgenom RE

@@ -74,6 +74,45 @@ rm(env)
 save(trees, file = "./parvicapture_save/Env2.Rdata")  
 ```
 
+```{r, eval=F}
+src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus %in% c("Symphonia", "Eschweilera"), 
+         Species %in% c("globulifera", "sagotiana", "coriacea", "decolorans")) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  filter(!(CodeMeas %in% c(4))) %>% 
+  collect() %>% 
+  group_by(idTree) %>% 
+  mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
+         DBHtoday = dplyr::last(DBH), N = n())  %>% 
+  ungroup() %>% 
+  dplyr::select(Genus, Species, Plot, idTree, Y0, DBH0, DBHtoday, N) %>% 
+  unique() %>% 
+  mutate(Treatment = ifelse(Plot %in% c(1, 6, 11, 13:16), "C", "T")) %>% 
+   ggplot(aes(Treatment, (DBHtoday - DBH0)/(2017-Y0), fill = Genus)) +
+  geom_boxplot()
+src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus %in% c("Symphonia", "Eschweilera", "Eperua", "Qualea", "Dicorynia")) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  filter(!(CodeMeas %in% c(4))) %>% 
+  collect() %>% 
+  group_by(idTree) %>% 
+  mutate(Y0 = dplyr::first(CensusYear), DBH0 = dplyr::first(DBH), 
+         DBHtoday = dplyr::last(DBH), N = n())  %>% 
+  mutate(DeltaDBH = (DBHtoday - DBH0)/(2017-Y0)) %>% 
+  group_by(Genus) %>% 
+  mutate(m = median(DeltaDBH)) %>% 
+  ungroup() %>% 
+  dplyr::select(Genus, m, DeltaDBH) %>% 
+  unique() %>% 
+  mutate(Genus = fct_reorder(Genus, desc(m))) %>%
+  ggplot(aes(Genus, , fill = Genus)) +
+  geom_boxplot()
+```
+
 ```{r mdata}
 ids <- read_tsv(file.path(path, "..", "variants", "final", "filtered.king.id"))
 K <- read_tsv(file.path(path, "..", "variants", "final", "filtered.king"),
