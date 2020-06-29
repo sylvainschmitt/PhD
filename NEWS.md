@@ -1,3 +1,6 @@
+# PhD 0.1.9183
+* thesis: introduction begins
+
 # PhD 0.1.9182
 * symcapture: manuscript: outlines 4 shared
 
