@@ -162,7 +162,8 @@ ggplot(hills, aes(x = Xutm, y = Yutm)) +
                                     data = data.frame(genus = "Eschweilera")) +
   theme(axis.title = element_blank(),
         legend.position = "bottom", legend.text = element_text(face = "italic"),
-        strip.background = element_blank(), strip.text.x = element_blank()) 
+        strip.background = element_blank(), strip.text.x = element_blank())  +
+  guides( col = guide_legend(nrow = 2, byrow = T))
 ```
 
 ```{r symphospecies, fig.cap="Admixture plot of *Symphonia* individuals for the best K = 3.", fig.width=6, fig.height=3}
@@ -210,7 +211,7 @@ read_delim(file.path("../../../../data/Eschweilera_Paracou/Sequences/", "variant
   scale_color_manual("", values = spcol[c(3,1,2)])
 ```
 
-```{r SpDistVar, fig.cap="Species distribution (**A**) and individual variance partitionning (**B**) along topography. In subfigure **A**, individuals density per species identified is given along the tropographic wetness (TWI) and the logarithm of relative elevation (log(RE+1)). In subfigure **B**, individual variation along the tropographic wetness index (TWI) and the relative elevation (RE) is partitionned with the Animal model into between-species (red), between-genotypes (green) and residual (blue).", fig.width=10, fig.height=6}
+```{r SpDistVar, fig.cap="Species distribution (**A**) and individual variance partitionning (**B**) along topography. In subfigure **A**, individuals density per species identified is given along the tropographic wetness (TWI) and the logarithm of relative elevation (log(RE+1)). In subfigure **B**, individual variation along the tropographic wetness index (TWI) and the relative elevation (RE) is partitionned with the Animal model into between-species (red), between-genotypes (green) and residual (blue).", fig.width=11, fig.height=6}
 wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
                             "topography", "TWI_1m.tif"))
 relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
@@ -223,17 +224,18 @@ wetness <- projectRaster(wetness, crs = crs)
 relele <- projectRaster(relele, crs = crs)
 trees$TWI <- raster::extract(wetness, trees)
 trees$RE <- raster::extract(relele, trees)
-gl <- trees@data %>% 
+gl.legend <- cowplot::get_legend(trees@data %>%
   mutate(RE = log(RE+1)) %>% 
   reshape2::melt(id.vars = c("Ind", "genus", "species")) %>% 
   mutate(variable = recode(variable, "TWI" = "Topographic wetness index",
                            "RE" = "log(Relative elevation + 1)")) %>% 
   ggplot(aes(value, fill = species, color = species)) +
   geom_density(alpha = 0.1) +
-  facet_wrap(~ variable, scales = "free", nrow = 2) +
-  scale_color_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
-  scale_fill_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
-  theme(legend.position = "bottom", legend.text = element_text(face = "italic"))
+  facet_grid(genus ~ variable, scales = "free") +
+  scale_color_manual("Species", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
+  scale_fill_manual("Species", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  guides(fill = guide_legend(nrow = 2, byrow = T), col = guide_legend(nrow = 2, byrow = T)))
 fitSympho <- list(TWI = list(), RE = list())
 for(var in c("TWI", "RE")){
   for(sim in list.files("../symcapture_save/EnvGeno", 
@@ -256,7 +258,7 @@ fitParvi <- lapply(fitParvi, rstan::sflist2stanfit)
 names(fitParvi) <- paste0("Eschweilera.", names(fitParvi))
 fitEnv <- c(fitSympho, fitParvi)
 rm(fitSympho, fitParvi)
-gr <- lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+gr.legend <- cowplot::get_legend(lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
   bind_rows(.id = "variable") %>% 
   mutate(parameter = recode(parameter, "Vp" = "Species", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
   group_by(variable) %>%
@@ -265,19 +267,66 @@ gr <- lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>%
   group_by(genus, variable) %>%
   mutate(m2 = m/sum(m)) %>% 
   ungroup() %>% 
-  mutate(variable = recode_factor(variable, "TWI" = "Topographic wetness index",
-                           "RE" = "Relative elevation")) %>% 
-  ggplot(aes(x = genus, fill = parameter)) +
+  mutate(variable = recode_factor(variable, "RE" = "Relative elevation",
+                                  "TWI" = "Topographic wetness index")) %>% 
+  ggplot(aes(x = variable, fill = parameter)) +
   geom_col(aes(y = m2)) +
   geom_text(aes(y = m2, label = pct), col = "white", position = position_stack(vjust = .5)) +
-  facet_wrap(~ variable, scales = "free", nrow = 2) +
+  facet_wrap(~ genus, scales = "free", nrow = 2) +
   coord_flip() +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.text.x = element_blank(), axis.line.x = element_blank(),
         axis.ticks.x = element_blank(), axis.line.y = element_blank(),
-        legend.position = "bottom", axis.text.y = element_text(face = "italic")) +
-  scale_fill_discrete(expression(sigma^2))
-cowplot::plot_grid(gl, gr, labels = LETTERS[1:2])
+        legend.position = "bottom", strip.text = element_text(face = "italic")) +
+  scale_fill_grey(expression(sigma^2)) +
+  guides(fill = guide_legend(nrow = 3, byrow = T)))
+bars <- lapply(fitEnv, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vr")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(parameter = recode(parameter, "Vp" = "Species", "Vg" = "Genotype", "Vr" = "Residual")) %>% 
+  group_by(variable) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  separate(variable, c("genus", "variable")) %>% 
+  group_by(genus, variable) %>%
+  mutate(m2 = m/sum(m)) %>% 
+  ungroup() %>% 
+  mutate(variable = recode_factor(variable, "RE" = "Relative elevation",
+                                  "TWI" = "Topographic wetness index")) %>% 
+  group_by(genus, variable) %>% 
+  do(g = ggplot(data = ., aes(x = variable, fill = parameter)) +
+       geom_col(aes(y = m2)) +
+       geom_text(aes(y = m2, label = pct), col = "white", position = position_stack(vjust = .5)) +
+       theme(axis.title = element_blank(), axis.text = element_blank(), axis.line = element_blank(), 
+             axis.ticks = element_blank()) +
+       scale_fill_grey(guide = "none"))
+densities <- trees@data %>%
+  mutate(RE = log(RE+1)) %>% 
+  reshape2::melt(id.vars = c("Ind", "genus", "species")) %>% 
+  mutate(variable = recode(variable, "TWI" = "Topographic wetness index",
+                           "RE" = "log(Relative elevation + 1)")) %>% 
+  group_by(genus, variable) %>% 
+  do(g = ggplot(data = ., aes(value, fill = species, color = species)) +
+       geom_density(alpha = 0.1) +
+       facet_grid(genus ~ variable, scales = "free") +
+       scale_color_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
+       scale_fill_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
+       theme(legend.position = "none"))
+g.white <- qplot(1:10, 1:10, geom="blank") +
+  theme(axis.title = element_blank(), axis.line = element_blank(), 
+        axis.ticks = element_blank(), axis.text = element_blank())
+cowplot::plot_grid(densities$g[[1]], 
+                   bars$g[[2]], 
+                   densities$g[[2]], 
+                   bars$g[[1]],
+                   densities$g[[3]], 
+                   bars$g[[4]], 
+                   densities$g[[4]], 
+                   bars$g[[3]],
+                   g.white,
+                   gl.legend,
+                   g.white,
+                   gr.legend,
+                   nrow = 3, rel_widths = c(3,1,3,1), rel_heights = c(3,3,1),
+                   labels = c("A", "", "B", "", "C", "", "D", ""))
 ```
 
 # References
