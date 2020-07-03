@@ -592,6 +592,40 @@ cor %>%
   xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
 ```
 
+```{r, eval=F}
+load("../../functional/functional_save/Individuals.Rdata")
+left_join(t, dplyr::select(Individuals, idTree, SLA, LDMC, LT, LA, CC)) %>% 
+  filter(DBHtoday > 14, DBHtoday < 46) %>% 
+  mutate(logLA = log(LA)) %>% 
+  dplyr::select(pop, idTree, aNCI, aGmax, SLA, LDMC, LT, logLA, CC, DBHtoday) %>% 
+  reshape2::melt(c("pop", "idTree", "aNCI", "aGmax"), variable.name = "trait") %>% 
+  group_by(trait) %>% 
+  mutate(value = as.vector(scale(value))) %>% 
+  reshape2::melt(c("pop", "idTree", "trait", "value"),
+                 value.name = "geneticValue") %>% 
+  na.omit() %>% 
+  ggplot(aes(geneticValue, value)) +
+  geom_point(alpha = 0.3) +
+  facet_grid(trait ~ variable, scales = "free") +
+  geom_smooth(method = "lm") +
+  ggpubr::stat_cor(method = "pearson", label.x = 1, label.y = -3) +
+  xlab("Genotypic value") +
+  ylab("Standardized trait value") +
+  theme(legend.position = "bottomright")
+```
+
+```{r, eval=F}
+ggplot(t, aes(DBHtoday, Gmax)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") +
+  ggpubr::stat_cor(method = "pearson", label.x = 40, label.y = 0)
+ggplot(t, aes(DBHtoday, aGmax)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") +
+  ggpubr::stat_cor(method = "pearson", label.x = 40, label.y = 0.5)
+```
+
+
 ```{r outlines, eval=F}
 save(fitGmaxGeno, fitNCI, t, cor, file = "symcapture_save/outlines.Rdata")
 ```
