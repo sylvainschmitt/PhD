@@ -1,3 +1,6 @@
+# PhD 0.1.9191
+* genomics:manuscripts:outlines3growth
+
 # PhD 0.1.9190
 * thesis:introduction:plan
 
