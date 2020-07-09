@@ -2,18 +2,18 @@
 title: Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes
 date: '`r Sys.Date()`'
 output:
-  bookdown::word_document2:
-    reference_docx: ./template/template.docx
+  bookdown::html_document2:
+    number_sections: no
+    toc: yes
+    toc_float: yes
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: no
     toc: no
-  bookdown::html_document2:
-    number_sections: no
-    toc: yes
-    toc_float: yes
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -21,8 +21,6 @@ link-citations: yes
 gdoc_id: 1fy-UVVtWqfwiFkqycxaxYoNM8I2_oh8bMEVcy6BjfkQ
 ---
  
-# Outlines 4
-
 The tremendous biodiversity of tropical forests [@Gaston2000] have intrigued biologists for decades [@connell_diversity_1978]. 
 Lowland Amazonia alone is estimated to shelter around sixteen thousand tree species [@TerSteege2013]. 
 But the five thousand species of trees described in Amazonia belong to only height hundred ten genera [@TerSteege2013], 
@@ -120,9 +118,9 @@ names(spcol) <- c("E. decolorans", "E. sagotiana", "E. coriacea", "S. globulifer
 ```
 
 ```{r maps, fig.cap="Map of sampled individuals for species complexes *Symphonia* and *Echweilera* clade Parvifolia. Color represent species determined with genetic structure and not orignial botanical identification. Grey level represents hillshading to visualize topography.", fig.width=6, fig.height=5}
-load("../symcapture_save/Env.Rdata")
+load("../symcapture/symcapture_save/Env.Rdata")
 symphonia <- trees
-load("../../parvicapture/parvicapture_save//Env.Rdata")
+load("../parvicapture/parvicapture_save/Env.Rdata")
 eschweilera <- trees
 trees <- bind_rows(
   mutate(symphonia, genus = "Symphonia") %>% 
@@ -167,10 +165,10 @@ ggplot(hills, aes(x = Xutm, y = Yutm)) +
 ```
 
 ```{r symphospecies, fig.cap="Admixture plot of *Symphonia* individuals for the best K = 3.", fig.width=6, fig.height=3}
-pophelper::readQ(file.path("../../../../data/Symphonia_Paracou/Sequences/populationGenomics/",
+pophelper::readQ(file.path("../../../data/Symphonia_Paracou/Sequences/populationGenomics/",
                            "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.3.Q"))[[1]] %>%
   dplyr::rename(Ssp1 = Cluster1, SgParacou = Cluster2, SgRegina = Cluster3) %>%
-  mutate(Ind = gsub(".g.vcf", "", read_tsv(file.path("../../../../data/Symphonia_Paracou/Sequences", "variantCalling", "paracou",
+  mutate(Ind = gsub(".g.vcf", "", read_tsv(file.path("../../../data/Symphonia_Paracou/Sequences", "variantCalling", "paracou",
                                                      "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
                                            col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype"))$IID)) %>%
   arrange(desc(Ssp1), desc(SgParacou), desc(SgRegina)) %>%
@@ -193,13 +191,13 @@ include_graphics("figures/symphoniamorphotypes.png")
 ```
 
 ```{r parvispecies, fig.cap="Principal component analysis (PCA) of single nucleotide polymorphisms (SNP) from *Eschweilera* clade Parvifolia. The colors represent the cluster detected with Kmeans for the best K = 3.", fig.height=5, fig.width=5}
-vars <- read_delim(file.path("../../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenval"), 
+vars <- read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenval"), 
                delim = " ", col_names = "var")
-read_delim(file.path("../../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenvec"),
+read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
   separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
-  left_join(read_tsv(file.path("../../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.kmeans"))) %>% 
+  left_join(read_tsv(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.kmeans"))) %>% 
   mutate(species = recode(cluster, "3" =  "E. decolorans", 
                           "2" = "E. sagotiana",
                           "1" = "E. coriacea")) %>% 
@@ -212,12 +210,9 @@ read_delim(file.path("../../../../data/Eschweilera_Paracou/Sequences/", "variant
 ```
 
 ```{r SpDistVar, fig.cap="Species distribution (**A**) and individual variance partitionning (**B**) along topography. In subfigure **A**, individuals density per species identified is given along the tropographic wetness (TWI) and the logarithm of relative elevation (log(RE+1)). In subfigure **B**, individual variation along the tropographic wetness index (TWI) and the relative elevation (RE) is partitionned with the Animal model into between-species (red), between-genotypes (green) and residual (blue).", fig.width=11, fig.height=6}
-wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
-                            "topography", "TWI_1m.tif"))
-relele <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/", 
-                            "topography", "RelativeElevation_1m.tif"))
-dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                        "topography", "DEM_1m_2015.tif")) # for CRS
+wetness <- raster(file.path("../../../data/Paracou/", "topography", "TWI_1m.tif"))
+relele <- raster(file.path("../../../data/Paracou/", "topography", "RelativeElevation_1m.tif"))
+dem <- raster(file.path("../../../data/Paracou/", "topography", "DEM_1m_2015.tif")) # for CRS
 projection(wetness) <- projection(dem)
 projection(relele) <- projection(dem)
 wetness <- projectRaster(wetness, crs = crs)
@@ -238,7 +233,7 @@ gl.legend <- cowplot::get_legend(trees@data %>%
   guides(fill = guide_legend(nrow = 2, byrow = T), col = guide_legend(nrow = 2, byrow = T)))
 fitSympho <- list(TWI = list(), RE = list())
 for(var in c("TWI", "RE")){
-  for(sim in list.files("../symcapture_save/EnvGeno", 
+  for(sim in list.files("../symcapture/symcapture_save/EnvGeno", 
                         pattern = var, full.names = T)){
     load(sim)
     fitSympho[[var]] <- c(fitSympho[[var]], fit)
@@ -248,7 +243,7 @@ fitSympho <- lapply(fitSympho, rstan::sflist2stanfit)
 names(fitSympho) <- paste0("Symphonia.", names(fitSympho))
 fitParvi <- list(TWI = list(), RE = list())
 for(var in c("TWI", "RE")){
-  for(sim in list.files("../../parvicapture/parvicapture_save/all/EnvGeno2/", 
+  for(sim in list.files("../parvicapture/parvicapture_save/all/EnvGeno2/", 
                         pattern = var, full.names = T)){
     load(sim)
     fitParvi[[var]] <- c(fitParvi[[var]], fit)

@@ -1,3 +1,6 @@
+# PhD 0.1.9192
+* file reordering for genomics manuscripts writing
+
 # PhD 0.1.9191
 * genomics:manuscripts:outlines3growth
 
