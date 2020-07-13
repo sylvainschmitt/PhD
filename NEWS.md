@@ -1,3 +1,7 @@
+# PhD 0.1.9193
+* growth:outlines v. Christophe share 1
+* topography:msc
+
 # PhD 0.1.9192
 * file reordering for genomics manuscripts writing
 

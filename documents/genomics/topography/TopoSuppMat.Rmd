@@ -1,0 +1,513 @@
+---
+title: Supplementary Materials
+author: Sylvain Schmitt, Myriam Heuertz, Niklas Tysklind, Bruno Herault
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+  bookdown::word_document2: default
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+always_allow_html: yes
+---
+
+```{r config, message=FALSE, warning=FALSE, include=FALSE}
+rm(list = ls()); invisible(gc())
+library(knitr)
+library(kableExtra)
+# if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+# if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+options(kableExtra.html.bsTable = T)
+library(tidyverse)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, 
+               fig.height = 8, fig.width = 8,
+               cache = T, cache.lazy = F)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+```
+
+This supplementary material includes additional information about methodology and results for genomic analyses of sequence capture in the Neotropical tree *Symphonia globulifera*.
+
+# Design of sequence capture
+
+We used the following scheme (Fig. \@ref(fig:probeDesign)) to select genomic targets to be captured. 
+We started from a published low-coverage draft genome of an African *Symphonia globulifera* [@Olsson2017], an unpublished draft genome of a *Symhpnoia globulifera* from French Guiana [Scotti et al., in prep], an unpublished transcriptome from 20 juveniles of *Symphonia globulifera* from French Guiana [Tysklind et al., in prep], and genomic reads of individuals from French Guiana [Torroba-Balmori et al., unpublished]. 
+And we used following softwares: `bwa` [@Li2009], `quickmerge` [@Chakraborty2016], `BLAT` [@Kent2002], `RepeatMasker` [@Smit2015], and `transdecoder` [@Haas2013]. 
+
+```{r probeDesign, fig.cap="Scheme used for the selection of genomic targets in the genome of *Symphonia globulifera*."}
+include_graphics("../images/Probes2.png")
+```
+
+# Populations
+
+We investigated population structure using `admixture` [@Alexander2011], with 10 repetitions of K genetic groups varying from 1 to 10 (Fig. \@ref(fig:admixtureParacou)). 
+Cross validation of admixture analyses for different levels of clustering K advocated for 3 different gene-pools (Fig. \@ref(fig:admixtureParacouCV)).
+`introgress` R package [@Gompert2010] confirmed introgression patterns between population pairs (Fig. \@ref(fig:introgress)).
+Site frequency spectrum revealed population in expansion with an excess of rare alleles in each population (Fig. \@ref(fig:sfs1pop3pop)).
+And phylogeny with `treemix` [@Pickrell2012] revealed a high likelihood of at least one migration event between *S. sp1* and the two *S. globulifera* populations in Paracou (Fig. \@ref(fig:treemixPlot)).
+
+```{r admixtureParacou, fig.cap="Population structure of Paracou individuals for 2 to 10 genetic clusters (K)."}
+fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+symcapture.admix <- pophelper::readQ(list.files(file.path(path, "admixture", "paracou"), 
+                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
+symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
+symcapture.admix <- pophelper::alignK(symcapture.admix)
+p <- pophelper::plotQ(symcapture.admix[2:10], exportplot = F, returnplot = T, imgoutput = "join",
+                      basesize = 11, splab = paste0("K=",2:10), showindlab = F, 
+                      useindlab = F, grplabsize = 4,linesize = 0.8, pointsize = 4, 
+                      sortind = 'all', sharedindlab = F)
+gridExtra::grid.arrange(p$plot[[1]]) 
+```
+
+```{r admixtureParacouCV, fig.cap="Cross-validation for the clustering of Paracou individuals. Y axis indicates corss-validation mean error, suggesting that 3 groups represent the best Paracou individuals structure.", fig.height=4}
+read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
+  dplyr::select(X3, X4) %>% 
+  dplyr::rename(K = X3, CV = X4) %>% 
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>% 
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = 3, col = "red", linetype = "dashed") +
+  ylab("Cross-validation error") +
+  xlab("Number of genetic clusters")
+```
+
+```{r introgress, fig.cap="Population structure and fraction of the genome inherited from S. sp1 for each individual (hybrid index or admixture coefficient). Population structure assessed with ADMIXTURE is represented with the color bar for each individual, with the percentage of membership to S. sp1 genepools represented by the bar height. The hybdrid index and it's confidence interval is represented by the black line and the white area. The white dashed line indicates levels used to define previous genepools and parental alleles frequencies."}
+load(file = file.path("../symcapture_save", "introgress.Rdata"))
+rm(clines)
+hi.index %>% 
+  dplyr::select(Ind, pair, h) %>% 
+  reshape2::dcast(Ind ~ pair) %>% 
+  mutate(pop = NA) %>% 
+  mutate(pop = ifelse(sr < 0.1 & sp < 0.1, "S. sp1 pure", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sp > 0.9, "S. globulifera Paracou pure", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sr > 0.9, "S. globulifera Regina pure", pop)) %>%
+  mutate(pop = ifelse(is.na(pop) & !is.na(sr) & sr > 0.3, "Admixed S. sp1 - S. globulifera Regina", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & !is.na(sr) & sr < 0.3 & sr > sp, "S. sp1 introgressed with S. globulifera Regina", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sp > 0.7, "S. globulifera Paracou introgressed with S. sp1", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop) & sp > 0.1 & sp < 0.7, "Admixed S. globulifera - S. sp1", pop)) %>% 
+  mutate(pop = ifelse(is.na(pop), "S. sp1 pure", pop)) %>% 
+  dplyr::select(-sr, -sp) %>% 
+  write_tsv(file.path(path, "populations", "paracou.hybridmap"))
+hi.index %>% 
+  mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
+  mutate(pair = recode(pair, 
+                       sp = "S. sp1 - S. globulifera type Paracou", 
+                       sr = "S. sp1 - S. globulifera type Regina",
+                       pr = "S. globulifera type Paracou - S. globulifera type Regina")) %>% 
+  left_join(symcapture.admix[[3]] %>% 
+              rownames_to_column(var = "Ind") %>%
+              reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
+              mutate(genepool = recode(genepool, Cluster1 = "S. sp1", 
+                                       Cluster2 = "S. globulifera type Paracou", 
+                                       Cluster3 = "S. globulifera type Regina"))) %>%
+  arrange(pair, desc(h)) %>%
+  mutate(order = 1:nrow(.)) %>% 
+  ggplot(aes(reorder(Ind, order), group = NA)) +
+  geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +
+  geom_hline(yintercept = c(0.1, 0.9), linetype = "dashed", col = "white") +
+  geom_ribbon(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.5, fill = "white") +
+  geom_line(aes(y = 1 - h)) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(), axis.line.x = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  scale_color_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  ylab("H index") +
+  facet_wrap(~ pair, nrow = 3) +
+  theme(legend.position = "bottom") 
+```
+
+```{r sfs1pop3pop, fig.cap="Number of alleles per allele count and population for anonymous and genic SNPs.", fig.height=4}
+prefix <- file.path(path, "SFS", "paracouWeighted3pop")
+pops <- c("sp1", "globuliferaTypeParacou", "globuliferaTypeRegina")
+types <- c("neutral", "functional")
+lapply(types, function(type)
+  lapply(pops, function(pop)
+    read_tsv(paste0(prefix, ".", type, ".", pop, ".fastsim"), skip = 1) %>% 
+      gather() %>% 
+      mutate(type = type)
+  ) %>% bind_rows()
+) %>% bind_rows() %>% 
+  separate(key, c("population", "AlleleCount"), convert = T) %>% 
+  mutate(population = gsub("d", "", population)) %>% 
+  filter(AlleleCount > 0) %>% 
+  mutate(population = recode(population, 
+                             "globuliferaTypeParacou" = "S. globulifera Paracou",
+                             "globuliferaTypeRegina" = "S. globulifera Regina", 
+                             "sp1" = "S. sp1")) %>% 
+  mutate(type = recode(type, 
+                       "functional" = "genic",
+                       "neutral" = "anonymous", 
+                       "hitchhiker" = "putatively-hitchhiker ")) %>% 
+  ggplot(aes(AlleleCount, value)) +
+  geom_bar(stat = "identity") +
+  facet_grid(type ~ population, scales = "free") +
+  xlab("Allele count within population") + ylab("Number of alleles")
+```
+
+```{r treemixPlot, fig.cap="Drift-based phylogeny of *Symphonia* and *Pentadesma* populations with `treemix` [@Pickrell2012]. Subfigure **A** present the log-likelihood of the phylogeny topology depending on the number of allowed migration events per SNP type, suggesting 1 migration event to better represent the phylogeny topology than none. Others subfigures represent the phylogeny for anonymous (**B**), genic (**C**) and putatively-hitchhiker (**D**) SNPs. The red arrow represents the most likely migration event. Population are named by their localities, including *Symphonia* species only or *Symphonia* and *Pentadesma* species in Africa. At the exception of the three Paracou populations: *S. sp1*, *S. globulifera type Paracou* and *S. globulifera type Regina* respectivelly named Ssp1, SgParacou and SgRegina."}
+cols <- c("#984EA3", "#377EB8", "#4DAF4A")
+names(cols) <- c("neutral", "functional", "hitchhiker")
+cols2 <- cols
+names(cols2) <- c("anonymous", "genic", "hitchhiker")
+g.llik <- lapply(c("neutral", "hitchhiker", "functional"), function(type)
+  read_tsv(file.path(path, "treemix", paste0("migration.", type, ".llik")), 
+           col_names = F) %>% 
+    mutate(type = type)) %>% 
+  bind_rows() %>% 
+  separate(X1, c("M", "what", "likelihood"), ":", convert = T) %>% 
+  mutate(M = as.numeric(gsub("out", "", gsub(".llik", "", M)))) %>% 
+  mutate(type = recode(type, 
+                       "functional" = "genic",
+                       "neutral" = "anonymous", 
+                       "hitchhiker" = "hitchhiker")) %>% 
+  ggplot(aes(M, likelihood, col = type)) +
+  geom_point() +
+  geom_line() +
+  xlab("Migration events") + 
+  ylab("Log-likelihhod") +
+  geom_vline(xintercept = 1, col = "red") + 
+  theme(legend.position = c(0.6,0.4)) +
+  scale_color_manual(values = cols2)
+g.tree <- lapply(c("neutral", "functional", "hitchhiker"),
+                 function(type)
+                   ggtree::ggtree(ape::read.tree(file.path(path, "treemix", 
+                                                           type, "out1.treeout")),
+                                  layout = "slanted", col = cols[type]) +
+                   ggtree::geom_taxalink(13, 15, curvature = 0, col = "red",
+                                         arrow = arrow(angle = 10, 
+                                                       length = unit(0.1, "inches"))) +
+                   ggtree::geom_tiplab() + 
+                   ggtree::theme_tree2() + 
+                   xlim(0,0.035) +
+                   xlab("Drift parameter"))
+cowplot::plot_grid(g.llik, g.tree[[1]], g.tree[[2]], g.tree[[3]], 
+                   labels = LETTERS[1:4])
+```
+
+# Environments
+
+We did environmental association analyses [@Rellstab2015a] using general linear models from genome wide association studies (GWAS). 
+The environment $y_{p,i}$ where the individual $i$ in population $p$ grow was inferred with a lognormal distribution with following formula and priors:
+
+\begin{equation}
+  \begin{aligned}
+    y_{p,i} \sim logN(log(\mu_p.\hat{a_{i}}), \sigma_1)  \\ 
+    \hat{a_{i}} = e^{\sqrt{V_G}.A.\epsilon_i}  \\
+    \epsilon_i \sim N(0,1) \\ 
+    ~  \\
+    \mu_p \sim logN(log(1),1)  \\  
+    \sigma_1 \sim N_T(0,1)  \\ 
+    ~ \\
+    V_Y = Var(log(y))  \\
+    V_P = Var(log(\mu_p))  \\
+    V_R=\sigma_1^2  \notag \\
+    V_G = V_Y - V_P - V_R  \\
+   \end{aligned}
+  (\#eq:animalstan)
+\end{equation} 
+
+where $u_p$ is the mean environment of population $p$, $\hat{a_i}$ is the breeding value of the individual $i$ and $\sigma_1$ is the shape parameter of the lognormal. 
+Individual breeding values $a_i$ are defined with the square root of genetic variance $\sqrt{V_G}$, the cholesky decomposed kinship matrix $A$ and genetic noise $\epsilon_i$.
+Genetic noise $\epsilon_i$ follow a standard normal distribution.
+Each $u_p$ follows *a priori* a lognormal distribution of parameters 0 and 1, whereas $\sigma_1$ follows *a priori* a positive truncated standard normal distribution.
+Variances of phenotype $V_Y$ and of population means $V_P$ are defined as the variance of the logtransformed values.
+Residual variance $V_R$ is defined as the square of $\sigma_1$.
+And genetic variance is defined as the phenotypic variance minus population and residual variances.
+We used the corresponding `stan` [@Carpenter2017] code below, and we obtained the results shown in table \@ref(tab:EnvGenoTab).
+Genomic scan result is showed in figure \@ref(fig:envMLM).
+
+```{stan Env, eval=F, echo=T, output.var="animal", cache=F}
+data {
+  int<lower=0>  N ; // # of individuals
+  int<lower=0>  P ; // # of populations
+  real y[N] ; // phenotype
+  int<lower=1, upper=P> population[N] ; // populations
+  cov_matrix[N] K ; // kinship covariance matrix
+}
+transformed data{
+  matrix[N, N] A = cholesky_decompose(K) ; // cholesky-decomposed kinship
+  real Vy = variance(log(y)) ;
+}
+parameters {
+  vector<lower=0>[P] mu ; // intercept
+  vector[N] epsilon ; // genotypic noise
+  real<lower=0, upper=sqrt(Vy)> sigma ; // genetic variance
+}
+transformed parameters {
+  real<lower=0> Vp = variance(log(mu[population])) ; // population variance
+  real Vr = square(sigma) ;
+  real Vg = Vy - Vp - Vr ;
+  vector[N] alog = sqrt(Vg)*A*epsilon ;
+}
+model {
+  y ~ lognormal(log(mu[population]) + alog, sigma) ;
+  epsilon ~ std_normal() ;
+  mu ~ lognormal(0, 1) ;
+  sigma ~ normal(0, 1) ;
+}
+```
+
+```{r EnvGenoTab}
+fitEnv <- list(TWI = list(), NCI = list())
+for(var in c("TWI", "NCI")){
+  for(sim in list.files("../symcapture_save/EnvGeno", 
+                        pattern = var, full.names = T)){
+    load(sim)
+    fitEnv[[var]] <- c(fitEnv[[var]], fit)
+  }
+}
+fitEnv <- lapply(fitEnv, rstan::sflist2stanfit)
+lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
+       droppars = NULL, rhat = T) %>% 
+  bind_rows(.id = "Variable") %>% 
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+    mutate(parameter = recode(parameter, "mu" = "$\\mu$", "Vp" = "$V_P$",
+                              "Vg" = "$V_G$", "Vr" = "$V_R$")) %>% 
+  mutate(population = recode(population, "1" = "S. globulifera Paracou",
+                             "2" = "S. globulifera Regina", "3" = "S. sp1")) %>% 
+  mutate(population = ifelse(is.na(population), "", population)) %>% 
+  kable(caption = "Summary table of the animal model for environmental topographic wetness index (TWI) and neighbor crowding index (NCI).",
+        col.names = c("Variable", "Parameter",  "Population",  
+                      "Estimate", "$\\sigma$", "$\\hat{R}$"), 
+        digits = 4, booktabs = T, escape = FALSE) %>% 
+    kable_styling(c("striped", "condensed"), 
+                latex_options = "striped", 
+                full_width = F)
+```
+
+```{r envMLM, fig.cap="q-value of major effect SNPs associated to environmental variables. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate."}
+lmm <- lapply(list.files(file.path(path, "gemma", "env"), 
+                         pattern = ".assoc.txt$", full.names = T),
+              function(file) read_tsv(file) %>% mutate(file = file)) %>% 
+  bind_rows() %>% 
+  mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//gemma/env/LMM.", "", file)) %>% 
+  mutate(file = gsub(".assoc.txt", "", file)) %>%
+  separate(file, c("population", "variable"), sep = ".var") %>% 
+  mutate(variable = recode(variable, "1" = "TWI",  "2" = "NCI")) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+              dplyr::rename(rs = snp)) %>% 
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval) %>% 
+    mutate(type = recode(type, 
+                       "functional" = "genic",
+                       "neutral" = "anonymous", 
+                       "hitchhiker" = "putatively-hitchhiker ")) %>% 
+    mutate(population = recode(population, 
+                             "globuliferaTypeParacou" = "S. globulifera Paracou",
+                             "globuliferaTypeRegina" = "S. globulifera Regina", 
+                             "sp1" = "S. sp1"))
+ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ggrepel::geom_text_repel(data = lmm[lmm$qval < 0.05,]) +
+  ylab(expression(-log[10]("q-value"))) +
+  facet_grid(variable ~ population) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP type") +
+  theme(legend.position = "bottom")
+```
+
+# Growth
+
+We investigated effects of ecological and evolutionary processes on individual growth, using populations, kinship, topographic wetnes index and neighbor crowding index.
+The individual growth of individual $i$ in population $p$ between individual recruitment $y_0$ and 2017, correspond to the difference of DBH between the two years, and is defined with a hierarchical model in a lognormal distribution with following formula and priors:
+
+\begin{equation}
+  \begin{aligned}
+    DBH_{y=2017,p,i}-DBH_{y=y_0,p,i} \sim logN(log[\sum_{y=y_0}^{y=2017}AGR(DBH_{y,p,i})],\sigma_1) \\
+    AGR(DBH_{y,p,i})=\hat{\theta_{1,p,i}}.exp(-\frac12[\frac{log\frac{DBH_{y,p,i}}{100.\hat{\theta_{2,p}} }}{ \hat{\theta_{3,p}} }]^2) \\
+    \hat{\theta_{1,p,i}} = e^{log(\theta_{1,p}.\hat{a_{1,i}}. \beta_1.TWI_i.\beta_2.NCI_i) + \sigma_2.\epsilon_{1,i}} \\ 
+    \hat{\theta_{2,p}}  = e^{log(\theta_2) + \sigma_3.\epsilon_{2,p}} \\ 
+    \hat{\theta_{3,p}}  = e^{log(\theta_3) + \sigma_4.\epsilon_{3,p}} \\  
+    \hat{a_{1,i}} = e^{\sigma_5.A.\epsilon_{4,i}} \\
+    \epsilon_{1,i} \sim N(0,1) \\
+    \epsilon_{2,p} \sim N(0,1) \\
+    \epsilon_{3,p} \sim N(0,1) \\
+    \epsilon_{4,i} \sim N(0,1) \\
+    ~ \\
+    (\theta_{1,p}, \theta_2, \theta_3) \sim logN^3(log(1),1) \\ 
+    (\beta_1, \beta_2) \sim N^2(0,1) \\ 
+    (\sigma_1, \sigma_2, \sigma_3, \sigma_4, \sigma_5) \sim N^5_T(0,1) \\ 
+    ~  \\ 
+    V_P = Var(log(\mu_p))  \\
+    V_G=\sigma_5^2  \\
+    V_{TWI} = Var(log(\beta_1.TWI_i))  \\
+    V_{NCI} = Var(log(\beta_2.NCI_i)) \\
+    V_R=\sigma_2^2
+  \end{aligned}
+  (\#eq:gmaxgenoenvstan)
+\end{equation}
+
+where the difference of DBH $DBH_{y=2017,p,i}-DBH_{y=y_0,p,i}$ is defined with a lognormal distribution located on the logarithm of the sum of annual growth rates $AGR$ during the period $y_0-2017$ and of shape $\sigma_1$. 
+The annual growth rates $AGR$ for individual $i$ in population $p$ at year $y$ with a diameter of $DBH_{y,p,i}$ is defined following a Gompertz model [@Gompertz1825] already identified as the best model for growth-trajectories in Paracou [@Herault2011].
+$\theta_{1,p,i}$ is the maximum growth potential (maximal AGR during individual life) for individual $i$ in population $p$, $\theta_{2,p}$ is the population optimal diameter at which the individual reach its maximum growth potential, and $\theta_{3,p}$ is the population kurtosis defining the width of the bell-shaped growth-trajectory [see figure 1 in @Herault2011]. 
+To ease model inference population optimal diameter $\theta_{2,p}$ and kurtosis $\theta_{3,p}$ were defined as random population effect centered on a global $\theta_2$ and $\theta_3$ with corresponding variances $\sigma^2_3$ and $\sigma^2_4$. 
+Individual $i$ maximum growth potential $\theta_{1,p,i}$ was defined in a nested Animal model with a lognormal distribution.
+$\theta_{1,p}$ is the mean growth potential of population $p$, $a_{1,i}$ is the breeding value of individual $i$ growth potential, $\beta_1$ and $\beta_2$ are the effects of TWI and NCI on growth potential, and $\sigma_2$ is the shape of the lognormal distribution.
+Individual breeding values $a_{1,i}$ are defined on the square root of genetic variance $\sqrt{V_G}$, the cholesky decomposed kinship matrix $A$.
+Genetic and population noises $epsilon$ independantly follow a standard normal distribution.
+Each $\theta_{1,p}$, $\theta_2$ and $\theta_3$ follow *a priori* a lognormal distribution of parameters 0 and 1.
+$\beta_1$ and $\beta_2$ follow *a priori* a standard normal distribution.
+All $\sigma$ follow *a priori* a positive truncated standard normal distribution.
+Variances of population mean growth potential $V_P$, of TWI $V_{TWI}$ and NCI $V_{NCI}$ effects are defined as the variance of the logtransformed values.
+Residual variance $V_R$ is defined as the square of $\sigma_2$.
+And genetic variance $V_G$ is defined as the square of $\sigma_5$.
+We used the corresponding `stan` [@Carpenter2017] code below, and we obtained the results shown in table \@ref(tab:EnvGenoTab).
+Finally, genomic scans revealed 3 significant major effect SNP for individual growth potential (2 for *S. globulifera type Regina* and 1 for *S. sp1*, Fig. \@ref(fig:growthLMM)). 
+
+```{stan Gmax, eval=F, echo=T, output.var="animal", cache=F}
+data {
+  int<lower=1> I ; // # of individuals
+  int<lower=1> Y ; // # of census years
+  int<lower=1> P ; // # of populations
+  vector[Y] years ; // years
+  vector[I] DBH0 ; // recruitment DBH
+  vector[I] Y0 ; // recruitment year
+  vector[I] DBHtoday ; // 2017 DBH
+  vector[I] NCI ;
+  vector[I] TWI ;
+  int<lower=1, upper=Y> pop[I] ; // gene pools
+  cov_matrix[I] K ; // kinship covariance matrix
+}
+transformed data{
+  matrix[I, I] A = cholesky_decompose(K) ;
+}
+parameters {
+  vector<lower=0, upper=1>[P] thetap1 ;
+  real<lower=0, upper=1> theta2 ;
+  real<lower=0, upper=1> theta3 ;
+  vector[2] beta ;
+  vector[P] epsilon_p2 ;
+  vector[P] epsilon_p3 ;
+  vector[I] epsilon_i ;
+  vector[I] epsilon_a ; 
+  vector<lower=0>[5] sigma ;
+}
+transformed parameters {
+  vector<lower=0>[I] DBH = rep_vector(1, I) ;
+  vector[I] alog = sigma[5]*A*epsilon_a ; 
+  vector[I] thetai1 = exp(log(thetap1[pop]) + 
+                                   log(beta[1]*TWI) + 
+                                   log(beta[2]*NCI) +
+                                   alog + 
+                                   sigma[2]*epsilon_i) ; 
+  vector[P] thetap2 = exp(log(theta2) + sigma[3]*epsilon_p2) ; 
+  vector[P] thetap3 = exp(log(theta3) + sigma[4]*epsilon_p3) ; 
+  for(t in 1:Y-1) {
+    for(i in 1:I) {
+      if(years[t] == Y0[i])
+        DBH[i] = DBH0[i] ;
+    }
+    DBH += thetai1 .* exp(-0.5* square(log(DBH ./ (100*thetap2[pop])) ./ thetap3[pop])) ;
+  }
+  DBH = DBH - DBH0 ;
+}
+model {
+  DBHtoday - DBH0 ~ lognormal(log(DBH), sigma[1]) ;
+  epsilon_p2 ~ std_normal() ;
+  epsilon_p3 ~ std_normal() ;
+  epsilon_i ~ std_normal() ;
+  epsilon_a ~ std_normal() ;
+  thetap1 ~ lognormal(0, 1) ;
+  theta2 ~ lognormal(0, 1) ;
+  theta3 ~ lognormal(0, 1) ;
+  beta ~ normal(0,1) ;
+  sigma ~ normal(0, 1) ;
+}
+generated quantities{
+  real Vp = variance(log(thetap1[pop])) ;
+  real Vg = square(sigma[5]) ;
+  real Vtwi = variance(log(beta[1]*TWI)) ;
+  real Vnci = variance(log(beta[2]*NCI)) ;
+  real Vr = square(sigma[2]) ;
+}
+```
+
+```{r gmaxgenoenvTab}
+fitGmaxGenoEnv <- list()
+for(sim in list.files("../symcapture_save/GmaxGenoEnv", full.names = T)){
+  load(sim)
+  fitGmaxGenoEnv <- c(fitGmaxGenoEnv, fit)
+}
+fitGmaxGenoEnv <- rstan::sflist2stanfit(fitGmaxGenoEnv)
+broom::tidyMCMC(fitGmaxGenoEnv, pars = c("thetap1", "beta", 
+                                         "theta2", "theta3",
+                                         "Vp", "Vg", "Vnci", "Vtwi", "Vr"), 
+                droppars = NULL, rhat = T, estimate.method = "median") %>% 
+  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+  mutate(population = c("S. globulifera Paracou", "S. globulifera Regina", 
+                        "S. sp1", "TWI", "NCI", rep("", 7))) %>% 
+    mutate(parameter = recode(parameter, "thetap1" = "$\\theta_{p,1}$", 
+                              "theta2" = "$\\theta_2$", "theta3" = "$\\theta_3$", 
+                              "beta" = "$\\beta$", "Vp" = "$V_P$",
+                              "Vg" = "$V_G$", "Vnci" = "$V_{NCI}$", 
+                              "Vtwi" = "$V_{TWI}$", "Vr" = "$V_R$")) %>%
+  dplyr::select(parameter, population, estimate, std.error, rhat) %>% 
+  kable(caption = "Summary table of the growth model with genetic and evnrionmental effects.",
+        col.names = c("Parameter",  "Population/Variable",  "Estimate", 
+                      "$\\sigma$", "$\\hat{R}$"), 
+        digits = 4, booktabs = T, escape = FALSE) %>% 
+    kable_styling(c("striped", "condensed"), 
+                latex_options = "striped", 
+                full_width = F)
+```
+
+```{r growthLMM, fig.cap="q-value of major effect SNPs associated to individual growth parameters. SNP were detected using linear mixed models (LMM) with individual kiniship as random effect. SNP significance was assessed with Wald test. q-value was obtained correcting mutlitple testing with false discovery rate.", fig.height=4}
+lmm <- lapply(list.files(file.path(path, "gemma", "gmax"), 
+                  pattern = ".assoc.txt$", full.names = T), 
+       function(x) read_tsv(x) %>% mutate(file = x))%>% 
+  bind_rows() %>% 
+  mutate(file = gsub("/home/sylvain/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics//gemma/gmax/LMM.", "", file)) %>% 
+  mutate(file = gsub(".assoc.txt", "", file)) %>% 
+  dplyr::rename(population = file) %>% 
+  mutate(rs = paste0(chr, "_snp", ps)) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")) %>%
+  dplyr::rename(rs = snp)) %>%
+  mutate(qval = p.adjust(p_wald, "fdr")) %>%
+  arrange(chr, ps) %>% 
+  mutate(snp = 1:nrow(.)) %>% 
+  na.omit(qval) %>% 
+  mutate(population = recode(population, 
+                             "globuliferaTypeParacou" = "S. globulifera Paracou",
+                             "globuliferaTypeRegina" = "S. globulifera Regina", 
+                             "sp1" = "S. sp1")) %>% 
+  mutate(type = recode(type, 
+                       "functional" = "genic",
+                       "neutral" = "anonymous", 
+                       "hitchhiker" = "putatively-hitchhiker "))
+ggplot(lmm, aes(snp, -log10(qval), label = snp, alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ggrepel::geom_text_repel(data = lmm[lmm$qval < 0.05,]) +
+  ylab(expression(-log[10]("q-value"))) +
+  facet_wrap(~ population) +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  xlab("SNP number") +
+  scale_color_discrete("SNP") +
+  theme(legend.position = "bottom")
+```
+
+# References
