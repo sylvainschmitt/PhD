@@ -1,0 +1,318 @@
+---
+title: Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes
+author: Sylvain Schmitt, Niklas Tysklind, Bruno Hérault, Myriam Heuertz
+date: unknown
+output:
+  bookdown::pdf_document2:
+    template: ./template/templateSuppMatNewPhyto.tex
+    number_sections: false
+    toc: false
+    keep_tex: true
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+always_allow_html: yes
+---
+
+**_New Phytologist_ Supporting Information**
+
+
+Article title: **Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes**
+
+Authors: Sylvain Schmitt, Niklas Tysklind, Bruno Hérault, Myriam Heuertz
+
+Article acceptance date: unknown
+
+
+The following Supporting Information is available for this article:
+
+**Model S1.**  Stan code for the animal model
+
+**Tab. S\@ref(tab:kmeansConfusion).** *Eschweilera* botanical species and genetic clusters
+
+**Fig. S\@ref(fig:symcapture).** Target selection for the capture experiment of *Symphonia*
+
+**Fig. S\@ref(fig:parvicapture).** Target selection for the capture experiment of *Eschweilera*
+
+**Fig. S\@ref(fig:libmiss).** SNP abundance per library for *Eschweilera*
+
+**Fig. S\@ref(fig:snpmiss).** Library abundance per SNP for *Eschweilera*
+
+**Fig. S\@ref(fig:outgroup).** Outgroup detection for *Eschweilera*
+
+**Fig. S\@ref(fig:admixtureSympoCV).** Cross-validation for *Symphonia* population structure
+
+**Fig. S\@ref(fig:admixtureSympo).** *Symphonia* population structure
+
+**Fig. S\@ref(fig:introgress).** *Symphonia* hybrid index 
+
+**Fig. S\@ref(fig:bayescanOutliers).** *Symphonia* species-specific SNPs
+
+\newpage
+
+# Model S1: Stan code for the bayesian inference of the animal model.
+
+```{stan, eval=F, echo=T, output.var="m", cache=F}
+data {
+  int<lower=0>  N ; // # of individuals
+  int<lower=0>  P ; // # of populations
+  real y[N] ; // phenotype
+  int<lower=1, upper=P> population[N] ; // populations
+  cov_matrix[N] K ; // kinship covariance matrix
+}
+transformed data{
+  matrix[N, N] A = cholesky_decompose(K) ; // cholesky-decomposed kinship
+  real Vy = variance(log(y)) ;
+}
+parameters {
+  vector<lower=0>[P] mu ; // intercept
+  vector[N] epsilon ; // genotypic noise
+  real<lower=0, upper=sqrt(Vy)> sigma ; // genetic variance
+}
+transformed parameters {
+  real<lower=0> Vp = variance(log(mu[population])) ; // population variance
+  real Vr = square(sigma) ;
+  real Vg = Vy - Vp - Vr ;
+  vector[N] alog = sqrt(Vg)*A*epsilon ;
+}
+model {
+  y ~ lognormal(log(mu[population]) + alog, sigma) ;
+  epsilon ~ std_normal() ;
+  mu ~ lognormal(0, 1) ;
+  sigma ~ normal(0, 1) ;
+}
+```
+
+\newpage
+
+```{r config, message=FALSE, warning=FALSE, include=FALSE}
+rm(list = ls()) ; gc()
+library(knitr)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
+```
+
+```{r kmeansConfusion}
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+individuals <-read_tsv("figures/Parvicapture - Extraction.tsv") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit()
+read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>% 
+    mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
+                          "2" = "E. sagotiana cluster",
+                          "1" = "E. coriacea cluster")) %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals) %>% 
+  filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>%
+  reshape2::dcast(Species ~ cluster) %>% 
+  mutate_if(is.numeric, funs(round(./sum(.)*100))) %>% 
+  mutate(Species = paste0("E. ", Species)) %>% 
+  kable(caption = "Confusion matrix (percentage) between genetic cluster and botanical identification for \\emph{Eschweilera} clade \\emph{Parvifolia}.",
+        format = "pandoc")
+```
+
+\newpage
+
+```{r symcapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Symphonia globulifera} as described in the manuscript.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
+include_graphics("figures/Symcapture.png")
+```
+
+\newpage
+
+```{r parvicapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Eschweilera} clade \\emph{Parvifolia} as described in the manuscript.", out.width="0.5\\linewidth", fig.align="center", fig.pos="H"}
+include_graphics("figures/Parvicapture.png")
+```
+
+\newpage
+
+```{r libmiss, fig.cap="SNP abundance per library rank for raw data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
+path <- "../../../data/Eschweilera_Paracou/"
+libmiss <- read_delim(file.path(path, "Sequences", "denovo", "raw", "raw.imiss"), delim = " ") %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(missingness = as.numeric(F_MISS)) %>% 
+  mutate(snps = (1-missingness)*704485) %>% 
+  arrange(missingness) %>% 
+  mutate(libraries = 1:nrow(.))
+Nlibs <- round(seq(50, max(libmiss$libraries), length.out = 10))
+ggplot(libmiss, aes(libraries, snps)) + 
+  geom_point() + 
+  geom_line() +
+  geom_vline(xintercept = Nlibs, linetype = "dashed")  +
+  geom_hline(yintercept = libmiss$snps[Nlibs], linetype = "dashed") +
+  xlab("Libraries ranked per species abundance") +
+  ylab("SNP abundance")
+```
+
+\newpage
+
+```{r snpmiss, fig.cap="Library abundance per SNP rank for library-filtered data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
+path <- "../../../data/Eschweilera_Paracou/"
+names(Nlibs) <- list.files(file.path(path, "Sequences", "variants", "libraries_filtered"))
+snpmiss <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.lmiss"), delim = " ") %>% 
+    dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+    mutate(missingness = as.numeric(F_MISS)) %>% 
+    arrange(missingness) %>%
+    mutate(Nlibs = Nlibs[f]) %>% 
+    mutate(libraries = (1-missingness)*Nlibs) %>% 
+    mutate(snps = 1:nrow(.)) %>% 
+    mutate(filter = f) %>% 
+    filter(snps %in% seq(1, 704485, length.out = 100))) %>% 
+  bind_rows()
+snpmissN <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.lmiss"), delim = " ") %>% 
+    dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+    mutate(missingness = as.numeric(F_MISS)) %>% 
+    arrange(missingness) %>%
+    mutate(Nlibs = Nlibs[f]) %>% 
+    mutate(libraries = round((1-missingness)*Nlibs)) %>% 
+    mutate(snps = 1:nrow(.)) %>% 
+    mutate(filter = f) %>% 
+    filter(libraries %in% c(5,10))) %>% 
+  bind_rows()
+snpmissN <- group_by(snpmissN, filter, libraries) %>% 
+  summarise(snps = max(snps), missingness = max(missingness))
+ggplot(snpmiss, aes(snps, libraries, col = gsub("filtered.", "", filter))) + 
+  geom_point() + 
+  geom_line() +
+  scale_x_sqrt() +
+  scale_y_log10() +
+  scale_color_discrete("Libraries filter\n(minimum missing\ndata rate)") +
+  geom_hline(yintercept = c(5, 10), linetype = "dashed") +
+  geom_vline(aes(xintercept = snps), linetype = "dashed", data = snpmissN) +
+  xlab("SNP ranked per library abundance") +
+  ylab("Library abundance")
+```
+
+\newpage
+
+```{r outgroup, fig.cap="Outgroup detection with \\emph{Eschweilera} individual clustering in the genomic principal component analysis (gPCA) in two groups using K-means for every filter."}
+pcas <- lapply(list.files(file.path(path, "Sequences", "variants", "snps_filtered")), function(f)
+  read_delim(file.path(path, "Sequences", "variants", "snps_filtered", f, "filtered.eigenvec"),
+             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+    mutate(filter = f)) %>% 
+  bind_rows() %>% 
+  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5)
+group_by(pcas, filter) %>% 
+  filter(sum(PCA1) != 0) %>% 
+  cbind(group_by(pcas, filter) %>% 
+          filter(sum(PCA1) != 0) %>% 
+          dplyr::select(., PCA1, PCA2) %>% 
+          do(hc = cutree(hclust(dist(as.matrix(.))), k = 2)) %>% 
+          broom::tidy(hc)) %>% 
+  dplyr::rename(cluster = x) %>% 
+  group_by(filter, cluster) %>% 
+  mutate(N = n()) %>%
+  group_by(filter) %>% 
+  mutate(Nmin = min(N)) %>% 
+  mutate(cluster = ifelse(N == Nmin, "outgroup", "parvifolia")) %>% 
+  dplyr::select(-N, -Nmin) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = PCA1, y = PCA2, col = cluster, 
+                 label = Sample)) +
+      geom_line(aes(group = IdGenetic)) +
+      geom_point(size=2, alpha = 0.5) +
+      scale_color_discrete("") +
+      theme(legend.position = "bottom") +
+      facet_wrap(~ filter, scales = "free") +
+      theme(strip.text.x = element_text(size = 6))
+```
+
+\newpage
+
+```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals. Y axis indicates corss-validation mean error, suggesting that 2 or 3 groups represent the best Paracou individuals structure."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
+  dplyr::select(X3, X4) %>% 
+  dplyr::rename(K = X3, CV = X4) %>% 
+  mutate(K = gsub("(K=", "", K, fixed = T)) %>% 
+  mutate(K = as.numeric(gsub("):", "", K))) %>% 
+  ggplot(aes(K, CV)) +
+  geom_point() +
+  geom_line() +
+  geom_vline(xintercept = c(2,3), col = "red", linetype = "dashed") +
+  ylab("Cross-validation error")
+```
+
+\newpage
+
+```{r admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10."}
+fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
+                          "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
+         col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
+  mutate(Ind = gsub(".g.vcf", "", IID))
+symcapture.admix <- pophelper::readQ(list.files(file.path(path, "admixture", "paracou"), 
+                                     full.names = T, pattern = ".Q"), indlabfromfile=F)
+symcapture.admix <- lapply(symcapture.admix, "rownames<-", fam$Ind)
+symcapture.admix <- pophelper::alignK(symcapture.admix)
+p <- pophelper::plotQ(symcapture.admix[2:10], exportplot = F, returnplot = T, imgoutput = "join",
+                      basesize = 11, splab = paste0("K=",2:10),  showindlab = F, useindlab = F, 
+                      grplabsize = 4,linesize = 0.8, pointsize = 4, sortind = 'all', sharedindlab = F)
+gridExtra::grid.arrange(p$plot[[1]]) 
+```
+
+\newpage
+
+```{r introgress, fig.cap="Population structure with hybrid index (black line and white interval confidence) and admixture coefficient (vertical bars)."}
+load(file = file.path("../symcapture/symcapture_save/introgress.Rdata"))
+hi.index %>% 
+  mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
+  mutate(pair = recode(pair, 
+                       sp = "S. sp1 - S. globulifera type Paracou", 
+                       sr = "S. sp1 - S. globulifera type Regina",
+                       pr = "S. globulifera type Paracou - S. globulifera type Regina")) %>% 
+  left_join(symcapture.admix[[3]] %>% 
+              rownames_to_column(var = "Ind") %>%
+              reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
+              mutate(genepool = recode(genepool, Cluster1 = "S. sp1", 
+                                       Cluster2 = "S. globulifera type Paracou", 
+                                       Cluster3 = "S. globulifera type Regina"))) %>%
+  arrange(pair, desc(h)) %>%
+  mutate(order = 1:nrow(.)) %>% 
+  ggplot(aes(reorder(Ind, order), group = NA)) +
+  geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +
+  geom_hline(yintercept = c(0.1, 0.9), linetype = "dashed", col = "white") +
+  geom_ribbon(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.5, fill = "white") +
+  geom_line(aes(y = 1 - h)) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(), axis.line.x = element_blank()) +
+  scale_fill_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  scale_color_manual("Genepool", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  ylab("hybrid index") +
+  facet_wrap(~ pair, nrow = 3) +
+  theme(legend.position = "bottom") 
+```
+
+\newpage
+
+```{r bayescanOutliers, fig.cap="Species-specific SNPs for \\emph{Symphonia} individuals detected with bayescan."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
+  mutate(snpNb = as.numeric(row.names(.))) %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
+  left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
+  mutate(snpNb = 1:nrow(.))) %>% 
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
+ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
+  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
+  geom_point() +
+  ylab(expression(-log[10]("q-value"))) +
+  xlab("SNP position (contigs are arbitrarily placed)") +
+  scale_alpha_discrete(guide = "none") +
+  scale_y_sqrt() +
+  ggtitle("4 020 significant SNPs (5.7%)", 
+          "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
+```

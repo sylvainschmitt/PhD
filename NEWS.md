@@ -1,3 +1,8 @@
+# PhD 0.1.9194
+* topography: newphytoversion & Myriam review in progress
+* thesis: introduction review in progress
+* modelling: begins
+
 # PhD 0.1.9193
 * growth:outlines v. Christophe share 1
 * topography:msc
