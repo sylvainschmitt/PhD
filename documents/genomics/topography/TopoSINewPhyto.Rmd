@@ -33,6 +33,10 @@ Article acceptance date: unknown
 
 The following Supporting Information is available for this article:
 
+**Method S1.** Design of the probes set for *Symphonia*.
+
+**Method S2.** Design of the probes set for *Eschweilera*.
+
 **Model S1.**  Stan code for the animal model
 
 **Tab. S\@ref(tab:kmeansConfusion).** *Eschweilera* botanical species and genetic clusters
@@ -54,6 +58,41 @@ The following Supporting Information is available for this article:
 **Fig. S\@ref(fig:introgress).** *Symphonia* hybrid index 
 
 **Fig. S\@ref(fig:bayescanOutliers).** *Symphonia* species-specific SNPs
+
+\newpage
+
+# Method S1: Design of the probes set for *Symphonia*.
+
+For *Symphonia globulifera*, the genomic and transcriptomic resources used for the design were comprised of a published low-coverage draft genome from Africa [@Olsson2017], an unpublished draft genome from French Guiana [Scotti et al., in prep], an unpublished transcriptome from 20 juveniles from French Guiana [Tysklind et al., in prep], and reduced-representation genomic sequence reads of individuals from French Guiana [Torroba-Balmori et al., unpublished]. 
+We aligned genomic reads on the two genome drafts with `bwa` [@Li2009]. 
+We kept scaffolds from the two genome drafts with a length superior to 1 kbp and at least one matching alignment with a read with a single match on the genome, and merged the two filtered genome drafts with `quickmerge` [@Chakraborty2016]. 
+We aligned transcripts on the new filtered genome draft with `BLAT` [@Kent2002] and selected 533 scaffolds without transcript-match, *i.e.* anonymous scaffolds. 
+We masked repetitive regions with `RepeatMasker` [@Smit2015] and selected 533 1-kbp anonymous loci within the 533 previous scaffolds.
+
+Similarly, we filtered transcripts from the 20 juveniles of *Symphonia globulifera* from French Guiana [Tysklind et al., in prep] based on SNP quality, type and frequency. 
+We further detected  open reading frames (ORFs) using `transdecoder` [@Haas2013], 
+and selected transcripts with non-overlapping  ORFs including a start codon.
+We kept ORFs with an alignment on scaffolds from the aforementioned genome draft for *Symphonia* using `BLAT` [@Kent2002],
+and masked repetitive regions with `RepeatMasker` [@Smit2015]. 
+We selected 1,150 genic loci of 500-bp to 1-kbp, from 100 bp before the start to a maximum of 900 bp after the end of the ORFs, resulting in 1-Mbp genomic loci that included a coding region.
+
+\newpage
+
+# Method S2: Design of the probes set for *Eschweilera*.
+
+For *Eschweilera*, the genomic and transcriptomic resources used for the design were comprised of transcriptomes from  *Eschweilera sagotiana* and *Eschweilera coriacea* [@Vargas2019], and unpublished reduced representation genomic reads (M. Heuertz pers. com.).
+We mapped reciprocally *E. coriacea* and *E. sagotiana* transcriptomes using `BLAT` [@Kent2002], and in reciprocal best matches, we kept a single transcript to avoid paralogs and have robust targets among species.
+We further detected  open reading frames (ORFs) using `transdecoder` [@Haas2013], 
+and selected transcripts with non-overlapping  ORFs including a start codon.
+We selected 1,530 transcriptomic loci of 500-bp to 1-kbp, from 100 bp before the start to a maximum of 900 bp after the end of the ORFs, resulting in 0.83-Mbp of transcriptomic loci. 
+To build anonymous targets, we built a *de novo* assembly of ddRAD-seq genomic data using `ipyrad` [@Eaton2020], mapped consensus sequences on transcripts using `BLAT` [@Kent2002], and kept consensus sequences with no match on transcripts.
+We masked repetitive regions with `RepeatMasker` [@Smit2015] and selected  2.2k anonymous loci resulting in a length 0.52-Mbp.
+
+\newpage
+
+# References
+
+<div id="refs"></div>
 
 \newpage
 
@@ -149,8 +188,8 @@ ggplot(libmiss, aes(libraries, snps)) +
   geom_line() +
   geom_vline(xintercept = Nlibs, linetype = "dashed")  +
   geom_hline(yintercept = libmiss$snps[Nlibs], linetype = "dashed") +
-  xlab("Libraries ranked per species abundance") +
-  ylab("SNP abundance")
+  xlab("number of libraries ranked by number of called SNPs") +
+  ylab("number of called SNPs")
 ```
 
 \newpage
@@ -185,13 +224,13 @@ snpmissN <- group_by(snpmissN, filter, libraries) %>%
 ggplot(snpmiss, aes(snps, libraries, col = gsub("filtered.", "", filter))) + 
   geom_point() + 
   geom_line() +
-  scale_x_sqrt() +
+  scale_x_sqrt(n.breaks	= 10) +
   scale_y_log10() +
   scale_color_discrete("Libraries filter\n(minimum missing\ndata rate)") +
   geom_hline(yintercept = c(5, 10), linetype = "dashed") +
   geom_vline(aes(xintercept = snps), linetype = "dashed", data = snpmissN) +
-  xlab("SNP ranked per library abundance") +
-  ylab("Library abundance")
+  xlab("number of filtered SNPs ranked by number of genotyped libraries") +
+  ylab("number of libraries")
 ```
 
 \newpage
@@ -231,7 +270,7 @@ group_by(pcas, filter) %>%
 
 \newpage
 
-```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals. Y axis indicates corss-validation mean error, suggesting that 2 or 3 groups represent the best Paracou individuals structure."}
+```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals. Y axis indicates cross-validation mean error, suggesting that K = 2 or K = 3 gene pools represent the best solution for genetic structure in \\emph{Symphonia} in Paracou."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
   dplyr::select(X3, X4) %>% 

@@ -1,0 +1,83 @@
+```{r setupintro, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+# path <- "../../data/Paracou/"
+```
+
+# Introduction {-}
+
+This chapter tries to portray options in (i) methodology, (ii) processes, and (iii) outcomes.
+
+## Methodology
+
+* Population-based
+* Individual-based
+    * might be needed for individual genotypic evolution
+* Processus-based
+* Sotck/Flux-based
+* Spatially-explicit
+    * might be needed for forest gaps dynamics
+* Genetically-explicit
+    * might be avoided to gain simplicity
+* matrix models for populations with stages
+
+### Tools
+
+* **TROLL** for gaps only [@Chave1999; @Marechaux2017]
+* **FORMIND** [@Kohler1998]
+* **SELVA** to model growth directly, include a genetics module
+* **SELVa** changing fitness landscape, only evolution
+* **@Vellend2006a** lotka-Voltera spatialized
+* **@Ellner1994** differential equations overlapping generations of 
+* Ordinary differential equations (ODE, possible in `stan` [see for instance](https://juliettearchambeau.github.io/BiogecoBayes/workshop6_ODE_SIR.html))
+* Eco-Gene Degen et al.,
+* RangeShifter
+
+## Processes
+
+* Species adaptations
+    * to topography
+* Genotypic adaptations
+    * microgeogrpahic
+    * to forest gaps dynamics
+* Phenotypic plasticity
+    * noise
+    * ontogeny
+    * reaction norm
+    * heritability
+* Mating
+    * random
+    * assortative
+* Time
+    * year
+* Space
+    * 2D explicit
+    * non explicit
+* Fitness
+    * indirect growth, survival and reproduction (process based)
+* Genetics
+    * implicit
+    * explicit
+    * evolving traits
+    * loci
+    * neutral genes
+    * mutations
+    * ploidy
+    * inheritance
+
+## Outcomes
+
+* Stability conditions
+* Key factors (sensitivity analysis)
+    * topography vs forest gap dynamics on genotypic vs species structure
+* System natural evolution under stable environment
+* System answer to disturbances (CC)
+

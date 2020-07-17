@@ -692,8 +692,25 @@ dplyr::select(eschweilera@data, wetness, relele, wtd, hydromorphy, waterlog) %>%
   theme_bw()
 ```
 
-```{r eval=F}
+## All in one
 
+```{r eval=F}
+hydromorphy <- spTransform(hydromorphy, CRSobj = crs(soil))
+waterlog <- spTransform(waterlog, CRSobj = crs(soil))
+wtd <- spTransform(wtd, CRSobj = crs(soil))
+soil$hydromorphy <- raster::extract(hydromorphy, soil)$Hydro
+soil$waterlog <- raster::extract(waterlog, soil)$LevelWater
+soil$wtd <- raster::extract(wtd, soil)$TypeWatEN
+dplyr::select(soil@data, 
+              wetness, relele, 
+              hydromorphy, waterlog, wtd,
+              Refus, MO, C, N, C_N, Polsen, PBray2, Al_KCl, Mg_ech, K_ech, Na_ech, S, CEC, TS) %>% 
+  fastDummies::dummy_cols() %>% 
+  dplyr::select(-waterlog, -wtd) %>%
+  # write_tsv("../../genomics/topography/figures/soil.tsv")
+  na.omit() %>% 
+  prcomp(scale. = T) %>%
+  autoplot(loadings = T, loadings.label = T)
 ```
 
 
