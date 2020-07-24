@@ -1,0 +1,172 @@
+```{r setup_ncidist, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(gganimate)
+library(raster)
+theme_set(bayesplot::theme_default())
+opts_chunk$set( echo = F, message = F, warning = F, fig.height = 6, fig.width = 8, cache = T, cache.lazy = F)
+```
+
+# Forest gap dynamics
+
+The aim of this chapter is to explore forest gap dynamics in Paracou.
+
+## NCI-niche breadth
+
+We specifically wanted to explore the breadth of the NCI-niche for abundant species in Paracou,
+in order to see if *Symphonia* species case is cryptic or general, [see @Schmitt2020 for TWI].
+We transformed the NCI individual computation in matrix product to gain computing time:
+
+\begin{equation} 
+  nci_i = \sum _{j~|~d_{i,j}<20m} ^{J_i} dbh_j^2 e^{-\frac14.d_{i,j}}
+  (\#eq:ncii)
+\end{equation} 
+
+\begin{equation} 
+  NCI = DBH^2 e^{-\frac14.D}
+  (\#eq:ncimatrix)
+\end{equation} 
+
+We used individual with DBH between 10 and 20cm at more than 20 meters from a plot limit, 
+and species with at least 50 individuals in 2017 (Fig. \@ref(fig:ncispeciesabundances)).
+We found *Symphonia* species to have a NCI-niche breadth around mean niche breadth observed in Paracou (Fig. \@ref(fig:ncibreadth)),
+with low values of the 5th quantile (Fig. \@ref(fig:nciniche)).
+
+```{r ncidistdata, eval=F}
+computeNCI <- function(Plot){
+  trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Plot == local(Plot)) %>% # test for P1
+    filter(CensusYear == 2017) %>% 
+    filter(Xfield > 20, Xfield < 250-20, Yfield > 20, Yfield < 250-20) %>% 
+    mutate(DBH = CircCorr/pi) %>%
+    dplyr::select(-CensusYear) %>% 
+    collect()
+  D <- dist(trees[c("Xfield", "Yfield")]) %>% 
+    as.matrix()
+  D[1:10,1:10]
+  D[D>20] <- NA # individuals above 20 m
+  D[D == 0] <- NA # theimselves
+  D <- exp(-0.25*D)
+  D[is.na(D)] <- 0
+  D[1:10,1:10]
+  trees$NCI <- as.vector(D %*% as.vector(trees$DBH))
+  return(trees)
+}
+trees <- lapply(1:15, computeNCI) %>% 
+  bind_rows()
+save(trees, file = "./symcapture_save/NCI2017all.Rdata")
+```
+
+```{r ncispeciesabundances, fig.cap="Speices abundances in plots 1 to 15 for DBH 10-20cm."}
+load("./symcapture_save/NCI2017all.Rdata")
+filter(trees, DBH >= 10, DBH <= 20) %>% 
+  group_by(Genus, Species) %>% 
+  summarise(N = n()) %>% 
+  # filter(N >= 50)
+  ggplot(aes(N)) + 
+  geom_histogram() +
+  scale_x_log10() +
+  geom_vline(xintercept = 50, col = "red", linetype = "dashed") +
+  ggtitle("103 species", "over 623")
+```
+
+```{r ncibreadth, fig.cap="NCI breadth per species in plots 1 to 15 for 10-20 cm DBH."}
+t <- trees %>% 
+  filter(Species != "Indet.") %>% 
+  filter(DBH >= 10 & DBH <= 20) %>% 
+  group_by(Genus, Species) %>% 
+  mutate(N = n()) %>%
+  mutate(N = ifelse(Genus == "Symphonia" & Species == "globulifera", 50, N)) %>% 
+  filter(N >= 50) %>%
+  group_by(Genus, Species, N) %>% 
+  summarise(NCI95 = quantile(NCI, 0.95), NCI05 = quantile(NCI, 0.05)) %>% 
+  mutate(NCIbreadth = NCI95 - NCI05)
+ggplot(t, aes(NCIbreadth)) + 
+  geom_histogram(fill = "lightgrey") + 
+  geom_vline(aes(xintercept = NCIbreadth,
+                 col = paste0(substr(Genus, 1, 1), ". ", Species)),
+             linetype = "dashed",
+             data = filter(t, Genus %in% c("Symphonia"))) +
+  ylab("N") + xlab("NCI breadth (95th - 5th quantile)") +
+  scale_color_discrete("Studied species")
+```
+
+```{r nciniche, fig.cap="NCI breadth per species in plots 1 to 15 for 10-20 cm DBH."}
+ggplot(t, aes(NCI05, NCI95, label = paste0(substr(Genus, 1, 1), ". ", Species))) + 
+  geom_point(col = "lightgrey") +
+  ggrepel::geom_text_repel(data = filter(t, Genus %in% c("Symphonia"))) +
+  ylab("NCI 95th quantile") + xlab("NCI 5th quantile")
+```
+
+## BA before treefalls
+
+Moreover, we wanted to explore the forest state before tree falls.
+We computed the local basal area in a grid of 10x10m for every control plots and census years (Fig. \@ref(fig:ba100)).
+We compared the variation of basal area along years with the previous year values (Fig. \@ref(fig:deltaBAvslag)).
+We then investigated the distribution of the local basal area variation and we couldn't see a clear demarcation of negatives values representing major treefalls (Fig. \@ref(fig:deltabadist)).
+We thus decided to keep all negative values to investigate the ditribution of the local basal area of the year before a decrease of basal area (Fig. \@ref(fig:negdeltaba)), which seemed to reveal two optima: 
+an optimum corresponding to treefalls from trees in mature stand, 
+and a second optimum with varying values of local basal area, maybe due to kiche-hiking species favoring treefalls ?
+
+```{r treefallsdata}
+BA <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Plot %in% c(1,6,11,13:15)) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect() %>% 
+  mutate(X = cut(Xfield, seq(0, 250, by = 10))) %>% 
+  mutate(Y = cut(Xfield, seq(0, 250, by = 10))) %>% 
+  filter(!is.na(X), !is.na(Y)) %>% 
+  group_by(Plot, SubPlot, CensusYear, X,Y) %>% 
+  summarise(BA = sum(DBH)) %>% 
+  mutate(ID = paste0("P", Plot, "_C", SubPlot, "_X",X, "_Y",Y)) %>% 
+  ungroup() %>% 
+  mutate(Plot = as.factor(Plot)) %>% 
+  filter(BA > 500)
+t <- BA %>% 
+  group_by(ID) %>% 
+  arrange(CensusYear) %>% 
+  mutate(Deltat = CensusYear - lag(CensusYear), 
+         DeltaBA = BA - lag(BA),
+         BAlag = lag(BA)) %>% 
+  mutate(DeltaBADeltat = DeltaBA / Deltat) %>% 
+  na.omit() 
+```
+
+```{r ba100, fig.cap="Local basal areas over census years."}
+BA %>% 
+  ggplot(aes(CensusYear, BA, group = ID, col = Plot)) +
+  geom_point() +
+  geom_line() +
+  xlab("Census year") +
+  ylab("Local basal area on 10x10m") 
+```
+
+```{r deltaBAvslag, fig.cap="Local basal area variation depending on previous year value."}
+ggplot(t, aes(BAlag, DeltaBADeltat, label = paste0("P", Plot, " ", CensusYear))) + 
+  geom_point() +
+  xlab("Local basal area of previous year") +
+  ylab("Local basal area variation") 
+```
+
+```{r deltabadist, fig.cap="Distribution of the local basal area variation."}
+ggplot(t, aes(DeltaBADeltat)) + 
+  geom_histogram() +
+  xlab("Local basal area variation") 
+```
+
+```{r negdeltaba, fig.cap="Ditribution of the local basal area of the year before a decrease of basal area"}
+ggplot(t, aes(BAlag)) +
+  geom_histogram() +
+  xlab("Local basal area of the year before a decrease of basal area.") +
+  facet_wrap(~ (DeltaBADeltat < -10), labeller = "label_both")
+```
+
+

@@ -16,7 +16,73 @@ opts_chunk$set(
 
 Here is a more extensive but raw review of the literature use throughout the analyses.
 
-## @Romero-Mujalli2019
+## Methodology
+
+* Population-based
+* Individual-based
+    * might be needed for individual genotypic evolution
+* Processus-based
+* Sotck/Flux-based
+* Spatially-explicit
+    * might be needed for forest gaps dynamics
+* Genetically-explicit
+    * might be avoided to gain simplicity
+* matrix models for populations with stages
+
+### Tools
+
+* **TROLL** for gaps only [@Chave1999; @Marechaux2017]
+* **FORMIND** [@Kohler1998]
+* **SELVA** to model growth directly, include a genetics module
+* **SELVa** changing fitness landscape, only evolution
+* **@Vellend2006a** lotka-Voltera spatialized
+* **@Ellner1994** differential equations overlapping generations of 
+* Ordinary differential equations (ODE, possible in `stan` [see for instance](https://juliettearchambeau.github.io/BiogecoBayes/workshop6_ODE_SIR.html))
+* Eco-Gene Degen et al.,
+* **Nemo** With the availability of a geneitc map, Nemo can be used to study the **genetics of adaption**, model scenarios of adaptation with gene flow, of population expansion into a new environment, **adaptation to fluctuating environments**, or the joint evolution of dispersal and deleterious mutations in structured populations, among other things.
+* **SLim3** explicit space, overlapping generations, individual variation in reproduction, density-dependent population regulation, individual var-iation in dispersal or migration, local extinction and recolonization, mating between subpopulations, age structure, fitness-based survival and hard selection
+* [cancercontrol popmodels list](https://popmodels.cancercontrol.cancer.gov/gsr/)
+
+```{r, fig.cap="Decision matrix for choosing an evolutionary simulator adapted from  @Hoban2012."}
+knitr::include_graphics("images/Hoban2012.png")
+```
+
+
+## Processes
+
+* Species adaptations
+    * to topography
+* Genotypic adaptations
+    * microgeogrpahic
+    * to forest gaps dynamics
+* Phenotypic plasticity
+    * noise
+    * ontogeny
+    * reaction norm
+    * heritability
+* Mating
+    * random
+    * assortative
+* Time
+    * year
+* Space
+    * 2D explicit
+    * non explicit
+* Fitness
+    * indirect growth, survival and reproduction (process based)
+* Genetics
+    * implicit
+    * explicit
+    * evolving traits
+    * loci
+    * neutral genes
+    * mutations
+    * ploidy
+    * inheritance
+
+## Uncategorized
+
+### @Romero-Mujalli2019
 
 **Individual-based modeling of eco-evolutionary dynamics: state of the art and future directions**
 
@@ -48,7 +114,7 @@ Here is a more extensive but raw review of the literature use throughout the ana
         * Costs: not explicit
         * Evolution: not included
         
-## @Vellend2006a
+### @Vellend2006a
 
 **The consequences of genetic diversity in competitive communities**
    
@@ -56,14 +122,14 @@ Here is a more extensive but raw review of the literature use throughout the ana
 * genotypic richness and range determine the probability for a species to possess genetic variants to survive in an environment in face of multispecies competition
 * genotypic richness decrease variation in community composition while increasing species diversity (sampling effect ?)
 
-## Nabieva2019
+### Nabieva2019
 
 **SELVa: Simulator of Evolution with Landscape Variation**
 
 * fitness landscape
 * only evolutive
 
-## @Schwilk2002
+### @Schwilk2002
 
 **Genetic niche-hiking: An alternative explanation for the evolution of flammability**
 
@@ -85,30 +151,51 @@ Here is a more extensive but raw review of the literature use throughout the ana
 * ecological mediation of generation time ~ fast growth in gaps = shorter generations ?
 * Niche-hiking can use a trait that causes the death of its possessor after reproduction but result simulatneously in the death of neighbors
 
-## @Bocedi2014
+### @Vincenzi2014
+
+**Evolution of serotiny in maritime pine (Pinus pinaster) in the light of increasing frequency of fires**
+
+* individual phenotype for a quantitative trait a with breeding value z_i = a_i + e_i , a_i ~ N(mu_a, sigmaG), e_i ~ N(mu_e, sigmaE), h2 = sigmaG/sigmaZ, aprogeny ~ N(mean(ap1,ap2),sigmaG/2)
+* Inheritance for a quntitaive trait 
+
+### @Bocedi2014
 
 **RangeShifter: a platform for modelling spatial eco-evolutionary dynamics and species’ responses to environmental changes** 
 
 * population dynamics and dispersal behaviours in an individual-based framework and allowing them to be simulated on landscapes at different scales
+* matrix model for population dynamics
 
-## @Okamoto2018
+### @Haller2019
+
+**SLiM 3: Forward Genetic Simulations Beyond the Wright-Fisher Model**
+
+* explicit space, overlapping generations, individual variation in reproduction, density-dependent population regulation, individual var-iation in dispersal or migration, local extinction and recolonization, mating between subpopulations, age structure, fitness-based survival and hard selection
+* could be the perfect solution, online workshop, but need training
+
+### @Guillaume2006
+
+**Nemo: An evolutionary and population genetics programming framework**
+
+* C++ framework to expand with custom functions, needs a big investment
+
+### @Okamoto2018
 
 **A framework for high-throughput eco-evolutionary simulations integrating multilocus forward-time population genetics and community ecology**
 
-## @Hoban2012
+### @Hoban2012
 
 **Computer simulations: Tools for population and evolutionary genetics**
 
-## @Ellner1994
+A general guide for evolutionary simulations
+
+### @Ellner1994
 
 
-## @Vindenes2015
+### @Vindenes2015
 
 **Individual heterogeneity in life histories and eco-evolutionary dynamics**
 
-## @Thuiller2013
+### @Thuiller2013
 
 **A road map for integrating eco-evolutionary processes into biodiversity models**
-
-* https://scholar.google.com/scholar?start=10&q=forest+simulator+gene+ecological+niche&hl=fr&as_sdt=0,5
 

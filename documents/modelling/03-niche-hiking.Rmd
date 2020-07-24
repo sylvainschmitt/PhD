@@ -1,0 +1,98 @@
+```{r setuprmetasim, include=FALSE}
+rm(list = ls()); invisible(gc())
+library(knitr)
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, 
+               fig.height = 6, fig.width = 6,
+               cache = F, cache.lazy = F)
+```
+
+# Niche-hiking
+
+In this document we explore the c++ code from [Schwilt and Kerr (2002)](https://github.com/dschwilk/ms-data-Oikos-2002) and corresponding outputs.
+A triel of packaging with `Rcpp` was launched on my GitHub https://sylvainschmitt.github.io/simsympho/ .
+
+```{r, eval=F, echo=T}
+devtools::install_github("sylvainschmitt/simsympho")
+```
+
+
+## Test
+
+* **Grid**: 100
+* **Torch init**: 0.002
+* **Initialisation**: Age < 101
+* **Stop**: Age < 1001
+
+```{r parameters}
+grid <- 100 
+```
+
+## Run
+
+```{r, echo=T, eval=F}
+system("bash test.sh")
+```
+
+
+## General outputs
+
+The file `out.txt` register several global variables along time (Fig. \@ref(fig:general)).
+
+```{r general, fig.cap="Torch proportion, and mean, torch and damp fitness along time in fire events."}
+read_tsv("niche-hiking/out.txt", col_names = c("age", "tprop", "meanfit", "meanfitT", "meanfitD")) %>% 
+  reshape2::melt("age") %>% 
+  mutate(variable = recode(variable, 
+                           "tprop" = "Torch proportion", 
+                           "meanfit" = "Mean fitness",
+                           "meanfitT" = "Torch mean fitness",
+                           "meanfitD" = "Damp mean fitness")) %>% 
+  ggplot(aes(age, value)) +
+  geom_point(alpha = 0.1) +
+  geom_line() +
+  geom_vline(xintercept = 100, linetype = "dashed") +
+  xlab("Time (fire events)") +
+  facet_wrap(~ variable, ncol = 1)
+```
+
+## Genotypes
+
+The file `flamgrids.txt` register genotypes distribution in space at several timesteps (Fig. \@ref(fig:genotypes)).
+
+```{r genotypes, fig.cap="Genotypes distribution in space at several timesteps."}
+genotypes <- read_tsv("niche-hiking/flamgrids.txt", col_names = c("torch"))
+n <- nrow(genotypes)
+Times <- ceiling(n/grid^2)
+mutate(genotypes , 
+       x = rep(rep(1:grid, each = grid), Times*grid)[1:n],
+       y = rep(rep(1:grid), Times*grid)[1:n],
+       t = rep(1:Times, each = grid*grid)[1:n]) %>%
+  mutate(time = c(0, 511, 527, 543, 735, 903)[t]) %>% 
+  mutate(genotype = recode(torch, "0" = "damp", "1" = "torch")) %>% 
+  ggplot(aes(x, y, fill = genotype)) +
+  geom_tile() +
+  facet_wrap(~ time, labeller = "label_both") +
+  viridis::scale_fill_viridis(discrete = T)
+```
+
+## Fitness
+
+The file `fitgrids.txt` register fitness distribution in space step at several timesteps (Fig. \@ref(fig:fitness)).
+
+```{r fitness, fig.cap="Fitness distribution in space at several timesteps."}
+fitness <- read_tsv("niche-hiking/fitgrids.txt", col_names = c("fitness"))
+n <- nrow(fitness)
+Times <- ceiling(n/grid^2)
+mutate(fitness , 
+       x = rep(rep(1:grid, each = grid), Times*grid)[1:n],
+       y = rep(rep(1:grid), Times*grid)[1:n],
+       t = rep(1:Times, each = grid*grid)[1:n]) %>%
+  mutate(time = c(0, 511, 527, 543, 735, 903)[t]) %>% 
+  ggplot(aes(x, y, fill = fitness)) +
+  geom_tile() +
+  facet_wrap(~ time, labeller = "label_both") +
+  scale_fill_brewer("Spectral") +
+  viridis::scale_fill_viridis()
+```
+

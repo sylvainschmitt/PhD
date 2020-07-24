@@ -1,3 +1,9 @@
+# PhD 0.1.9196
+* growth: Christophe v2
+* symcapture: forest gaps dynamcis
+* topography: Bruno's comments begins
+* modelling: simulators cpp
+
 # PhD 0.1.9195
 * topography: Myriam review in progress
 * thesis: introduction review in progress

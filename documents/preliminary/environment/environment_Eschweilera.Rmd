@@ -704,7 +704,7 @@ soil$wtd <- raster::extract(wtd, soil)$TypeWatEN
 dplyr::select(soil@data, 
               wetness, relele, 
               hydromorphy, waterlog, wtd,
-              Refus, MO, C, N, C_N, Polsen, PBray2, Al_KCl, Mg_ech, K_ech, Na_ech, S, CEC, TS) %>% 
+              Refus, MO, C, N, C_N, Polsen, PBray2, Al_KCl, Ca_ech, Mg_ech, K_ech, Na_ech, S, CEC, TS) %>% 
   fastDummies::dummy_cols() %>% 
   dplyr::select(-waterlog, -wtd) %>%
   # write_tsv("../../genomics/topography/figures/soil.tsv")

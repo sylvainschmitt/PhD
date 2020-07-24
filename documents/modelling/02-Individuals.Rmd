@@ -1,0 +1,284 @@
+```{r setupinds, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+# path <- "../../data/Paracou/"
+```
+
+# Individuals dynamics
+
+This page present a quick implementation of a one dimension individual dynamics with a quantitative trait determining seedling viability along environment.
+
+## 1-D environment
+
+A corresponding simulator is available here, with the R code below: https://sylvainschmitt.shinyapps.io/simulator1D/
+
+Individual quantitative trait $z_i$ is the sum of its genotypic breeding value $a_i$ and an environmental effect $e_i$, both drawn from a genetic and an environmental normal distribution:
+
+\begin{equation} 
+  z_i = a_i + e_i \\
+  a_i \sim N(\mu_G,\sigma^2_G) \\
+  e_i \sim N(\mu_e,\sigma^2_E)
+  (\#eq:zi)
+\end{equation} 
+
+$N_i$ individuals are simulated over $N_g$ generations on an environmental gradient ranging from $-E$ to $E$.
+At each generation each cell is replaced by $N_s$ seedlings.
+Seedlings inherit from two parents in the dispersal neighbourhood $d$.
+Seedlings genotypic breeding value $a_s$ is drawn from a normal centered on parental mean and of half the variance of genetic variation, and is used to compute seedling trait value:
+
+\begin{equation} 
+  z_s = a_s + e_s \\
+  a_s \sim N(mean(a_{P1},a_{P2}),\frac{\sigma^2_G}{2}) \\
+  e_s \sim N(\mu_e,\sigma^2_E)
+  (\#eq:as)
+\end{equation} 
+
+Among the $N_s$ seedlings one is recruited either with a determinist viability, e.g. keeping the seedling with the trait closer to the seedling environmental value, or with a probabilist viability, e.g. with a random draw with probability equal to the inverse of the distance between seedling trait and environment.
+
+```{r simulator1DR, echo=T}
+simulator1D_R <- function(
+    Nind = 50, # size
+    Ngen = 50,
+    muG = 0, # genetics
+    sigmaG = 1,
+    muE = 0, # environment
+    sigmaE = 1,
+    Elim = 10,
+    seedlings = 4, # reproduction
+    dispersal = 1,
+    viability_deterministic = T
+){
+    E = seq(-Elim, Elim, length.out = Nind)
+    # Simulation
+    A <- matrix(nrow = Ngen, ncol = Nind) # objects
+    Z <- matrix(nrow = Ngen, ncol = Nind)
+    A[1,] <- rnorm(Nind, muG, sigmaG) # inits
+    Z[1,] <- A[1,] + rnorm(Nind, muE, sigmaE)
+    for(g in 2:Ngen){ # iterations
+        Aoffsprings <- sapply(1:Nind, function(i) sapply(1:seedlings, function(s)
+            rnorm(1, mean(sample(A[g-1,max(1,i-dispersal):min(i+dispersal,Nind)],2)), sigmaG/2)))
+        Zoffsprings <- apply(Aoffsprings, 2, function(x) x + rnorm(length(x), muE, sigmaE))
+        if(viability_deterministic){
+            survivors <- apply(apply(Zoffsprings, 1, function(x) sqrt((x - E)^2)), 1, which.min)
+        } else {
+            survivors <- apply(1/apply(Zoffsprings, 1, function(x) sqrt((x - E)^2)), 1, 
+                               function(w) sample.int(seedlings, 1, replace = T, prob = w)) 
+        }
+        A[g,] <- Aoffsprings[cbind(survivors,1:Nind)]
+        Z[g,] <- Zoffsprings[cbind(survivors,1:Nind)]
+    }
+    return(list(A =A, Z =Z, E= E))
+}
+```
+
+```{Rcpp simulator1DCpp, echo=T}
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+NumericVector build_gradient(
+    double gradientlim,
+    int length
+){
+  double step = gradientlim*2/(length-1) ;
+  NumericVector gradient(length) ;
+  gradient[0] = - gradientlim ;
+  for (int i = 1; i < length; i++)
+    gradient[i] = gradient[i-1] + step ;
+  return gradient ;
+}
+
+// [[Rcpp::export]]
+List simulator1D_cpp(
+    int  Nind = 50,
+    int Ngen = 50,
+    double muG = 0,
+    double sigmaG = 1,
+    double muE = 0,
+    double sigmaE = 1,
+    double Elim = 10,
+    int seedlings = 4,
+    int dispersal = 1,
+    bool viability_deterministic = true
+) {
+  NumericMatrix A(Ngen, Nind) ;
+  NumericMatrix Z(Ngen, Nind) ;
+  NumericVector E = build_gradient(Elim, Nind) ;
+  NumericMatrix Aoffsprings(Nind, seedlings) ;
+  NumericMatrix Zoffsprings(Nind, seedlings) ;
+  NumericVector Ap(2*dispersal+1) ;
+  NumericVector w(seedlings) ;
+  IntegerVector seeds(seedlings) ;
+  int imin , imax, winner ;
+  double muS ;
+  A.row(0) = rnorm(Nind, muG, sigmaG) ; 
+  Z.row(0) = rnorm(Nind, muE, sigmaE) ;
+  for(int s = 0; s < seedlings; s++)
+    seeds(s) = s ;
+  for (int g = 1; g < Ngen; g++){
+    for (int i = 0; i < Nind; i++){
+      imin = 0 ;
+      imax = Nind ;
+      if(i-dispersal > 0){
+        imin = i-dispersal ;
+      } 
+      if(i+dispersal+1 < Nind){
+        imax = i+dispersal+1 ;
+      }
+      NumericVector Ap(imax-imin) ;
+      for(int p = 0; p < imax-imin; p++) Ap(p) = A(g-1,imin+p) ;
+      for (int s = 0; s < seedlings; s++){
+        Aoffsprings(i,s) = rnorm(1, mean(sample(Ap, 2)), sigmaG/2)[0] ;
+        Zoffsprings(i,s) = Aoffsprings(i,s) + rnorm(1, muE, sigmaE)[0] ;
+      }
+      if(viability_deterministic){
+        winner = which_min(sqrt(pow(Zoffsprings(i,_)-E(i), 2))) ; 
+      } else {
+        w = 1/sqrt(pow(Zoffsprings(i,_)-E(i), 2)) ;
+        winner = sample(seeds, 1, true, w)[0] ;
+      }
+      A(g,i) = Aoffsprings(i,winner) ;
+      Z(g,i) =  Zoffsprings(i,winner) ;
+    }
+  }
+  List sim = List::create(Named("A") = A, 
+                          Named("Z") = Z,
+                          Named("E") = E) ;
+  return sim;
+}
+```
+
+```{r plotSim1D, echo=T}
+plotSim1D <- function(sim)
+  lapply(list("breeding value (a)" = sim$A, "trait value (z)" = sim$Z), function(M)
+    reshape2::melt(M) %>% 
+      dplyr::rename(generation = Var1, individual = Var2)) %>% 
+  bind_rows(.id = "var") %>% 
+  left_join(data.frame(individual = 1:length(sim$E), environment = sim$E), by = "individual") %>% 
+  ggplot(aes(generation, value, 
+             group = individual, col = environment)) + 
+  geom_line(alpha = 0.5) +
+  facet_wrap(~ var) +
+  viridis::scale_color_viridis()
+```
+
+```{r, eval=F}
+plotSim1D(simulator1D_R())
+plotSim1D(simulator1D_cpp(seedlings = 5))
+```
+
+```{r benchmarkSim1D}
+microbenchmark::microbenchmark(
+  simulator1D_R(),
+  simulator1D_cpp()
+)
+```
+
+## 2-D environment
+
+We reimplemented the same model with a 2-D surface and a "simple" diagonal environmental gradient. The simulator is available here: https://sylvainschmitt.shinyapps.io/simulator2D/ .
+
+```{r simulator2D, echo=T, eval=F}
+simulator2D <- function(
+    grid = 20, # size
+    Ngen = 50,
+    muG = 0, # genetics
+    sigmaG = 1,
+    muE = 0, # environment
+    sigmaE = 1,
+    Elim = 5,
+    seedlings = 4, # reproduction
+    dispersal = 1,
+    viability_deterministic = T
+){
+    A <- array(dim = c(grid, grid, Ngen)) # objects
+    Z <- array(dim = c(grid, grid, Ngen))
+    A[,,1] <- array(rnorm(grid*grid, muG, sigmaG), dim = c(grid,grid))
+    Z[,,1] <- A[,,1] + array(rnorm(grid*grid, muE, sigmaE), dim = c(grid,grid))
+    E <- seq(-Elim, Elim, length.out = grid) %*% t(seq(-Elim, Elim, length.out = grid))
+    for(g in 2:Ngen){ # iterations
+      Aoffsprings <- array(
+        as.vector(
+          sapply(1:grid, function(i)
+            sapply(1:grid, function(j)
+              sapply(1:seedlings, function(s)
+                rnorm(1, 
+                      sample(A[max(1,i-dispersal):min(i+dispersal,grid),
+                               max(1,j-dispersal):min(j+dispersal,grid),
+                               g-1], 2),
+                      sigmaG/2)
+              )
+            )
+          )
+        ), dim = c(grid, grid, seedlings))
+        Zoffsprings <- Aoffsprings + array(rnorm(grid*grid*seedlings, muE, sigmaE), dim = c(grid,grid,seedlings))
+        if(viability_deterministic){
+            survivors <- array(apply(apply(Zoffsprings, 3, function(x) as.array(sqrt((x - E)^2), dim = c(grid,grid))), 1, which.min), dim = c(grid,grid))
+        } else {
+          survivors <- array(apply(1/apply(Zoffsprings, 3, function(x) as.array(sqrt((x - E)^2), dim = c(grid,grid))), 1, 
+                                   function(w) sample.int(seedlings, 1, replace = T, prob = w)), dim = c(grid,grid))
+        }
+        A[,,g] <- Aoffsprings[cbind(rep(1:grid, grid), rep(1:grid, each = grid), as.vector(survivors))]
+        Z[,,g] <- Zoffsprings[cbind(rep(1:grid, grid), rep(1:grid, each = grid), as.vector(survivors))]
+        
+    }
+    return(lapply(list("breeding value (a)" = A, "trait value (z)" = Z), function(M)
+        reshape2::melt(M) %>%
+          dplyr::rename(X = Var1, Y = Var2, generation = Var3)) %>%
+        bind_rows(.id = "var") %>%
+          left_join(reshape2::melt(E) %>%
+                      dplyr::rename(X = Var1, Y = Var2, environment = value),
+                    by = c("X", "Y")) %>% 
+          mutate(individual = paste0("X",X,"Y",Y)))
+}
+plot_env <-function(sim) {
+  dplyr::select(sim, X, Y, environment) %>% 
+    unique() %>% 
+    ggplot(aes(X, Y, fill = environment)) +
+    geom_tile() +
+    viridis::scale_fill_viridis(guide = "none")
+}
+plot_maps <- function(sim){
+  filter(sim, generation %in% c(1, floor(max(sim$generation)/2), max(sim$generation))) %>% 
+    ggplot(aes(X, Y, fill = value)) +
+    facet_wrap(~ generation) +
+    geom_tile() +
+    facet_grid(var ~ generation) +
+    viridis::scale_fill_viridis(guide = "none")
+}
+plot_trajectories <- function(sim, thin = NA){
+  if(is.na(thin)) thin <- length(unique(sim$individual))
+  filter(sim, individual %in% sample(unique(sim$individual), thin)) %>% 
+    ggplot(aes(generation, value, 
+               group = individual, col = environment)) + 
+    geom_line(alpha = 0.5) +
+    facet_wrap(~ var) +
+    viridis::scale_color_viridis(guide = "none")
+}
+plot_all <- function(sim,thin = NA){
+  gridExtra::grid.arrange(
+    plot_env(sim),
+    plot_maps(sim),
+    plot_trajectories(sim, thin = NA),
+    nrow = 2,
+    widths = c(1,2),
+    layout_matrix = rbind(c(1, 2),
+                          c(3, 3))
+  )
+}
+```
+
+```{Rcpp }
+
+```
+
+
+
