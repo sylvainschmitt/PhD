@@ -1,3 +1,9 @@
+# PhD 0.1.9197
+* growth: Msc PNAS first draft
+* symcapture: forest gaps dynamics
+* topography: msc review in progress
+* introduction: Niklas review in progress
+
 # PhD 0.1.9196
 * growth: Christophe v2
 * symcapture: forest gaps dynamcis
