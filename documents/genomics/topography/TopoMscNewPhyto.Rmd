@@ -1,19 +1,19 @@
 ---
-title: Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes
+title: Topography drives microgeographic adaptations of closely-related species in two tropical tree species complexes
 date: 'New Phytologist version `r Sys.Date()` '
 output:
-  bookdown::html_document2:
-    number_sections: false  
-    toc: true
-    toc_float: yes
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::word_document2:
-    reference_docx: ./template/template.docx
+  bookdown::html_document2:
+    number_sections: false  
+    toc: true
+    toc_float: yes
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/newphyto.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -33,11 +33,11 @@ Myriam Heuertz$^1$
 
 * **Corresponding author**: Sylvain Schmitt, +33 6 49 19 32 63, sylvain.m.schmitt@gmail.com
 * **Word count**:
-    * Main body: 5223
-    * Introduction: 1132
-    * Material and Methods: 2446
-    * Results: 588
-    * Discussion: 1057
+    * Main body: 
+    * Introduction: 1261
+    * Material and Methods: 2317
+    * Results: 670
+    * Discussion: 
 * **Figures**: 5 (all in colour)
 * **Tables**: 0
 * **Supporting information**: 1 file
@@ -49,29 +49,25 @@ Myriam Heuertz$^1$
 <!-- _**200 words.maximum**_ -->
 
 * Closely-related tree species that grow in sympatry are abundant in rainforests. However, little is known of the eco-evolutionary processes that shape their niches and allow their local coexistence. Here, we assessed genetic species delimitation in closely-related sympatric species belonging to two Neotropical tree species complexes and investigated their genomic adaptation to a fine-scale topographic gradient with associated edaphic and hydrologic features.
-* Combining LiDAR-derived topographic data, comprehensive tree inventories, and single nucleotide polymorphisms (SNPs) from gene capture experiments, we explored genome-wide population genetic structure, covariation of environmental variables and genotype-environment association to assess microgeographic adaptations to topography within the species complexes *Symphonia* (Clusiaceae), and *Eschweilera* (Lecythidaceae) with three species per complex and 406 and 257 individuals genotyped, respectively.
-* Within species complexes, closely-related tree species had different realized optima for topographic niches defined through the topographic wetness index or the relative elevation, and species displayed genetic signatures of adaptations. *Symphonia* species were differentially adapted to water and nutrient distribution, whereas *Eschweilera* species avoided hydromorph soils and were differentially adapted to soil chemistry.
+* Combining LiDAR-derived topographic data, comprehensive tree inventories, and single nucleotide polymorphisms (SNPs) from gene capture experiments, we explored genome-wide population genetic structure, covariation of environmental variables, and genotype-environment association to assess microgeographic adaptations to topography within the species complexes *Symphonia* (Clusiaceae), and *Eschweilera* (Lecythidaceae) with three species per complex and 385 and 257 individuals genotyped, respectively.
+* Within species complexes, closely-related tree species had different realized optima for topographic niches defined through the topographic wetness index or the relative elevation, and species displayed genetic signatures of adaptations. *Symphonia* species were differentially adapted to water and nutrient distribution, whereas *Eschweilera* species avoided hydromorphic soils and were differentially adapted to soil chemistry.
 * Our results suggest that varied topography represents a powerful driver of tropical forest biodiversity, driving differential adaptations and stabilizing local coexistence of closely-related tree species within tree species complexes.
 
 ## Keywords
 
-Ecological niche; French Guiana; relative elevation; syngameon; topographic wetness index; tropical forests
+Ecological niche; French Guiana; relative elevation; species coexistence; syngameon; topographic wetness index; tropical forests
 
 # Introduction 
 
-The tremendous biodiversity of tropical forests [@Gaston2000] has intrigued biologists for decades [@connell_diversity_1978].
-Lowland Amazonia alone is estimated to shelter around sixteen thousand tree species [@TerSteege2013]. 
-But the five thousand species of trees botanically identified in Amazonia belong to only height hundreds and ten genera [@TerSteege2013],
-many of which are thus species-rich.
-Even at the local scale, tropical forests shelter up to several hundred tree species per hectare [@Gentry1988], 
-including species-rich genera with closely-related species growing in sympatry [@Caron2019]. 
+Closely-related tree species are abundant at the local and regional scales in Neotropical forests [@Gentry1988; @TerSteege2013;  @Pinheiro2018].
+The five thousand tree species botanically identified in Amazonia belong to only height hundred ten genera  [@TerSteege2013],
+many of which thus contain multiple related species. 
+Even at the local scale, tropical forests shelter up to several hundred tree species per hectare [@Gentry1988],
+including genera with multiple closely-related species growing in sympatry [@Caron2019]. 
 Closely-related species are expected to share similar niche and functional strategies due to phylogenetic constraints [@Wiens2010].
-For example, sister species of Californian plants have greater ecological and reproductive similarities than non-sister species, although most have observed at least one change in traits [@Anacker2014].
-These niche and functional similarities are expected to lead to increased competition between closely-related tree species with a risk of local competitive exclusion, 
-unless closely-related species increase their niche difference or decrease their fitness difference [@Turcotte2016],  
-e.g. they become sufficiently different or similar [@Scheffer2006].
-Despite the local and regional abundance of closely-related tree species growing in sympatry in the Neotropics [@Gentry1988; @TerSteege2013; @Pinheiro2018],
-little is known of the eco-evolutionary forces that shape their ecological niches and allow their local coexistence.
+Such similar strategies can lead to increased competition between species,
+and a heightened risk of local competitive exclusion [@Turcotte2016].
+The abundance of sympatrically growing closely-related tropical tree species represents thus an intriguing paradox that warrants the investigation of the eco-evolutionary forces that shape their ecological niches and allow their local coexistence.
 
 Genetic studies have shown that species in species-rich genera have a higher level of genetic polymorphism [@Caron2019] 
 and hybridize more often between congeners [@Whitney2010] than those in species-poor genera. 
@@ -79,15 +75,18 @@ Species-rich genera thus frequently contain species complexes, defined as clades
 Species-rich genera also frequently contain syngameons, defined as species connected by limited, but recurrent, interspecific gene flow [@Suarez-Gonzalez2018].
 Syngameons are evolving at two contrasting taxonomic levels, they maximize each species adaptation to its ecological niche, and they evolve at the syngameon level which benefits all the constituent species through adaptive introgressions.
 The syngameon is thus unlikely to just represent a transitional stage before complete speciation; 
-instead it probably represents a successful evolutionary strategy that decreases the overall risk of syngameon extinction, 
-while allowing distinct ecological adaptations of its constituent species [@Cannon2015b; @Cannon2019a]. 
-With regard to local species coexistence, species complexes and syngeamons are especially susceptible to phylogenetic constraints due to their low level of genetic differentiation. 
-However, species complexes and syngameons frequently include sympatric species coexisting at local scales [@Caron2019; @Gonzalez2009; @Cannon2019a].
+instead it is probably a successful evolutionary strategy that maximizes adaptive evolution while decreasing the overall risk of extinction [@Cannon2015b; @Cannon2019a]. 
+Species complexes and syngameons frequently include sympatric species coexisting at local scales [@Caron2019; @Gonzalez2009; @Cannon2019a],
+but how these species remain distinct and persist in sympatry despite phylogenetic constraints and inter-specific gene flow remains poorly known.
 
-To address local species coexistence in sympatry despite similar expected niches, 
-niche theory evokes ecological niche differences [@lortie_rethinking_2004-1; @weiher_assembly_1995],
-while emerging similarity theory evokes fitness convergence [@Scheffer2006; @Turcotte2016], 
-that both limit competitive exclusion.
+The local coexistence of ecologically and phenotypically similar, closely-related species is governed by ecological and evolutionary processes, contingent on the history of speciation and niche differentiation [@Weber2016].
+Once in contact, ecologists consider foremost the competition for resources and the resulting niche differentiation [@Chesson2000; @Turcotte2016], 
+whereas evolutionary biologists are more interested in the level of reproductive isolation [@Weber2016]. 
+For stable coexistence, niche theory evokes that species maximize ecological niche differences [@lortie_rethinking_2004-1; @weiher_assembly_1995],
+while the “emerging similarity theory” reconciles niche and neutral theories by suggesting coexistence of distinct groups of species that are functionally similar within groups [@Scheffer2006]. 
+Functionally similar species must have similar fitness as an additional condition for stable coexistence [@Chesson2000],
+and recently diverged species must have evolved sufficient reproductive isolation to avoid the break-down of differences and their genetic homogenization upon secondary contact [@Abbott2013; @Levin1996; @Taylor2006]. 
+
 The heterogeneity of resource distribution in space and time defines fine-scale habitat structure where species can coexist.
 In tropical forests, topography explains the local spatial distribution of water and nutrient availability,
 showing a strong association with soil nitrogen, carbon, and phosphorus content [@ferry2010higher].
@@ -95,41 +94,39 @@ Topography  has been shown to explain pervasive differentiation in habitat prefe
 In particular, soil nutrients, also influenced by topography through hydromorphy, directly shape the spatial distribution of forest tree species [@Levins1971].
 Topography has also been shown to drive functional responses among and within species [@Schmitt2020].
 Topography, for example measured  through the topographic wetness index [@Schmitt2020] or relative elevation [@Allie2015], 
-is thus a proxy of numerous habitat features related to distributions of nutrients and water.
-Therefore, fine-scaled mapped topography is a good candidate factor that may explain adaptation and local coexistence of closely-related species in Neotropical tree species complexes.
+is thus a proxy of numerous habitat features related to the distribution of nutrients and water.
+Therefore, fine-scale mapped topography is a good candidate factor that may explain adaptation and local coexistence of closely-related species in Neotropical tree species complexes.
 
 Closely-related species growing in sympatry in differentiated ecological niches are frequently the product of an adaptive radiation [@Seehausen2004], such as Darwin’s finches in the Galapagos [@Grant2019]. 
-Evolutionary history behind adaptive radiations falls within a continuum from sympatric ecological speciation to secondary contacts of species ecologically specialised in allopatry or parapatry [@rundell_adaptive_2009].
+Evolutionary history behind sympatric species in adaptive radiations falls within a continuum from sympatric ecological speciation to secondary contacts of species ecologically specialised in allopatry or parapatry [@rundell_adaptive_2009; @Weber2016].
 In particular, species complexes can result from adaptive radiations and species segregation along environmental gradients.
 Species complexes may combine and reshuffle genetic features among species in hybrid swarms [@Seehausen2004; @Grant2019], 
 thus multiplying the number of potential ecological niches and helping species to achieve reproductive isolation [@Runemark2019]. 
-Indeed, hybrid or derived species require a certain degree of reproductive isolation from their progenitors to avoid becoming an evolutionary melting pot. 
+A certain degree of reproductive isolation is necessary to prevent hybrid or derived species from becoming an evolutionary melting pot.
 Nevertheless, species-specific adaptations can be maintained or even maximised under gene flow, 
 especially with selective pressures varying in space and or time [@Tigano2016].
-For instance, the European white oaks form one of the best known syngameons [@Cannon2019a].
-European white oak species lack private haplotypes indicating extensive hybridisation [@Petit2002], 
-but each has a unique ecological niche regarding tolerance to drought, cold, and alkaline soils [@Cannon2019a; @Leroy2019]. 
-The coexistence of the different species is partly due to the genes that allow them to survive in different ecological niches [@Leroy2019].
+For instance, the European white oaks form one of the best known syngameons [@Cannon2019a] with extensive hybridisation [@Petit2002], 
+but each species has a unique ecological niche concerning tolerance to drought, cold, and alkaline soils [@Cannon2019a; @Leroy2019]. 
+The coexistence of the different species is partly due to the genes that allow them to survive in different, adjacent, ecological niches [@Leroy2019].
 To our knowledge, only few studies have reported genetic evidence for differential adaptation to topography or abiotic habitats in tropical tree clades [@Fine2004; @Paun2016; @Pillon2014].
 At the within-species level though, topography has been highlighted as a driver of genetic divergence [@Brousseau2015].
 
 In the present study, we assessed genetic species delimitation and genotypic diversity of closely-related sympatric tree species belonging to two Neotropical species complexes, 
-the *Symphonia* (Clusiaceae) and the clade *Parvifolia* of the genus *Eschweilera* (Lecythidaceae). 
+the genus *Symphonia* (Clusiaceae) and the clade *Parvifolia* of the genus *Eschweilera* (Lecythidaceae). 
 We addressed fine-scale spatial adaptation along a topographic gradient associated with nutrient and water distribution. 
 Combining LiDAR-derived topographic data, comprehensive tree inventories, and single nucleotide polymorphisms (SNPs) from gene capture experiments, 
-we used population genomics, environmental association analyses and genome wide association studies to address the following questions:
+we explored genome-wide population genetic structure, covariation of environmental variables and genotype-environment association to address the following questions:
 
 1. How is genetic diversity structured among and within species of Neotropical tree species complexes ?
-1. How is the distribution of soil water and nutrients structured at fine spatial scale by the topographic gradient in which individuals grow?
+1. How are soil water and nutrients distributed at fine spatial scale along the topographic gradient exploited by the species complexes?
 1. Are tree species and individuals adapted to the fine-scale topographic gradient?
 
 We hypothesized species to be delineated into gene pools corresponding to already described taxonomic morphotypes. 
-We expected misidentifications due to absence of true diagnostic markers due to overlapping intraspecific morphological variability, and the difficulty to access reproductive material [@Mori1990]. 
-In this context, molecular data reveals the true evolutionary history as it can reveal cryptic species or lead to the merging of  taxa previously thought to be distinct [@Ewedje2020].
+We expected misidentifications due to overlapping intraspecific morphological variability and the difficulty to access reproductive material [@Mori1990]. 
+In this context, gene pool delimitation based on molecular data can reveal cryptic species or lead to the merging of taxa previously thought to be distinct [@Ewedje2020].
 We hypothesized relative elevation and topographic wetness to explain the distributions of water and nutrients at fine scale [@ferry2010higher; @Allie2015]. 
-We hypothesized species to be delimited along topography with fixed neutral and adaptive variants, 
-following preliminary evidence of topography determining species’ ecological niches [Schmitt et al., in prep]. 
-But interspecific gene flow within the species complex could reduce species adaptations to topography and blur evolutionary history [@Tigano2016].
+We expected genetic variation among and within species to be structured along the topographic gradient and to detect genetic signatures of adaptation, following preliminary evidence of topography determining species’ ecological niches [Schmitt et al., in prep]. 
+However, countering this process, interspecific gene flow could reduce neutral and adaptive signatures of differentiation among species within the species complexes [@Tigano2016].
 
 # Material and Methods
 
@@ -143,77 +140,68 @@ The site comprises 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which hav
 ## Plant material
 
 Four hundred and two individuals of *Symphonia globulifera* (Clusiaceae) 
-and 432 individuals belonging to the clade *Parvifolia* of the genus *Eschweilera* [Lecythidaceae, @Huang2015; @Mori2016] 
-were sampled in 2017 and 2018 during the dry season (from September to December) in Paracou (Fig. \@ref(fig:maps)).
+and 417 individuals belonging to the clade *Parvifolia* of the genus *Eschweilera* [Lecythidaceae, @Huang2015; @Mori2016] 
+were sampled in 2017 and 2018 during the dry season (i.e. from September to December) in Paracou (Fig. \@ref(fig:maps)).
 Both genera are locally abundant and some species within them are Amazonian hyperdominants [@TerSteege2013].
 *Symphonia globulifera* L.f (Clusiaceae) was previously recognized as composed of two morphotypes in French Guiana [@Ferry2007; @Molino2001; @Sabatier1997].
-*S. globulifera sensu stricto* and *Symphonia sp.1* occur in sympatry but in differentiated habitats, 
+*Symphonia globulifera sensu stricto* and *Symphonia sp.1* occur in sympatry but in differentiated habitats, 
 with *S. globulifera* preferentially growing in valley bottoms with an acquisitive functional strategy 
-and *S. sp1* preferentially exploiting a variety of drier habitats with a conservative functional strategy [@Allie2015; Schmitt et al., in prep; @Schmitt2020].
+and *S. sp1.* preferentially exploiting a variety of drier habitats with a conservative functional strategy [@Allie2015; Schmitt et al., in prep; @Schmitt2020].
 Reciprocal transplantation experiments of Symphonia seedlings have shown that survival and growth performance of each morphotype is better in their home environment than in the opposite environment, 
-showcasing how the two morphotypes are differently adapted to their respective environments(Tysklind et al, 2020).  
+showcasing how the two morphotypes are differently adapted to their respective environments (Tysklind et al., 2020).  
 Similarly, *Eschweilera sagotiana* Miers, *E. decolorans* Sandwith, and *E. coriacea* (DC.) S.A.Mori exhibit niche differentiation, differential responses to water stress, and different functional traits along topography [@Allie2015; Schmitt et al., in prep; @Ferry2007; @Schmitt2020].
-The genera *Symphonia*  and *Eschweilera* have been highlighted as species complexes with low (phylo-)genetic species resolution and high levels of plastid DNA sharing among sister species [@baraloto_using_2012-1; @Caron2019; @Gonzalez2009; @Torroba-Balmori2017; @Heuertz2020; @Huang2015].
+The genera *Symphonia*  and *Eschweilera* have been highlighted as species complexes with low (phylo-)genetic species resolution and high levels of plastid DNA sharing among closely related species [@baraloto_using_2012-1; @Caron2019; @Gonzalez2009; @Torroba-Balmori2017; @Heuertz2020; @Huang2015].
 In addition, outgroups for genetic analysis in *Symphonia* were comprised of 13 individuals of *Symphonia globulifera* from Africa (Sao Tome, Gabon, Cameroun, Congo, Benin, Liberia, Ivory Coast, and Ghana), seven *Symphonia globulifera* from South America (Brazil, Costa Rica and Panama), two *Symphonia nectarifera* Jum. & H. Perrier from Madagascar, two *Symphonia urophylla* (Decne. ex Planch. & Triana) Benth. & Hook.f. ex Vesque from Madagascar, five *Pentadesma butyracea* Sabine from Benin and Cameroon and one *Pentadesma grandifolia* Baker f. from Cameroon.
-For *Eschweilera*, outgroups were selected from other *Eschweilera* clades in Paracou (*Lecythis persistens* Sagot, *E. simiorum* (Benoist) Eyma, and *E. chartacea* (O.Berg) Eyma).
+For *Eschweilera*, outgroups were selected from other *Eschweilera* and *Lecythis* clades in Paracou (*Lecythis persistens* Sagot, *E. simiorum* (Benoist) Eyma, and *E. chartacea* (O.Berg) Eyma).
 Leaves were collected from the 864 individuals (402 *Symphonia* + 30 outgroups; 417 *Eschweilera* + 15 outgroups)  and  dessicated using silica gel. 
 
 ## Sequence capture 
 
 *Design of probes sets*
 
-We designed in *silico* two sets of 20,000 80-mer probes for sequence capture, one for the *Symphonia globulifera*, and a second one compatible with both *Eschweilera sagotiana* and *Eschweilera coriacea* (Fig. S1, Fig. S2). 
+We designed in *silico* two sets of 20,000 80-mer probes for sequence capture, one for *Symphonia globulifera*, and a second one compatible with both *Eschweilera sagotiana* and *Eschweilera coriacea* (Fig. S1, Fig. S2). 
 
 For *Symphonia globulifera*, the genomic and transcriptomic resources used for the design were comprised of a published low-coverage draft genome obtained from an individual from Cameroon [@Olsson2017], an unpublished draft genome from an individual from French Guiana [Scotti et al., in prep], an unpublished transcriptome from 20 juveniles from French Guiana [Tysklind et al., in prep], and reduced-representation genomic sequence reads of individuals from French Guiana [Torroba-Balmori et al., unpublished].
 Details on the design of the probes set for *Symphonia* are given in Method S1. 
 
-For *Eschweilera*, we used transcriptomes from  *Eschweilera sagotiana* and *Eschweilera coriacea* [@Vargas2019], and unpublished reduced representation genomic reads of *E. coriacea*, *E. sagotiana* and *E. decolorans* (M. Heuertz pers. com.).
+For *Eschweilera*, we used transcriptomes from  *Eschweilera sagotiana* and *Eschweilera coriacea* [@Vargas2019], and unpublished reduced representation genomic reads of *E. coriacea*, *E. sagotiana*, and *E. decolorans* (M. Heuertz pers. com.).
 Details on the design of the probes set for *Eschweilera* are given in Method S2. 
 
 *Genomic libraries and sequence capture*
 
 Genomic DNA was extracted from 5 mg of dried leaf tissue with a CTAB protocol [@Doyle1987]. 
 DNA extracts were digested with 'Ultra II FS Enzyme Mix' (new England Biolabs Inc, MA, USA) for a target size of 150 bp, 
-and libraries built with the 'NEBNext Ultra II FS DNA Library Prep kit for Illumina'(New England Biolabs Inc, MA, USA).
+and libraries built with the 'NEBNext Ultra II FS DNA Library Prep kit for Illumina' (New England Biolabs Inc, MA, USA).
 We amplified and tagged libraries using 5 $\mu L$ of adaptor-ligated DNA, 8.3 $\mu L$ of 'NEBNext Ultra II Q5 Master Mix' (new England Biolabs Inc, MA, USA), 2x 1.6 $\mu L$ of Index Primer i5 and i7 from 'NEBNext Multiplex Oligos for Illumina (Dual Index Primers Set 1 and Set 2)' (new England Biolabs Inc, MA, USA). 
 Initial denaturation (98°C for 30 s) was followed by 8 cycles (98°C for 10 s and 65°C for 1 min 30 s) and a final extension (65°C for 5 min). 
 We pooled libraries in four equimolar multiplexes for each genus.
-We obtained a custom made set of  20,000 80-mer probes for each genus  using myBaits Custom 1-20K (Arbor Biosciences, MI, USA)
+We used a custom made set of  20,000 80-mer probes for each genus (myBaits Custom 1-20K, Arbor Biosciences, MI, USA)
 and conducted the capture experiments using the corresponding myBaits V4 protocol with a hybridization time of 80 hours.
 We pooled the four multiplexes and sequenced them in two lanes of an Illumina HiSeq 4000 instrument obtaining 2x150bp pair-end reads for each genus.
 
-*SNP calling and filtering in Symphonia*
+*SNP calling, filtering and annotation in Symphonia*
 
 We assessed the quality off raw reads using `multiqc` [@Ewels2016] and trimmed them with `trimmomatic` [@Andrews2010]. 
 We kept only pair-end reads without adaptors and a phred score above 15 in a sliding window of 4.
 Seventy percent of trimmed reads mapped off-targets using `bwa` [@Li2009]. 
 We thus mapped trimmed reads on the hybrid reference built for the sequence capture experiment using `bwa` [@Li2009], `picard` [@BroadInstitute2018], `samtools` [@Li2009a] and `bedtools` [@Quinlan2010].
 We called variants for each individual using `HaplotypeCaller`, aggregated variants using `GenomicsDBImport` and jointly-genotyped individuals using `GenotypeGVCFs` all in `GATK4` software [@Freksa1993]. 
-We filtered biallelic SNPs with a quality above 30, a quality by depth above 2, a Fisher strand bias below 60 and strand odds ratio above 3 using `GATK4` [@Freksa1993]. 
-Finally, we filtered individuals and SNPs for missing data with a maximum of 95% and 15% of missing data per individual and SNP, respectively, using `plink2` [@Chen2019].
-We obtained 454,262 biallelic SNPs over 406 individuals without outgroups.
-
-*Reference annotation in Symphonia*
-
-We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon).
-We used transcript annotation of gene ontology to further annotate called SNPs. 
-We used long ORFs detection with `TransDecoder` [@Haas2013], their alignment with `blastp` on the `Uniprot` database [@Bateman2019; @Bias1991] and with `hmmscan` on `Pfam` database [@Johnson2010; @El-Gebali2019] in addition to called SNPs position into `SNPdat` [@Doran2013] to assess SNP synonymy.
-
-*SNP filtering for quantitative genomics in Symphonia*
-
-This first dataset including 454,262 SNPs was used for population genetic analyses.
-Since low-frequency alleles and linkage disequilibrium will bias the number of fixed loci and increase the number of false-positives in genomic scans for outliers [@Foll2008],
-we built a second dataset for quantitative genomics and genomic scans, filtering variants with a minor allele frequency above 5% (18 individuals) and with linkage disequilibrium $r^2<0.99$. 
-We further removed admixed individuals (see population genetic analyses for criteria) and retained 70,737 biallelic SNPs over 372 individuals.
+We filtered biallelic SNPs with a quality above 30, a quality by depth above 2, a Fisher strand bias below 60 and a strand odds ratio above 3 using `GATK4` [@Freksa1993]. 
+Finally, we filtered individuals and SNPs for missing data with a maximum of 95% and 15% of missing data per individual and SNP permitted, respectively, using `plink2` [@Chen2019].
+We obtained 454,262 biallelic SNPs over 385 individuals, without outgroups, for population genetic analysis.
+Since low-frequency alleles and linkage disequilibrium (LD) will bias the number of fixed loci and increase the number of false-positives in genomic scans for outliers [@Foll2008],
+we built a second dataset for outlier and environmental association analysis, filtering variants with a minor allele frequency (MAF) above 5% (18 individuals) and with LD $r^2<0.99$. 
+We further removed admixed individuals (<90% gene pool membership, see Genetic species delimitation) and retained 70,737 biallelic SNPs over 372 individuals.
+We used the genome-transcriptome alignments built for the design of probes sets to annotate called SNPs (Method S1).
 
 *SNP calling and filtering in Eschweilera*
 
 We conducted quality control and trimming of sequence reads as described for *Symphonia*.
 We kept only trimmed reads that mapped on-targets using `bwa` [@Li2009]. 
 Because of problems with paralogs in *Eschweilera* clade *Parvifolia* due to a strong signature of a past genome duplication [@Heuertz2020],
-we decided to build a *de novo* reference of successfully mapping reads using `ipyrad` with a very strict clustering threshold of 0.95 within and across individuals [@Eaton2020].
+we decided to build a *de novo* reference of successfully mapping reads using `ipyrad` with a very strict sequence similarity  threshold of 0.95 for clustering within and across individuals [@Eaton2020].
 We automatically tested numerous values of missing data and outgroup filtering, and kept strict filters with population structure congruent with botanical identification but keeping a maximum of individuals (Fig. S3, Fig. S4).
-We filtered individuals and SNPs for missing data with a maximum of 99% of missing data per SNP and at least 5 individuals represented per SNP using `plink2` [@Chen2019].
+We filtered individuals and SNPs for missing data allowing a maximum of 99% of missing data per SNP and at least 5 individuals represented per SNP using `plink2` [@Chen2019].
 Outgroups were automatically filtered out by clustering individuals in two groups using K-means in a genomic principal component analysis (Fig. S5).
 We obtained 418,793 biallelic SNPs over 257 individuals.
 
@@ -223,16 +211,16 @@ We obtained 418,793 biallelic SNPs over 257 individuals.
 
 For genetic species delimitation in the *Symphonia* species complex, 
 we investigated population genetic structure using `admixture` [@Alexander2011], 
-using 10 repetitions of K genetic groups varying from 1 to 10 and assessed the number of gene pools with cross validation.
+using 10 repetitions of K genetic groups with K varying from 1 to 10 and assessed the number of gene pools with cross validation.
 We defined individuals with a membership to gene pools below 90% as admixed and the remaining individuals as genetically pure.
 We further investigated admixture with the `introgress` R package [@Gompert2010], 
 using genetically pure individuals as parental populations and all individuals as the hybrid population.
 Due to an excess of missing data, `admixture` failed to infer genetic custers in *Eschweilera*.
 We thus used principal component analysis and K-means clustering to delimit *Eschweilera* species.
-We assessed the number of gene pools using the within group sum of squares.
+We assessed the number of gene pools using the within-group sum of squares.
 We validated gene pool delimitation in *Symphonia* and *Eschweilera* by comparison with botanical identifications using a confusion matrix, and we conducted a second blind-identification of every collected individual of Symphonia in November 2019.
 
-We used `bayescan` [@Foll2008] to detect fixed SNPs between the different *Symphonia* gene pools using the 70,737 SNPs filtered for quantitative genomics (see genomic data production) with an *a priori* odds ratio of ten.
+We used the genomic scan approach implemented in `bayescan` [@Foll2008] to detect high-differentiation outlier SNPs between the different *Symphonia* gene pools using the dataset of 70,737 MAF and LD-filtered SNPs with an *a priori* odds ratio of ten.
 We considered as outliers those SNPs for which the p-value corrected for multiple testing by false discovery rate was below 5%.
 We tested genic outlier SNPs for enrichment in gene ontology with the R package `clusterProfiler` [@DeLaCruz2014].
 
@@ -240,19 +228,18 @@ We tested genic outlier SNPs for enrichment in gene ontology with the R package 
 
 We used two relatively-independent topographic variables, the topographic wetness index (TWI) and the relative elevation (RE, orthogonality shown in Fig. 4), as proxies of the distribution of soil water and nutrients availability in Paracou. 
 Waterlogging and topography have been highlighted as crucial for forest dynamics [@ferry2010higher], species-habitats relationships [@Engelbrecht2007], and phenotypic variation of *Symphonia* and *Eschweilera* [@Schmitt2020]. 
-TWI and RE were derived from a 1-m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign done in 2015.
+TWI and RE were derived from a 1-m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign of the whole Paracou field station done in 2015.
 Principal component analysis (PCA) was further used to characterize the distribution of variables summarizing soil water and nutrients along TWI and RE in Paracou interpolating previous studies: 
-we specifically assessed the variation in organic matter, carbon, nitrogen and phosphorous content, exchangeable cation charge [@Soucemarianadin2004; @Roelens2007], water table depth [@Gourlet-Fleury2004], hydromorphy, and waterlogging [@Cantet2004].
+we specifically assessed the co-variation in organic matter, carbon, nitrogen and phosphorous content, exchangeable cation charge [@Soucemarianadin2004; @Roelens2007], water table depth [@Gourlet-Fleury2004], hydromorphy, and waterlogging [@Cantet2004].
 
 ### Topography effect on neutral and adaptive genetic variation
 
 We did environmental association analyses [@Rellstab2015a] in each complex using general linear mixed models developed for genome wide association studies (GWAS). 
-We used topography as the response variable and genetic structure (gene pools representing species) and relatedness (kinship matrix) as explanatory variables, as it is common practice [@Rellstab2015a]. 
+We used topographic wetness index (TWI) or relative elevation (RE) as the response variable and genetic structure (i.e. gene pools representing species) and relatedness (i.e. kinship matrix) as explanatory variables, as it is common practice [@Rellstab2015a]. 
 This analysis assumed that the topographic conditions where individuals have grown above 10-cm DBH are strongly correlated to the individual heritable phenotypes [e.g. @Eckert2010]. 
 We used genetic species and individual kinship in an animal model [@Wilson2010] to estimate genetic variance associated with topography.
 We used a lognormal likelihood given that distributions of environmental variables were positive and skewed.
-We defined species based on the gene pools identified with `admixture`, removing admixed individuals.
-We inferred individual kinship using KING [@Manichaikul2010], as the method is robust to population structure. 
+We defined species based on the gene pools identified with `admixture` and inferred individual kinship using KING [@Manichaikul2010], as the method is robust to population structure. 
 We set negative kinship values to null as they were confounding with population structure, and we further ensured that the matrix was positive-definite using the `nearPD`  function from the R package `Matrix`.
 The environment $y_{s,i}$ where individual $i$ in species $s$ grows was inferred with a lognormal distribution with the following formula:
 
@@ -264,40 +251,41 @@ The environment $y_{s,i}$ where individual $i$ in species $s$ grows was inferred
    (\#eq:AnimalEnv)
 \end{equation}
 
-where $\mu_s$ is the mean environment of species $s$, $a_i$ is the breeding value of the individual $i$ and $\sigma^2_1$ is the shape parameter of the lognormal. 
+where $\mu_s$ is the mean environment of species $s$, $a_i$ is the breeding value of individual $i$ and $\sigma^2_1$ is the shape parameter of the lognormal distribution. 
 Individual breeding values $a_i$ are defined following a multivariate lognormal law $\mathcal{MVlogN}$ of co-shape matrix defined as the product of the kinship matrix $K$ with estimated individual genotypic variation $\sigma^2_2$.
-To estimate variances on a normal scale, we log-transformed species fixed effect, genetic additive values, and we calculated conditional and marginal $R^2$ [@Nakagawa2013].
-A Bayesian method was used to infer parameters using `stan` language [@Carpenter2017, Model S1] and `rstan` package [@Team2018] in the R environment [@RCoreTeam2020] using the No-U-Turn Sampler alogirthm [NUTS, @Hoffman2014], which performs better for estimating genetic parameters and breeding values [@Nishio2019].
+To estimate variances on a normal scale, we log-transformed species fixed effects, genetic additive values, and we calculated conditional and marginal $R^2$ [@Nakagawa2013].
+A Bayesian method was used to infer parameters using `stan` language [@Carpenter2017, code available in Model S1] and `rstan` package [@Team2018] in the R environment [@RCoreTeam2020] using the No-U-Turn Sampler alogirthm [NUTS, @Hoffman2014], which performs better for estimating genetic parameters and breeding values [@Nishio2019].
 
 # Results
 
 *Symphonia globulifera* was previously recognized as composed of two morphotypes in French Guiana,
 but cross validation of admixture analyses for different levels of clustering advocated for K = 3 different gene pools (Fig. \@ref(fig:symphospecies)a, Fig. S6, Fig. S7).
-The three gene pools correspond to the previously identified two morphotypes (70-80% of match), *S. globulifera* and *S. sp1*, 
+The three gene pools correspond to the two previously identified morphotypes (70-80% of match), *S. globulifera* and *S. sp.1*, 
 where the *S. globulifera* morphotype itself comprises two gene pools. 
 These two gene pools correspond to two locally defined sub-morphotypes herafter called *S. globulifera type Paracou* and *S. globulifera type Régina* (Fig. \@ref(fig:symphospecies)b). 
-*S. sp1* grows preferentially in drier plateaux and slopes (Schmitt et al., submitted) and has a light grey thin and smooth bark associated with smaller leaves, flowers, and fruits (Fig. \@ref(fig:symphospecies)b). 
-*S. globulifera type Paracou* grows in wet habitats of bottomlands, but drier than those of *S. globulifera type Régina*, and has a dark bark that is intermediate between that of the other morphotypes with respect to thickness and rugosity (Fig. \@ref(fig:symphospecies)b). 
-*S. globulifera type Régina* grows in the wettest bottomlands of Paracou and has a thick and lashed bark (Fig. \@ref(fig:symphospecies)b).
+*Symphonia sp.1* grows preferentially in drier plateaux and slopes (Schmitt et al., submitted) and has a light grey thin and smooth bark associated with smaller leaves, flowers, and fruits (Fig. \@ref(fig:symphospecies)b). 
+*Symphonia globulifera type Paracou* grows in wet habitats of bottomlands, but drier than those of *S. globulifera type Régina*, and has a dark bark that is intermediate between that of the other morphotypes with respect to thickness and rugosity (Fig. \@ref(fig:symphospecies)b). 
+*Symphonia globulifera type Régina* grows in the wettest bottomlands of Paracou and has a thick and lashed bark (Fig. \@ref(fig:symphospecies)b).
 The second blind-identification correctly assigned the difference between all *S. globulifera type Paracou* and *S. globulifera type Régina* and reclassified correctly 87% of previous mismatches between gene pools and previous botanical identification.
-Among the three populations, 25 individuals (7%) showed patterns of introgression, 15 between *S. globulifera type Regina* and *S. sp1* and 10 between *S. globulifera type Paracou* and *S. sp1* (confirmed with `introgress` R package, Fig. S8). 
+Among the three populations, 25 individuals (7%) showed admixed genotypes, 15 between *S. globulifera type Régina* and *S. sp.1* and 10 between *S. globulifera type Paracou* and *S. sp.1*, 
+whereas no admixed individuals were found between *S. globulifera type Régina* and *S. globulifera type Paracou* (confirmed with `introgress` R package, Fig. S8). 
 Admixed individuals were removed from subsequent analyses.
 
-Genomic scans for *Symphonia* revealed fixed markers among gene pools (5.7% of SNPs, Fig. S9),
-and fixed markers were enriched in the gene ontology term “response to water deprivation” ($p=0.01106$). 
+Genomic scans for *Symphonia* revealed high-differentiation outliers among gene pools (5.7% of SNPs, Fig. S9),
+and outliers were enriched in the gene ontology term “response to water deprivation” ($p=0.01106$). 
 Based on our results, *Symphonia globulifera* is locally and genetically structured in three sympatric species,
-including thus cryptic species, corresponding to three different morphotypes (Fig. \@ref(fig:symphospecies)). 
+corresponding to three distinct morphotypes (Fig. \@ref(fig:symphospecies)). 
 *Eschweilera* clade Parvifolia was locally and genetically structured in three genepools separated based on a principal component analysis. 
 The gene pools corresponded to botanical species *E. coriacea*, *E. sagotiana*, and *E. decolorans* (65-80% of match, Fig. \@ref(fig:parvispecies), Tab. S1).
 Symphonia and Eschweilera gene pools showed intermediate genetic differentiation, $F_{ST}=0.15$ and $F_{ST}=0.35$, respectively.
 
-We identified topographic wetness index (TWI) and relative elevation (RE, Fig. \@ref(fig:SpDistVar)) as descriptors of the topographic gradient in which individuals grow.
+We confirmed topographic wetness index (TWI) and relative elevation (RE, Fig. \@ref(fig:SpDistVar)) as descriptors of microenvironmental variation along the topographic gradient exploited by the two species complexes in Paracou.
 Topographic wetness index (TWI) was related to soil water distribution, opposing water tables deeper than 100 cm to those between the surface and 100 cm deep, which corresponded to hydromorphic soils with the most pronounced waterlogging (variable waterlog5, Fig. \@ref(fig:soilpca)).
 Relative elevation (RE) was related to the distribution of nutrients, opposing hilltop soils with the lowest degree of waterlogging (waterlog1) and increased soil organic compounds (soil carbon, nitrogen, organic matter, exchangeable cation charge) to those further down the slopes with intermediate levels of waterlogging and higher soil fertility (higher availability of phosphorus) (Fig. \@ref(fig:soilpca)).
 
-The distribution of *Symphonia* and *Eschweilera* species along the topographic gradient suggested that both topographic wetness index (TWI) and relative elevation (RE) drove individual survival across  gene pools ($0.06<R_m^2<0.39$, Fig. \@ref(fig:SpDistVar), Tab. \@ref(tab:fits)).
-The spatial distribution of *Symphonia* species was driven by both topographic wetness index (TWI, Fig. \@ref(fig:SpDistVar)**c**, Tab. \@ref(tab:fits)), especially between *S. globulifera type Régina* and *S. globulifera type Paracou*, and relative elevation (RE, Fig. \@ref(fig:SpDistVar)**d**, Tab. \@ref(tab:fits)), especially between *S. sp1* and the two other species.
-The spatial distribution of *Eschweilera*  species was mainly driven by relative elevation (RE, Fig. \@ref(fig:SpDistVar)**b**, Tab. \@ref(tab:fits)).
+The distribution of *Symphonia* and *Eschweilera* species along the topographic gradient suggested that both topographic wetness index (TWI) and relative elevation (RE) drove individual survival across gene pools ($0.06<R_m^2<0.39$, Fig. \@ref(fig:SpDistVar), Tab. \@ref(tab:fits)).
+The spatial distribution of *Symphonia* species was driven by both the topographic wetness index (TWI, Fig. \@ref(fig:SpDistVar)**c**, Tab. \@ref(tab:fits)), especially between *S. globulifera type Régina* and *S. globulifera type Paracou*, and the relative elevation (RE, Fig. \@ref(fig:SpDistVar)**d**, Tab. \@ref(tab:fits)), especially between *S. sp.1* and the two other species.
+The spatial distribution of *Eschweilera*  species was more driven by relative elevation (RE, Fig. \@ref(fig:SpDistVar)**b**, Tab. \@ref(tab:fits)) than by topographic wetness index.
 Variance partitioning revealed that the total genetic variance for topographic position was higher in *Symphonia* (44 and 46% for TWI and RE, respectively) than in *Eschweilera* (27 and 25%, respectively) and that the variance component corresponding to species was much higher in *Symphonia* (35 and 39%) than in *Eschweilera* (6 and 13%, respectively).
 Within-species additive genetic variance explained between 7 and 21% of total variance in topographic position in all models of the two species complexes.
 
@@ -306,35 +294,38 @@ Within-species additive genetic variance explained between 7 and 21% of total va
 Despite the local abundance of closely-related tree species growing in sympatry in the Neotropics,
 little is known of the eco-evolutionary forces that shape their niches and allow their local coexistence.
 Here, we show that within tree species complexes, closely-related species have different realized optima for topographic niches and we provide evidence for genetic adaptations of species and of genotypes within species for the topographic position where they occur. 
-*Symphonia* species are adapted to the distribution of water and nutrients captured through the topographic wetness index and relative elevation, growing thus in a broad range of local habitats.
+*Symphonia* species are adapted to the distribution of water and nutrients captured through the topographic wetness index and the relative elevation, hence they coexist locally through exploiting a broad gradient of local habitats.
 Conversely, *Eschweilera* species are differentially adapted to soil chemistry,
-captured through relative elevation, and avoid the wettest, hydromorphic habitats.
-The greater role of topographic position among *Symphonia* species than among *Eschweilera* species suggests that topography may be the main factor in differentiating niches among *Symphonia* species, 
-while additional factors contribute niche differentiation or phenotypic convergence among *Eschweilera* species.
-Consequently, species adaptations to different characteristics of topography stabilize local coexistence through avoidance of competition among closely-related species within the two tree species complexes.
+captured foremost through the relative elevation, and avoid the wettest, hydromorphic habitats.
+The greater adaptive signature to topographic position in *Symphonia* than in *Eschweilera* suggests that topographic niche differentiation may be the main factor explaining sympatric coexistence of *Symphonia*, 
+while additional factors related to niche and/or fitness may be necessary to explain coexistence of *Eschweilera* species. 
+Overall, our results suggest that genetic adaptations to different characteristics of topography stabilize local coexistence of species through reducing competition among closely-related species within the two tree species complexes.
 
 ## Three species of *Symphonia* adapted to topography coexist in sympatry
 
 We identified three distinct species within *Symphonia globulifera sensu lato* with different morphologies, distinct gene pools, and topographic niches.
-For the purpose of the study, we named the three species *S. sp1*, *S. globulifera type Paracou* and *S. globulifera type Régina* in reference to already existing morphotypes and local names.
+For the purpose of the study, we named the three species *S. sp.1*, *S. globulifera type Paracou*, and *S. globulifera type Régina* in reference to already existing morphotypes and local names.
 The three species showed a low but significant genetic differentiation ($F_{ST} = 0.15$), 
-as shown previously at the local scale between the two previously recognized morphotypes, *S. globulifera sensu stricto* and *S. sp1* [$F_{ST} = 0.114$ for genic SSRs; @Olsson2017].
-The genetic differentiation was revealed by 5.7% of SNPs being significantly associated with species with an enrichment in genes implicated in response to water deprivation.
-Topography has already shown to be a driver of the distribution of the two previously recognized morphotypes [@Allie2015] with *S. globulifera* growing in low-elevation and wet bottomlands and *S. sp1* growing in drier slopes and plateaux.
+as shown previously at the local scale between the two previously recognized morphotypes, *S. globulifera sensu stricto* and *S. sp.1* [$F_{ST} = 0.114$ for genic SSRs; @Olsson2017].
+Evidence for adaptive genetic differentiation among species was revealed by 5.7% of SNPs identified as high-differentiation outliers,
+with an enrichment in genes implicated in response to water deprivation..
+Topography has already shown to be a driver of the distribution of the two previously recognized morphotypes [@Allie2015] with *S. globulifera* growing in low-elevation and wet bottomlands and *S. sp.1* growing in drier slopes and plateaux.
  In addition, our study revealed the existence of two *Symphonia globulifera* morphotypes segregated within wet areas, with *Symphonia globulifera type Régina* growing in the wettest bottomlands, such as swamp characterized by increased wetness and anoxia.
 Similar ecotypic differentiation with a designated swamp ecotype has been suggested in Africa [@Budde2013].
- Individual topographic conditions where individuals grow was mainly non-related to genetics, i.e. plastic (54-56% of residual variation) but among the remaining genetic variation the majority (80-85%) was due to species differences (Fig. \@ref(fig:SpDistVar)).
-Thus, finescale topographic variation among individuals was driven by species adaptations, revealing local adaptation to topography among the three species at the hectare-scale.
-Further studies at a broader regional scale are needed, but our results advocate for the definition of three distinct taxonomic species with differences in morphology (Fig. \@ref(fig:symphomorphotypes)), habitat preference (Fig. \@ref(fig:SpDistVar)), functional traits and growth trajectories (S. Schmitt pers. com.).
+Individual topographic positions had a large plastic component (54-56% of variation) but genetics explained the remaining variation,
+with a ca. five-fold larger inter- than intra-specific component (Fig. \@ref(fig:SpDistVar)).
+Thus, finescale topographic variation among individuals was driven by adaptive processes,
+revealing local adaptation to topography within and among the three species at the hectare-scale.
+Further studies at a broader regional scale are needed, but our results advocate for the definition of three distinct taxonomic species with differences in morphology (Fig. \@ref(fig:symphomorphotypes)), habitat preference (Fig. \@ref(fig:SpDistVar)), functional traits and growth trajectories (S. Schmitt unpublished results).
 
 ## Three species of *Eschweilera* adapted to soil chemistry coexist in sympatry
 
-*Eschweilera* species avoided hydromorphs soils and were differentially adapted to soil chemistry. 
+*Eschweilera* species avoided hydromorphic soils and were differentially adapted to soil chemistry. 
 At least three distinct species of *Eschweilera* clade *Parvifolia* with different morphologies, gene pools, and topographic niches coexist in sympatry.
-*E. coriacea* preferentially grows in fertile and phosphorus-rich valley bottoms but has a broad topographic niche, 
+*Eschweilera coriacea* preferentially grows in fertile and phosphorus-rich valley bottoms but has a broad topographic niche, 
 and *E. sagotiana* and *E. decolorans* preferentially exploit slopes and plateaus, 
-characterized by low waterlogging and soil rich in soil organic compounds [Fig. \@ref(fig:SpDistVar); @Allie2015].
-Topography, through iron oxides dissolution, litter- and tree-fall transfers and waterlogging, shape soil nutrient distribution in tropical forests [@Levins1971; @Ferry2010]. 
+characterized by low levels of waterlogging and soils rich in organic compounds [Fig. \@ref(fig:SpDistVar); @Allie2015].
+Topography, through the dissolution of iron oxides, litter- and tree-fall transfers and waterlogging, shape soil nutrient distribution in tropical forests [@Levins1971; @Ferry2010]. 
 The lack of power of *Eschweilera* data prevented us from detecting the less abundant *Eschweilera* species of the *Parvifolia* clade
 (e.g. *E. grandiflora* (Aubl.) Sandwith, *E. wachenheimii* (Benoist) Sandwith), but our results do not question their botanical definitions. 
 Topographic position within *Eschweilera* was mainly plastic (73-75% of residual variation),
@@ -343,32 +334,45 @@ whereas the  topographic wetness index best captured genetic variation among gen
 
 ## Species niche differentiation and coexistence within species complexes
 
-The interaction between topography and genes shapes the microgeographic genetic structure of the three sympatric populations of *Symphonia globulifera* and of the three *Eschweilera* species in the clade *Parvifolia*.
-Genomic bases for the microgeographic adaptation of species have been identified for *Symphonia* species,
-with in particular a functional response to water distribution identified as a driver of the topographic niches of the species.
-Similarly to European white oakd, we identified coexisting different species with genes that allow them to survive in different ecological niches despite interspecific hybridization [@Leroy2019]. 
-Consequently, we evidenced syngameons of tropical trees with differential adaptations of species to topographic niches stabilizing local coexistence of species. 
-If interspecific gene flow benefits all the constituent species, 
-*Symphonia globulifera* and *Eschweilera* clade *Parvifolia* might represent a successful evolutionary state as syngamons [@Cannon2019a].
+The interaction between topography and genes shapes the microgeographic genetic structure among and within species in the studied tropical tree species complexes.
+We found genomic evidence for a functional response to water deprivation between *Symphonia* species, confirming the role of water availability as a driver of the topographic niches in the complex.
+Similarly to European white oaks, *Symphonia* holds coexisting species with differential genetic adaptations that allow them to thrive in different ecological niches despite interspecific hybridization  [@Leroy2019]. 
+In *Eschweilera*, we evidenced a genomic signature of topographic niche differentiation but the low resolution of our data did not allow us to demonstrate hybridization.
+Although the regional-scale evolutionary history and the specific roles of interspecific hybridization and introgression remain unknown for both species complexes, 
+our study shows that inter- and intra-specific adaptive processes to topographic niches stabilize local coexistence of species in these tropical tree species complexes, 
+similarly to what is observed in the European white oaks syngameon. 
+*Symphonia* and *Eschweilera* clade *Parvifolia* might thus represent syngamons [@Cannon2019a] of tropical trees.
+It remains to be shown that interspecific gene flow benefits their constituent species, 
+through adaptive introgression, or through preventing local extinction of congeners by enabling reproductive assurance and increasing their effective population size [@Cannon2015b].
 
-The results of *Eschweilera* are in contrast to those of *Symphonia*, with more plasticity and stronger genotypic effects for topographic position in *Eschweilera* than in *Symphonia.*
-Topography had globally a greater role among *Symphonia* species than among *Eschweilera* species (less residual variation).
-*Eschweilera* species, despite similar morphology have a higher genetic differentiation than *Symphonia* species. 
-*Eschweilera* species may thus have evolved differentiation along other ecological niches, e.g., related to root depth or light access [@Ruger2009].
-But *Eschweilera* species may also coexist by a decrease in fitness differences among species across a shared niche  [@Turcotte2016], 
-thanks to the phenotypic convergence allowed by increased genetic differentiation [@Tobias2014].
-Whereas the less differentiated species of *Symphonia* probably did not diverge genetically enough to converge phenotypically.
+The distribution of *Eschweilera* species along the topographic gradient was more influenced by plasticity than in *Symphonia*
+and the role of intra-specific adaptive processes was stronger in *Eschweilera*, with intra-specific genotypic effects stronger or equal to inter-specific effects.
+As compared to *Symphonia*, *Eschweilera* exhibited globally a weaker role of topography on the structuring of its genetic variation,
+its species had a more marked topographic niche overlap, and the intra-specific adaptive signature to topography was larger.
+These patterns may be a consequence of the evolutionary history of the complex. 
+*Eschweilera* species, despite similar morphology, have a higher genetic differentiation and their phylogenetic constraints may thus be relaxed as compared to Symphonia [@Wiens2010],
+allowing greater topographic niche overlap possibly in conjunction with niche differentiation along other ecological gradients, 
+e.g., related to root depth or light access [@Ruger2009].
+But *Eschweilera* species may also coexist through a decrease in fitness differences among species allowing them to persist in a shared niche [@Turcotte2016]. 
+This explanation is plausible in a species complex like Eschweilera in which the risk of hybridization and consequent breakdown of inter-specific divergence may be more limited than in more closely-related, recently diverged species [@Tobias2014].
+Furthermore, the signature of within-species genotypic adaptations to topographic niche may be associated with broad niches for TWI.
+@Schmitt2020 showed that *E. coriacea* and the two major previously recognized *Symphonia* morphotypes had broader niches for TWI than the majority of tree species in Paracou. 
+To further improve our understanding on the eco-evolutionary drivers of coexistence in these tropical tree species complexes, 
+future work should improve our knowledge on the evolutionary history of both complexes, 
+including aspects of interspecific gene flow and introgression, 
+as well as consolidate knowledge on the factors that shape the niche space of both species complexes at broader geographic scale.
 
-Literature includes numerous examples of niche differentiation among closely-related species growing in sympatry, 
+The literature includes numerous examples of niche differentiation among closely-related species growing in sympatry, 
 along fine-scale topography [@gunatilleke_specieshabitat_2006; @Engelbrecht2007; @kraft_functional_2008; @Allie2015] 
 or along other local ecological niche variables [@Crystal2003; @Yamasaki2013].
 On a larger scale, topography is also a driving force for tropical species diversity on the Andes [@Mutke2014].
 In Paracou, several species complexes have been shown to present differentiated niches along topography [Schmitt et al. in prep].
 Combined with our results, this abundant evidence of niche differentiation among closely related species calls into question the more general role of topography in the genetic adaptation and diversification of tropical tree species complexes, 
 even for small topographic gradients such as those found in French Guiana.
-Ecological speciation induced by steep gradients, such as soil types or soil metal content [@Fine2004; @Paun2016],
-could also occur at a finer scale in sympatry with progressive habitat variation. 
-Moreover, it emphasizes the potential role of species complexes and syngameons in the origin and maintenance of Neotropical forest diversity.
+Our results suggest that ecological speciation as demonstrated along steep gradients, 
+such as soil types or soil metal content [@Fine2004; @Paun2016],
+could possibly occur at a fine spatial scale with gradual habitat variation.
+Our work emphasizes the potential role of species complexes and syngameons in the origin and maintenance of Neotropical forest diversity.
 
 # Acknowledgements
 
@@ -380,7 +384,7 @@ This study was funded through an Investissement d’Avenir grant of the ANR: CEB
 
 All authors conceived the ideas and designed methodology;
 SS, MH, and NT sampled individuals;
-SS and MH realized the gene capture experiment;
+SS and MH performed the gene capture experiments;
 SS, MH and BH  analysed outputs; 
 SS and MH led the writing of the manuscript. 
 All authors contributed critically to the drafts and gave final approval for publication.
@@ -407,11 +411,11 @@ All authors contributed critically to the drafts and gave final approval for pub
 
 **Fig. S6.** Cross-validation for *Symphonia* population structure
 
-**Fig. S7.** *Symphonia* population structure
+**Fig. S7.** *Symphonia* population structure using admixture
 
-**Fig. S8.** *Symphonia* hybrid index 
+**Fig. S8.** *Symphonia* population structure using hybrid index 
 
-**Fig. S9.** *Symphonia* species-specific SNPs
+**Fig. S9.** Outlier SNPs among *Symphonia* species
 
 # Tables and Figures
 
@@ -419,9 +423,9 @@ All authors contributed critically to the drafts and gave final approval for pub
 
 **Figure \@ref(fig:maps).** Map of sampled individuals for species complexes *Symphonia* and *Eschweilera* clade *Parvifolia*. Colours represent species determined based on the genetic structure of capture datasets, which was not necessarily in agreement with original botanical identification. Grey level represents hill shading to visualize topography.
 
-**Figure \@ref(fig:soilpca).** Principal component analysis (PCA) of topographic wetness index (TWI), relative elevation (RE) with edaphic and hydrological properties. Edaphic and hydrological properties include organic matter (OM), carbon (C), nitrogen (N), exchangeable cation charge (C) [@Soucemarianadin2004; @Roelens2007], water table depth [WTD in cm, @Gourlet-Fleury2004], hydromorphy and waterlogging [waterlog in 5 classes, @Cantet2004]). Data have been obtained by interpolating soil sampling with LiDAR data.
+**Figure \@ref(fig:soilpca).** Principal component analysis (PCA) of topographic wetness index (TWI), relative elevation (RE) with edaphic and hydrological properties. Edaphic and hydrological properties include organic matter (OM), carbon (C), nitrogen (N), exchangeable cation charge (C) [@Soucemarianadin2004; @Roelens2007], water table depth [WTD in cm, @Gourlet-Fleury2004], hydromorphy and waterlogging [waterlog in 5 classes, @Cantet2004]).  Data were obtained through interpolation of soil sample data on TWI and RE from LiDAR data.
 
-**Figure \@ref(fig:symphospecies).** Admixture plot **(a)** of *Symphonia* individuals for the best K, K = 3 and corresponding trunk morphology **(b)**. The three morphotypes are identified with their bark with *S. sp1* (left, red) having a light grey thin and smooth bark, the *S. globulifera type Paracou* (center, light blue) having a dark that is intermediate between that of the other morphotypes with respect to thickness and rugosity and the *S. globulifera type Regina* that has a thick and lashed bark (right, dark blue).
+**Figure \@ref(fig:symphospecies).** Admixture plot **(a)** of *Symphonia* individuals for the best K, K = 3 and corresponding trunk morphology **(b)**. The three morphotypes are identified with their bark with *S. sp.1* (left, red) having a light grey thin and smooth bark, the *S. globulifera type Paracou* (center, light blue) having a dark that is intermediate between that of the other morphotypes with respect to thickness and rugosity and the *S. globulifera type Régina* that has a thick and lashed bark (right, dark blue).
 
 **Figure \@ref(fig:parvispecies).** Principal component analysis (PCA) of single nucleotide polymorphisms (SNP) from *Eschweilera* clade *Parvifolia.* The colours represent the clusters detected with Kmeans for the best K, K = 3.
 
@@ -443,7 +447,7 @@ opts_chunk$set(echo = F, message = F, warning = F,
 # crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 crs <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 spcol <- c("#1b9e77", "#d95f02", "#7570b3", "#1E90FF", "#0000EE", "#CD2626")
-names(spcol) <- c("E. decolorans", "E. sagotiana", "E. coriacea", "S. globulifera Paracou", "S. globulifera Regina", "S. sp1")
+names(spcol) <- c("E. decolorans", "E. sagotiana", "E. coriacea", "S. globulifera Paracou", "S. globulifera Régina", "S. sp.1")
 ```
 
 ```{r fits}
@@ -476,8 +480,8 @@ lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), droppars = NULL, rhat
   mutate(population = ifelse(is.na(population), "", paste0(complex, population))) %>% 
   mutate(population = recode(population, 
                              "Symphonia1" = "S. globulifera Paracou",
-                             "Symphonia2" = "S. globulifera Regina", 
-                             "Symphonia3" = "S. sp1",
+                             "Symphonia2" = "S. globulifera Régina", 
+                             "Symphonia3" = "S. sp.1",
                              "Eschweilera3" =  "E. decolorans", 
                              "Eschweilera2" = "E. sagotiana",
                              "Eschweilera1" = "E. coriacea")) %>% 
@@ -503,6 +507,7 @@ trees <- bind_rows(
     dplyr::select("Ind", "Xutm", "Yutm", "genus", "pop") %>% 
     dplyr::rename(species = pop) %>% 
     mutate(species = gsub("Type", " ", species)) %>% 
+    mutate(species = recode(species, "sp1" =  "sp.1",  "globulifera Regina" = "globulifera Régina")) %>%  
     mutate(species = paste0("S. ", species)),
   mutate(eschweilera, genus = "Eschweilera") %>% 
     dplyr::select("Library", "Xutm", "Yutm", "genus", "cluster") %>% 
@@ -541,7 +546,7 @@ ggplot(hills, aes(x = Xutm, y = Yutm)) +
   ggsave("figures/Figure_1.pdf", device = "pdf", dpi = 600, width = 6, height = 5)
 ```
 
-```{r soilpca, fig.cap="Principal component analysis (PCA) of topographic wetness index (TWI), relative elevation (RE) with edaphic and hydrological properties. Edaphic and hydrological properties include organic matter (OM), carbon (C), nitrogen (N), exchangeable cation charge (C) [@Soucemarianadin2004; @Roelens2007], water table depth [WTD in cm, @Gourlet-Fleury2004], hydromorphy and waterlogging [waterlog in 5 classes, @Cantet2004]). Data have been obtained by interpolating soil sampling with LiDAR data."}
+```{r soilpca, fig.cap="Principal component analysis (PCA) of topographic wetness index (TWI), relative elevation (RE) with edaphic and hydrological properties. Edaphic and hydrological properties include organic matter (OM), carbon (C), nitrogen (N), exchangeable cation charge (C) [@Soucemarianadin2004; @Roelens2007], water table depth [WTD in cm, @Gourlet-Fleury2004], hydromorphy and waterlogging [waterlog in 5 classes, @Cantet2004]). Data were obtained through interpolation of soil sample data on TWI and RE from LiDAR data."}
 read_tsv("figures/soil.tsv") %>%
   na.omit() %>% 
   dplyr::select(-Refus, -Mg_ech, -K_ech, -Polsen, -S, -TS, -Na_ech, -Al_KCl, - Ca_ech) %>% 
@@ -572,7 +577,7 @@ read_tsv("figures/soil.tsv") %>%
         legend.justification = c(1, 1))
 ```
 
-```{r symphospecies, fig.cap="Admixture plot **(a)** of *Symphonia* individuals for the best K, K = 3 and corresponding trunk morphology **(b)**. The three morphotypes are identified with their bark with *S. sp1* (left, red) having a light grey thin and smooth bark, the *S. globulifera type Paracou* (center, light blue) having a dark that is intermediate between that of the other morphotypes with respect to thickness and rugosity and the *S. globulifera type Regina* that has a thick and lashed bark (right, dark blue).", fig.width=6, fig.height=3}
+```{r symphospecies, fig.cap="Admixture plot **(a)** of *Symphonia* individuals for the best K, K = 3 and corresponding trunk morphology **(b)**. The three morphotypes are identified with their bark with *S. sp.1* (left, red) having a light grey thin and smooth bark, the *S. globulifera type Paracou* (center, light blue) having a dark that is intermediate between that of the other morphotypes with respect to thickness and rugosity and the *S. globulifera type Régina* that has a thick and lashed bark (right, dark blue).", fig.width=6, fig.height=3}
 cowplot::plot_grid(
   pophelper::readQ(file.path("../../../data/Symphonia_Paracou/Sequences/populationGenomics/",
                            "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.3.Q"))[[1]] %>%
@@ -586,9 +591,9 @@ cowplot::plot_grid(
   ggplot(aes(reorder(Ind, order), value, fill = pop, col = pop)) +
   geom_col() +
   scale_fill_manual("", values = c("#CD2626", "#1E90FF", "#0000EE"),
-                    labels = c("S. sp1", "S. globulifera Paracou", "S. globulifera Regina")) +
+                    labels = c("S. sp.1", "S. globulifera Paracou", "S. globulifera Régina")) +
   scale_color_manual("", values = c("#CD2626", "#1E90FF", "#0000EE"),
-                     labels = c("S. sp1", "S. globulifera Paracou", "S. globulifera Regina")) +
+                     labels = c("S. sp.1", "S. globulifera Paracou", "S. globulifera Régina")) +
   ylab("Admixture\ncoefficient") +
   theme(axis.title.x = element_blank(), axis.line.x = element_blank(),
         axis.ticks.x = element_blank(), axis.text.x = element_blank(),

@@ -53,11 +53,11 @@ The following Supporting Information is available for this article:
 
 **Fig. S\@ref(fig:admixtureSympoCV).** Cross-validation for *Symphonia* population structure
 
-**Fig. S\@ref(fig:admixtureSympo).** *Symphonia* population structure
+**Fig. S\@ref(fig:admixtureSympo).** *Symphonia* population structure using admixture
 
-**Fig. S\@ref(fig:introgress).** *Symphonia* hybrid index 
+**Fig. S\@ref(fig:introgress).** *Symphonia* population structure using hybrid index 
 
-**Fig. S\@ref(fig:bayescanOutliers).** *Symphonia* species-specific SNPs
+**Fig. S\@ref(fig:bayescanOutliers).** Outlier SNPs among *Symphonia* species
 
 \newpage
 
@@ -270,7 +270,7 @@ group_by(pcas, filter) %>%
 
 \newpage
 
-```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals. Y axis indicates cross-validation mean error, suggesting that K = 2 or K = 3 gene pools represent the best solution for genetic structure in \\emph{Symphonia} in Paracou."}
+```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals using admixture. Y axis indicates cross-validation mean error, suggesting that K = 2 or K = 3 gene pools represent the best solution for genetic structure in \\emph{Symphonia} in Paracou."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
   dplyr::select(X3, X4) %>% 
@@ -286,7 +286,7 @@ read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_n
 
 \newpage
 
-```{r admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10."}
+```{r admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10 using admixture."}
 fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
@@ -303,7 +303,7 @@ gridExtra::grid.arrange(p$plot[[1]])
 
 \newpage
 
-```{r introgress, fig.cap="Population structure with hybrid index (black line and white interval confidence) and admixture coefficient (vertical bars)."}
+```{r introgress, fig.cap="Genotypinc constitution of \\emph{Symphonia} using hybrid index. Admixture coefficients (black line) are given with 90% confidence interval (light shade). Admixture coefficients of 10 and 90% are indicated by white stippled lines."}
 load(file = file.path("../symcapture/symcapture_save/introgress.Rdata"))
 hi.index %>% 
   mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
@@ -335,7 +335,7 @@ hi.index %>%
 
 \newpage
 
-```{r bayescanOutliers, fig.cap="Species-specific SNPs for \\emph{Symphonia} individuals detected with bayescan."}
+```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon)."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
   mutate(snpNb = as.numeric(row.names(.))) %>% 

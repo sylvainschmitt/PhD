@@ -1,0 +1,174 @@
+---
+title: "**Supplementary Information for:** \"Forest gap dynamics: an underexplored factor that drives divergent adaptive growth strategies within tropical tree species\""
+# author: "*Bruno Hérault, Myriam Heuertz, Sylvain Schmitt, Niklas Tysklind*"
+# date: '`r Sys.Date()`'
+output: 
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
+  bookdown::html_document2:
+    number_sections: false  
+    toc: true
+    toc_float: yes
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/pnas.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+**Sylvain Schmitt, Niklas Tysklind, Myriam Heuertz, Bruno Hérault**
+
+**Corresponding Sylvain Schmitt**
+**E-mail: sylvain.m.schmitt@gmail.com**
+
+**This PDF file includes:**
+
+* SI Materials and Methods
+* SI References
+
+\newpage
+
+# SI Materials and Methods
+
+*Part of the analyses are common with and described in  Schmitt et al. (in prep).*
+
+## Study site
+
+The study was conducted in the Paracou field station, in the coastal forests of French Guiana, South America.
+The site is characterized by an average of 3,041 mm annual rainfall and a mean air temperature of 25.71 °C [@Aguilos2018].
+Old tropical forest with an exceptional richness (i.e. over 750 woody species) grows across the succession of small hills of this area, which rise to 10–40 m a.s.l. [@Gourlet-Fleury2004].
+The site comprises 16 permanent plots (fifteen 6.25 ha plus one 25 ha) which have been censused (DBH>10) every 1-2 years for more than 35 years. Nine of the plots were logged and subjected to human-induced disturbance in 1986 [details on the experiment in @Herault2018].
+
+## Plant material
+
+Four hundred and two individuals of *Symphonia globulifera* (Clusiaceae) were sampled in 2017 during the dry season (from September to December) in Paracou.
+*Symphonia globulifera* L.f (Clusiaceae) was previously recognized as composed of two morphotypes in French Guiana [@Ferry2007; @Molino2001; @Sabatier1997].
+*S. globulifera sensu stricto* and *Symphonia sp.1* occur in sympatry but in differentiated habitats, 
+with *S. globulifera* preferentially growing in valley bottoms with an acquisitive functional strategy 
+and *S. sp1* preferentially exploiting a variety of drier habitats with a conservative functional strategy [@Allie2015; Schmitt et al., in prep; @Schmitt2020].
+*Symphonia*  have been highlighted as a species complex with low (phylo-)genetic species resolution and high levels of plastid DNA sharing among sister species [@baraloto_using_2012-1; @Caron2019; @Gonzalez2009; @Torroba-Balmori2017].
+In addition, outgroups for genetic analysis in *Symphonia* were comprised of 13 individuals of *Symphonia globulifera* from Africa (Sao Tome, Gabon, Cameroun, Congo, Benin, Liberia, Ivory Coast, and Ghana), seven *Symphonia globulifera* from South America (Brazil, Costa Rica and Panama), two *Symphonia nectarifera* Jum. & H. Perrier from Madagascar, two *Symphonia urophylla* (Decne. ex Planch. & Triana) Benth. & Hook.f. ex Vesque from Madagascar, five *Pentadesma butyracea* Sabine from Benin and Cameroon and one *Pentadesma grandifolia* Baker f. from Cameroon.
+Leaves were collected from the 432 individuals (402 + 30 outgroups)  and  dessicated using silica gel. 
+
+## Sequence capture 
+
+*Design of probes set*
+
+The genomic and transcriptomic resources used for the design were comprised of a published low-coverage draft genome from Africa [@Olsson2017], an unpublished draft genome from French Guiana [Scotti et al., in prep], an unpublished transcriptome from 20 juveniles from French Guiana [Tysklind et al., in prep], and reduced-representation genomic sequence reads of individuals from French Guiana [Torroba-Balmori et al., unpublished]. 
+We aligned genomic reads on the two genome drafts with `bwa` [@Li2009]. 
+We kept scaffolds from the two genome drafts with a length superior to 1 kbp and at least one matching alignment with a read with a single match on the genome, and merged the two filtered genome drafts with `quickmerge` [@Chakraborty2016]. 
+We aligned transcripts on the new filtered genome draft with `BLAT` [@Kent2002] and selected 533 scaffolds without transcript-match, *i.e.* anonymous scaffolds. 
+We masked repetitive regions with `RepeatMasker` [@Smit2015] and selected 533 1-kbp anonymous loci within the 533 previous scaffolds.
+
+Similarly, we filtered transcripts from the 20 juveniles of *Symphonia globulifera* from French Guiana [Tysklind et al., in prep] based on SNP quality, type and frequency. 
+We further detected  open reading frames (ORFs) using `transdecoder` [@Haas2013], 
+and selected transcripts with non-overlapping  ORFs including a start codon.
+We kept ORFs with an alignment on scaffolds from the aforementioned genome draft for *Symphonia* using `BLAT` [@Kent2002],
+and masked repetitive regions with `RepeatMasker` [@Smit2015]. 
+We selected 1,150 genic loci of 500-bp to 1-kbp, from 100 bp before the start to a maximum of 900 bp after the end of the ORFs, resulting in 1-Mbp genomic loci that included a coding region.
+
+*Genomic libraries and sequence capture*
+
+Genomic DNA was extracted from 5 mg of dried leaf tissue with a CTAB protocol [@Doyle1987]. 
+DNA extracts were digested with 'Ultra II FS Enzyme Mix' (new England Biolabs Inc, MA, USA) for a target size of 150 bp, 
+and libraries built with the 'NEBNext Ultra II FS DNA Library Prep kit for Illumina'(New England Biolabs Inc, MA, USA).
+We amplified and tagged libraries using 5 $\mu L$ of adaptor-ligated DNA, 8.3 $\mu L$ of 'NEBNext Ultra II Q5 Master Mix' (new England Biolabs Inc, MA, USA), 2x 1.6 $\mu L$ of Index Primer i5 and i7 from 'NEBNext Multiplex Oligos for Illumina (Dual Index Primers Set 1 and Set 2)' (new England Biolabs Inc, MA, USA). 
+Initial denaturation (98°C for 30 s) was followed by 8 cycles (98°C for 10 s and 65°C for 1 min 30 s) and a final extension (65°C for 5 min). 
+We pooled libraries in four equimolar multiplexes for each genus.
+We obtained a custom made set of  20,000 80-mer probes for each genus  using myBaits Custom 1-20K (Arbor Biosciences, MI, USA)
+and conducted the capture experiments using the corresponding myBaits V4 protocol with a hybridization time of 80 hours.
+We pooled the four multiplexes and sequenced them in two lanes of an Illumina HiSeq 4000 instrument obtaining 2x150bp pair-end reads for each genus.
+
+*SNP calling and filtering*
+
+We assessed the quality off raw reads using `multiqc` [@Ewels2016] and trimmed them with `trimmomatic` [@Andrews2010]. 
+We kept only pair-end reads without adaptors and a phred score above 15 in a sliding window of 4.
+Seventy percent of trimmed reads mapped off-targets using `bwa` [@Li2009]. 
+We thus mapped trimmed reads on the hybrid reference built for the sequence capture experiment using `bwa` [@Li2009], `picard` [@BroadInstitute2018], `samtools` [@Li2009a] and `bedtools` [@Quinlan2010].
+We called variants for each individual using `HaplotypeCaller`, aggregated variants using `GenomicsDBImport` and jointly-genotyped individuals using `GenotypeGVCFs` all in `GATK4` software [@Freksa1993]. 
+We filtered biallelic SNPs with a quality above 30, a quality by depth above 2, a Fisher strand bias below 60 and strand odds ratio above 3 using `GATK4` [@Freksa1993]. 
+Finally, we filtered individuals and SNPs for missing data with a maximum of 95% and 15% of missing data per individual and SNP, respectively, using `plink2` [@Chen2019].
+We obtained 454,262 biallelic SNPs over 385 individuals without outgroups, that we used for population genetic analyses.
+Since low-frequency alleles and linkage disequilibrium will bias the number of fixed loci and increase the number of false-positives in genomic scans for outliers [@Foll2008],
+we built a second dataset for quantitative genomics and genomic scans, filtering variants with a minor allele frequency above 5% (18 individuals) and with linkage disequilibrium $r^2<0.99$. 
+We further removed admixed individuals (see population genetic analyses for criteria) and retained 70,737 biallelic SNPs over 372 individuals.
+
+## Analyses
+
+### Genetic species delimitation
+
+We investigated population genetic structure using `admixture` [@Alexander2011], 
+using 10 repetitions of K genetic groups varying from 1 to 10 and assessed the number of gene pools with cross validation.
+We defined individuals with a membership to gene pools below 90% as admixed and the remaining individuals as genetically pure.
+We further investigated admixture with the `introgress` R package [@Gompert2010], 
+using genetically pure individuals as parental populations and all individuals as the hybrid population.
+We validated gene pool delimitation by comparison with botanical identifications using a confusion matrix, 
+and we conducted a second blind-identification of every collected individual in November 2019.
+
+### Neighbour crowding effect on neutral and adaptive genetic variation
+
+We did environmental association analyses [@Rellstab2015a] in each complex using general linear mixed models developed for genome wide association studies (GWAS). 
+We used mean neighbourhood crowding index [$NCI$; @Uriarte2004] over the last 30 years,
+an indirect measurement of access to light and forest gap dynamics, 
+as the response variable and genetic structure (gene pools representing species) and relatedness (kinship matrix) as explanatory variables, as it is common practice [@Rellstab2015a]. 
+This analysis assumed that the neighbour crowding conditions where individuals have grown above 10-cm DBH are strongly correlated to the individual heritable phenotypes [e.g. @Eckert2010]. 
+The mean neighborhood crowding index $NCI_i$ from tree individual $i$ was calculated as follow:
+
+$$NCI_i=\overline{\sum_{j|\delta_{i,j}<20m}DBH^2_{j,t}.e^{-\frac14\delta_{i,j}}}$$
+
+with $DBH_{j,t}$ the diameter of the neighbouring tree $j$ in year $t$ and $\delta_{i,j}$ its distance to the individual tree $i$.
+$NCI_i$ is computed for all neighbours at a distance $\delta_{i,j}$ inferior to the maximum neighbouring distance of 20 meters.
+The power of neighbours $DBH_{j,t}$ effect was set to 2 to represent a surface. 
+The decrease of neighbours diameter effect with distance was set to -0.25 to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0 meters. 
+$NCI_i$ is computed as the mean of yearly $NCI_{i,t}$ over the last 30 years denoted by the overline.
+
+We used genetic species and individual kinship in an animal model [@Wilson2010] to estimate genetic variance associated with neighbour crowding index.
+We used a lognormal likelihood given that distributions of environmental variables were positive and skewed.
+We inferred individual kinship using KING [@Manichaikul2010], as the method is robust to population structure. 
+We set negative kinship values to null as they were confounding with population structure, and we further ensured that the matrix was positive-definite using the `nearPD`  function from the R package `Matrix`.
+The environment $y_{s,i}$ where individual $i$ in species $s$ grows was inferred with a lognormal distribution with the following formula:
+
+$$y_{s,i} \sim logN(log(\mu_s.a_{i}),\sigma^2_1)$$
+$$a_{i} \sim MVlogN_N(log(1),\sigma^2_2.K)$$
+
+where $\mu_s$ is the mean environment of species $s$, $a_i$ is the breeding value of the individual $i$ and $\sigma^2_1$ is the shape parameter of the lognormal. 
+Individual breeding values $a_i$ are defined following a multivariate lognormal law $\mathcal{MVlogN}$ of co-shape matrix defined as the product of the kinship matrix $K$ with estimated individual genotypic variation $\sigma^2_2$.
+To estimate variances on a normal scale, we log-transformed species fixed effect, genetic additive values, and we calculated conditional and marginal $R^2$ [@Nakagawa2013].
+A Bayesian method was used to infer parameters using `stan` language [@Carpenter2017 and `rstan` package [@Team2018] in the R environment [@RCoreTeam2020] using the No-U-Turn Sampler alogirthm [NUTS, @Hoffman2014], which performs better for estimating genetic parameters and breeding values [@Nishio2019].
+
+### Neutral and adaptive genetic variation effect on individual growth
+
+We investigated effects of ecological and evolutionary processes on individual growth, using genetic species and kinship.
+The individual growth of individual $i$ in population $p$ between individual recruitment $y_0$ and 2017, correspond to the difference of DBH between the two years, and is defined with a hierarchical model in a lognormal distribution as follow:
+
+$$DBH_{y=2017,p,i} - DBH_{y=y0,p,i} \sim logN(log[\sum_{y=y0}^{y=2017}AGR(DBH_{y,p,i})], \sigma^2_1)$$
+
+where the difference of DBH $DBH_{y=2017,p,i}-DBH_{y=y_0,p,i}$ is defined with a lognormal distribution located on the logarithm of the sum of annual growth rates $AGR$ during the period $y_0-2017$ and of shape $\sigma_1$. 
+The annual growth rates $AGR$ for individual $i$ in population $p$ at year $y$ with a diameter of $DBH_{y,p,i}$ is defined following a Gompertz model [@Gompertz1825] already identified as the best model for growth-trajectories in Paracou [@Herault2011]:
+
+$$AGR(DBH_{y,p,i}) = Gmax_i.exp(-\frac12[\frac{log(\frac{DBH_{y,p,i}}{Doptp})}{Ksp}]^2)$$
+
+where $Gmax_i$ is the maximum growth potential (maximal AGR during individual life) for individual $i$, 
+$Dopt_p$ is the population optimal diameter at which the individual reach its maximum growth potential, 
+and $Ks_p$ is the population kurtosis defining the width of the bell-shaped growth-trajectory [see figure 1 in @Herault2011]. 
+To ease model inference population optimal diameter $Dopt_p$ and kurtosis $Ks_p$ were defined as random population effect centered on a global $Dopt$ and $Ks$ with corresponding variances $\sigma^2_{P,Dopt}$ and $\sigma^2_{P,Ks}$. 
+Individual $i$ maximum growth potential $Gmax_i$ was defined in a nested Animal model with a lognormal distribution:
+
+$$Gmax_i \sim logN(log(Gmax_p.a_i), \sigma_{R,Gmax})$$
+$$a_i \sim MVlogN(log(1), \sigma_{G,Gmax}.K)$$
+
+where $Gmax_p$ is the mean $Gmax$ of population $p$,
+$a_i$ is the breeding value of individual $i$, 
+and $\sigma_{R,Gmax}$ is the shape of the lognormal distribution.
+Individual breeding values $a_i$ are defined following a multivariate lognormal law $MVlogN$ 
+with a co-shape matrix defined as the product of the kinship matrix $K$ and the genotypic variation $\sigma_{G,Gmax}$. 
+To estimate variances on a normal-scale, we log-transformed population fixed effect, genetic additive values, 
+and calculated conditional and marginal $R^2$ [@Nakagawa2013].
+We used Bayesian inference with No-U-Turn Sampler [NUTS, @Hoffman2014] using `stan` language [@Carpenter2017].
+
+# SI References
