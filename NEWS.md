@@ -1,3 +1,6 @@
+# PhD 0.1.9200
+* thesis: discussion: part 1/4
+
 # PhD 0.1.9199
 * thesis: introduction reviwe by Niklas, chapters formatting, appendix, and discussion plan
 
