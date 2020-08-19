@@ -543,7 +543,7 @@ ggplot(hills, aes(x = Xutm, y = Yutm)) +
         legend.position = "bottom", legend.text = element_text(face = "italic"),
         strip.background = element_blank(), strip.text.x = element_blank())  +
   guides( col = guide_legend(nrow = 2, byrow = T)) +
-  ggsave("figures/Figure_1.pdf", device = "pdf", dpi = 600, width = 6, height = 5)
+  ggsave("figures/Figure_1.tiff", device = "tiff", dpi = 600, width = 6, height = 5)
 ```
 
 ```{r soilpca, fig.cap="Principal component analysis (PCA) of topographic wetness index (TWI), relative elevation (RE) with edaphic and hydrological properties. Edaphic and hydrological properties include organic matter (OM), carbon (C), nitrogen (N), exchangeable cation charge (C) [@Soucemarianadin2004; @Roelens2007], water table depth [WTD in cm, @Gourlet-Fleury2004], hydromorphy and waterlogging [waterlog in 5 classes, @Cantet2004]). Data were obtained through interpolation of soil sample data on TWI and RE from LiDAR data."}
@@ -574,7 +574,8 @@ read_tsv("figures/soil.tsv") %>%
   geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
   scale_color_discrete(guide = "none") +
   theme(legend.position = c(1, 1), 
-        legend.justification = c(1, 1))
+        legend.justification = c(1, 1)) +
+  ggsave("figures/Figure_2.tiff", device = "tiff", dpi = 600, width = 6, height = 6)
 ```
 
 ```{r symphospecies, fig.cap="Admixture plot **(a)** of *Symphonia* individuals for the best K, K = 3 and corresponding trunk morphology **(b)**. The three morphotypes are identified with their bark with *S. sp.1* (left, red) having a light grey thin and smooth bark, the *S. globulifera type Paracou* (center, light blue) having a dark that is intermediate between that of the other morphotypes with respect to thickness and rugosity and the *S. globulifera type Régina* that has a thick and lashed bark (right, dark blue).", fig.width=6, fig.height=3}
@@ -601,7 +602,8 @@ cowplot::plot_grid(
   cowplot::ggdraw() + 
     cowplot::draw_image("figures/symphoniamorphotypes.png", scale = 0.9),
   nrow = 2, labels = c("(a)", "(b)")
-)
+) +
+  ggsave("figures/Figure_3.tiff", device = "tiff", dpi = 600, width = 6, height = 3)
 ```
 
 ```{r parvispecies, fig.cap="Principal component analysis (PCA) of single nucleotide polymorphisms (SNP) from *Eschweilera* clade *Parvifolia.* The colours represent the clusters detected with Kmeans for the best K, K = 3.", fig.height=5, fig.width=5}
@@ -622,7 +624,7 @@ read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants",
   xlab(paste0("PCA 1 - ", round(vars$var[1], 2), "%")) +
   ylab(paste0("PCA 2 - ", round(vars$var[2], 2), "%")) +
   scale_color_manual("", values = spcol[c(3,1,2)]) +
-  ggsave("figures/Figure_3.pdf", device = "pdf", dpi = 600, width = 5, height = 5)
+  ggsave("figures/Figure_4.tiff", device = "tiff", dpi = 600, width = 5, height = 5)
 ```
 
 ```{r SpDistVar, fig.cap="Species distribution and individual variance partitioning along topography. Each subfigure shows density of individuals per species (density plot) against the variable considered (topographic wetness index (TWI, left subfigures) or the logarithm of relative elevation (log(RE+1), right subfigures) and the partitioning of individual variation in the positioning along topography (barplot) partitioned with the Animal model into among-species (dark grey), among-genotypes (intermediate grey) and residual (light grey). Species complexes correspond to *Eschweilera* clade *Parvifolia* (top subfigures) and *Symphonia* (bottom subfigures). Colours represent species determined based on the genetic structure of capture datasets, which was not necessarily in agreement with original botanical identification.", fig.width=11, fig.height=6}
@@ -738,5 +740,9 @@ cowplot::plot_grid(densities$g[[1]],
                    gr.legend,
                    nrow = 3, rel_widths = c(3,1,3,1), rel_heights = c(3,3,1),
                    labels = c("(a)", "", "(b)", "", "(c)", "", "(d)", "")) +
-  ggsave("figures/Figure_5.pdf", device = "pdf", dpi = 600, width = 11, height = 6)
+  ggsave("figures/Figure_5.tiff", device = "tiff", dpi = 600, width = 11, height = 6)
+```
+
+```{r thesis, eval=F, echo=T}
+save(list = ls(), file = "../../thesis/rdata/Ch3Msc.Rdata")
 ```

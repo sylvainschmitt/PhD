@@ -314,7 +314,7 @@ t %>%
 
 ```{r ncibreadth, fig.cap="Niche breadth in neighbourhood crowding index (NCI) for species abundant in Paracou. Niche breadth is defined by the difference between the 95th and 5th quantiles of neighbourhood crowding index (NCI) for individuals with a diameter at breast height between 10 and 20 cm. Niche breadth has been calculated for species with at least fifty individuals meeting previous criteria. The analyses used only control plots, and not human disturbed plots. Dashed lines represent niche breadth for Symphonia globulifera (red) and Symphonia sp. 1 (blues)."}
 load("../symcapture/symcapture_save/NCI2017all.Rdata")
-t <- trees %>% 
+t2 <- trees %>% 
   filter(Species != "Indet.") %>% 
   filter(DBH >= 10 & DBH <= 20) %>% 
   group_by(Genus, Species) %>% 
@@ -324,13 +324,17 @@ t <- trees %>%
   group_by(Genus, Species, N) %>% 
   summarise(NCI95 = quantile(NCI, 0.95), NCI05 = quantile(NCI, 0.05)) %>% 
   mutate(NCIbreadth = NCI95 - NCI05)
-ggplot(t, aes(NCIbreadth)) + 
+ggplot(t2, aes(NCIbreadth)) + 
   geom_histogram(fill = "lightgrey", bins = 30) + 
   geom_vline(aes(xintercept = NCIbreadth,
                  col = paste0(substr(Genus, 1, 1), ". ", Species)),
              linetype = "dashed",
-             data = filter(t, Genus %in% c("Symphonia"))) +
+             data = filter(t2, Genus %in% c("Symphonia"))) +
   ylab("Number of species") + xlab("Niche breadth in neighbourhood crowding index (NCI)") +
   scale_color_discrete("Studied species") +
   theme(legend.position = "bottom", legend.text = element_text(face = "italic"))
+```
+
+```{r thesis, eval=F, echo=T}
+save(list = ls(), file = "../../thesis/rdata/Ch4Msc.Rdata")
 ```

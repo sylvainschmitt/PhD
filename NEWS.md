@@ -1,3 +1,6 @@
+# PhD 0.1.9199
+* thesis: introduction reviwe by Niklas, chapters formatting, appendix, and discussion plan
+
 # PhD 0.1.9198
 * growth: Msc PNAS first draft
 * topography: pre-submission

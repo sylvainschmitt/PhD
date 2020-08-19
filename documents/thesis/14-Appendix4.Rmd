@@ -1,27 +1,15 @@
----
-title: Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes
-author: Sylvain Schmitt, Niklas Tysklind, Bruno Hérault, Myriam Heuertz
-date: unknown
-output:
-  bookdown::pdf_document2:
-    template: ./template/templateSuppMatNewPhyto.tex
-    number_sections: false
-    toc: false
-    keep_tex: true
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2:
-    reference_docx: ./template/template.docx
-linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
-bibliography: /home/sylvain/Documents/Bibliography/library.bib
-link-citations: yes
-always_allow_html: yes
----
+```{r setupA4, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(tidyverse)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
+load("rdata/Ch3SupMat.Rdata")
+```
 
-**_New Phytologist_ Supporting Information**
+# Appendix 4: Chapter 3 Supplementary Materials
 
 Article title: **Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes**
 
@@ -29,38 +17,38 @@ Authors: Sylvain Schmitt, Niklas Tysklind, Bruno Hérault, Myriam Heuertz
 
 Article acceptance date: unknown
 
-
 The following Supporting Information is available for this article:
 
-**Method S1.** Design of the probes set for *Symphonia*.
+**Method S[1](#A4methodS1).** Design of the probes set for *Symphonia*.
 
-**Method S2.** Design of the probes set for *Eschweilera*.
+**Method S[2](#A4methodS2).** Design of the probes set for *Eschweilera*.
 
-**Model S1.**  Stan code for the animal model
+**Model S[1](#A4model).**  Stan code for the animal model
 
-**Tab. S\@ref(tab:kmeansConfusion).** *Eschweilera* botanical species and genetic clusters
+**Tab. \@ref(tab:A4kmeansConfusion).** *Eschweilera* botanical species and genetic clusters
 
-**Fig. S\@ref(fig:symcapture).** Target selection for the capture experiment of *Symphonia*
+**Fig. \@ref(fig:A4symcapture).** Target selection for the capture experiment of *Symphonia*
 
-**Fig. S\@ref(fig:parvicapture).** Target selection for the capture experiment of *Eschweilera*
+**Fig. \@ref(fig:A4parvicapture).** Target selection for the capture experiment of *Eschweilera*
 
-**Fig. S\@ref(fig:libmiss).** SNP abundance per library for *Eschweilera*
+**Fig. \@ref(fig:A4libmiss).** SNP abundance per library for *Eschweilera*
 
-**Fig. S\@ref(fig:snpmiss).** Library abundance per SNP for *Eschweilera*
+**Fig. \@ref(fig:A4snpmiss).** Library abundance per SNP for *Eschweilera*
 
-**Fig. S\@ref(fig:outgroup).** Outgroup detection for *Eschweilera*
+**Fig. \@ref(fig:A4outgroup).** Outgroup detection for *Eschweilera*
 
-**Fig. S\@ref(fig:admixtureSympoCV).** Cross-validation for *Symphonia* population structure
+**Fig. \@ref(fig:A4admixtureSympoCV).** Cross-validation for *Symphonia* population structure
 
-**Fig. S\@ref(fig:admixtureSympo).** *Symphonia* population structure using admixture
+**Fig. \@ref(fig:A4admixtureSympo).** *Symphonia* population structure using admixture
 
-**Fig. S\@ref(fig:introgress).** *Symphonia* population structure using hybrid index 
+**Fig. \@ref(fig:A4introgress).** *Symphonia* population structure using hybrid index 
 
-**Fig. S\@ref(fig:bayescanOutliers).** Outlier SNPs among *Symphonia* species
+**Fig. \@ref(fig:A4bayescanOutliers).** Outlier SNPs among *Symphonia* species
 
 \newpage
 
-# Method S1: Design of the probes set for *Symphonia*.
+
+## Method S1: Design of the probes set for *Symphonia*. {#A4methodS1}
 
 For *Symphonia globulifera*, the genomic and transcriptomic resources used for the design were comprised of a published low-coverage draft genome from Africa [@Olsson2017], an unpublished draft genome from French Guiana [Scotti et al., in prep], an unpublished transcriptome from 20 juveniles from French Guiana [Tysklind et al., in prep], and reduced-representation genomic sequence reads of individuals from French Guiana [Torroba-Balmori et al., unpublished]. 
 We aligned genomic reads on the two genome drafts with `bwa` [@Li2009]. 
@@ -77,7 +65,7 @@ We selected 1,150 genic loci of 500-bp to 1-kbp, from 100 bp before the start to
 
 \newpage
 
-# Method S2: Design of the probes set for *Eschweilera*.
+## Method S2: Design of the probes set for *Eschweilera*. {#A4methodS2}
 
 For *Eschweilera*, the genomic and transcriptomic resources used for the design were comprised of transcriptomes from  *Eschweilera sagotiana* and *Eschweilera coriacea* [@Vargas2019], and unpublished reduced representation genomic reads (M. Heuertz pers. com.).
 We mapped reciprocally *E. coriacea* and *E. sagotiana* transcriptomes using `BLAT` [@Kent2002], and in reciprocal best matches, we kept a single transcript to avoid paralogs and have robust targets among species.
@@ -89,15 +77,9 @@ We masked repetitive regions with `RepeatMasker` [@Smit2015] and selected  2.2k 
 
 \newpage
 
-# References
+## Model S1: Stan code for the bayesian inference of the animal model. {#A4model}
 
-<div id="refs"></div>
-
-\newpage
-
-# Model S1: Stan code for the bayesian inference of the animal model.
-
-```{stan, eval=F, echo=T, output.var="m", cache=F}
+```{stan A4model, eval=F, echo=T, output.var="m", cache=F}
 data {
   int<lower=0>  N ; // # of individuals
   int<lower=0>  P ; // # of populations
@@ -130,20 +112,8 @@ model {
 
 \newpage
 
-```{r config, message=FALSE, warning=FALSE, include=FALSE}
-rm(list = ls()) ; gc()
-library(knitr)
-library(tidyverse)
-theme_set(bayesplot::theme_default())
-opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
-```
-
-```{r kmeansConfusion}
+```{r A4kmeansConfusion}
 path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
-individuals <-read_tsv("figures/Parvicapture - Extraction.tsv") %>% 
-  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
-  unique() %>% 
-  na.omit()
 read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>% 
     mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
                           "2" = "E. sagotiana cluster",
@@ -161,27 +131,19 @@ read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>%
 
 \newpage
 
-```{r symcapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Symphonia globulifera} as described in the manuscript.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
-include_graphics("figures/Symcapture.png")
+```{r A4symcapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Symphonia globulifera} as described in the manuscript.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
+include_graphics("../genomics/topography/figures/Symcapture.png")
 ```
 
 \newpage
 
-```{r parvicapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Eschweilera} clade \\emph{Parvifolia} as described in the manuscript.", out.width="0.5\\linewidth", fig.align="center", fig.pos="H"}
-include_graphics("figures/Parvicapture.png")
+```{r A4parvicapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Eschweilera} clade \\emph{Parvifolia} as described in the manuscript.", out.width="0.5\\linewidth", fig.align="center", fig.pos="H"}
+include_graphics("../genomics/topography/figures/Parvicapture.png")
 ```
 
 \newpage
 
-```{r libmiss, fig.cap="SNP abundance per library rank for raw data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
-path <- "../../../data/Eschweilera_Paracou/"
-libmiss <- read_delim(file.path(path, "Sequences", "denovo", "raw", "raw.imiss"), delim = " ") %>% 
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
-  mutate(missingness = as.numeric(F_MISS)) %>% 
-  mutate(snps = (1-missingness)*704485) %>% 
-  arrange(missingness) %>% 
-  mutate(libraries = 1:nrow(.))
-Nlibs <- round(seq(50, max(libmiss$libraries), length.out = 10))
+```{r A4libmiss, fig.cap="SNP abundance per library rank for raw data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
 ggplot(libmiss, aes(libraries, snps)) + 
   geom_point() + 
   geom_line() +
@@ -193,33 +155,7 @@ ggplot(libmiss, aes(libraries, snps)) +
 
 \newpage
 
-```{r snpmiss, fig.cap="Library abundance per SNP rank for library-filtered data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
-path <- "../../../data/Eschweilera_Paracou/"
-names(Nlibs) <- list.files(file.path(path, "Sequences", "variants", "libraries_filtered"))
-snpmiss <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
-  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.lmiss"), delim = " ") %>% 
-    dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
-    mutate(missingness = as.numeric(F_MISS)) %>% 
-    arrange(missingness) %>%
-    mutate(Nlibs = Nlibs[f]) %>% 
-    mutate(libraries = (1-missingness)*Nlibs) %>% 
-    mutate(snps = 1:nrow(.)) %>% 
-    mutate(filter = f) %>% 
-    filter(snps %in% seq(1, 704485, length.out = 100))) %>% 
-  bind_rows()
-snpmissN <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
-  read_delim(file.path(path, "Sequences", "variants", "libraries_filtered", f, "filtered.lmiss"), delim = " ") %>% 
-    dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
-    mutate(missingness = as.numeric(F_MISS)) %>% 
-    arrange(missingness) %>%
-    mutate(Nlibs = Nlibs[f]) %>% 
-    mutate(libraries = round((1-missingness)*Nlibs)) %>% 
-    mutate(snps = 1:nrow(.)) %>% 
-    mutate(filter = f) %>% 
-    filter(libraries %in% c(5,10))) %>% 
-  bind_rows()
-snpmissN <- group_by(snpmissN, filter, libraries) %>% 
-  summarise(snps = max(snps), missingness = max(missingness))
+```{r A4snpmiss, fig.cap="Library abundance per SNP rank for library-filtered data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
 ggplot(snpmiss, aes(snps, libraries, col = gsub("filtered.", "", filter))) + 
   geom_point() + 
   geom_line() +
@@ -234,14 +170,7 @@ ggplot(snpmiss, aes(snps, libraries, col = gsub("filtered.", "", filter))) +
 
 \newpage
 
-```{r outgroup, fig.cap="Outgroup detection with \\emph{Eschweilera} individual clustering in the genomic principal component analysis (gPCA) in two groups using K-means for every filter."}
-pcas <- lapply(list.files(file.path(path, "Sequences", "variants", "snps_filtered")), function(f)
-  read_delim(file.path(path, "Sequences", "variants", "snps_filtered", f, "filtered.eigenvec"),
-             delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
-    mutate(filter = f)) %>% 
-  bind_rows() %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
-  dplyr::rename(IdGenetic = X4, Lane = X5)
+```{r A4outgroup, fig.cap="Outgroup detection with \\emph{Eschweilera} individual clustering in the genomic principal component analysis (gPCA) in two groups using K-means for every filter."}
 group_by(pcas, filter) %>% 
   filter(sum(PCA1) != 0) %>% 
   cbind(group_by(pcas, filter) %>% 
@@ -269,7 +198,7 @@ group_by(pcas, filter) %>%
 
 \newpage
 
-```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals using admixture. Y axis indicates cross-validation mean error, suggesting that K = 2 or K = 3 gene pools represent the best solution for genetic structure in \\emph{Symphonia} in Paracou."}
+```{r A4admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals using admixture. Y axis indicates cross-validation mean error, suggesting that K = 2 or K = 3 gene pools represent the best solution for genetic structure in \\emph{Symphonia} in Paracou."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
   dplyr::select(X3, X4) %>% 
@@ -285,7 +214,7 @@ read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_n
 
 \newpage
 
-```{r admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10 using admixture."}
+```{r A4admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10 using admixture."}
 fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
@@ -302,8 +231,7 @@ gridExtra::grid.arrange(p$plot[[1]])
 
 \newpage
 
-```{r introgress, fig.cap="Genotypinc constitution of \\emph{Symphonia} using hybrid index. Admixture coefficients (black line) are given with 90% confidence interval (light shade). Admixture coefficients of 10 and 90% are indicated by white stippled lines."}
-load(file = file.path("../symcapture/symcapture_save/introgress.Rdata"))
+```{r A4introgress, fig.cap="Genotypinc constitution of \\emph{Symphonia} using hybrid index. Admixture coefficients (black line) are given with 90% confidence interval (light shade). Admixture coefficients of 10 and 90% are indicated by white stippled lines."}
 hi.index %>% 
   mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
   mutate(pair = recode(pair, 
@@ -334,15 +262,7 @@ hi.index %>%
 
 \newpage
 
-```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon)."}
-path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
-bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
-  mutate(snpNb = as.numeric(row.names(.))) %>% 
-  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
-  mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
-  left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
-  mutate(snpNb = 1:nrow(.))) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
+```{r A4bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon)."}
 ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
   geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
@@ -355,6 +275,3 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
           "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
 ```
 
-```{r thesis, eval=F, echo=T}
-save(list = ls(), file = "../../thesis/rdata/Ch3SupMat.Rdata")
-```
