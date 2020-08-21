@@ -1,3 +1,6 @@
+# PhD 0.1.9202
+* thesis: discussion: part 3/4 almost done
+
 # PhD 0.1.9201
 * growth:msc revision
 * thesis: discussion: part 2/4
