@@ -1,3 +1,6 @@
+# PhD 0.1.9204
+* thesis: discussion: first draft and Myriam's review begins
+
 # PhD 0.1.9203
 * introduction: Myriam's review
 * thesis: discussion: subpart 18/19 almost almost done!
