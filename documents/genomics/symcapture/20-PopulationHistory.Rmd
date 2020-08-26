@@ -198,6 +198,7 @@ g.tree <- lapply(c("neutral", "functional", "hitchhiker"),
                    ggtree::theme_tree2() + 
                    xlim(0,0.035) +
                    xlab("Drift parameter"))
+save(g.llik, g.tree, file = "../../thesis/rdata/treemix.Rdata")
 cowplot::plot_grid(g.llik, g.tree[[1]], g.tree[[2]], g.tree[[3]], 
                    labels = LETTERS[1:4])
 ```
@@ -453,6 +454,7 @@ g <- lapply(types, function(type)
     theme(axis.title = element_blank()) +
     ggtitle(type))
 names(g) <- types
+save(g, file = "../../thesis/rdata/sfs.Rdata")
 plotly::ggplotly(g$neutral)
 plotly::ggplotly(g$hitchhiker)
 plotly::ggplotly(g$functional)

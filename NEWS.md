@@ -1,3 +1,9 @@
+# PhD 0.1.9205
+* thesis: discussion: take home
+* thesis: A1
+* thesis: chapters polishing
+* thesis: appenbdix polishing
+
 # PhD 0.1.9204
 * thesis: discussion: first draft and Myriam's review begins
 

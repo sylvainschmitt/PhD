@@ -136,6 +136,7 @@ cowplot::plot_grid(plotlist = lapply(fitFT, mcmc_trace,
 ```
 
 ```{r ftGenoVar, fig.cap="Genetic variance partitionning."}
+save(fitFT, file = "../../thesis/rdata/fitFT.Rdata")
 lapply(fitFT, mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vdbh", "Vplot", "Vr")) %>% 
   bind_rows(.id = "variable") %>% 
   mutate(variance = recode_factor(parameter, 

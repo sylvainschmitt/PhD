@@ -16,11 +16,23 @@ Article title: **Topography shapes the local coexistence of tree species within 
 
 Authors: Sylvain Schmitt, Niklas Tysklind, Géraldine Derroire, Myriam Heuertz, Bruno Hérault
 
-Article acceptance date: unknown
+The following Supporting Information is available for this article:
+
+**Fig. \@ref(fig:A2correlations).** Correlation of abiotic topographic variables and neighbor crowding indexes. 
+
+**Tab. \@ref(tab:A2ModelsTable).** Model tested for species complex distribution.
+
+**Fig. \@ref(fig:A2Predictions).** Habitat suitability of single taxa model for every model form.
+
+**Tab. \@ref(tab:A2ComplexPar).** Model parameters for each complex with scaled descriptors.
+
+**Tab. \@ref(tab:A2Speciespar).** Model parameters for each complex with scaled descriptors.
+
+**Model S[1](#A2singlemodel).**  Stan code for the inference of species complex presencer.
+
+**Model S[2](#A2jointmodel).**  Stan code for the inference of species joint-presence.
 
 \newpage
-
-## Figures and tables
 
 ```{r A2correlations, fig.cap="Correlation of abiotic topographic variables and neighbor crowding indexes (NCI). All variables, relative elevation (RelEl), slope, curvature (Curv), aspect, topographic ruggedness index (TRI), and topographic wetness index (TWI) are derived from the digital elevation model (DEM) obtained through LiDAR campaign in 2015, the digital canopy model (DCM) has been obtained in the same campaign, and neighbor crowding index (NCI) of heterospecific (NCIh) or conspecific (NCIc) are derived from Paracou census campaign of 2015."}
 data %>% 
@@ -49,6 +61,8 @@ data.frame(
   kable(caption = "Model tested for species complex distribution.", format = "pandoc", escape = F, booktabs = T)
 ```
 
+\newpage
+
 ```{r A2Predictions, fig.cap="Habitat suitability of single taxa model for every model form (see Supplementary Material Tab. \\@ref(tab:A2ModelsTable)) and three theoretical species distribution cases. Three species distribution cases have been simulated: (i) the environmental variable has no effect, (ii) the niche optimum is an intermediate value of the environmental variable range, and (iii) the niche optimum is a limit of the environmental variable range. Blue and red dots represent simulated presences and absences respectively, whereas the black line represents the fitted corresponding model with its credibility interval in grey. The model B,2 shows the best behavior with the three distribution cases."}
 predsNull %>% 
   mutate(model = recode_factor(model, B0 = "B[0]", Balpha = "B[alpha]",
@@ -65,6 +79,8 @@ predsNull %>%
   facet_grid(model ~ type, scales = "free", labeller = label_parsed) +
   ylab("Habitat suitabtility") + scale_color_discrete("Presence")
 ```
+
+\newpage
 
 ```{r A2ComplexPar}
 lapply(fitsComplex, function(fit)
@@ -88,6 +104,8 @@ lapply(fitsComplex, function(fit)
   column_spec(1, bold = T) %>%
   collapse_rows(columns = 1)  
 ```
+
+\newpage
 
 ```{r A2Speciespar}
 lapply(fitsSpecies, function(fit)
@@ -116,9 +134,9 @@ lapply(fitsSpecies, function(fit)
   collapse_rows(columns = 1:3)
 ```
 
-## Codes
+\newpage
 
-### Stan code for the inference of species complex presence {#A2singlemodel}
+## Model S1: Stan code for the inference of species complex presence {#A2singlemodel}
 
 ```{stan A2singlemodel, eval=F, echo=T, cache=F, output.var="m1"}
 functions {
@@ -159,7 +177,9 @@ generated quantities {
 }
 ```
 
-### Stan code for the inference of species joint-presence {#A2jointmodel}
+\newpage
+
+## Model S2: Stan code for the inference of species joint-presence {#A2jointmodel}
 
 ```{stan A2jointmodel, eval=F, echo=T, cache=F, output.var="m2"}
 functions {

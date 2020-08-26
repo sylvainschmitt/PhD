@@ -15,7 +15,21 @@ Article title: **Topography consistently drives intra- and inter-specific leaf t
 
 Authors: Sylvain Schmitt, Bruno Hérault, Émilie Ducouret, Anne Baranger, Niklas Tysklind, Myriam Heuertz, Éric Marcon, Saint Omer Cazal, Géraldine Derroire
 
-Article acceptance date: 07 June 2020
+The following Supporting Information is available for this article:
+
+**Fig. \@ref(fig:A2abiotic).** Principal Component Analysis of abiotic topographic variables.
+
+**Fig. \@ref(fig:A2Dawkins).** Diameter at breast height and Dawkins index correlation.
+
+**Fig. \@ref(fig:A2DBH).** Diameter at breast height distribution between sampled indivduals and other *Symphonia* and *Eschweilera* individuals of Paracou.
+
+**Tab. \@ref(tab:A2ontogenyModel).** Log-likelihood for diameter model depending on model form (linear vs Michaelis-Menten).
+
+**Fig. \@ref(fig:A2DBH90).** Effect of tree diameter on leaf functional trait variation.
+
+**Fig. \@ref(fig:A2NicheBreadth).** Species niche breadth along the topographic wetness index for all species from Paracou.
+
+**Fig. \@ref(fig:A2Plot).** Random effects of plots on leaf functional trait variation.
 
 \newpage
 
@@ -24,6 +38,8 @@ factoextra::fviz_pca_var(princomp(~ DEM + RelativeElevation + Slope + Curvature 
                           Aspect + TRI + TWI, Individuals, cor = T),
                axes = c(1, 2), geom = c("arrow", "text"), col.var = "contrib")
 ```
+
+\newpage
 
 ```{r A2Dawkins, fig.cap='Diameter at breast height (DBH) and Dawkins index correlation. Box colors indicates the Dawkins index. DBH and Dawkins index correlation has been investigated by Anova. **** indicates a $p-value < 0.0001$. Letters indicate post-hoc groups investigated by Tukey Honest Significant Differences.'}
 Individuals %>% 
@@ -43,12 +59,16 @@ Individuals %>%
   ylab("Diameter at breast hiaght (dbh, cm)")
 ```
 
+\newpage
+
 ```{r A2DBH, fig.cap='Diameter at breast height (DBH) distribution between sampled indivduals and other *Symphonia* and *Eschweilera* individuals of Paracou.'}
 ggplot(DBHdata, aes(DBH)) +
   geom_histogram(position = "dodge") +
   facet_wrap(~ Sample, scale = "free", nrow = 2) +
   xlab("Diameter at breast height (dbh, cm)")
 ```
+
+\newpage
 
 ```{r A2ontogenyModel}
 lapply(models, function(model)
@@ -71,6 +91,8 @@ lapply(models, function(model)
   kable(caption = "Log-likelihood for diameter model depending on model form (linear vs Michaelis-Menten).", digits = 3, format = "pandoc", escape = F) %>% 
   kable_styling(full_width = F)
 ```
+
+\newpage
 
 ```{r A2DBH90, fig.cap="Effect of tree diameter on leaf functional trait variation. The posterior distribution of species diameter at breast height for which a given trait reaches 90% of its maximum value ($DBH_{90}$) was estimated for every trait for all species in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species. Vertical lines indicate from left to right: (i) tree recruitment diameter and (ii) and (iii) 95th percentile of diameter for *Eschweilera* and *Symphonia*, respectively."}
 lapply(fitsModel, function(fit) 
@@ -102,6 +124,8 @@ lapply(fitsModel, function(fit)
   scale_fill_brewer(guide = "none", palette = "Set1")
 ```
 
+\newpage
+
 ```{r A2NicheBreadth, fig.cap="Species niche breadth along the topographic wetness index (TWI) for all species from Paracou. Niche breadth has been calculated as the difference between the 95th quantile and the 5th quantile of TWI for all species from Paracou with at least 20 individuals. Dashed vertical lines represent niche breadth value for species from this study indicated by line color. E. coriacea and the two Symphonia species have bigger niche breadth than most Paracou species but E. sagotiana and E. coriacea have niche breadth similar to the majority of Paracou species.", fig.height=3}
 env %>% 
   group_by(SpeciesLong) %>% 
@@ -116,6 +140,8 @@ env %>%
   ylab("N") + xlab("Species niche breadth along the topographic wetness index (TWI)") + scale_color_discrete("Studied species") +
   theme(legend.text = element_text(face = "italic"))
 ```
+
+\newpage
 
 ```{r A2Plot, fig.cap="Random effects of plots on leaf functional trait variation. The posterior distribution of plot effect was estimated for every trait for all plots in both complexes using Bayesian inference. Circles represent the mean estimate, thick lines the 50% confidence interval and thin lines the 95% confidence interval, and color the corresponding species.", fig.height=8}
 lapply(fitsModel, function(fit) 

@@ -244,6 +244,9 @@ for(var in vars){
   }
 }
 fitEnv <- lapply(fitEnv, sflist2stanfit)
+fitEnvParvi <- fitEnv
+save(fitEnvParvi, file = "../../thesis/rdata/fitEnvParvi.Rdata")
+rm(fitEnvParvi)
 lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
        droppars = NULL, rhat = T) %>% 
   bind_rows(.id = "Variable") %>% 
