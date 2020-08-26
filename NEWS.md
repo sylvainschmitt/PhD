@@ -1,3 +1,6 @@
+# PhD 0.1.9206
+* thesis: Ch4 update
+
 # PhD 0.1.9205
 * thesis: discussion: take home
 * thesis: A1
