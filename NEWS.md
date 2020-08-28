@@ -1,3 +1,6 @@
+# PhD 0.1.9207
+* thesis: abstract and résumé substantiel
+
 # PhD 0.1.9206
 * thesis: Ch4 update
 
