@@ -1,3 +1,6 @@
+# PhD 0.1.9208
+* thesis: discussion: Bruno's comments
+
 # PhD 0.1.9207
 * thesis: abstract and résumé substantiel
 
