@@ -13,7 +13,3 @@ NumericVector build_gradient(
     gradient[i] = gradient[i-1] + step ;
   return gradient ;
 }
-
-/**** R
-build_gradient(10, 50)
-*/

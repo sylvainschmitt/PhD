@@ -32,7 +32,6 @@ List simulator1D_cpp(
   NumericVector E = build_gradient(Elim, Nind) ;
   NumericMatrix Aoffsprings(Nind, seedlings) ;
   NumericMatrix Zoffsprings(Nind, seedlings) ;
-  NumericVector Ap(2*dispersal+1) ;
   NumericVector w(seedlings) ;
   IntegerVector seeds(seedlings) ;
   int imin , imax, winner ;
@@ -51,10 +50,19 @@ List simulator1D_cpp(
       if(i+dispersal+1 < Nind){
         imax = i+dispersal+1 ;
       }
-      NumericVector Ap(imax-imin) ;
-      for(int p = 0; p < imax-imin; p++) Ap(p) = A(g-1,imin+p) ;
+      NumericVector Am(imax-imin) ;
+      IntegerVector Pm(imax-imin) ;
+      for(int m = 0; m < imax-imin; m++){
+        Pm(m) = m ;
+        Am(m) = A(g-1,imin+m) ;
+      } 
       for (int s = 0; s < seedlings; s++){
-        Aoffsprings(i,s) = rnorm(1, mean(sample(Ap, 2)), sigmaG/2)[0] ;
+        int M = sample(Pm, 1)[0] ;
+        NumericVector Af(imax-imin) ; // imax and imin to be redefined
+        for(int m = 0; m < imax-imin; m++){
+          Af(m) = A(g-1,imin+m) ;
+        } 
+        Aoffsprings(i,s) = rnorm(1, (Am[M] + sample(Af, 1)[0])/2, sigmaG/2)[0] ;
         Zoffsprings(i,s) = Aoffsprings(i,s) + rnorm(1, muE, sigmaE)[0] ;
       }
       if(viability_deterministic){
