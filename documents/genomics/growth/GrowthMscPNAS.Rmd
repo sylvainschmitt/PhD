@@ -305,17 +305,19 @@ cor %>%
 n <- 6
 t %>% 
   arrange(DBHtoday) %>% 
-  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>% 
+  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>%
+  mutate(significance = ifelse(DBHclass %in% c(1,6), "0", "1")) %>% 
   group_by(DBHclass) %>% 
   mutate(DBHclassCm = paste0(round(min(DBHtoday)), " - ", round(max(DBHtoday)), " cm")) %>% 
   ggplot(aes(aGmax, aNCI)) +
   geom_point(alpha = 0.5) +
   facet_wrap(~ DBHclassCm, scales = "free") +
-  geom_smooth(method = "lm", col = "black") +
+  geom_smooth(method = "lm", aes(col = significance)) +
   scale_size_continuous(guide = "none") +
   ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.85, ) +
   xlab("Genotypic value for individual growth potential (Gmax)") +
-  ylab("Genotypic value for neighbourhood crowding index (NCI)")
+  ylab("Genotypic value for neighbourhood crowding index (NCI)") +
+  scale_color_manual(guide = "none", values = c("darkgrey", "black"))
 ```
 
 \newpage 

@@ -293,8 +293,10 @@ simulator2D <- function(
     A <- array(dim = c(grid, grid, Ngen)) # objects
     Z <- array(dim = c(grid, grid, Ngen))
     A[,,1] <- array(rnorm(grid*grid, muG, sigmaG), dim = c(grid,grid))
-    Z[,,1] <- A[,,1] + array(rnorm(grid*grid, muE, sigmaE), dim = c(grid,grid))
-    E <- seq(-Elim, Elim, length.out = grid) %*% t(seq(-Elim, Elim, length.out = grid))
+    Z[,,1] <- A[,,1] + array(rnorm(grid*grid, muE, sigmaE), 
+                             dim = c(grid,grid))
+    E <- seq(-Elim, Elim, length.out = grid) %*% 
+      t(seq(-Elim, Elim, length.out = grid))
     for(g in 2:Ngen){ # iterations
       Aoffsprings <- array(
         as.vector(
@@ -310,18 +312,32 @@ simulator2D <- function(
             )
           )
         ), dim = c(grid, grid, seedlings))
-        Zoffsprings <- Aoffsprings + array(rnorm(grid*grid*seedlings, muE, sigmaE), dim = c(grid,grid,seedlings))
+        Zoffsprings <- Aoffsprings + 
+          array(rnorm(grid*grid*seedlings, muE, sigmaE), 
+                dim = c(grid,grid,seedlings))
         if(viability_deterministic){
-            survivors <- array(apply(apply(Zoffsprings, 3, function(x) as.array(sqrt((x - E)^2), dim = c(grid,grid))), 1, which.min), dim = c(grid,grid))
+            survivors <- array(apply(
+              apply(Zoffsprings, 3, 
+                    function(x) as.array(sqrt((x - E)^2), 
+                                         dim = c(grid,grid))), 1, which.min), 
+              dim = c(grid,grid))
         } else {
-          survivors <- array(apply(1/apply(Zoffsprings, 3, function(x) as.array(sqrt((x - E)^2), dim = c(grid,grid))), 1, 
-                                   function(w) sample.int(seedlings, 1, replace = T, prob = w)), dim = c(grid,grid))
+          survivors <- array(
+            apply(1/apply(Zoffsprings, 3, 
+                          function(x) as.array(sqrt((x - E)^2),
+                                               dim = c(grid,grid))), 1, 
+                  function(w) 
+                    sample.int(seedlings, 1, replace = T, prob = w)), 
+            dim = c(grid,grid))
         }
-        A[,,g] <- Aoffsprings[cbind(rep(1:grid, grid), rep(1:grid, each = grid), as.vector(survivors))]
-        Z[,,g] <- Zoffsprings[cbind(rep(1:grid, grid), rep(1:grid, each = grid), as.vector(survivors))]
+        A[,,g] <- Aoffsprings[cbind(rep(1:grid, grid), rep(1:grid, each = grid),
+                                    as.vector(survivors))]
+        Z[,,g] <- Zoffsprings[cbind(rep(1:grid, grid), rep(1:grid, each = grid),
+                                    as.vector(survivors))]
         
     }
-    return(lapply(list("breeding value (a)" = A, "trait value (z)" = Z), function(M)
+    return(lapply(list("breeding value (a)" = A, "trait value (z)" = Z), 
+                  function(M)
         reshape2::melt(M) %>%
           dplyr::rename(X = Var1, Y = Var2, generation = Var3)) %>%
         bind_rows(.id = "var") %>%
@@ -334,7 +350,7 @@ simulator2D <- function(
 
 \newpage
 
-```{r A1gmaxspecies, fig.cap="Species variation in growth trajectories of *Symphonia* and *Eschweilera* clade *Parvifolia* species. ..."}
+```{r A1gmaxspecies, fig.cap="Species variation in growth trajectories of *Symphonia* and *Eschweilera* clade *Parvifolia* species."}
 load("./rdata/fitGmaxSympho.Rdata")
 load("./rdata/fitGmaxParvi.Rdata")
 g.sympho <-  mcmc_intervals_data(fitGmaxSympho, regex_pars = c("Vp", "Vr")) %>% 
