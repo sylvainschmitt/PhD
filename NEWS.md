@@ -1,3 +1,6 @@
+# PhD 0.1.9212
+* thickness: init
+
 # PhD 0.1.9211
 * thesis: printing prep, list of manuscripts
 * modelling: updating to ecoevosimulator
