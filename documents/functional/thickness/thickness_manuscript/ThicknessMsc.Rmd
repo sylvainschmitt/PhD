@@ -1,0 +1,184 @@
+---
+title: The extractable water drives a leaf thinning of tropical trees during the rainy season
+date: 'Journal? `r Sys.Date()` '
+output:
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::html_document2:
+    number_sections: false  
+    toc: true
+    toc_float: yes
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/newphyto.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 8, cache = F, cache.lazy = F)
+```
+
+Authors (alphabetic):
+Émilie Ducouret$^6$, 
+Géraldine Derroire$^6$, 
+Bruno Hérault$^{3,4,5}$,
+Myriam Heuertz$^1$,
+Sylvain Schmitt$^1$, 
+Niklas Tysklind$^2$, 
+...
+
+*$^1$ Univ. Bordeaux, INRAE, BIOGECO, 69 route d’Arcachon, 33610 Cestas France;* 
+*$^2$ INRAE, UMR EcoFoG (Agroparistech, CNRS, Cirad, Université des Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana;*
+*$^3$ CIRAD, UPR Forêts et Sociétés, Yamoussoukro, Côte d'Ivoire;*
+*$^4$ Forêts et Sociétés, Univ Montpellier, CIRAD, Montpellier, France;*
+*$^5$ Institut National Polytechnique Félix Houphouët-Boigny, INP-HB, Yamoussoukro, Côte d'Ivoire;*
+*$^6$ Cirad, UMR EcoFoG (Agroparistech, CNRS, INRAE, Université des Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana;*
+
+* **Corresponding author**: Sylvain Schmitt, +33 6 49 19 32 63, sylvain.m.schmitt@gmail.com
+
+\newpage 
+
+# Abstract
+
+**To be written**
+
+## Keywords
+
+Keyword 1; ...
+
+# Introduction 
+
+* Functional traits
+* Leaf variation
+* Weather effects
+* Variation in leaf thickness + weather data + diameter data + bayesian modelling
+* How does weather influence leaf thickness in tropical trees ?
+* Hypothesis
+
+# Material and Methods
+
+## Study site
+
+**Paracou.**
+
+## Plant material
+
+Four hundreds and one individuals of the *Symphonia* genus were sampled between October and December 2017.
+Sampling overlapped dry and rainy seasons.
+The genus *Symphonia* includes the well-recognised species *Symphonia globulifera* (Clusiaceae)
+that include two locally recognized morphotypes,
+*S. globulifera sensu stricto* (*S. globulifera* hereafter) and *Symphonia sp.1*.
+The two morphotypes occurs in sympatry but in differentiated habitats, 
+with *S. globulifera* preferentially growing in valley bottoms 
+and *S. sp1* preferentially exploiting a variety of drier habitats [Schmitt et al. in prep; @Allie2015]. 
+Individuals tres with diameter at breast height larger than 10 cm (DBH > 10 cm) were randomly selected across all plots,
+spanning the natural distribution of DBH and topographic habitats.
+For each tree five mature and healthy leaves were sampled at the top of the crown 
+using a slingshot sampling device (BIG SHOT SHERILLtree), 
+and kept in humidified ziplock bags with CO2-enriched air in darkness until measurement within the next six hours following a standard protocol [@Perez-Harguindeguy2013]. 
+Access to light for each sampled tree was assessed using the Dawkins index [@Dawkins1958].
+
+## Leaf thickness measurement
+
+We measured leaf thickness (LT, $\mu m$) on all fresh leaves (**without rehydratation**) with a micrometer of precision 1 $\mu m$.
+The average thickness of the leaf was calculated on three points on both sides of the blade, while avoiding the midrib.
+The petiole was removed for all measurements.
+
+## Leaf thickness descriptors
+
+The realtive extractable water [REW, @Wagner2011] was selected among several interdependent abiotic descriptors of weather (Fig. S1).
+**Further describe REW.**
+
+The diameter at breast height (DBH, cm) was chosen to control for tree size [@OBrien1995; @Zhang2004]. 
+DBH values of sampled individuals were retrieved from the 2017 inventory of the Paracou permanent plots.
+
+## Analyses
+
+We used a linear mixed models with REW, DBH and species fixed effects combined with individuals random effect to explain leaf thickness among several tested models (Mat. Sup. S2).
+
+Leaf thickness $LT_{l,i,s}$ for leaf $l$ belonging individual $i\in[1;I]$ in species $s\in[1;S]$ 
+was inferred with a normal distribution with the following formula:
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
+$$with~\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+where $\alpha_s$ is the mean leaf thickness of species $s$,
+$\gamma_i$ is the individual random effect centered on 0 of variance $\sigma_I$,
+and $\beta_{REW}$ and $\beta_{DBH}$ are the slope of REW and DBH effects.
+We calculated conditional and marginal $R^2$ [@Nakagawa2013] and used them to partition variance between fixed and random effects.
+A Bayesian method was used to infer parameters using stan language [@Carpenter2017, stan code available in Model S1] and rstan package [@Team2018] in the R environment [@RCoreTeam2020].
+
+# Results
+
+Variance partitioning showed the importance of relative extractable water (REW) and tree diameter (DBH) in leaf thickness variation (Fig. \@ref(fig:varpart)).
+After individual random effects (46%), REW and DBH explained respectivelly 26% and 15% of the leaf thickness variation, and represented 90% of the total leaf thickness variation with species and individuals effects.
+REW showed a strong negative effect on leaf thickness (-0.49, Tab. \@ref(tab:pars)), and DBH showed a positive effect (0.37, Tab. \@ref(tab:pars)).
+In other words, increased extractible water drives leaf thinning and increased tree size drives leaves thckening.
+
+
+```{r varpart, fig.cap="Variance partitioning of leaf thickness between REW (red), DBH (brown), species (green), individuals (blue), and residual variation (pink)."}
+load("../thickness_save/fits.Rdata")
+mcmc_intervals_data(fits$rewdbhspeciesindividual, regex_pars = c("V")) %>% 
+  mutate(variance = recode_factor(parameter, 
+                           "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
+                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "LT", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))  
+```
+
+```{r pars}
+load("../thickness_save/fits.Rdata")
+broom::tidyMCMC(fits$rewdbhspeciesindividual, 
+                pars =  c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma"),
+                droppars = NULL, ess = F, rhat = F, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error) %>% 
+  mutate(term = recode(term,
+                       "alpha[1]" = "$\\alpha_{S.~globulifera}$",
+                       "alpha[2]" = "$\\alpha_{S.~sp 1}$",
+                       "beta_rew" = "$\\beta_{REW}$",
+                       "beta_dbh" = "$\\beta_{DBH}$",
+                       "sigmaI" = "$\\sigma_I$",
+                       "sigma" = "$\\sigma$")) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error")) 
+```
+
+# Discussion
+
+* The extractable water drives a leaf thinning of tropical trees during the rainy season.
+* Why ?
+* Increased thickness with closed stomata: "When the stomata close at low air humidity the water content of the apricot leaves increases. The stomata open at high air humidity in spite of a decrease in leaf water content." [@Schulze1972] ?
+
+# Acknowledgements
+
+We thank the University of Bordeaux for a PhD grant to Sylvain Schmitt.
+We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification.
+Special thanks go to Saint-Omer Cazal, Anne Baranger, Josselin Cazal, Ilke Gelaldi, Fabien Lehuede, Adeline Adam, Agathe Benfredj Zaleski, Numa Faucherre, and David Zipper for their assistance during sampling in Paracou station.
+This study was partially funded by an Investissement d’Avenir grant of the ANR: CEBA (ANR-10-LABEX-0025).
+
+
+# Authors’ contributions
+
+**To be written**
+
+# References
+
+<div id="refs"></div>

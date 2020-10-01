@@ -5,12 +5,386 @@ library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
+library(rstan)
+library(bayesplot)
 theme_set(bayesplot::theme_default())
+options(mc.cores = 4)
+rstan_options(auto_write = TRUE)
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
-# path <- "../../data/Paracou/"
+```
+
+
+```{r mdata}
+data <- read_tsv("thickness_save/data.tsv") %>% 
+  mutate(Species = ifelse(Species == "Indet.",
+                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+                                                                      "sp.1" =  "S")], Species)) %>% 
+  filter(!is.na(Species)) %>% 
+  mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+  mutate(IndNum = as.numeric(as.factor(idTree)))
+mdata <- list(
+  L = nrow(data),
+  S = max(data$SpeciesNum),
+  I = max(data$IndNum),
+  LT = as.vector(scale(data$LT)),
+  REW = as.vector(scale(data$REW)),
+  DBH = as.vector(scale(log(data$DBH))),
+  species = data$SpeciesNum,
+  individual = data$IndNum
+)
 ```
 
 # Models
+
+This chapter develop all the models used to infer leaf thickness variation with relative extractible water.
+
+## Summary
+
+Summary of all models and results (list of variables and parameters, and details below). 
+Without random effect the model with REW, DBH and species is the most likely and the likelihood increase a lot while adding individual random effects (Fig. \@ref(fig:lp)).
+We will thus use the model with REW, DBH, species and individuals for variance partitionning (we don't seek an predictive model).
+With few uncertainty, after individual random effect, REW is the main factor explainging leaf trait variation (Fig. \@raf(fig:varpart) & Fir. \@ref(fig:R2)).
+
+```{r lp, fig.cap="Models log likelhood."}
+load("thickness_save/fits.Rdata")
+lapply(fits, mcmc_intervals_data, pars = "lp__") %>% 
+  bind_rows(.id = "model") %>% 
+  mutate(low = ifelse(m < 0, "low", "up")) %>% 
+  ggplot(aes(x = model, 
+             xend = model,
+             color = model, 
+             fill = model)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ low, scales = "free") +
+  datatools::scale_x_reordered() +
+  xaxis_title(F) +
+  ylab("Log likelihood") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+```{r varpart, fig.cap="Variance partitionning for the selected model."}
+load("thickness_save/fits.Rdata")
+mcmc_intervals_data(fits$rewdbhspeciesindividual, regex_pars = c("V")) %>% 
+  mutate(variance = recode_factor(parameter, 
+                           "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
+                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "LT", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", 
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))  
+```
+
+```{r R2, fig.cap="R2 for the selected model"}
+load("thickness_save/fits.Rdata")
+as.data.frame(fits$rewdbhspeciesindividual, 
+              c("Vrew", "Vdbh", "Vspecies", "Vindividual", "Vresidual")) %>% 
+  rowwise() %>% 
+  mutate(Vtot = sum(c(Vrew, Vdbh, Vspecies, Vindividual, Vresidual))) %>% 
+  mutate(Vexp = sum(c(Vrew, Vdbh, Vspecies, Vindividual))) %>% 
+  mutate_at(c("Vrew", "Vdbh", "Vspecies", "Vindividual", "Vexp"), funs(./Vtot)) %>% 
+  dplyr::select(-Vtot, -Vresidual) %>% 
+  reshape2::melt(id.vars = NULL) %>% 
+  group_by(variable) %>% 
+  summarise(q5 = quantile(value, 0.05),
+            q25 = quantile(value, 0.25),
+            mean = mean(value),
+            median = median(value),
+            sd = sd(value),
+            q75 = quantile(value, 0.75),
+            q95 = quantile(value, 0.95)) %>% 
+    mutate(variable = recode_factor(variable, 
+                           "Vexp" = "Marginal", "Vindividual" = "Individual", 
+                           "Vrew" = "REW", "Vdbh" = "DBH",
+                           "Vspecies" = "Species")) %>% 
+  ggplot(aes(x = variable, xend = variable, col = variable)) +
+  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = q5, yend = q95),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
+  ylab(expression(R^2)) +
+  theme(axis.title.y = element_blank()) +
+  coord_flip()  +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```
+
+## Variables & parameters
+
+Summary of all variables, laws, and parameters choice and used in subsequent models.
+
+### Variables
+
+* $l$ leaf or observation ($L$)
+* $i$ individual ($I$)
+* $s$ species ($S$)
+* $LT$ leaf thickness (vary with $l$)
+* $REW$ relative extractible water content (vary with $i$)
+* $DBH$ diameter at breast height (vary with $i$)
+
+### Parameters
+
+* $\alpha$ leaf thickness origin
+* $\alpha$ leaf thickness origin with species fixed effect
+* $\beta_{REW}$ slope of REW effect
+* $\beta_{DBH}$ slope of DBH effect
+* $\sigma$ residual variation
+* $\gamma_i$ individual random effect 
+* $\sigma_I$ individual random effect variation
+
+## Models
+
+### $N_{REW}$ Linear variation with REW
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{REW}.REW_i,\sigma)$$
+
+```{r NrewSampling, include=FALSE}
+modelNrew <- stan_model("thickness_models/Nrew.stan")
+fitNrew <- sampling(modelNrew, mdata)
+```
+
+```{r NrewTable}
+broom::tidyMCMC(fitNrew, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrew), np = nuts_params(fitNrew)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrew), np = nuts_params(fitNrew))
+```
+
+### $N_{REW,Species}$ Linear variation with REW & species fixed effect on interecept
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+\beta_{REW}.REW_i,\sigma)$$
+
+```{r NrewspeciesSampling, include=FALSE}
+modelNrewspecies <- stan_model("thickness_models/Nrewspecies.stan")
+fitNrewspecies <- sampling(modelNrewspecies, mdata)
+```
+
+```{r NrewspeciesTable}
+broom::tidyMCMC(fitNrewspecies, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewspeciesTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewspecies), np = nuts_params(fitNrewspecies)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewspeciesPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewspecies), np = nuts_params(fitNrewspecies))
+```
+
+### $N_{REW,Individual}$ Linear variation with REW & individual random effect
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha+ \gamma_i+\beta_{REW}.REW_i,\sigma)$$
+$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+```{r NrewindividualSampling, include=FALSE}
+modelNrewindividual <- stan_model("thickness_models/Nrewindividual.stan")
+fitNrewindividual <- sampling(modelNrewindividual, mdata, include =F, pars = "gamma")
+```
+
+```{r NrewindividualTable}
+broom::tidyMCMC(fitNrewindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewindividualTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewindividual), np = nuts_params(fitNrewindividual)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewindividual), np = nuts_params(fitNrewindividual))
+```
+
+### $N_{REW,Species,Individual}$ Linear variation with REW & species fixed effect on interecept & individual random effect
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+ \gamma_i+\beta_{REW}.REW_i,\sigma)$$
+$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+```{r NrewspeciesindividualSampling, include=FALSE}
+modelNrewspeciesindividual <- stan_model("thickness_models/Nrewspeciesindividual.stan")
+fitNrewspeciesindividual <- sampling(modelNrewspeciesindividual, mdata, include =F, pars = "gamma")
+```
+
+```{r NrewspeciesindividualTable}
+broom::tidyMCMC(fitNrewspeciesindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewspeciesindividualTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewspeciesindividual), np = nuts_params(fitNrewspeciesindividual)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewspeciesindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewspeciesindividual), np = nuts_params(fitNrewspeciesindividual))
+```
+
+### $N_{DBH}$ Linear variation with logarithm of DBH
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{DBH}.DBH_i,\sigma)$$
+
+```{r NdbhSampling, include=FALSE}
+modelNdbh <- stan_model("thickness_models/Ndbh.stan")
+fitNdbh <- sampling(modelNdbh, mdata)
+```
+
+```{r NdbhTable}
+broom::tidyMCMC(fitNdbh, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NdbhTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNdbh), np = nuts_params(fitNdbh)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NdbhPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNdbh), np = nuts_params(fitNdbh))
+```
+
+### $N_{REW,DBH}$ Linear variation with REW & the logarithm of DBH
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
+
+```{r NrewdbhSampling, include=FALSE}
+modelNrewdbh <- stan_model("thickness_models/Nrewdbh.stan")
+fitNrewdbh <- sampling(modelNrewdbh, mdata)
+```
+
+```{r NrewdbhTable}
+broom::tidyMCMC(fitNrewdbh, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewdbhTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewdbh), np = nuts_params(fitNrewdbh)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewdbhPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewdbh), np = nuts_params(fitNrewdbh))
+```
+
+### $N_{REW,DBH,Species}$ Linear variation with REW & species fixed effect on interecept
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
+
+```{r NrewdbhspeciesSampling, include=FALSE}
+modelNrewdbhspecies <- stan_model("thickness_models/Nrewdbhspecies.stan")
+fitNrewdbhspecies <- sampling(modelNrewdbhspecies, mdata)
+```
+
+```{r NrewdbhspeciesTable}
+broom::tidyMCMC(fitNrewdbhspecies, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewdbhspeciesTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewdbhspecies), np = nuts_params(fitNrewdbhspecies)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewdbhspeciesPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewdbhspecies), np = nuts_params(fitNrewdbhspecies))
+```
+
+### $N_{REW,DBH,Individual}$ Linear variation with REW & individual random effect
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
+$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+```{r NrewdbhindividualSampling, include=FALSE}
+modelNrewdbhindividual <- stan_model("thickness_models/Nrewdbhindividual.stan")
+fitNrewdbhindividual <- sampling(modelNrewdbhindividual, mdata, include =F, pars = "gamma")
+```
+
+```{r NrewdbhindividualTable}
+broom::tidyMCMC(fitNrewdbhindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewdbhindividualTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewdbhindividual), np = nuts_params(fitNrewdbhindividual)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewdbhindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewdbhindividual), np = nuts_params(fitNrewdbhindividual))
+```
+
+### $N_{REW,DBH,Species,Individual}$ Linear variation with REW & species fixed effect on interecept & individual random effect
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
+$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+```{r NrewdbhspeciesindividualSampling, include=FALSE}
+modelNrewdbhspeciesindividual <- stan_model("thickness_models/Nrewdbhspeciesindividual.stan")
+fitNrewdbhspeciesindividual <- sampling(modelNrewdbhspeciesindividual, mdata, include =F, pars = "gamma")
+```
+
+```{r NrewdbhspeciesindividualTable}
+broom::tidyMCMC(fitNrewdbhspeciesindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r NrewdbhspeciesindividualTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitNrewdbhspeciesindividual), np = nuts_params(fitNrewdbhspeciesindividual)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r NrewdbhspeciesindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitNrewdbhspeciesindividual), np = nuts_params(fitNrewdbhspeciesindividual))
+```
+
+```{r fits}
+fits <- list(
+  rew = fitNrew,
+  rewspecies = fitNrewspecies,
+  rewindividual = fitNrewindividual,
+  rewspeciesindividual = fitNrewspeciesindividual,
+  rewdbh = fitNrewdbh,
+  rewdbhspecies = fitNrewdbhspecies,
+  rewdbhindividual = fitNrewdbhindividual,
+  rewdbhspeciesindividual = fitNrewdbhspeciesindividual
+)
+save(fits, file = "thickness_save/fits.Rdata")
+```
 

@@ -1,0 +1,124 @@
+---
+title: Supporting information
+output:
+  bookdown::word_document2: 
+      reference_docx: ./template/template.docx
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
+linestretch: 1.5
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 8, cache = F, cache.lazy = F)
+```
+
+Article title: **The extractable water drives a leaf thinning of tropical trees during the rainy season**
+
+Authors (alphabetic): Émilie Ducouret, Géraldine Derroire, Bruno Hérault, Myriam Heuertz, Niklas Tysklind, Sylvain Schmitt, ...
+
+
+The following Supporting Information is available for this article:
+
+**Model S1.** Stan code for the linear mixed model.
+
+**Fig. S\@ref(fig:cor).** Correlations among leaf thickness descriptors. 
+
+**Fig. S\@ref(fig:lp).** Log-likelhood of teted models.
+
+\newpage
+
+# Model S1: Stan code for the linear mixed model.
+
+```{stan, echo=T, eval=F, output.var=""}
+data {
+  int<lower=1> L ;
+  int<lower=1> I ;
+  int<lower=1> S ;
+  vector[L] LT ;
+  vector[L] REW ;
+  vector[L] DBH ;
+  int<lower=1, upper=S> species[L] ;
+  int<lower=1, upper=I> individual[L] ;
+}
+parameters {
+  vector[S] alpha ;
+  vector[I] gamma ;
+  real beta_rew ;
+  real beta_dbh ;
+  real<lower=0> sigma ;
+  real<lower=0> sigmaI ;
+}
+model {
+  LT ~ normal(alpha[species] + gamma[individual] + beta_rew * REW + beta_dbh * DBH, sigma);
+  gamma ~ normal(0, sigmaI) ;
+}
+generated quantities {
+  real Vrew = variance(beta_rew * REW) ;
+  real Vdbh = variance(beta_dbh * DBH) ;
+  real Vspecies = variance(alpha[species]) ;
+  real Vindividual = variance(gamma[individual]) ;
+  real Vresidual = variance(LT) - variance(alpha[species] + gamma[individual] + beta_rew * REW + beta_dbh * DBH) ;
+}
+```
+
+\newpage
+
+```{r cor, fig.cap="Correlations among leaf thickness descriptors. Pearson's r below the diagonal and corresponding color above the diagonal."}
+read_tsv("../thickness_save/data.tsv") %>% 
+  dplyr::select(LT, DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, 
+                rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+  na.omit() %>%
+  cor() %>% 
+  corrplot::corrplot.mixed()
+```
+
+\newpage
+
+```{r lp, fig.cap="Log-likelhood of teted models."}
+load("../thickness_save/fits.Rdata")
+lapply(fits, mcmc_intervals_data, pars = "lp__") %>% 
+  bind_rows(.id = "model") %>% 
+  mutate(random = ifelse(m < 0, "no individual random effect", 
+                         "with individual random effect")) %>% 
+  mutate(model = recode(model,
+                        "rew"= "REW",
+                        "rewspecies" = "REW + Species",
+                        "rewindividual" = "REW",
+                        "rewspeciesindividual" = "REW + Species",
+                        "rewdbh" = "REW + DBH",
+                        "rewdbhspecies" = "REW + DBH + Species",
+                        "rewdbhindividual" = "REW + DBH",
+                        "rewdbhspeciesindividual" = "REW + DBH + Species")) %>% 
+  ggplot(aes(x = model, 
+             xend = model,
+             color = model, 
+             fill = model)) +
+  geom_point(aes(y = m), shape = 21, size = 3, alpha = 0.5) +
+  geom_segment(aes(y = ll, yend = hh),
+               size = 1, show.legend = F, alpha = 0.5) +
+  geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
+  coord_flip() +
+  facet_wrap(~ random, scales = "free_x") +
+  datatools::scale_x_reordered() +
+  xaxis_title(F) +
+  ylab("Log-likelihood") +
+  scale_color_discrete(guide = "none") +
+  scale_fill_discrete(guide = "none")
+```

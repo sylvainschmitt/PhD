@@ -11,11 +11,11 @@ theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
-path <- "../../../data/Paracou/weather/"
 data <- read_tsv("thickness_save/data.tsv")
 ```
 
 ```{r data, eval=F}
+path <- "../../../data/Paracou/weather/"
 # LT 
 traits <- readxl::read_xlsx(path = file.path(path, "Measures_Symphonia.xlsx"), sheet = "AllTraits") %>% 
   dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, Leaf, Morphotype, Bark, Dawkins, LT) %>% 
@@ -26,6 +26,17 @@ individuals <- read_tsv(file.path(path, "Measures_Symphonia - Individuals.tsv"))
   dplyr::select(date, time, Plot, SubPlot, TreeFieldNum, Bark, Dawkins, Position)
 data <- left_join(individuals, traits, by = c("Plot", "SubPlot", "TreeFieldNum", "Dawkins", "Bark"))
 rm(individuals, traits)
+## Paracou
+paracou <- src_sqlite(file.path(path, "..", "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(idTree %in% local(data$idTree)) %>%
+  filter(Genus %in% c("Lecythis", "Eschweilera") & Plot %in% c(1, 6, 11, 13:15) & CensusYear == 2017 |
+         Genus %in% c("Lecythis", "Eschweilera") & Plot == 16 & CensusYear == 2015 |
+         Genus == "Symphonia" & CensusYear == 2015) %>%
+  mutate(DBH = CircCorr/pi) %>% 
+  collect()
+data <- left_join(data, paracou)
+rm(paracou)
 # Weather
 weather <- readxl::read_xlsx(path = file.path(path, "GX-METEO-2004 - 2018E.xlsx"), sheet = "Gxmeteo E") %>% 
   filter(Year == 2017, Month %in% 10:12)
@@ -109,14 +120,14 @@ Tables have been joined with dates and shortest time difference into the `data.t
 Figures \@ref(fig:cor) and \@ref(fig:pca) showed variables covariations among them and with leaf thickness. There are a lot of positive and negative covariations, as expected. And leaf thickness (LT) is mainly correlated to relative extractible water (REW), atmospheric pressure (Patm) and cummulated rain over five days (rainfivedays).
 
 ```{r cor, fig.cap="Variables correlations. Pearson's r below the diagonal and corresponding color above the diagonal."}
-dplyr::select(data, LT, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+dplyr::select(data, LT, DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   na.omit() %>%
   cor() %>% 
   corrplot::corrplot.mixed()
 ```
 
 ```{r pca, fig.cap="Principal component analysis of variables."}
-autoplot(princomp(~ LT + T55 + T30 + Hr55 + Hr30 + Patm + windaspect + windspeed + rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
+autoplot(princomp(~ LT + DBH + T55 + T30 + Hr55 + Hr30 + Patm + windaspect + windspeed + rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
                   data = data, cor = T),
            loadings.label.size = 6,
            loadings.label.colour = 'black', loadings.label.vjust = 1.1,
@@ -137,7 +148,7 @@ I thus suggest to build a hierarchical/mixed model with weather fixed effect tho
 ```{r lmplot, fig.cap="Linear regressions per explanatory variables."}
 dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   ggplot(aes(x = value, y = LT)) +
   geom_point(alpha = 0.3) +
@@ -147,8 +158,8 @@ dplyr::select(data,
 
 ```{r lmtab}
 a <- dplyr::select(data,
-              date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT,
+              DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   group_by(variable) %>% 
   do(lm = lm(LT ~ value, data = .)) %>% 
@@ -158,7 +169,7 @@ a <- dplyr::select(data,
   arrange(p.value)
 b <- dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   group_by(variable) %>% 
   do(lm = lm(LT ~ value, data = .)) %>% 
@@ -173,10 +184,11 @@ left_join(a, b) %>%
 
 
 ```{r oob, fig.cap="Variable importance calculated with an out-of-bag method applied on a random forest. Variable importance is represented by the mean increase in mean square error (MSE)."}
-randomForest::randomForest(LT ~ T55 + T30 + Hr55 + Hr30 + Patm + windaspect + windspeed + rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
-                                     data = data,  na.action = na.omit,
-                                     ntree = 1000, replace = F , importance = T,
-                                     do.trace = F, keep.forest = T, keep.inbag = T)$importance %>% 
+randomForest::randomForest(LT ~ DBH + T55 + T30 + Hr55 + Hr30 + Patm + windaspect + windspeed + 
+                             rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
+                           data = data,  na.action = na.omit,
+                           ntree = 1000, replace = F , importance = T,
+                           do.trace = F, keep.forest = T, keep.inbag = T)$importance %>% 
   as.data.frame() %>% 
   rownames_to_column("variable") %>% 
   dplyr::rename(MSEinc = "%IncMSE") %>% 

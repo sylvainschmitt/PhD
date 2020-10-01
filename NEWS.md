@@ -1,3 +1,6 @@
+# PhD 0.1.9213
+* thickness: weather data, models, and msc begins
+
 # PhD 0.1.9212
 * thickness: init
 
