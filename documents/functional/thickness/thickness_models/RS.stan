@@ -13,3 +13,8 @@ parameters {
 model {
   LT ~ normal(alpha[species] + beta_rew * REW, sigma);
 }
+generated quantities {
+  matrix[L,S] predicted ;
+  for(s in 1:S)
+    predicted[,s] = alpha[s] + beta_rew * REW ;
+}

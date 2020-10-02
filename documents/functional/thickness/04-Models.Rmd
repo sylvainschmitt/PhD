@@ -23,14 +23,17 @@ data <- read_tsv("thickness_save/data.tsv") %>%
                                                                       "sp.1" =  "S")], Species)) %>% 
   filter(!is.na(Species)) %>% 
   mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
-  mutate(IndNum = as.numeric(as.factor(idTree)))
+  mutate(IndNum = as.numeric(as.factor(idTree))) %>%
+  mutate(Species = recode(Species,
+                        "globulifera"= "S. globulifera",
+                        "sp.1" = "S. sp1"))
 mdata <- list(
   L = nrow(data),
   S = max(data$SpeciesNum),
   I = max(data$IndNum),
-  LT = as.vector(scale(data$LT)),
+  LT = data$LT,
   REW = as.vector(scale(data$REW)),
-  DBH = as.vector(scale(log(data$DBH))),
+  logDBH = as.vector(scale(log(data$DBH))),
   species = data$SpeciesNum,
   individual = data$IndNum
 )
@@ -51,6 +54,18 @@ With few uncertainty, after individual random effect, REW is the main factor exp
 load("thickness_save/fits.Rdata")
 lapply(fits, mcmc_intervals_data, pars = "lp__") %>% 
   bind_rows(.id = "model") %>% 
+  filter(model != "RxSDSI") %>% 
+  mutate(model = recode(model,
+                        "R"= "REW",
+                        "RS" = "REW + Species",
+                        "RxS" = "REW.Species",
+                        "RxSS" = "REW.Species + Species",
+                        "D"= "DBH",
+                        "DS" = "DBH + Species",
+                        "DxS" = "DBH.Species",
+                        "DxSS" = "DBH.Species + Species",
+                        "RxSDS" = "REW.Species + DBH + Species"
+  )) %>% 
   mutate(low = ifelse(m < 0, "low", "up")) %>% 
   ggplot(aes(x = model, 
              xend = model,
@@ -61,63 +76,50 @@ lapply(fits, mcmc_intervals_data, pars = "lp__") %>%
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_wrap(~ low, scales = "free") +
   datatools::scale_x_reordered() +
   xaxis_title(F) +
-  ylab("Log likelihood") +
+  ylab("Log-likelihood") +
   scale_color_discrete(guide = "none") +
   scale_fill_discrete(guide = "none")
+```
+
+```{r Predictions, message=FALSE, fig.cap="Predictions for the selected model."}
+load("thickness_save/fits.Rdata")
+as.data.frame(fits$RxSDS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95, group = Species), fill = "lightgrey", col = NA) +
+  geom_line(aes(y = LTm)) +
+  scale_color_manual("", values = c("#0000EE", "#CD2626")) +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Relative extractable water (REW)") +
+  ylab("Leaf thickness (LT)")
 ```
 
 ```{r varpart, fig.cap="Variance partitionning for the selected model."}
 load("thickness_save/fits.Rdata")
-mcmc_intervals_data(fits$rewdbhspeciesindividual, regex_pars = c("V")) %>% 
-  mutate(variance = recode_factor(parameter, 
+mcmc_intervals_data(fits$RxSDSI, regex_pars = c("V")) %>%
+  mutate(variance = recode_factor(parameter,
                            "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
-                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>% 
+                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>%
   mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
   ggplot(aes(x = "LT", fill = variance)) +
   geom_col(aes(y = m)) +
-  geom_text(aes(y = m, label = pct), col = "white", 
+  geom_text(aes(y = m, label = pct), col = "white",
             position = position_stack(vjust = .5)) +
   theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), 
+        axis.text.x = element_blank(), axis.line.x = element_blank(),
         axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2))  
-```
-
-```{r R2, fig.cap="R2 for the selected model"}
-load("thickness_save/fits.Rdata")
-as.data.frame(fits$rewdbhspeciesindividual, 
-              c("Vrew", "Vdbh", "Vspecies", "Vindividual", "Vresidual")) %>% 
-  rowwise() %>% 
-  mutate(Vtot = sum(c(Vrew, Vdbh, Vspecies, Vindividual, Vresidual))) %>% 
-  mutate(Vexp = sum(c(Vrew, Vdbh, Vspecies, Vindividual))) %>% 
-  mutate_at(c("Vrew", "Vdbh", "Vspecies", "Vindividual", "Vexp"), funs(./Vtot)) %>% 
-  dplyr::select(-Vtot, -Vresidual) %>% 
-  reshape2::melt(id.vars = NULL) %>% 
-  group_by(variable) %>% 
-  summarise(q5 = quantile(value, 0.05),
-            q25 = quantile(value, 0.25),
-            mean = mean(value),
-            median = median(value),
-            sd = sd(value),
-            q75 = quantile(value, 0.75),
-            q95 = quantile(value, 0.95)) %>% 
-    mutate(variable = recode_factor(variable, 
-                           "Vexp" = "Marginal", "Vindividual" = "Individual", 
-                           "Vrew" = "REW", "Vdbh" = "DBH",
-                           "Vspecies" = "Species")) %>% 
-  ggplot(aes(x = variable, xend = variable, col = variable)) +
-  geom_point(aes(y = median), shape = 21, size = 3, alpha = 0.5) +
-  geom_segment(aes(y = q5, yend = q95),
-               size = 1, show.legend = F, alpha = 0.5) +
-  geom_segment(aes(y = q25, yend = q75), size = 2, alpha = 0.5) +
-  ylab(expression(R^2)) +
-  theme(axis.title.y = element_blank()) +
-  coord_flip()  +
-  scale_color_discrete(guide = "none") +
-  scale_fill_discrete(guide = "none")
+  scale_fill_discrete(expression(sigma^2))
 ```
 
 ## Variables & parameters
@@ -145,245 +147,507 @@ Summary of all variables, laws, and parameters choice and used in subsequent mod
 
 ## Models
 
-### $N_{REW}$ Linear variation with REW
+### $R$ Linear variation with REW
 
 $$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{REW}.REW_i,\sigma)$$
 
-```{r NrewSampling, include=FALSE}
-modelNrew <- stan_model("thickness_models/Nrew.stan")
-fitNrew <- sampling(modelNrew, mdata)
+```{r RSampling, include=FALSE}
+modelR <- stan_model("thickness_models/R.stan")
+fitR <- sampling(modelR, mdata)
 ```
 
-```{r NrewTable}
-broom::tidyMCMC(fitNrew, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+```{r RTable}
+broom::tidyMCMC(fitR, pars = c("alpha", "beta_rew", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Parameters estimate.",
         col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
 ```
 
-```{r NrewTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrew), np = nuts_params(fitNrew)) +
+```{r RTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitR), pars = c("alpha", "beta_rew", "sigma"), np = nuts_params(fitR)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
-```{r NrewPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrew), np = nuts_params(fitNrew))
+```{r RPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitR), pars = c("alpha", "beta_rew", "sigma"), np = nuts_params(fitR))
 ```
 
-### $N_{REW,Species}$ Linear variation with REW & species fixed effect on interecept
+```{r RPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitR), regex_pars =  c("alpha", "beta"), np = nuts_params(fitR))
+```
+
+```{r RPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitR, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>%  
+  unique() %>% 
+  ggplot(aes(x = REW)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $R,S$ Linear variation with REW & species fixed effect on interecept
 
 $$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+\beta_{REW}.REW_i,\sigma)$$
 
-```{r NrewspeciesSampling, include=FALSE}
-modelNrewspecies <- stan_model("thickness_models/Nrewspecies.stan")
-fitNrewspecies <- sampling(modelNrewspecies, mdata)
+```{r RSSampling, include=FALSE}
+modelRS <- stan_model("thickness_models/RS.stan")
+fitRS <- sampling(modelRS, mdata)
 ```
 
-```{r NrewspeciesTable}
-broom::tidyMCMC(fitNrewspecies, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+```{r RSTable}
+broom::tidyMCMC(fitRS, pars = c("alpha", "beta_rew", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Parameters estimate.",
         col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
 ```
 
-```{r NrewspeciesTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewspecies), np = nuts_params(fitNrewspecies)) +
+```{r RSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitRS), regex_pars = c("alpha", "beta_rew", "sigma"), np = nuts_params(fitRS)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
-```{r NrewspeciesPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewspecies), np = nuts_params(fitNrewspecies))
+```{r RSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitRS), regex_pars = c("alpha", "beta_rew", "sigma"), np = nuts_params(fitRS))
 ```
 
-### $N_{REW,Individual}$ Linear variation with REW & individual random effect
+```{r RSPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitRS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitRS))
+```
 
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha+ \gamma_i+\beta_{REW}.REW_i,\sigma)$$
+```{r RSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitRS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $RxS$ Linear variation with REW & species fixed effect on REW slope
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha + {\beta_{REW}}_s.REW_i,\sigma)$$
+
+```{r RxSSampling, include=FALSE}
+modelRxS <- stan_model("thickness_models/RxS.stan")
+fitRxS <- sampling(modelRxS, mdata)
+```
+
+```{r RxSTable}
+broom::tidyMCMC(fitRxS, pars = c("alpha", "beta_rew", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r RxSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitRxS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxS)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r RxSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitRxS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxS))
+```
+
+```{r RxSPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitRxS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitRxS))
+```
+
+```{r RxSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitRxS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $RxS,S$ Linear variation with REW & species fixed effect on intercept and REW slope
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s + {\beta_{REW}}_s.REW_i,\sigma)$$
+
+```{r RxSSSampling, include=FALSE}
+modelRxSS <- stan_model("thickness_models/RxSS.stan")
+fitRxSS <- sampling(modelRxSS, mdata)
+```
+
+```{r RxSSTable}
+broom::tidyMCMC(fitRxSS, pars = c("alpha", "beta_rew", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r RxSSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitRxSS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxSS)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r RxSSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitRxSS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxSS))
+```
+
+```{r RxSSsPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitRxSS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitRxSS))
+```
+
+```{r RxSSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitRxSS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $D$ Linear variation with logarithm of DBH
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{DBH}.log(DBH_i),\sigma)$$
+
+```{r DSampling, include=FALSE}
+modelD <- stan_model("thickness_models/D.stan")
+fitD <- sampling(modelD, mdata)
+```
+
+```{r DTable}
+broom::tidyMCMC(fitD, pars = c("alpha", "beta_dbh", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r DTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitD), regex_pars =  c("alpha", "beta"), np = nuts_params(fitD)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r DPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitD), regex_pars =  c("alpha", "beta") , np = nuts_params(fitD))
+```
+
+
+```{r DPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitD), regex_pars =  c("alpha", "beta"), np = nuts_params(fitD))
+```
+
+```{r DPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitD, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, DBH)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = DBH, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $D,S$ Linear variation with DBH & species fixed effect on interecept
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+\beta_{DBH}.log(DBH_i),\sigma)$$
+
+```{r DSSampling, include=FALSE}
+modelDS <- stan_model("thickness_models/DS.stan")
+fitDS <- sampling(modelDS, mdata)
+```
+
+```{r DSTable}
+broom::tidyMCMC(fitDS, pars = c("alpha", "beta_dbh", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r DSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitDS), regex_pars = c("alpha", "beta", "sigma"), np = nuts_params(fitDS)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r DSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitDS), regex_pars = c("alpha", "beta", "sigma"), np = nuts_params(fitDS))
+```
+
+```{r DSPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitDS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitDS))
+```
+
+```{r DSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitDS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, DBH)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = DBH, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $DxS$ Linear variation with DBH & species fixed effect on DBH slope
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha + {\beta_{DBH}}_s.log(DBH_i),\sigma)$$
+
+```{r DxSSampling, include=FALSE}
+modelDxS <- stan_model("thickness_models/DxS.stan")
+fitDxS <- sampling(modelDxS, mdata)
+```
+
+```{r DxSTable}
+broom::tidyMCMC(fitDxS, pars = c("alpha", "beta_dbh", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r DxSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitDxS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitDxS)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r DxSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitDxS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitDxS))
+```
+
+```{r DxSPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitDxS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitDxS))
+```
+
+```{r DxSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitDxS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, DBH)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = DBH, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $DxS,S$ Linear variation with DBH & species fixed effect on intercept and DBH slope
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s + {\beta_{DBH}}_s.log(DBH_i),\sigma)$$
+
+```{r DxSSSampling, include=FALSE}
+modelDxSS <- stan_model("thickness_models/DxSS.stan")
+fitDxSS <- sampling(modelDxSS, mdata)
+```
+
+```{r DxSSTable}
+broom::tidyMCMC(fitDxSS, pars = c("alpha", "beta_dbh", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r DxSSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitDxSS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitDxSS)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r DxSSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitDxSS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitDxSS))
+```
+
+```{r DxSSsPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitDxSS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitDxSS))
+```
+
+```{r DxSSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitDxSS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, DBH)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = DBH, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $RxS,D,S$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s + {\beta_{REW}}_s.REW_i + \beta_{DBH}.log(DBH_i),\sigma)$$
+
+```{r RxSDSSampling, include=FALSE}
+modelRxSDS <- stan_model("thickness_models/RxSDS.stan")
+fitRxSDS <- sampling(modelRxSDS, mdata)
+```
+
+```{r RxSDSTable}
+broom::tidyMCMC(fitRxSDS, pars = c("alpha", "beta_rew", "beta_dbh", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r RxSDSTrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitRxSDS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxSDS)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r RxSDSPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitRxSDS), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxSDS))
+```
+
+```{r RxSDSPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitRxSDS), regex_pars =  c("alpha", "beta"), np = nuts_params(fitRxSDS))
+```
+
+```{r RxSDSPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitRxSDS, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+### $RxS,D,S,I$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope & individual random effect
+
+$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s + \gamma_i + {\beta_{REW}}_s.REW_i + \beta_{DBH}.log(DBH_i),\sigma)$$
 $$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
 
-```{r NrewindividualSampling, include=FALSE}
-modelNrewindividual <- stan_model("thickness_models/Nrewindividual.stan")
-fitNrewindividual <- sampling(modelNrewindividual, mdata, include =F, pars = "gamma")
+```{r RxSDSISampling, include=FALSE}
+modelRxSDSI <- stan_model("thickness_models/RxSDSI.stan")
+fitRxSDSI <- sampling(modelRxSDSI, mdata)
 ```
 
-```{r NrewindividualTable}
-broom::tidyMCMC(fitNrewindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+```{r RxSDSITable}
+broom::tidyMCMC(fitRxSDSI, pars = c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Parameters estimate.",
         col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
 ```
 
-```{r NrewindividualTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewindividual), np = nuts_params(fitNrewindividual)) +
+```{r RxSDSITrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxSDSI)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
-```{r NrewindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewindividual), np = nuts_params(fitNrewindividual))
+```{r RxSDSIPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitRxSDSI))
 ```
 
-### $N_{REW,Species,Individual}$ Linear variation with REW & species fixed effect on interecept & individual random effect
-
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+ \gamma_i+\beta_{REW}.REW_i,\sigma)$$
-$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
-
-```{r NrewspeciesindividualSampling, include=FALSE}
-modelNrewspeciesindividual <- stan_model("thickness_models/Nrewspeciesindividual.stan")
-fitNrewspeciesindividual <- sampling(modelNrewspeciesindividual, mdata, include =F, pars = "gamma")
+```{r RxSDSIPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitRxSDSI), regex_pars =  c("alpha", "beta"), np = nuts_params(fitRxSDSI))
 ```
 
-```{r NrewspeciesindividualTable}
-broom::tidyMCMC(fitNrewspeciesindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Parameters estimate.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```{r RxSDSIPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitRxSDSI, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
 ```
 
-```{r NrewspeciesindividualTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewspeciesindividual), np = nuts_params(fitNrewspeciesindividual)) +
-  viridis::scale_color_viridis(discrete = T)
+```{r  RxSDSIVariance, fig.cap="Model variance partitionning."}
+mcmc_intervals_data(fitRxSDSI, regex_pars = c("V")) %>%
+  mutate(variance = recode_factor(parameter,
+                           "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
+                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "LT", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white",
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))
 ```
 
-```{r NrewspeciesindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewspeciesindividual), np = nuts_params(fitNrewspeciesindividual))
-```
-
-### $N_{DBH}$ Linear variation with logarithm of DBH
-
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{DBH}.DBH_i,\sigma)$$
-
-```{r NdbhSampling, include=FALSE}
-modelNdbh <- stan_model("thickness_models/Ndbh.stan")
-fitNdbh <- sampling(modelNdbh, mdata)
-```
-
-```{r NdbhTable}
-broom::tidyMCMC(fitNdbh, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Parameters estimate.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
-```
-
-```{r NdbhTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNdbh), np = nuts_params(fitNdbh)) +
-  viridis::scale_color_viridis(discrete = T)
-```
-
-```{r NdbhPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNdbh), np = nuts_params(fitNdbh))
-```
-
-### $N_{REW,DBH}$ Linear variation with REW & the logarithm of DBH
-
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
-
-```{r NrewdbhSampling, include=FALSE}
-modelNrewdbh <- stan_model("thickness_models/Nrewdbh.stan")
-fitNrewdbh <- sampling(modelNrewdbh, mdata)
-```
-
-```{r NrewdbhTable}
-broom::tidyMCMC(fitNrewdbh, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Parameters estimate.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
-```
-
-```{r NrewdbhTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewdbh), np = nuts_params(fitNrewdbh)) +
-  viridis::scale_color_viridis(discrete = T)
-```
-
-```{r NrewdbhPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewdbh), np = nuts_params(fitNrewdbh))
-```
-
-### $N_{REW,DBH,Species}$ Linear variation with REW & species fixed effect on interecept
-
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
-
-```{r NrewdbhspeciesSampling, include=FALSE}
-modelNrewdbhspecies <- stan_model("thickness_models/Nrewdbhspecies.stan")
-fitNrewdbhspecies <- sampling(modelNrewdbhspecies, mdata)
-```
-
-```{r NrewdbhspeciesTable}
-broom::tidyMCMC(fitNrewdbhspecies, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Parameters estimate.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
-```
-
-```{r NrewdbhspeciesTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewdbhspecies), np = nuts_params(fitNrewdbhspecies)) +
-  viridis::scale_color_viridis(discrete = T)
-```
-
-```{r NrewdbhspeciesPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewdbhspecies), np = nuts_params(fitNrewdbhspecies))
-```
-
-### $N_{REW,DBH,Individual}$ Linear variation with REW & individual random effect
-
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
-$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
-
-```{r NrewdbhindividualSampling, include=FALSE}
-modelNrewdbhindividual <- stan_model("thickness_models/Nrewdbhindividual.stan")
-fitNrewdbhindividual <- sampling(modelNrewdbhindividual, mdata, include =F, pars = "gamma")
-```
-
-```{r NrewdbhindividualTable}
-broom::tidyMCMC(fitNrewdbhindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Parameters estimate.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
-```
-
-```{r NrewdbhindividualTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewdbhindividual), np = nuts_params(fitNrewdbhindividual)) +
-  viridis::scale_color_viridis(discrete = T)
-```
-
-```{r NrewdbhindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewdbhindividual), np = nuts_params(fitNrewdbhindividual))
-```
-
-### $N_{REW,DBH,Species,Individual}$ Linear variation with REW & species fixed effect on interecept & individual random effect
-
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
-$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
-
-```{r NrewdbhspeciesindividualSampling, include=FALSE}
-modelNrewdbhspeciesindividual <- stan_model("thickness_models/Nrewdbhspeciesindividual.stan")
-fitNrewdbhspeciesindividual <- sampling(modelNrewdbhspeciesindividual, mdata, include =F, pars = "gamma")
-```
-
-```{r NrewdbhspeciesindividualTable}
-broom::tidyMCMC(fitNrewdbhspeciesindividual, droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Parameters estimate.",
-        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
-```
-
-```{r NrewdbhspeciesindividualTrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitNrewdbhspeciesindividual), np = nuts_params(fitNrewdbhspeciesindividual)) +
-  viridis::scale_color_viridis(discrete = T)
-```
-
-```{r NrewdbhspeciesindividualPairs, message=FALSE, fig.cap="Pairs of model parameters."}
-mcmc_pairs(as.array(fitNrewdbhspeciesindividual), np = nuts_params(fitNrewdbhspeciesindividual))
-```
+<!-- saving -->
 
 ```{r fits}
 fits <- list(
-  rew = fitNrew,
-  rewspecies = fitNrewspecies,
-  rewindividual = fitNrewindividual,
-  rewspeciesindividual = fitNrewspeciesindividual,
-  rewdbh = fitNrewdbh,
-  rewdbhspecies = fitNrewdbhspecies,
-  rewdbhindividual = fitNrewdbhindividual,
-  rewdbhspeciesindividual = fitNrewdbhspeciesindividual
+  R = fitR,
+  RS = fitRS,
+  RxS = fitRxS,
+  RxSS = fitRxSS,
+  D = fitD,
+  DS = fitDS,
+  DxS = fitDxS,
+  DxSS = fitDxSS,
+  RxSDS = fitRxSDS,
+  RxSDSI = fitRxSDSI
 )
 save(fits, file = "thickness_save/fits.Rdata")
 ```

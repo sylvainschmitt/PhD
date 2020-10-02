@@ -11,3 +11,6 @@ parameters {
 model {
   LT ~ normal(alpha + beta_rew * REW, sigma);
 }
+generated quantities {
+  vector[L] predicted = alpha + beta_rew * REW ;
+}
