@@ -11,7 +11,7 @@ theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
   cache = T, cache.lazy = F)
-data <- read_tsv("thickness_save/data.tsv")
+data <- read_tsv("thickness_save/data.tsv") 
 ```
 
 ```{r data, eval=F}
@@ -47,13 +47,14 @@ weather <- weather %>%
   mutate(hour = round(`heure+min`/100)) %>% 
   mutate(minutes = `heure+min`-100*hour) %>% 
   mutate(time = as_datetime(paste(date, hour, minutes, 0))) %>% 
-  dplyr::rename(T55 = "Temp(55)", T30 = "Temp(30)", Hr55 = "Hr(55)", Hr30 = "Hr(30)", 
+  dplyr::select(-hour, -minutes) %>% 
+  dplyr::rename(T55 = "Temp(55)", T30 = "Temp(30)", Hr55 = "Hr(55)", Hr30 = "Hr(30)", minutes = "heure+min",
                 windaspect = "Dir vent", windspeed = "Vit vent", rain = "Pluie", PET = "ETP penman (mm h-1) - OK") %>% 
   group_by(date) %>%
   mutate(rainday = sum(rain)) %>% 
   ungroup() %>% 
   mutate(rainfivedays = zoo::rollapplyr(rain, width = 240, FUN = sum, partial = T)) %>% 
-  dplyr::select(date, time, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET)
+  dplyr::select(date, time, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET)
 data <- left_join(data, weather, by = "date", suffix = c("tree", "weather")) %>% 
   mutate(dt = abs(timetree - timeweather)) %>% 
   group_by(idTree, Leaf) %>% 
@@ -103,6 +104,7 @@ Tables have been joined with dates and shortest time difference into the `data.t
 * **T30**: Air temperature at 30 m in degree celsius
 * **Hr55**: Air humidity at 55 m in percent
 * **Hr30**: Air humidity at 30 m in percent
+* **minutes**: minutes in the day since midnight
 * **Patm**: Atmospheric pressure in mbar
 * **windaspect**: wind aspect in degree
 * **windspeed**: wind speed in $m.s^{-1}$
@@ -113,21 +115,22 @@ Tables have been joined with dates and shortest time difference into the `data.t
 * **PET**: Potential evapotranspiration (Penman) in mm
 * **dt**: time difference between tree and weather sampling in seconds
 * **rainfall**: rainfall in mm from REW database
-* **REW**: relative extractable water computed with Fabein Wagner model
+* **REW**: relative extractable water computed with Fabein Wagner modelminutes
 
 ## Covariations
 
 Figures \@ref(fig:cor) and \@ref(fig:pca) showed variables covariations among them and with leaf thickness. There are a lot of positive and negative covariations, as expected. And leaf thickness (LT) is mainly correlated to relative extractible water (REW), atmospheric pressure (Patm) and cummulated rain over five days (rainfivedays).
 
 ```{r cor, fig.cap="Variables correlations. Pearson's r below the diagonal and corresponding color above the diagonal."}
-dplyr::select(data, LT, DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+dplyr::select(data, LT, DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   na.omit() %>%
   cor() %>% 
   corrplot::corrplot.mixed()
 ```
 
 ```{r pca, fig.cap="Principal component analysis of variables."}
-autoplot(princomp(~ LT + DBH + T55 + T30 + Hr55 + Hr30 + Patm + windaspect + windspeed + rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
+autoplot(princomp(~ LT + DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
+                    rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
                   data = data, cor = T),
            loadings.label.size = 6,
            loadings.label.colour = 'black', loadings.label.vjust = 1.1,
@@ -148,7 +151,7 @@ I thus suggest to build a hierarchical/mixed model with weather fixed effect tho
 ```{r lmplot, fig.cap="Linear regressions per explanatory variables."}
 dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   ggplot(aes(x = value, y = LT)) +
   geom_point(alpha = 0.3) +
@@ -159,7 +162,7 @@ dplyr::select(data,
 ```{r lmtab}
 a <- dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT,
-              DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   group_by(variable) %>% 
   do(lm = lm(LT ~ value, data = .)) %>% 
@@ -169,7 +172,7 @@ a <- dplyr::select(data,
   arrange(p.value)
 b <- dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   group_by(variable) %>% 
   do(lm = lm(LT ~ value, data = .)) %>% 
@@ -184,7 +187,7 @@ left_join(a, b) %>%
 
 
 ```{r oob, fig.cap="Variable importance calculated with an out-of-bag method applied on a random forest. Variable importance is represented by the mean increase in mean square error (MSE)."}
-randomForest::randomForest(LT ~ DBH + T55 + T30 + Hr55 + Hr30 + Patm + windaspect + windspeed + 
+randomForest::randomForest(LT ~ DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
                              rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
                            data = data,  na.action = na.omit,
                            ntree = 1000, replace = F , importance = T,

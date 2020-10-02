@@ -1,3 +1,6 @@
+# PhD 0.1.9215
+* thickness: lognormal
+
 # PhD 0.1.9214
 * thickness: new models
 

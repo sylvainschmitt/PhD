@@ -121,44 +121,61 @@ A Bayesian method was used to infer parameters using stan language [@Carpenter20
 
 # Results
 
-Variance partitioning showed the importance of relative extractable water (REW) and tree diameter (DBH) in leaf thickness variation (Fig. \@ref(fig:varpart)).
+(Tab. \@ref(tab:pars) and Fig. \@ref(fig:preds))
+
+Variance partitioning showed the importance of relative extractable water (REW) and tree diameter (DBH) in leaf thickness variation (Tab. \@ref(tab:pars) and Fig. \@ref(fig:preds)).
 After individual random effects (46%), REW and DBH explained respectivelly 26% and 15% of the leaf thickness variation, and represented 90% of the total leaf thickness variation with species and individuals effects.
 REW showed a strong negative effect on leaf thickness (-0.49, Tab. \@ref(tab:pars)), and DBH showed a positive effect (0.37, Tab. \@ref(tab:pars)).
 In other words, increased extractible water drives leaf thinning and increased tree size drives leaves thckening.
 
-
-```{r varpart, fig.cap="Variance partitioning of leaf thickness between REW (red), DBH (brown), species (green), individuals (blue), and residual variation (pink)."}
-load("../thickness_save/fits.Rdata")
-mcmc_intervals_data(fits$rewdbhspeciesindividual, regex_pars = c("V")) %>% 
-  mutate(variance = recode_factor(parameter, 
-                           "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
-                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>% 
-  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
-  ggplot(aes(x = "LT", fill = variance)) +
-  geom_col(aes(y = m)) +
-  geom_text(aes(y = m, label = pct), col = "white", 
-            position = position_stack(vjust = .5)) +
-  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
-        axis.text.x = element_blank(), axis.line.x = element_blank(), 
-        axis.ticks.x = element_blank()) +
-  scale_fill_discrete(expression(sigma^2))  
-```
-
 ```{r pars}
 load("../thickness_save/fits.Rdata")
-broom::tidyMCMC(fits$rewdbhspeciesindividual, 
+broom::tidyMCMC(fits$RxSDSI, 
                 pars =  c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma"),
                 droppars = NULL, ess = F, rhat = F, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error) %>% 
   mutate(term = recode(term,
                        "alpha[1]" = "$\\alpha_{S.~globulifera}$",
                        "alpha[2]" = "$\\alpha_{S.~sp 1}$",
-                       "beta_rew" = "$\\beta_{REW}$",
+                       "beta_rew[1]" = "$\\beta_{REW,S.~globulifera}$",
+                       "beta_rew[2]" = "$\\beta_{REW,S.~sp 1}$",
                        "beta_dbh" = "$\\beta_{DBH}$",
                        "sigmaI" = "$\\sigma_I$",
                        "sigma" = "$\\sigma$")) %>% 
   kable(caption = "Parameters estimate.",
         col.names = c("Parameter", "Estimate", "Standard error")) 
+```
+
+```{r preds, message=FALSE, fig.cap="Model predictions."}
+data <- read_tsv("../thickness_save/data.tsv") %>% 
+  mutate(Species = ifelse(Species == "Indet.",
+                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+                                                                      "sp.1" =  "S")], Species)) %>% 
+  filter(!is.na(Species)) %>% 
+  mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+  mutate(IndNum = as.numeric(as.factor(idTree))) %>%
+  mutate(Species = recode(Species,
+                        "globulifera"= "S. globulifera",
+                        "sp.1" = "S. sp1"))
+load("../thickness_save/fits.Rdata")
+as.data.frame(fits$RxSDSI, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95, group = Species), fill = "lightgrey", col = NA) +
+  geom_line(aes(y = LTm)) +
+  scale_color_manual("", values = c("#0000EE", "#CD2626")) +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Relative extractable water (REW)") +
+  ylab("Leaf thickness (LT)")
 ```
 
 # Discussion

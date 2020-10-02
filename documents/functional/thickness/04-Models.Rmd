@@ -54,7 +54,7 @@ With few uncertainty, after individual random effect, REW is the main factor exp
 load("thickness_save/fits.Rdata")
 lapply(fits, mcmc_intervals_data, pars = "lp__") %>% 
   bind_rows(.id = "model") %>% 
-  filter(model != "RxSDSI") %>% 
+  filter(!(model %in% c("RxSDSI", "LogRxSDSI"))) %>% 
   mutate(model = recode(model,
                         "R"= "REW",
                         "RS" = "REW + Species",
@@ -85,7 +85,7 @@ lapply(fits, mcmc_intervals_data, pars = "lp__") %>%
 
 ```{r Predictions, message=FALSE, fig.cap="Predictions for the selected model."}
 load("thickness_save/fits.Rdata")
-as.data.frame(fits$RxSDS, pars = "predicted") %>% 
+as.data.frame(fits$LogRxSDSI, pars = "predicted") %>% 
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
@@ -634,9 +634,75 @@ mcmc_intervals_data(fitRxSDSI, regex_pars = c("V")) %>%
   scale_fill_discrete(expression(sigma^2))
 ```
 
+### $log(RxS,D,S,I)$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope & individual random effect
+
+$$LT_{l,i,s} \sim \mathcal{logN}(log(\alpha_s + \gamma_i + {\beta_{REW}}_s.REW_i + \beta_{DBH}.log(DBH_i)),\sigma)$$
+$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+```{r LogRxSDSISampling, include=FALSE}
+# modeLogRxSDSI <- stan_model("thickness_models/LogRxSDSI.stan")
+# fitLogRxSDSI <- sampling(modeLogRxSDSI, mdata) 
+load("thickness_save/fits.Rdata")
+fitLogRxSDSI <- fits$LogRxSDSI
+```
+
+```{r LogRxSDSITable}
+broom::tidyMCMC(fitLogRxSDSI, pars = c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r LogRxSDSITrace, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitLogRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitLogRxSDSI)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r LogRxSDSIPairs, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitLogRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitLogRxSDSI))
+```
+
+```{r LogRxSDSIPosteriors, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitLogRxSDSI), regex_pars =  c("alpha", "beta"), np = nuts_params(fitLogRxSDSI))
+```
+
+```{r LogRxSDSIPredictions, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitLogRxSDSI, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = LT), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95), fill = "lightgrey") +
+  geom_line(aes(y = LTm))
+```
+
+```{r  LogRxSDSIVariance, fig.cap="Model variance partitionning."}
+mcmc_intervals_data(fitLogRxSDSI, regex_pars = c("V")) %>%
+  mutate(variance = recode_factor(parameter,
+                           "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
+                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "LT", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white",
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))
+```
+
 <!-- saving -->
 
-```{r fits}
+```{r fits, eval=F}
 fits <- list(
   R = fitR,
   RS = fitRS,
@@ -647,8 +713,22 @@ fits <- list(
   DxS = fitDxS,
   DxSS = fitDxSS,
   RxSDS = fitRxSDS,
-  RxSDSI = fitRxSDSI
+  RxSDSI = fitRxSDSI,
+  LogRxSDSI = fitLogRxSDSI
 )
+# fits <- list(
+#   R = fits$R,
+#   RS = fits$RS,
+#   RxS = fits$RxS,
+#   RxSS = fits$RxSS,
+#   D = fits$D,
+#   DS = fits$DS,
+#   DxS = fits$DxS,
+#   DxSS = fits$DxSS,
+#   RxSDS = fits$RxSDS,
+#   RxSDSI = fits$RxSDSI,
+#   LogRxSDSI = fitLogRxSDSI
+# )
 save(fits, file = "thickness_save/fits.Rdata")
 ```
 
