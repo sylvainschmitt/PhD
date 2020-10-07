@@ -49,32 +49,25 @@ The following Supporting Information is available for this article:
 ```{stan, echo=T, eval=F, output.var=""}
 data {
   int<lower=1> L ;
-  int<lower=1> I ;
   int<lower=1> S ;
+  int<lower=1> I ;
   vector[L] LT ;
   vector[L] REW ;
-  vector[L] DBH ;
+  vector[L] logDBH ;
   int<lower=1, upper=S> species[L] ;
   int<lower=1, upper=I> individual[L] ;
 }
 parameters {
-  vector[S] alpha ;
+  vector<lower=0>[S] alpha ;
   vector[I] gamma ;
-  real beta_rew ;
+  vector[S] beta_rew ;
   real beta_dbh ;
   real<lower=0> sigma ;
   real<lower=0> sigmaI ;
 }
 model {
-  LT ~ normal(alpha[species] + gamma[individual] + beta_rew * REW + beta_dbh * DBH, sigma);
+  LT ~ lognormal(log(alpha[species] + gamma[individual] + beta_rew[species] .* REW + beta_dbh * logDBH), sigma) ;
   gamma ~ normal(0, sigmaI) ;
-}
-generated quantities {
-  real Vrew = variance(beta_rew * REW) ;
-  real Vdbh = variance(beta_dbh * DBH) ;
-  real Vspecies = variance(alpha[species]) ;
-  real Vindividual = variance(gamma[individual]) ;
-  real Vresidual = variance(LT) - variance(alpha[species] + gamma[individual] + beta_rew * REW + beta_dbh * DBH) ;
 }
 ```
 
@@ -95,17 +88,19 @@ read_tsv("../thickness_save/data.tsv") %>%
 load("../thickness_save/fits.Rdata")
 lapply(fits, mcmc_intervals_data, pars = "lp__") %>% 
   bind_rows(.id = "model") %>% 
-  mutate(random = ifelse(m < 0, "no individual random effect", 
-                         "with individual random effect")) %>% 
+  filter(!(model %in% c("RxSDSI", "LogRxSDSI"))) %>% 
   mutate(model = recode(model,
-                        "rew"= "REW",
-                        "rewspecies" = "REW + Species",
-                        "rewindividual" = "REW",
-                        "rewspeciesindividual" = "REW + Species",
-                        "rewdbh" = "REW + DBH",
-                        "rewdbhspecies" = "REW + DBH + Species",
-                        "rewdbhindividual" = "REW + DBH",
-                        "rewdbhspeciesindividual" = "REW + DBH + Species")) %>% 
+                        "R"= "REW",
+                        "RS" = "REW + Species",
+                        "RxS" = "REW.Species",
+                        "RxSS" = "REW.Species + Species",
+                        "D"= "DBH",
+                        "DS" = "DBH + Species",
+                        "DxS" = "DBH.Species",
+                        "DxSS" = "DBH.Species + Species",
+                        "RxSDS" = "REW.Species + DBH + Species"
+  )) %>% 
+  mutate(low = ifelse(m < 0, "low", "up")) %>% 
   ggplot(aes(x = model, 
              xend = model,
              color = model, 
@@ -115,7 +110,6 @@ lapply(fits, mcmc_intervals_data, pars = "lp__") %>%
                size = 1, show.legend = F, alpha = 0.5) +
   geom_segment(aes(y = l, yend = h), size = 2, alpha = 0.5) +
   coord_flip() +
-  facet_wrap(~ random, scales = "free_x") +
   datatools::scale_x_reordered() +
   xaxis_title(F) +
   ylab("Log-likelihood") +

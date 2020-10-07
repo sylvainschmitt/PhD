@@ -1,4 +1,4 @@
-```{r setupinds, include=FALSE}
+```{r setupsim, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
 library(kableExtra)
@@ -16,7 +16,7 @@ library(ecoevosimulator)
 
 This chapter introduce the simulator with the different steps. Additional following chapters develop analyses that supported specific development choices or parameters.
 
-Simulations start with **environment**, **genotypes** and **phenotypes** initialisation, and follows with a cycle of four steps repeated over time:
+Simulations start with **genotypes** and **phenotypes** initialisation, and follows with a cycle of four steps repeated over time:
 
 * **Forest gap dynamics**
 * **Background mortality**
@@ -40,19 +40,6 @@ Simulations start with **environment**, **genotypes** and **phenotypes** initial
 * $determinist$ *bool.* determinist (true) or probabilist (false) recruitment
 
 ## Initialisation
-
-### Environment
-
-The environmental mosaic where individuals grow is defined by a square matrix of size $grid\times grid$. 
-Environment is generated with: (1) a gradient product, (2) a topography generator, or (3) a forest gap dynamics generator. Currently only the first method, a gradient product, is implemented. 
-The environmental matrix varies in a grid defined by the product of the vectors $(−E_{lim},E_{lim})$ (Fig. \@ref(fig:env)).
-
-```{r env, fig.cap="Example of environmental matrix obtained with gradient product."}
-plotEnv(simulator(50,1))
-```
-
-
-### Trees
 
 A tree grow in each cell of the environmental matrix. A tree $i$ is defined through its phenotype composed of a quantitative trait $z_i$ (two quantitative traits in next steps ?).
 The quantitative trait $z_i$ is the sum of its genotypic breeding value $a_i$ and an environmental effect $e_i$, 

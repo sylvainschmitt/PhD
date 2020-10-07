@@ -743,6 +743,27 @@ cowplot::plot_grid(densities$g[[1]],
   ggsave("figures/Figure_5.tiff", device = "tiff", dpi = 600, width = 11, height = 6)
 ```
 
+```{r, eval=F}
+n <- 3
+symphonia %>% 
+  dplyr::rename(species = pop) %>% 
+  mutate(species = gsub("Type", " ", species)) %>% 
+  mutate(species = recode(species, "sp1" =  "sp.1",  "globulifera Regina" = "globulifera Régina")) %>%  
+  mutate(species = paste0("S. ", species)) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  arrange(DBH) %>% 
+  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>%
+  group_by(DBHclass) %>% 
+  mutate(DBHclassCm = paste0(round(min(DBH)), " - ", round(max(DBH)), " cm")) %>% 
+  ggplot(aes(TWI, fill = species, color = species)) +
+  geom_density(alpha = 0.1) +
+  scale_color_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
+  scale_fill_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
+  facet_wrap(~DBHclassCm) +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Topographic wetness index (TWI)")
+```
+
 ```{r thesis, eval=F, echo=T}
 save(list = ls(), file = "../../thesis/rdata/Ch3Msc.Rdata")
 ```

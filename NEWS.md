@@ -1,3 +1,10 @@
+# PhD 0.1.9216
+* distribution: congenerics and conspecifics
+* thickness manuscript
+* topography: size effect
+* modelling: ecoevosimulator and topography
+* thesis: validation
+
 # PhD 0.1.9215
 * thickness: lognormal
 

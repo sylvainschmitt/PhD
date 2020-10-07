@@ -1,0 +1,72 @@
+```{r setupHeterCon, include=FALSE, eval=T}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(ggrepel)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 10, fig.width = 10,
+  cache = T, cache.lazy = F, eval=T)
+```
+
+# Congenerics and conspecifcs
+
+```{r datahetcon, eval=F}
+d <- 25
+trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                              "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(Genus %in% c("Eschweilera", "Symphonia"),
+         Species %in% c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                        "wachenheimii", "grandiflora_form2", "globulifera", "sp.1")) %>% 
+  filter(CensusYear == 2017) %>% 
+  filter(Plot != 16) %>% 
+  filter(Xfield > d, Xfield < 250-d, Yfield > d, Yfield < 250-d) %>% 
+  mutate(DBH = CircCorr/pi) %>%
+  dplyr::select(-CensusYear) %>% 
+  collect()
+  # filter(Plot == 1)
+  # sample_n(100)
+data <-lapply(1:nrow(trees), function(ind)
+  src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                       "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(Genus %in% c("Eschweilera", "Symphonia"),
+           Species %in% c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                          "wachenheimii", "grandiflora_form2", "globulifera", "sp.1")) %>% 
+    filter(CensusYear == 2017) %>% 
+    filter(Plot  == local(trees$Plot[ind])) %>% 
+    mutate(d = sqrt( (Xfield - local(trees$Xfield[ind]))^2 + (Yfield - local(trees$Yfield[ind]))^2 )) %>% 
+    filter(d < local(d)) %>% 
+    collect() %>% 
+    mutate(congener = as.numeric(Genus == trees$Genus[ind]),
+           conspecific = as.numeric(Species == trees$Species[ind])) %>% 
+    summarise(Genus = trees$Genus[ind], Species = trees$Species[ind], 
+              idTree = trees$idTree[ind], congenerics = sum(congener), conspecifics = sum(conspecific)) 
+) %>% bind_rows() %>% 
+  mutate(congenerics = congenerics - conspecifics)
+write_tsv(data, path = "distribution_save/congenerics.tsv")
+```
+
+```{r graphhetcon}
+read_tsv("distribution_save/congenerics.tsv") %>% 
+  mutate(Species = recode(Species, "grandiflora_form2" = "grandiflora")) %>% 
+  group_by(Genus, Species) %>% 
+  summarise(sdgen = sd(congenerics), congenerics = mean(congenerics), 
+            sdsp = sd(conspecifics), conspecifics = mean(conspecifics)) %>% 
+  ggplot(aes(conspecifics, congenerics, 
+             col = paste(paste0(substr(Genus, 1, 1), "."), Species))) + 
+  geom_abline(col = "lightgrey") +
+  geom_point(size = 3) +
+  geom_segment(aes(x = conspecifics - sdsp, xend = conspecifics + sdsp,
+                   y = congenerics, yend = congenerics), alpha = 0.5) +
+  geom_segment(aes(x = conspecifics, xend = conspecifics, 
+                   y = congenerics - sdgen, yend = congenerics + sdgen),
+               alpha = 0.5) +
+  scale_color_discrete("Species") +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Number of conspecifics within 25 meter radius") +
+  ylab("Number of consgenerics within 25 meter radius")
+```
+

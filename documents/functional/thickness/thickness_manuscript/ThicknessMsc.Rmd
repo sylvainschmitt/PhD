@@ -83,7 +83,7 @@ The two morphotypes occurs in sympatry but in differentiated habitats,
 with *S. globulifera* preferentially growing in valley bottoms 
 and *S. sp1* preferentially exploiting a variety of drier habitats [Schmitt et al. in prep; @Allie2015]. 
 Individuals tres with diameter at breast height larger than 10 cm (DBH > 10 cm) were randomly selected across all plots,
-spanning the natural distribution of DBH and topographic habitats.
+spanning the natural distribution of tree diameters and topographic habitats.
 For each tree five mature and healthy leaves were sampled at the top of the crown 
 using a slingshot sampling device (BIG SHOT SHERILLtree), 
 and kept in humidified ziplock bags with CO2-enriched air in darkness until measurement within the next six hours following a standard protocol [@Perez-Harguindeguy2013]. 
@@ -91,7 +91,7 @@ Access to light for each sampled tree was assessed using the Dawkins index [@Daw
 
 ## Leaf thickness measurement
 
-We measured leaf thickness (LT, $\mu m$) on all fresh leaves (**without rehydratation**) with a micrometer of precision 1 $\mu m$.
+We measured leaf thickness (LT, $\mu m$) on all fresh leaves, without rehydratation, with a micrometer of precision 1 $\mu m$.
 The average thickness of the leaf was calculated on three points on both sides of the blade, while avoiding the midrib.
 The petiole was removed for all measurements.
 
@@ -102,35 +102,37 @@ The realtive extractable water [REW, @Wagner2011] was selected among several int
 
 The diameter at breast height (DBH, cm) was chosen to control for tree size [@OBrien1995; @Zhang2004]. 
 DBH values of sampled individuals were retrieved from the 2017 inventory of the Paracou permanent plots.
+We log-transformed DBH to have a linear effect of DBH on LT, 
+because leaf thickness have been shown to follow a Michaelis-Menten trajectory with tree size [@Schmitt2020].
 
 ## Analyses
 
-We used a linear mixed models with REW, DBH and species fixed effects combined with individuals random effect to explain leaf thickness among several tested models (Mat. Sup. S2).
+We used a linear mixed models with REW, the logarithm of DBH and species fixed effects on the intercept and the slope of REW combined with individuals random effect to explain leaf thickness among several tested models (Mat. Sup. S2).
 
 Leaf thickness $LT_{l,i,s}$ for leaf $l$ belonging individual $i\in[1;I]$ in species $s\in[1;S]$ 
-was inferred with a normal distribution with the following formula:
+was inferred with a lognormal distribution with the following formula:
 
-$$LT_{l,i,s} \sim \mathcal{N}(\alpha_s+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.DBH_i,\sigma)$$
+$$LT_{l,i,s} \sim \mathcal{logN}(log[\alpha_s+ \gamma_i+\beta_{REW}.REW_i+\beta_{DBH}.logDBH_i],\sigma)$$
 $$with~\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
 
 where $\alpha_s$ is the mean leaf thickness of species $s$,
 $\gamma_i$ is the individual random effect centered on 0 of variance $\sigma_I$,
-and $\beta_{REW}$ and $\beta_{DBH}$ are the slope of REW and DBH effects.
-We calculated conditional and marginal $R^2$ [@Nakagawa2013] and used them to partition variance between fixed and random effects.
+and $\beta_{REW}$ and $\beta_{DBH}$ are the slope of REW and logDBH effects.
+REW and the logartihm of DBH were normalised to ease model inference and enable comparison of covariates.
 A Bayesian method was used to infer parameters using stan language [@Carpenter2017, stan code available in Model S1] and rstan package [@Team2018] in the R environment [@RCoreTeam2020].
 
 # Results
 
-(Tab. \@ref(tab:pars) and Fig. \@ref(fig:preds))
-
-Variance partitioning showed the importance of relative extractable water (REW) and tree diameter (DBH) in leaf thickness variation (Tab. \@ref(tab:pars) and Fig. \@ref(fig:preds)).
-After individual random effects (46%), REW and DBH explained respectivelly 26% and 15% of the leaf thickness variation, and represented 90% of the total leaf thickness variation with species and individuals effects.
-REW showed a strong negative effect on leaf thickness (-0.49, Tab. \@ref(tab:pars)), and DBH showed a positive effect (0.37, Tab. \@ref(tab:pars)).
+DBH and REW showed both a significant but opposed effect on leaf thickness (Tab. \@ref(tab:pars) and Fig. \@ref(fig:preds)).
+REW had a negative effect on leaf thickness (Fig. \@ref(fig:preds)) 
+for both *S. globulifera* ($-45 \mu m$ of leaf thickness for one standard unit of REW, Tab. \@ref(tab:pars)) 
+and *S. sp1* ($-41 \mu m$ of leaf thickness for one standard unit of REW, Tab. \@ref(tab:pars) and ).
+DBH had a positive effect on leaf thickness ($31 \mu m$ of leaf thickness for one standard unit of DBH, Tab. \@ref(tab:pars)) .
 In other words, increased extractible water drives leaf thinning and increased tree size drives leaves thckening.
 
 ```{r pars}
 load("../thickness_save/fits.Rdata")
-broom::tidyMCMC(fits$RxSDSI, 
+broom::tidyMCMC(fits$LogRxSDSI, 
                 pars =  c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma"),
                 droppars = NULL, ess = F, rhat = F, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error) %>% 
@@ -158,7 +160,7 @@ data <- read_tsv("../thickness_save/data.tsv") %>%
                         "globulifera"= "S. globulifera",
                         "sp.1" = "S. sp1"))
 load("../thickness_save/fits.Rdata")
-as.data.frame(fits$RxSDSI, pars = "predicted") %>% 
+as.data.frame(fits$LogRxSDSI, pars = "predicted") %>% 
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
@@ -170,7 +172,7 @@ as.data.frame(fits$RxSDSI, pars = "predicted") %>%
   unique() %>% 
   ggplot(aes(x = REW, col = Species)) +
   geom_point(aes(y = LT), data = data, alpha = 0.3) +
-  geom_ribbon(aes(ymin = LTq5, ymax = LTq95, group = Species), fill = "lightgrey", col = NA) +
+  geom_ribbon(aes(ymin = LTq5, ymax = LTq95, group = Species), fill = "lightgrey", col = NA, alpha = 0.5) +
   geom_line(aes(y = LTm)) +
   scale_color_manual("", values = c("#0000EE", "#CD2626")) +
   theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +

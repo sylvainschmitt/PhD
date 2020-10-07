@@ -38,24 +38,24 @@ with low values of the 5th quantile (Fig. \@ref(fig:nciniche)).
 
 ```{r ncidistdata, eval=F}
 computeNCI <- function(Plot){
-  trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                                "trees", "Paracou.sqlite")) %>% 
-    tbl("Paracou") %>% 
-    filter(Plot == local(Plot)) %>% # test for P1
-    filter(CensusYear == 2017) %>% 
-    filter(Xfield > 20, Xfield < 250-20, Yfield > 20, Yfield < 250-20) %>% 
-    mutate(DBH = CircCorr/pi) %>%
-    dplyr::select(-CensusYear) %>% 
-    collect()
-  D <- dist(trees[c("Xfield", "Yfield")]) %>% 
-    as.matrix()
-  D[1:10,1:10]
-  D[D>20] <- NA # individuals above 20 m
-  D[D == 0] <- NA # theimselves
-  D <- exp(-0.25*D)
-  D[is.na(D)] <- 0
-  D[1:10,1:10]
-  trees$NCI <- as.vector(D %*% as.vector(trees$DBH))
+    trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                  "trees", "Paracou.sqlite")) %>% 
+      tbl("Paracou") %>% 
+      filter(Plot == local(Plot)) %>% # test for P1
+      filter(CensusYear == 2017) %>% 
+      filter(Xfield > 20, Xfield < 250-20, Yfield > 20, Yfield < 250-20) %>% 
+      mutate(DBH = CircCorr/pi) %>%
+      dplyr::select(-CensusYear) %>% 
+      collect()
+    D <- dist(trees[c("Xfield", "Yfield")]) %>% 
+      as.matrix()
+    D[1:10,1:10]
+    D[D>20] <- NA # individuals above 20 m
+    D[D == 0] <- NA # theimselves
+    D <- exp(-0.25*D)
+    D[is.na(D)] <- 0
+    D[1:10,1:10]
+    trees$NCI <- as.vector(D %*% as.vector(trees$DBH))
   return(trees)
 }
 trees <- lapply(1:15, computeNCI) %>% 
