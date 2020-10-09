@@ -5,7 +5,7 @@ library(kableExtra)
 if(knitr:::is_html_output()) options(knitr.table.format = "html") 
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
-library(raster)
+library(gganimate)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -18,3 +18,274 @@ library(ecoevosimulator)
 This chapter aims to develop a forest gap dynamics generator and compare it to the forest gap dynamics observed in Parcou plots.
 ...
 
+## Mortality
+
+I first explored mortality with the code measures from Paracou censuses.
+I used code 0 "arbre mort sur pied (chandelle)",
+code 6 "arbre mort et tombé (chablis primaire)" 
+and 7 "arbre mort par la chute d'un autre arbre (chablis secondaire)". 
+But every small treefalls is reported, 
+and this does not seem interesting compared to gaps that should have a role in *Symphonia* ecoevolutionary dynamics.
+Moreover, background mortality seems not negligible compared to treefall mortality.
+Last bu not least, mortality seems higly influenced by the disturbance experiment. 
+
+```{r plot1mortality, eval=F}
+g <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(Plot == 1) %>%
+  collect() %>% 
+  mutate_at(c("CodeAlive", "CodeMeas"), as.factor) %>% 
+  mutate(gaps = as.factor(as.numeric(CodeMeas %in% 6:7 & CodeAlive == 0))) %>% 
+  mutate(background = as.factor(as.numeric(CodeMeas == 0 & CodeAlive == 0))) %>% 
+  mutate(death = "alive") %>% 
+  mutate(death = ifelse(gaps == 1, "gaps", death)) %>% 
+  mutate(death = ifelse(background == 1, "background", death)) %>% 
+  ggplot(aes(Xfield, Yfield, col = death, alpha = death, group = idTree)) +
+  geom_point() +
+  scale_color_manual("Mortality", values = c("lightgrey", "red", "blue")) +
+  scale_alpha_discrete("Mortality") +
+  facet_wrap(~ Plot, labeller = "label_both") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) +
+  transition_time(CensusYear) +
+  labs(title = 'Year: {frame_time}')
+anim_save("modelling_save/plot1treefalls.gif", g)
+```
+```{r plot1mortalitygif, fig.cap="Mortality in the Plot 1 of Paracou. In blue death on foot with code measure 0 and in red death by treefalls with code measure 6 and 7."}
+include_graphics("modelling_save/plot1treefalls.gif")
+```
+
+```{r mortality, fig.cap="Background and treefall mortality per plots and census years in Paracou."}
+src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(Plot != 16) %>% 
+  filter(CodeAlive == 0, CodeMeas %in% c(0,6:7)) %>% 
+  collect() %>% 
+  mutate(Mortality = ifelse(CodeMeas == 0, "treefalls", "background")) %>% 
+  group_by(CensusYear, Plot, Mortality) %>% 
+  summarise(N = n()) %>% 
+  filter(N > 0) %>% 
+  ggplot(aes(CensusYear, N, col = as.factor(Plot), group = Plot)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~ Mortality, labeller = "label_both") +
+  viridis::scale_color_viridis("Plot", discrete = T) +
+  xlab("Census year")
+```
+
+## Backgound mortality
+
+```{r bkgmortality}
+bkgmortality <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(CensusYear != 1984) %>% 
+  filter(Plot %in% c(1, 6, 11, 13:15)) %>% 
+  filter(CodeMeas == 0 & CodeAlive == 0 | CodeAlive == 1) %>% 
+  group_by(Plot, Censusyear, CodeAlive) %>% 
+  summarise(N = n()) %>% 
+  collect() %>% 
+  mutate(CodeAlive = recode(CodeAlive, "0"= "dead", "1" = "alive")) %>% 
+  reshape2::dcast(Plot + CensusYear ~ CodeAlive, value = "N") %>% 
+  mutate(mortality = dead/(dead+alive)) %>% 
+  na.omit()
+pdeath <- round(mean(bkgmortality$mortality), 4)
+```
+
+We found a mean background mortality of $`r pdeath`year^{-1}$ in control and biodiversity plots of Paracou using code 0 "arbre mort sur pied (chandelle)".
+
+```{r bkgmortalitygraph, fig.cap="Background mortality in control and biodiversity plots of Paracou across census years."}
+ggplot(bkgmortality, aes(CensusYear, mortality, col = as.factor(Plot))) +
+  geom_line() +
+  geom_point() +
+  geom_hline(yintercept = pdeath, col = "red", lwd = 1.1) +
+  geom_text(aes(label = label), col = "red", cex  = 6,
+            data = data.frame(CensusYear = 1990, mortality = 0.01, label = pdeath)) +
+  viridis::scale_color_viridis("Plot", discrete = T) +
+  xlab("Census year") +
+  ylab("Background mortality")
+```
+
+## Neighbour crowding index
+
+I computed the neighbour crowding index (NCI) for all trees in plot 1, 6, 11 and 13 to 15 for all census years as follow:
+
+\begin{equation} 
+  NCI_{i,t} = \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}
+  (\#eq:nci)
+\end{equation} 
+
+with $DBH_{j,t}$ the diameter from neighboring tree $j$ in year $t$ and $\delta_{i,j}$ its distance to individual tree $i$.
+$NCI_{i,t}$ is computed for all neighbors at a distance $\delta_{i,j}$ inferior to maximum neighboring distance of 20 meters. 
+The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface.
+The decrease of neighbors $DBH$ effect with distance was set to 0.25 here
+to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters.
+
+The variation of plot 1 over time seems to show rare decreases in NCI that could be related to falling trees (Fig. \@ref(fig:plotncigif)), 
+as shown by the NCI trajectories of the trees in plot 1 (Fig. \@ref(fig:ncip1)), 
+which include regular increases with few stochastic decreases.
+
+I then computed the NCI variation as follow:
+
+\begin{equation} 
+  \delta NCI_{i,t} = \frac{NCI_{i,t} - NCI_{i,t-1}}{t - (t-1)}
+  (\#eq:deltanci)
+\end{equation} 
+
+with $NCI_{i,t}$ and $NCI_{i,t-1}$ the neighbour crowding index in censuses $t$ and $t-1$,
+*beware* $t - (t-1)$ can be longer than one year for censuses seperated by more than one year.
+
+I used the logarithm of he negative value of $\delta NCI$, $log(-\delta NCI)$ to investigate treefalls. 
+$-\delta NCI$ had a negative exponential distribution with a lot of small decrease of NCI and few rare events with high loss of NCI. 
+$log(-\delta NCI)$ had a mean close to 0, and a 10th quantile around -2, and the 90th quantile around 2 (Fig. \@ref(fig:deltancidist)).
+The idea was to use $log(-\delta NCI)$ distribution to define a cutoff to separate big treefall that affects ecoevolutionary dynamics from small treefalls and tree dying on foot.
+But using different cutoff revealed that the low values of $log(-\delta NCI)$ also represented individuals close to a trefall gap (Fig. \@ref(fig:deltancip12015low)).
+Using a cutoff of 1 almost kept all gaps but removing the trees fram for the center (Fig. \@ref(fig:deltancip12015low)).
+Using a cutoff of 3 kept only major treefalls (Fig. \@ref(fig:deltancip12015low) and Fig. \@ref(fig:deltancip1gif)),
+which still represented a lot of treefall events.
+
+**The question is how do we define spatially, temporally, and in term of NCI variation the treefall gaps?**
+Because the way we define it will determine the dynamics we infer after. 
+
+*Some ideas in bulk, we could use a 2d clustering to define tree belonging to the same gap (e.g. K-means).*
+*And then use the manximum value of delta NCI to define the center and the convex-hull to define the gap size.*
+*But this seems excessively complicated to identify gaps in time.*
+*And we still need to define a cutoff to avoid defining gaps on tiny loss of NCI.*
+
+
+```{r ncidata, eval=F}
+computeNCI <- function(CensusYear, Plot, d = 20){
+  if(Plot == 16) 
+    stop("Xfield and Yfield doesn't work with P16.")
+  trees <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(CodeAlive == 1) %>% 
+    filter(Plot == local(Plot)) %>% # test for P1
+    filter(CensusYear == local(CensusYear)) %>% 
+    filter(Xfield > local(d), Xfield < 250-local(d), Yfield > local(d), Yfield < 250-local(d)) %>% 
+    mutate(DBH = CircCorr/pi) %>%
+    collect()
+  D <- dist(trees[c("Xfield", "Yfield")]) %>% 
+    as.matrix()
+  D[D>20] <- NA # individuals above 20 m
+  D[D == 0] <- NA # theimselves
+  D <- exp(-0.25*D)
+  D[is.na(D)] <- 0
+  trees$NCI <- as.vector(D %*% as.vector(trees$DBH))
+  return(trees)
+}
+nci <- lapply(unique(bkgmortality$Plot), function(p){
+  lapply(unique(bkgmortality$CensusYear), 
+              function(y) computeNCI(y, p)) %>% 
+  bind_rows()
+}) %>% 
+  bind_rows()
+write_tsv(nci, path = "modelling_save/nci.tsv")
+```
+
+```{r plotnci, eval=F}
+g <- read_tsv("modelling_save/nci.tsv") %>% 
+  mutate( CensusYear = as.integer(CensusYear)) %>% 
+  filter(Plot %in% c(1)) %>% 
+  ggplot(aes(Xfield, Yfield, col = log(NCI), group = idTree)) +
+  geom_point() +
+  facet_wrap(~ Plot, labeller = "label_both") +
+  viridis::scale_color_viridis(direction = -1) +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) +
+   transition_time(CensusYear) +
+  labs(title = 'Year: {frame_time}')
+anim_save("modelling_save/nci.gif", g)
+```
+
+```{r plotncigif, fig.cap="NCI in the Plot 1 of Paracou."}
+include_graphics("modelling_save/nci.gif")
+```
+
+```{r ncip1, fig.cap="NCI over census years in Plot 1."}
+read_tsv("modelling_save/nci.tsv") %>% 
+  filter(Plot == 1) %>% 
+  ggplot(aes(CensusYear, NCI, group = idTree)) +
+  geom_line(alpha = 0.1) +
+  xlab("Census year") +
+  ylab("Neighbour crowding index (NCI) in Plot 1") 
+```
+
+```{r deltancidist, fig.cap="Distribution of the negative NCI variation."}
+nci <- read_tsv("modelling_save/nci.tsv") %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
+         NCIlag = lag(NCI)) %>% 
+  na.omit() %>% 
+  filter(deltaNCI <= 0) %>%
+  mutate(lognegdeltaNCI = log(-deltaNCI))
+m <- median(nci$lognegdeltaNCI)
+s <- sd(nci$lognegdeltaNCI)
+q <- quantile(nci$lognegdeltaNCI, probs = c(0.10, 0.90))
+ggplot(nci, aes(lognegdeltaNCI)) +
+  geom_histogram() +
+  xlab("Logarithm of negative NCI variation (log[-NCI_y - NCI_{y-1}])") +
+  geom_vline(xintercept = m, col = "red", lwd = 1.5) +
+  geom_vline(xintercept = c(m-s,m+s), col = "black", lty = "dashed") +
+  geom_vline(xintercept = q, col = "black", lty = "dotted")
+```
+
+```{r deltancip12015low, fig.cap="Logarithm of the negative variation of NCI in the Plot 1 of Paracou in 2015.", fig.height=8, fig.width=8}
+nci <- read_tsv("modelling_save/nci.tsv") %>% 
+  filter(Plot %in% c(1)) %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
+         NCIlag = lag(NCI)) %>% 
+  ungroup() %>% 
+  na.omit() %>% 
+  filter(CensusYear %in% 2011:2015) %>% 
+  mutate(neglogdeltaNCI = log(-deltaNCI))
+lapply(c(0:3), function(l)
+  mutate(nci, neglogdeltaNCI = ifelse(neglogdeltaNCI < l, NA, neglogdeltaNCI)) %>% 
+    mutate(Cutoff = l)) %>% 
+  bind_rows() %>% 
+  ggplot(aes(Xfield, Yfield, col = neglogdeltaNCI, 
+             group = idTree, alpha = !is.na(neglogdeltaNCI))) +
+  geom_point() +
+  facet_grid(CensusYear ~ Cutoff, labeller = "label_both") +
+  viridis::scale_color_viridis("-log(deltaNCI)", direction = 1) +
+   scale_alpha_discrete(guide = "none") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank())
+```
+
+```{r deltancip1, eval=F}
+l <- 3
+g <- read_tsv("modelling_save/nci.tsv") %>% 
+  filter(Plot %in% c(1)) %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
+         NCIlag = lag(NCI)) %>% 
+  ungroup() %>% 
+  na.omit() %>% 
+  mutate(neglogdeltaNCI = log(-deltaNCI)) %>% 
+  mutate(neglogdeltaNCI = ifelse(neglogdeltaNCI < l, NA, neglogdeltaNCI)) %>% 
+  mutate(Cutoff = l) %>% 
+  mutate(CensusYear = as.integer(CensusYear)) %>% 
+  ggplot(aes(Xfield, Yfield, col = neglogdeltaNCI, 
+             group = idTree, alpha = !is.na(neglogdeltaNCI))) +
+  geom_point() +
+  facet_grid(Plot ~ Cutoff, labeller = "label_both") +
+  viridis::scale_color_viridis("-log(deltaNCI)", direction = 1, begin = 0) +
+   scale_alpha_discrete(guide = "none") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) +
+   transition_time(CensusYear) +
+  labs(title = 'Year: {frame_time}')
+anim_save("modelling_save/deltanci.gif", g)
+```
+
+```{r deltancip1gif, fig.cap="Logarithm of the negative variation of NCI in the Plot 1 of Paracou for values above 3."}
+include_graphics("modelling_save/deltanci.gif")
+```

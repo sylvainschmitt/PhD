@@ -23,7 +23,7 @@ Specifically we want a generator that can be tweaked with few parameters, and th
 I developed two generators. One is mathematic, a.k. the sinusoidal topography, and one is algorithmic, a.k. the square-diamond topography.
 The sinusoidal topography is based on three parameters, the $grid$ size, the environmental gradient limit $Elim$ and the $amplitude$, and is computed with the following formula:
 
-$$M = sin(amplitude.E \times E')|E=vect(-Elim,Elim)_{grid}$$
+$$M = Elim\times sin(amplitude.E \times E')|E=vect(-1,1)_{grid}$$
 
 The square-diamond topography is computed with the [square-diamond algorithm](https://medium.com/@nickobrien/diamond-square-algorithm-explanation-and-c-implementation-5efa891e486f) (see the scheme below or use the link for a better explanation).
 
@@ -110,7 +110,7 @@ Setting the $amplitude$ close to 0 and playing with the environmental gradient l
 
 ```{r diagonal, fig.cap="Topography generated with the sinusoidal function for an amplitude of 0.01, a variable limit, and a grid of 2^6+1."}
 diagonal <- lapply(c(5, 8, 10, 15), function(l)
-  sinusoidalTopography(grid = 2^6+1, Elim = l, amplitude = 0.01)  %>%
+  sinusoidalTopography(grid = 2^6+1, Elim = l, amplitude = 1)  %>%
   reshape2::melt(NULL) %>% 
   dplyr::rename(X = Var1, Y = Var2) %>% 
   mutate(Elim = l)) %>%
@@ -140,7 +140,7 @@ ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(Elim))) + geom_hline(y
   scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
   geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
   geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
-  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
+  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable") 
 ```
 
 ## Sinusoidal topography
@@ -148,7 +148,7 @@ ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(Elim))) + geom_hline(y
 Playing with the $amplitude$ and setting the environmental gradient limit $Elim$ to 10 in the sinusoidal topography generator allows the generation of a sinusoidal topography. The sinusoidal topography is structured positively at low amplitude but the structure disappear with increasing amplitude. The positive correlation after 100 cells can be problematic compared to TWI in Paracou.
 
 ```{r sinusoidal, fig.cap="Topography generated with the sinusoidal function for a variable amplitudz, a limit of 10, and a grid of 2^6+1."}
-sinusoidal <- lapply(c(0.01, 0.05, 0.1, 0.5), function(a)
+sinusoidal <- lapply(c(1, 5, 10, 20), function(a)
   sinusoidalTopography(grid = 2^6+1, Elim = 10, amplitude = a)  %>%
   reshape2::melt(NULL) %>% 
   dplyr::rename(X = Var1, Y = Var2) %>% 
@@ -164,7 +164,7 @@ ggplot(sinusoidal, aes(X, Y, fill = value)) +
 
 ```{r sincor, fig.cap="Spatial autocorrelogram (Moran’s I) of simulated topography."}
 n <- 500
-cor <- lapply(c(0.01, 0.05, 0.1, 0.5), function(a){
+cor <- lapply(c(1, 5, 10, 20), function(a){
   t <- sinusoidal %>% 
     filter(amplitude == a) %>% 
     sample_n(n)

@@ -1,3 +1,6 @@
+# PhD 0.1.9217
+* modelling: forest gap dynamics
+
 # PhD 0.1.9216
 * distribution: congenerics and conspecifics
 * thickness manuscript
