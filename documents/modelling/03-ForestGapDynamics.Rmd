@@ -6,6 +6,10 @@ if(knitr:::is_html_output()) options(knitr.table.format = "html")
 if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
 library(tidyverse)
 library(gganimate)
+library(rstan)
+library(bayesplot)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -207,9 +211,13 @@ include_graphics("modelling_save/nci.gif")
 
 ```{r ncip1, fig.cap="NCI over census years in Plot 1."}
 read_tsv("modelling_save/nci.tsv") %>% 
-  filter(Plot == 1) %>% 
-  ggplot(aes(CensusYear, NCI, group = idTree)) +
-  geom_line(alpha = 0.1) +
+  filter(Plot == 1) %>%
+  group_by(CensusYear) %>% 
+  mutate(NCImean = mean(NCI)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = CensusYear)) +
+  geom_line(aes(y = NCI, group = idTree), alpha = 0.1) +
+  geom_line(aes(y = NCImean), col = "red", size = 2) +
   xlab("Census year") +
   ylab("Neighbour crowding index (NCI) in Plot 1") 
 ```
@@ -232,6 +240,21 @@ ggplot(nci, aes(lognegdeltaNCI)) +
   geom_vline(xintercept = m, col = "red", lwd = 1.5) +
   geom_vline(xintercept = c(m-s,m+s), col = "black", lty = "dashed") +
   geom_vline(xintercept = q, col = "black", lty = "dotted")
+```
+
+```{r, eval=F}
+nci <- read_tsv("modelling_save/nci.tsv") %>% 
+  group_by(idTree) %>% 
+  arrange(CensusYear) %>% 
+  mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
+         NCIlag = lag(NCI)) %>% 
+  na.omit()
+nci %>% 
+  filter(Plot == 1, SubPlot == 1) %>% 
+  filter(idTree %in% sample(unique(.$idTree), 10)) %>% 
+  ggplot(aes(CensusYear, deltaNCI, group = idTree)) +
+  geom_line(alpha = 1) +
+  facet_wrap(~idTree)
 ```
 
 ```{r deltancip12015low, fig.cap="Logarithm of the negative variation of NCI in the Plot 1 of Paracou in 2015.", fig.height=8, fig.width=8}
@@ -288,4 +311,125 @@ anim_save("modelling_save/deltanci.gif", g)
 
 ```{r deltancip1gif, fig.cap="Logarithm of the negative variation of NCI in the Plot 1 of Paracou for values above 3."}
 include_graphics("modelling_save/deltanci.gif")
+```
+
+## Canopy height model 
+
+Another way to identify forest gaps is to use canopy height models (CHM) from Lidar campaign.
+I used the R pacakge [`ForestGapR`](https://github.com/carlos-alberto-silva/ForestGapR) [@Silva2019] with CHM from 2004, 2009, and 2013 to detect forest gaps in Paracou undisturbed plots (P1, P6, P11, P13, P14, and P15). 
+I defined gaps with a height below 10$m$ and a gaps size between 10$m^2$ and 1$ha$ (following @Hunter2015, Fig. \@ref(fig:CHM2014)).
+I linked canopy height and inclusion in gaps for censused trees of corresponding censuses,
+using 2003 census to correspond to 2004 Lidar campaign (no tree census in 2004).
+A significant relation (LM, $p < 0.001$) exist between NCI and canopy height in every plot and lidar campaigns but with low variation explained ($R^2=4\%$, Fig. \@ref(fig:canpynci)).
+Moreover, NCI showed a significant difference of groups (KW, $p<0.001$) between forest gaps and closed canopy (Fig. \@ref(fig:gapsnci)A),
+but a non-negligible overlap exists.
+I arbitrarily defined the NCI threshold to 100 (intersection between the two densities, Fig. \@ref(fig:gapsnci)B), 
+but this would result in numerous gaps misenditifications. 
+**Consequently, the question: "how do we define spatially, temporally, and in term of NCI variation the treefall gaps" stays.**
+
+```{r chmdata, eval=F}
+library(raster)
+library(viridis)
+library(ForestGapR)
+
+# parameters
+crs <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+path <- "../../data/Paracou"
+
+# Paracou
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CodeAlive == 1) %>% 
+  filter(CensusYear %in% c(2003, 2009, 2013)) %>%
+  collect()
+coordinates(paracou) <- ~Xutm + Yutm
+proj4string(paracou) <- crs
+
+# CHM
+dem <- raster(file.path(path, "topography", "DEM_1m_2015.tif"))
+canopy2004 <- raster(file.path(path, "biotic", "Paracou2004_MNC1m.asc"))
+crs(canopy2004) <- crs(dem)
+canopy2004 <- projectRaster(canopy2004, crs = crs)
+canopy2004<- crop(canopy2004, paracou)
+canopy2009 <- raster(file.path(path, "biotic", "MNC_ParacouAvril2009_1m.tif"))
+crs(canopy2009) <- crs(dem)
+canopy2009 <- projectRaster(canopy2009, crs = crs)
+canopy2009 <- crop(canopy2009, canopy2004) # canopy2004 smaller than the others !
+canopy2013 <- raster(file.path(path, "biotic", "ParacouMNS1m2013.asc"))
+dem2013 <- raster(file.path(path, "biotic", "ParacouMNT1m2013.asc"))  
+canopy2013 <- canopy2013 - dem2013
+crs(canopy2013) <- crs(dem)
+canopy2013 <- projectRaster(canopy2013, crs = crs)
+canopy2013 <- crop(canopy2013, canopy2004) # canopy2004 smaller than the others !
+canopy <- stack(canopy2004, canopy2009, canopy2013)
+names(canopy) <- c("CHM 2004", "CHM 2009", "CHM 2013")
+plot(canopy, col = viridis(10))
+
+# Detecting forest gaps
+gaps <- lapply(as.list(canopy), getForestGaps, 10, c(10,1000))
+names(gaps) <- c("gaps.2004", "gaps.2009", "gaps.2013")
+plot(canopy$CHM.2004, main = "Forest Canopy Gap - 2004 - Plot 1", col = viridis(10))
+plot(gaps$gaps.2004, add = T, col = "red", legend = F)
+
+# extracting informations
+canopy.df <- as.data.frame(raster::extract(canopy, paracou)) %>% 
+  mutate(idTree = paracou@data$idTree, CensusYear = paracou@data$CensusYear) %>% 
+  reshape2::melt(id.vars = c("idTree", "CensusYear"), variable.name = "LidarYear", value.name = "canopy") %>% 
+  mutate(LidarYear = as.numeric(gsub("CHM.", "", LidarYear))) %>% 
+  mutate(LidarYearAdj = ifelse(LidarYear == 2004, 2003, LidarYear)) %>% 
+  filter(CensusYear == LidarYearAdj) %>% 
+  dplyr::select(-LidarYearAdj)
+gaps.df <- lapply(gaps, function(g)
+  raster::extract(g, paracou)) %>% 
+    bind_cols() %>% 
+    mutate_all(funs(as.numeric(!is.na(.)))) %>% 
+  mutate(idTree = paracou@data$idTree, CensusYear = paracou@data$CensusYear) %>% 
+  reshape2::melt(id.vars = c("idTree", "CensusYear"), variable.name = "LidarYear", value.name = "gap") %>% 
+  mutate(LidarYear = as.numeric(gsub("gaps.", "", LidarYear))) %>% 
+  mutate(LidarYearAdj = ifelse(LidarYear == 2004, 2003, LidarYear)) %>% 
+  filter(CensusYear == LidarYearAdj) %>% 
+  dplyr::select(-LidarYearAdj)
+left_join(canopy.df, gaps.df) %>% 
+  write_tsv(path = "modelling_save/canopy.tsv")
+```
+
+```{r CHM2014, fig.cap="Detection of forest gaps with canopy height model from 2004 Lidar campaign in Paracou. Gaps have been detected using ForestGapR [@Silva2019] with a maximum height of 10 m and area of 10m2."}
+include_graphics("modelling_save/CHM2004.png")
+```
+
+```{r canpynci, fig.cap="Relation between canopy height and neighbour crowding index among undisturbed plots and Lidar campaigns."}
+read_tsv("modelling_save/nci.tsv") %>% 
+  left_join(read_tsv("modelling_save/canopy.tsv")) %>% 
+  filter(!is.na(gap)) %>% 
+  # lm(NCI ~ canopy, data = .) %>% summary()
+  ggplot(aes(canopy, NCI, col = as.factor(gap), group = NA)) + 
+  geom_point() +
+  geom_smooth(method = "lm") +
+  ggpubr::stat_cor() +
+  xlab("Canopy height (m)") +
+  ylab("Neighbour crowding index") +
+  scale_color_manual("Gap", values = c("darkgrey", "firebrick")) +
+  facet_grid(Plot ~ CensusYear + LidarYear, scales = "free", labeller = "label_both") +
+  scale_x_sqrt()
+```
+
+```{r gapsnci, fig.cap="Relation neighbour crowding index and forest gaps among undisturbed plots and years."}
+g1 <- read_tsv("modelling_save/nci.tsv") %>% 
+  left_join(read_tsv("modelling_save/canopy.tsv")) %>% 
+  filter(!is.na(gap)) %>% 
+  ggplot(aes(as.factor(Plot), NCI, fill = as.factor(gap))) + 
+  geom_boxplot() +
+  geom_hline(yintercept = 100, col = "black", linetype = "dashed") +
+  xlab("Plot") + ylab("Neighbour crowding index") +
+  scale_fill_manual("Gap", values = c("darkgrey", "firebrick")) +
+  coord_flip()
+g2 <- read_tsv("modelling_save/nci.tsv") %>% 
+  left_join(read_tsv("modelling_save/canopy.tsv")) %>% 
+  filter(!is.na(gap)) %>% 
+  ggplot(aes(NCI, fill = as.factor(gap))) + 
+  geom_density(alpha = 0.5) +
+  geom_vline(xintercept = 100, col = "black", linetype = "dashed") +
+  xlab("Neighbour crowding index") +
+  scale_fill_manual("Gap", values = c("darkgrey", "firebrick"))
+cowplot::plot_grid(g1, g2, nrow = 2, labels = LETTERS[1:2])
 ```

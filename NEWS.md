@@ -1,3 +1,6 @@
+# PhD 0.1.9218
+* modelling: forest gap dynamics: trying to define gaps
+
 # PhD 0.1.9217
 * modelling: forest gap dynamics
 
