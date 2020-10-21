@@ -228,3 +228,41 @@ data %>%
   kable_styling(full_width = F) %>% 
   collapse_rows(1:2)
 ```
+
+## Phylogeny
+
+```{r phylogeny, fig.cap="Selected species complexes position in Paracou phylogeny."}
+library(ggtree)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+complexes <- bind_rows(
+  data.frame(Complex = "Parvifolia", Genus = "Eschweilera",
+             Species = c("pedicellata", "coriacea", "decolorans", "sagotiana",
+                         "wachenheimii", "grandiflora_form2")),
+  data.frame(Complex = "Licania", Genus = "Licania",
+             Species = c("alba", "membranacea", "canescens", "micrantha",
+                         "ovalifolia", "sprucei", "densiflora",
+                         "laxiflora", "parvifructa")),
+  data.frame(Complex = "Iryanthera", Genus = "Iryanthera",
+             Species = c("hostmannii", "sagotiana")),
+  data.frame(Complex = "Talisia", Genus = "Talisia",
+             Species = c("hexaphylla", "praealta", "simaboides")),
+  data.frame(Complex = "Symphonia", Genus = "Symphonia",
+             Species = c("globulifera", "sp.1")))
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  dplyr::select(Family, Genus, Species) %>% 
+  collect() %>% 
+  unique() %>% 
+  left_join(complexes) %>% 
+  mutate(species = paste(Genus, Species), genus = Genus, family = Family) %>% 
+  dplyr::select(species, genus, family, Complex)
+tree <- V.PhyloMaker::phylo.maker(sp.list = paracou, tree = GBOTB.extended, nodes = nodes.info.1, scenarios = "S3")
+fortify(tree$scenario.3) %>% 
+  mutate(species = gsub("_", " ", label)) %>% 
+  left_join(paracou) %>% 
+  ggtree(aes(col = Complex), layout="circular") + 
+  geom_tiplab2(size = 1, aes(alpha = !is.na(Complex))) +
+  theme_tree(legend.position='right', legend.text = element_text(face = "italic")) +
+  scale_alpha_manual("Complex", values = c(0.2, 1))
+```
+

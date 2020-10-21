@@ -1,3 +1,7 @@
+# PhD 0.1.9219
+* modelling: forest gap dynamics: mixed distributions and spatial clustering
+* distribution: *Oecologia* revision 1
+
 # PhD 0.1.9218
 * modelling: forest gap dynamics: trying to define gaps
 

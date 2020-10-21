@@ -114,6 +114,8 @@ ggplot(bkgmortality, aes(CensusYear, mortality, col = as.factor(Plot))) +
 
 ## Neighbour crowding index
 
+### $NCI$
+
 I computed the neighbour crowding index (NCI) for all trees in plot 1, 6, 11 and 13 to 15 for all census years as follow:
 
 \begin{equation} 
@@ -131,34 +133,6 @@ The variation of plot 1 over time seems to show rare decreases in NCI that could
 as shown by the NCI trajectories of the trees in plot 1 (Fig. \@ref(fig:ncip1)), 
 which include regular increases with few stochastic decreases.
 
-I then computed the NCI variation as follow:
-
-\begin{equation} 
-  \delta NCI_{i,t} = \frac{NCI_{i,t} - NCI_{i,t-1}}{t - (t-1)}
-  (\#eq:deltanci)
-\end{equation} 
-
-with $NCI_{i,t}$ and $NCI_{i,t-1}$ the neighbour crowding index in censuses $t$ and $t-1$,
-*beware* $t - (t-1)$ can be longer than one year for censuses seperated by more than one year.
-
-I used the logarithm of he negative value of $\delta NCI$, $log(-\delta NCI)$ to investigate treefalls. 
-$-\delta NCI$ had a negative exponential distribution with a lot of small decrease of NCI and few rare events with high loss of NCI. 
-$log(-\delta NCI)$ had a mean close to 0, and a 10th quantile around -2, and the 90th quantile around 2 (Fig. \@ref(fig:deltancidist)).
-The idea was to use $log(-\delta NCI)$ distribution to define a cutoff to separate big treefall that affects ecoevolutionary dynamics from small treefalls and tree dying on foot.
-But using different cutoff revealed that the low values of $log(-\delta NCI)$ also represented individuals close to a trefall gap (Fig. \@ref(fig:deltancip12015low)).
-Using a cutoff of 1 almost kept all gaps but removing the trees fram for the center (Fig. \@ref(fig:deltancip12015low)).
-Using a cutoff of 3 kept only major treefalls (Fig. \@ref(fig:deltancip12015low) and Fig. \@ref(fig:deltancip1gif)),
-which still represented a lot of treefall events.
-
-**The question is how do we define spatially, temporally, and in term of NCI variation the treefall gaps?**
-Because the way we define it will determine the dynamics we infer after. 
-
-*Some ideas in bulk, we could use a 2d clustering to define tree belonging to the same gap (e.g. K-means).*
-*And then use the manximum value of delta NCI to define the center and the convex-hull to define the gap size.*
-*But this seems excessively complicated to identify gaps in time.*
-*And we still need to define a cutoff to avoid defining gaps on tiny loss of NCI.*
-
-
 ```{r ncidata, eval=F}
 computeNCI <- function(CensusYear, Plot, d = 20){
   if(Plot == 16) 
@@ -169,7 +143,6 @@ computeNCI <- function(CensusYear, Plot, d = 20){
     filter(CodeAlive == 1) %>% 
     filter(Plot == local(Plot)) %>% # test for P1
     filter(CensusYear == local(CensusYear)) %>% 
-    filter(Xfield > local(d), Xfield < 250-local(d), Yfield > local(d), Yfield < 250-local(d)) %>% 
     mutate(DBH = CircCorr/pi) %>%
     collect()
   D <- dist(trees[c("Xfield", "Yfield")]) %>% 
@@ -179,7 +152,8 @@ computeNCI <- function(CensusYear, Plot, d = 20){
   D <- exp(-0.25*D)
   D[is.na(D)] <- 0
   trees$NCI <- as.vector(D %*% as.vector(trees$DBH))
-  return(trees)
+  return(trees %>% 
+           filter(Xfield > local(d), Xfield < 250-local(d), Yfield > local(d), Yfield < 250-local(d)))
 }
 nci <- lapply(unique(bkgmortality$Plot), function(p){
   lapply(unique(bkgmortality$CensusYear), 
@@ -222,69 +196,73 @@ read_tsv("modelling_save/nci.tsv") %>%
   ylab("Neighbour crowding index (NCI) in Plot 1") 
 ```
 
-```{r deltancidist, fig.cap="Distribution of the negative NCI variation."}
-nci <- read_tsv("modelling_save/nci.tsv") %>% 
-  group_by(idTree) %>% 
-  arrange(CensusYear) %>% 
-  mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
-         NCIlag = lag(NCI)) %>% 
-  na.omit() %>% 
-  filter(deltaNCI <= 0) %>%
-  mutate(lognegdeltaNCI = log(-deltaNCI))
-m <- median(nci$lognegdeltaNCI)
-s <- sd(nci$lognegdeltaNCI)
-q <- quantile(nci$lognegdeltaNCI, probs = c(0.10, 0.90))
-ggplot(nci, aes(lognegdeltaNCI)) +
-  geom_histogram() +
-  xlab("Logarithm of negative NCI variation (log[-NCI_y - NCI_{y-1}])") +
-  geom_vline(xintercept = m, col = "red", lwd = 1.5) +
-  geom_vline(xintercept = c(m-s,m+s), col = "black", lty = "dashed") +
-  geom_vline(xintercept = q, col = "black", lty = "dotted")
-```
+### $\delta NCI$
 
-```{r, eval=F}
-nci <- read_tsv("modelling_save/nci.tsv") %>% 
-  group_by(idTree) %>% 
-  arrange(CensusYear) %>% 
-  mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
-         NCIlag = lag(NCI)) %>% 
-  na.omit()
-nci %>% 
-  filter(Plot == 1, SubPlot == 1) %>% 
-  filter(idTree %in% sample(unique(.$idTree), 10)) %>% 
-  ggplot(aes(CensusYear, deltaNCI, group = idTree)) +
-  geom_line(alpha = 1) +
-  facet_wrap(~idTree)
-```
+I then computed the NCI variation as follow:
 
-```{r deltancip12015low, fig.cap="Logarithm of the negative variation of NCI in the Plot 1 of Paracou in 2015.", fig.height=8, fig.width=8}
+\begin{equation} 
+  \delta NCI_{i,t} = \frac{NCI_{i,t} - NCI_{i,t-1}}{t - (t-1)}
+  (\#eq:deltanci)
+\end{equation} 
+
+with $NCI_{i,t}$ and $NCI_{i,t-1}$ the neighbour crowding index in censuses $t$ and $t-1$,
+*beware* $t - (t-1)$ can be longer than one year for censuses seperated by more than one year.
+I tested to model the distribution of $NCI$ and $\delta NCI$ as a mixture of two normals distribution using `mixtools`:
+(i) intermediate and stable $NCI$ or $\delta NCI$ in the forest,
+and (ii) low $NCI$ or $\delta NCI$ in or close to forest gaps.
+$NCI$ did not give a good results and seems more related to a unique distribution;
+whereas $detla NCI$ can be simulated as two normal distributions (Fig.\@ref(fig:mixture)):
+(i) a narrow and positive normal corresponding to intermediate and stable patch of the forest,
+and (ii) a  wide and negative normal corresponding to trees in or close to forest gaps.
+I thus defined a threshold of $\delta NCI=-1.406$ to identify gaps corresponding to the 0.001 quantile of the narrow distribution (more than 99.9% of the dsitribution is not considered as gaps.)
+
+```{r mixture, message=FALSE, warning=FALSE, fig.cap="Test of normal distribution mixture for NCI and deltaNCI."}
 nci <- read_tsv("modelling_save/nci.tsv") %>% 
-  filter(Plot %in% c(1)) %>% 
   group_by(idTree) %>% 
   arrange(CensusYear) %>% 
   mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
          NCIlag = lag(NCI)) %>% 
   ungroup() %>% 
-  na.omit() %>% 
-  filter(CensusYear %in% 2011:2015) %>% 
-  mutate(neglogdeltaNCI = log(-deltaNCI))
-lapply(c(0:3), function(l)
-  mutate(nci, neglogdeltaNCI = ifelse(neglogdeltaNCI < l, NA, neglogdeltaNCI)) %>% 
-    mutate(Cutoff = l)) %>% 
-  bind_rows() %>% 
-  ggplot(aes(Xfield, Yfield, col = neglogdeltaNCI, 
-             group = idTree, alpha = !is.na(neglogdeltaNCI))) +
+  na.omit()
+ncimix <- mixtools::normalmixEM(nci$NCI, k = 2, maxit = 100, verb = F)
+deltancimix <- mixtools::normalmixEM(nci$deltaNCI, k = 2, verb = F)
+gnci <- ggplot(nci, aes(x = NCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
+  stat_function(fun = dnorm, args = list(mean = ncimix$mu[1], sd = ncimix$sigma[1]), col = "red") +
+  stat_function(fun = dnorm, args = list(mean = ncimix$mu[2], sd = ncimix$sigma[2]), col = "black") +
+  xlab(expression(NCI))
+gdeltanci <- ggplot(nci, aes(x = deltaNCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
+  stat_function(fun = dnorm, args = list(mean =  deltancimix$mu[1], sd =  deltancimix$sigma[1]), col = "red") +
+  stat_function(fun = dnorm, args = list(mean =  deltancimix$mu[2], sd =  deltancimix$sigma[2]), col = "black") +
+  geom_vline(xintercept = qnorm(0.01, mean = deltancimix$mu[2], sd = deltancimix$sigma[2]), linetype = "dashed") +
+  geom_text(aes(label = q0.01, y = y),
+            data.frame(deltaNCI = -2, y = 0.4, 
+                       q0.01 = round(qnorm(0.001, mean = deltancimix$mu[2], sd = deltancimix$sigma[2]), 3))) +
+  xlim(-10, 10) +
+  xlab(expression(delta[NCI]))
+cowplot::plot_grid(gnci, gdeltanci, nrow = 2)
+```
+
+```{r deltancip12015low, fig.cap="deltaNCI below the threshold.", fig.height=8, fig.width=8}
+nci %>% 
+  # mutate(gaps = as.factor(as.numeric(deltaNCI < -1.406))) %>% 
+    mutate(gaps = as.factor(as.numeric(deltaNCI < -35))) %>% 
+  filter(Plot %in% 1:11) %>% 
+  filter(CensusYear %in% 2013:2015) %>% 
+  ggplot(aes(Xfield, Yfield, col = deltaNCI, 
+             group = idTree, alpha = gaps)) +
   geom_point() +
-  facet_grid(CensusYear ~ Cutoff, labeller = "label_both") +
-  viridis::scale_color_viridis("-log(deltaNCI)", direction = 1) +
-   scale_alpha_discrete(guide = "none") +
+  facet_grid(CensusYear ~ Plot, labeller = "label_both") +
+  viridis::scale_color_viridis(expression(delta[NCI]), direction = -1) +
+  scale_alpha_discrete(guide = "none") +
   theme(axis.text = element_blank(), axis.title = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank())
 ```
 
 ```{r deltancip1, eval=F}
-l <- 3
 g <- read_tsv("modelling_save/nci.tsv") %>% 
+  mutate(CensusYear = as.integer(CensusYear)) %>% 
   filter(Plot %in% c(1)) %>% 
   group_by(idTree) %>% 
   arrange(CensusYear) %>% 
@@ -292,16 +270,14 @@ g <- read_tsv("modelling_save/nci.tsv") %>%
          NCIlag = lag(NCI)) %>% 
   ungroup() %>% 
   na.omit() %>% 
-  mutate(neglogdeltaNCI = log(-deltaNCI)) %>% 
-  mutate(neglogdeltaNCI = ifelse(neglogdeltaNCI < l, NA, neglogdeltaNCI)) %>% 
-  mutate(Cutoff = l) %>% 
-  mutate(CensusYear = as.integer(CensusYear)) %>% 
-  ggplot(aes(Xfield, Yfield, col = neglogdeltaNCI, 
-             group = idTree, alpha = !is.na(neglogdeltaNCI))) +
+   # mutate(gaps = as.factor(as.numeric(deltaNCI < -1.406))) %>% 
+     mutate(gaps = as.factor(as.numeric(deltaNCI < -35))) %>% 
+  ggplot(aes(Xfield, Yfield, col = deltaNCI, 
+             group = idTree, alpha = gaps)) +
   geom_point() +
-  facet_grid(Plot ~ Cutoff, labeller = "label_both") +
-  viridis::scale_color_viridis("-log(deltaNCI)", direction = 1, begin = 0) +
-   scale_alpha_discrete(guide = "none") +
+  facet_wrap(~ Plot, labeller = "label_both") +
+  viridis::scale_color_viridis(expression(delta[NCI]), direction = -1) +
+  scale_alpha_discrete(guide = "none") +
   theme(axis.text = element_blank(), axis.title = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank()) +
    transition_time(CensusYear) +
@@ -309,11 +285,92 @@ g <- read_tsv("modelling_save/nci.tsv") %>%
 anim_save("modelling_save/deltanci.gif", g)
 ```
 
-```{r deltancip1gif, fig.cap="Logarithm of the negative variation of NCI in the Plot 1 of Paracou for values above 3."}
+```{r deltancip1gif, fig.cap="Negative variation of NCI in the Plot 1 of Paracou for values below threshold."}
 include_graphics("modelling_save/deltanci.gif")
 ```
 
+### Clustering
+
+I then used `dbscan` for nearest-neighbour clustering in every plot and census year.
+I needed to chose a distance threshold to define cluster.
+Looking at point sorted by distance (Fig. \@ref(fig:kNNdist)), 
+it seems that we had a good "knee" in the distribution after 10 meters.
+I thus clustered defined gaps using the threshold of a maximum nearest neighbour of 10 meters,
+the result seems okay (Fig. \@ref(fig:gaps)).
+But the methods resulted in numerous gaps across time in Plot 1 (Fig. \@ref(fig:gapsp1gif)).
+
+```{r kNNdist, fig.cap="k-Nearest Neighbor Distance plot."}
+nci %>% 
+  # filter(deltaNCI < -1.406) %>% 
+  filter(deltaNCI < -35) %>% 
+  group_by(Plot, CensusYear) %>% 
+  do(d = data.frame(d = dbscan::kNNdist(.[c("Xfield", "Yfield")], k = 3)) %>% 
+       arrange(d) %>% 
+       mutate(point = 1:n())) %>% 
+  unnest(d) %>% 
+  ggplot(aes(point, d, col = CensusYear,
+             group = as.factor(CensusYear))) + 
+  geom_line() +
+  geom_hline(yintercept = 10, linetype = "dashed") +
+  xlab("Points sorted by distance") +
+  ylab("3-NN distance") +
+  facet_wrap(~ Plot, labeller = "label_both") +
+  viridis::scale_color_viridis()
+```
+
+```{r gapsdata, eval=F}
+nci %>% 
+  # filter(deltaNCI < -1.406) %>% 
+    filter(deltaNCI < -35) %>% 
+  group_by(Plot, CensusYear) %>% 
+  do(gaps = data.frame(idTree = .$idTree, gap = 1,
+                       group = dbscan::dbscan(.[c("Xfield", "Yfield")], eps = 10, minPts = 3)$cluster)) %>% 
+  unnest(gaps) %>% 
+  ungroup() %>% 
+  write_tsv(path = "modelling_save/gaps.tsv")
+```
+
+```{r gaps, fig.height=8, fig.width=8, fig.cap="Identified gaps with clustering."}
+nci %>% 
+  left_join(read_tsv("modelling_save/gaps.tsv")) %>% 
+  filter(Plot %in% 1:11) %>% 
+  filter(CensusYear %in% 2013:2015) %>% 
+  ggplot(aes(Xfield, Yfield, col = as.factor(group), 
+             group = idTree)) +
+  geom_point() +
+  facet_grid(CensusYear ~ Plot, labeller = "label_both") +
+  viridis::scale_color_viridis("Gap", direction = -1, discrete = T) +
+  scale_alpha_discrete(guide = "none") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank(), panel.border = element_rect(color="black", fill=NA))
+```
+
+```{r gapsp1, eval=F}
+g <- read_tsv("modelling_save/nci.tsv") %>% 
+  left_join(read_tsv("modelling_save/gaps.tsv")) %>% 
+  filter(Plot == 1) %>% 
+  na.omit() %>% 
+  mutate(CensusYear = as.integer(CensusYear)) %>% 
+  ggplot(aes(Xfield, Yfield, col = as.factor(group), 
+             group = idTree)) +
+  geom_point() +
+  facet_wrap(~ Plot, labeller = "label_both") +
+  viridis::scale_color_viridis("Gap", direction = -1, discrete = T) +
+  scale_alpha_discrete(guide = "none") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) +
+   transition_time(CensusYear) +
+  labs(title = 'Year: {frame_time}')
+anim_save("modelling_save/gaps.gif", g)
+```
+
+```{r gapsp1gif, fig.cap="Gaps in the Plot 1 of Paracou for values below threshold."}
+include_graphics("modelling_save/gaps.gif")
+```
+
 ## Canopy height model 
+
+**I kept this paragraph as a reminder but I decided to not use canopy hieght model in the end.**
 
 Another way to identify forest gaps is to use canopy height models (CHM) from Lidar campaign.
 I used the R pacakge [`ForestGapR`](https://github.com/carlos-alberto-silva/ForestGapR) [@Silva2019] with CHM from 2004, 2009, and 2013 to detect forest gaps in Paracou undisturbed plots (P1, P6, P11, P13, P14, and P15). 

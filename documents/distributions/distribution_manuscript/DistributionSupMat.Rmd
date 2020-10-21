@@ -40,6 +40,8 @@ library(ggfortify)
 library(broom)
 library(rstan)
 library(bayesplot)
+library(ggtree)
+library(V.PhyloMaker)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, 
                fig.height = 8, fig.width = 8,
@@ -357,6 +359,26 @@ generated quantities {
     Y_pred[n,] = to_row_vector(softmax(alpha + beta*to_vector(X_pred_std[n,]) + gamma*to_vector(X_pred_std[n,] .* X_pred_std[n,]))) ;
 }
 ```
+
+```{r phylogeny, fig.cap="Selected species complexes position in Paracou phylogeny."}
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  dplyr::select(Family, Genus, Species) %>% 
+  collect() %>% 
+  unique() %>% 
+  left_join(Complexes) %>% 
+  mutate(species = paste(Genus, Species), genus = Genus, family = Family) %>% 
+  dplyr::select(species, genus, family, Complex)
+tree <- phylo.maker(sp.list = paracou, tree = GBOTB.extended, nodes = nodes.info.1, scenarios = "S3")
+fortify(tree$scenario.3) %>% 
+  mutate(species = gsub("_", " ", label)) %>% 
+  left_join(paracou) %>% 
+  ggtree(aes(col = Complex), layout="circular") + 
+  geom_tiplab2(size = 1, aes(alpha = !is.na(Complex))) +
+  theme_tree(legend.position='right', legend.text = element_text(face = "italic")) +
+  scale_alpha_manual("Complex", values = c(0.2, 1))
+```
+
 
 ```{r thesis, eval=F, echo=T}
 save(list = ls(), file = "../../thesis/rdata/Ch1SupMat.Rdata")
