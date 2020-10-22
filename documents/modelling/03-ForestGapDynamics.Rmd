@@ -20,97 +20,8 @@ library(ecoevosimulator)
 # Forest gap dynamics
 
 This chapter aims to develop a forest gap dynamics generator and compare it to the forest gap dynamics observed in Parcou plots.
-...
-
-## Mortality
-
-I first explored mortality with the code measures from Paracou censuses.
-I used code 0 "arbre mort sur pied (chandelle)",
-code 6 "arbre mort et tombé (chablis primaire)" 
-and 7 "arbre mort par la chute d'un autre arbre (chablis secondaire)". 
-But every small treefalls is reported, 
-and this does not seem interesting compared to gaps that should have a role in *Symphonia* ecoevolutionary dynamics.
-Moreover, background mortality seems not negligible compared to treefall mortality.
-Last bu not least, mortality seems higly influenced by the disturbance experiment. 
-
-```{r plot1mortality, eval=F}
-g <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                     "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(Plot == 1) %>%
-  collect() %>% 
-  mutate_at(c("CodeAlive", "CodeMeas"), as.factor) %>% 
-  mutate(gaps = as.factor(as.numeric(CodeMeas %in% 6:7 & CodeAlive == 0))) %>% 
-  mutate(background = as.factor(as.numeric(CodeMeas == 0 & CodeAlive == 0))) %>% 
-  mutate(death = "alive") %>% 
-  mutate(death = ifelse(gaps == 1, "gaps", death)) %>% 
-  mutate(death = ifelse(background == 1, "background", death)) %>% 
-  ggplot(aes(Xfield, Yfield, col = death, alpha = death, group = idTree)) +
-  geom_point() +
-  scale_color_manual("Mortality", values = c("lightgrey", "red", "blue")) +
-  scale_alpha_discrete("Mortality") +
-  facet_wrap(~ Plot, labeller = "label_both") +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank()) +
-  transition_time(CensusYear) +
-  labs(title = 'Year: {frame_time}')
-anim_save("modelling_save/plot1treefalls.gif", g)
-```
-```{r plot1mortalitygif, fig.cap="Mortality in the Plot 1 of Paracou. In blue death on foot with code measure 0 and in red death by treefalls with code measure 6 and 7."}
-include_graphics("modelling_save/plot1treefalls.gif")
-```
-
-```{r mortality, fig.cap="Background and treefall mortality per plots and census years in Paracou."}
-src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                     "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(Plot != 16) %>% 
-  filter(CodeAlive == 0, CodeMeas %in% c(0,6:7)) %>% 
-  collect() %>% 
-  mutate(Mortality = ifelse(CodeMeas == 0, "treefalls", "background")) %>% 
-  group_by(CensusYear, Plot, Mortality) %>% 
-  summarise(N = n()) %>% 
-  filter(N > 0) %>% 
-  ggplot(aes(CensusYear, N, col = as.factor(Plot), group = Plot)) +
-  geom_line() +
-  geom_point() +
-  facet_wrap(~ Mortality, labeller = "label_both") +
-  viridis::scale_color_viridis("Plot", discrete = T) +
-  xlab("Census year")
-```
-
-## Backgound mortality
-
-```{r bkgmortality}
-bkgmortality <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
-                     "trees", "Paracou.sqlite")) %>%
-  tbl("Paracou") %>%
-  filter(CensusYear != 1984) %>% 
-  filter(Plot %in% c(1, 6, 11, 13:15)) %>% 
-  filter(CodeMeas == 0 & CodeAlive == 0 | CodeAlive == 1) %>% 
-  group_by(Plot, Censusyear, CodeAlive) %>% 
-  summarise(N = n()) %>% 
-  collect() %>% 
-  mutate(CodeAlive = recode(CodeAlive, "0"= "dead", "1" = "alive")) %>% 
-  reshape2::dcast(Plot + CensusYear ~ CodeAlive, value = "N") %>% 
-  mutate(mortality = dead/(dead+alive)) %>% 
-  na.omit()
-pdeath <- round(mean(bkgmortality$mortality), 4)
-```
-
-We found a mean background mortality of $`r pdeath`year^{-1}$ in control and biodiversity plots of Paracou using code 0 "arbre mort sur pied (chandelle)".
-
-```{r bkgmortalitygraph, fig.cap="Background mortality in control and biodiversity plots of Paracou across census years."}
-ggplot(bkgmortality, aes(CensusYear, mortality, col = as.factor(Plot))) +
-  geom_line() +
-  geom_point() +
-  geom_hline(yintercept = pdeath, col = "red", lwd = 1.1) +
-  geom_text(aes(label = label), col = "red", cex  = 6,
-            data = data.frame(CensusYear = 1990, mortality = 0.01, label = pdeath)) +
-  viridis::scale_color_viridis("Plot", discrete = T) +
-  xlab("Census year") +
-  ylab("Background mortality")
-```
+First, we simulated back neighbour crowding index (NCI) dynamics in space and time.
+Then, we simulated background and treefall mortality in relation to NCI dynamics.
 
 ## Neighbour crowding index
 
@@ -131,7 +42,22 @@ to represent trees at 20 meters of the focal trees having 1% of the effect of th
 
 The variation of plot 1 over time seems to show rare decreases in NCI that could be related to falling trees (Fig. \@ref(fig:plotncigif)), 
 as shown by the NCI trajectories of the trees in plot 1 (Fig. \@ref(fig:ncip1)), 
-which include regular increases with few stochastic decreases.
+which include regular increases with few stochastic decreases and a global stable mean.
+$NCI$ followed a normal distribution centered on $\mu_{NCI} = 123$ of variance $\sigma_{NCI} = 26$ 
+in Plot 1 (Fig. \@ref(fig:p1spNCIdist)),
+with spatially aggregated clusters on 10 meters or $d_{NCI} = 3$ cells (Fig. \@ref(fig:spcornci)).
+We thus defined NCI distribution for initialization as:
+
+\begin{equation} 
+ NCI \sim \left\{
+    \begin{array}{ll}
+        \mathcal N(\mu_{NCI} = 123, \sigma_{NCI} = 26) \\
+        d_{NCI}=3 & \mbox{Spatial aggregation}
+    \end{array}
+\right.
+\end{equation} 
+
+To simulate back NCI dynamics we chose to study the spatio-temporal dynamics of NCI variation. 
 
 ```{r ncidata, eval=F}
 computeNCI <- function(CensusYear, Plot, d = 20){
@@ -196,9 +122,59 @@ read_tsv("modelling_save/nci.tsv") %>%
   ylab("Neighbour crowding index (NCI) in Plot 1") 
 ```
 
+```{r p1spNCIdist, fig.cap="Plot1 NCI distribution in space and absolute."}
+t <-  read_tsv("modelling_save/nci.tsv") %>% 
+  filter(Plot == 1, CensusYear == 2014) %>% 
+  rename(X = Xfield, Y = Yfield)
+mu <- MASS::fitdistr(t$NCI, "normal")$estimate[1]
+sigma <- MASS::fitdistr(t$NCI, "normal")$estimate[2]
+g1 <- ggplot(t, aes(x = NCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100) +
+  stat_function(fun = dnorm , args = list(mean = mu, sd = sigma)) +
+  geom_vline(xintercept = mu, linetype = "dashed") +
+  geom_text(aes(y = y), label = "Normal", data = data.frame(NCI = 180, y = 0.015)) +
+  geom_text(aes(y = y), label = expression(mu), data = data.frame(NCI = 180, y = 0.013)) +
+  geom_text(aes(y = y), label = round(mu,3), data = data.frame(NCI = 180, y = 0.010)) +
+  geom_text(aes(y = y), label = expression(sigma), data = data.frame(NCI = 180, y = 0.008)) +
+  geom_text(aes(y = y), label = round(sigma,3), data = data.frame(NCI = 180, y = 0.005)) +
+  xlab("NCI")
+g2 <- ggplot(t, aes(X, Y, col = NCI)) +
+  geom_point() +
+  viridis::scale_color_viridis(direction = -1) +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank())
+cowplot::plot_grid(g1, g2)
+```
+
+```{r spcornci, fig.cap="Spatial autocorrelation of NCI."}
+nci.cor <- pgirmess::correlog(t[c("X", "Y")], t$NCI, method = "Moran", nbclass = 100)
+t <- as.data.frame(nci.cor) %>% 
+  filter(dist.class < 20) %>% 
+  mutate(coef = round(1000*coef)) %>% 
+  group_by(dist.class) %>% 
+  expand(coef = 1:coef)
+lambdacor <- MASS::fitdistr(t$dist.class, "exponential")$estimate
+nci.cor %>% 
+  as.data.frame() %>% 
+  filter(dist.class < 200) %>% 
+  ggplot(aes(x = dist.class, y = coef)) + 
+  geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
+  scale_alpha_manual("p < 0.01", values = c(0.3, 1)) +
+  geom_vline(xintercept = 9, col = "black", linetype = "dashed") +
+  xlab("Distance (m)") + ylab("Moran\'s I") +
+  scale_color_discrete(expression(delta[NCI])) +
+  stat_function(fun = function(x) exp(-lambdacor*x), col = "black") +
+  geom_text(label = "Exponential", col = "black",
+            data = data.frame(dist.class = 50, coef = 0.5, type = "positive")) +
+  geom_text(label = expression(lambda),  col = "black",
+            data = data.frame(dist.class = 50, coef = 0.4, type = "positive")) +
+  geom_text(label = round(lambdacor,3),  col = "black",
+            data = data.frame(dist.class = 50, coef = 0.3, type = "positive"))
+```
+
 ### $\delta NCI$
 
-I then computed the NCI variation as follow:
+We computed the NCI variation as follow:
 
 \begin{equation} 
   \delta NCI_{i,t} = \frac{NCI_{i,t} - NCI_{i,t-1}}{t - (t-1)}
@@ -207,16 +183,25 @@ I then computed the NCI variation as follow:
 
 with $NCI_{i,t}$ and $NCI_{i,t-1}$ the neighbour crowding index in censuses $t$ and $t-1$,
 *beware* $t - (t-1)$ can be longer than one year for censuses seperated by more than one year.
-I tested to model the distribution of $NCI$ and $\delta NCI$ as a mixture of two normals distribution using `mixtools`:
-(i) intermediate and stable $NCI$ or $\delta NCI$ in the forest,
-and (ii) low $NCI$ or $\delta NCI$ in or close to forest gaps.
-$NCI$ did not give a good results and seems more related to a unique distribution;
-whereas $detla NCI$ can be simulated as two normal distributions (Fig.\@ref(fig:mixture)):
-(i) a narrow and positive normal corresponding to intermediate and stable patch of the forest,
-and (ii) a  wide and negative normal corresponding to trees in or close to forest gaps.
-I thus defined a threshold of $\delta NCI=-1.406$ to identify gaps corresponding to the 0.001 quantile of the narrow distribution (more than 99.9% of the dsitribution is not considered as gaps.)
+$\delta NCI$ had a normal distribution but inflated in zero (Fig. \@ref(fig:deltaNCIdistribution)).
+We decided to split the distribution in two with a defined probability $p$ (Fig. \@ref(fig:deltaNCIdistribution)):
+(i) $\delta NCI>0$ representing trees in growing patches following a lognormal distribution of parameters $\mu$ and $\sigma$,
+(ii) $\delta NCI \leq 0$ representing trees in or near treefalls following an exponential distribution of parameter $\lambda$,
+with spatially aggregated clusters on 10 meters or $d_{\delta NCI} = 3$ cells (Fig. \@ref(fig:spcor)).
+We thus defined NCI distribution for as:
 
-```{r mixture, message=FALSE, warning=FALSE, fig.cap="Test of normal distribution mixture for NCI and deltaNCI."}
+\begin{equation} 
+\delta NCI \sim \left\{
+    \begin{array}{ll}
+        P(\delta NCI > 0) \sim \mathcal B(p_{\delta NCI} = 1 - 0.271) \\
+        \mathcal {logN} (\mu_{\delta NCI > 0} = 0.749, \sigma_{\delta NCI > 0} = 2.651) & \mbox{if } \delta NCI > 0 \\
+        \mathcal {Exp} (\lambda_{\delta NCI \leq 0} = 123) & \mbox{ifelse} \\
+        d_{\delta NCI}=3 & \mbox{Spatial aggregation}
+    \end{array}
+\right.
+\end{equation} 
+
+```{r deltaNCIdistribution, fig.cap="Delta NCI distribution."}
 nci <- read_tsv("modelling_save/nci.tsv") %>% 
   group_by(idTree) %>% 
   arrange(CensusYear) %>% 
@@ -224,269 +209,406 @@ nci <- read_tsv("modelling_save/nci.tsv") %>%
          NCIlag = lag(NCI)) %>% 
   ungroup() %>% 
   na.omit()
-ncimix <- mixtools::normalmixEM(nci$NCI, k = 2, maxit = 100, verb = F)
-deltancimix <- mixtools::normalmixEM(nci$deltaNCI, k = 2, verb = F)
-gnci <- ggplot(nci, aes(x = NCI)) +
+nci.pos <- filter(nci, deltaNCI > 0)
+nci.neg <- filter(nci, deltaNCI <= 0)
+p <- nrow(nci.neg)/nrow(nci)
+mu <- MASS::fitdistr(nci$deltaNCI, "normal")$estimate[1]
+sigma <- MASS::fitdistr(nci$deltaNCI, "normal")$estimate[2]
+mulog <- MASS::fitdistr(nci.pos$deltaNCI, "lognormal")$estimate[1]
+sigmalog <- MASS::fitdistr(nci.pos$deltaNCI, "lognormal")$estimate[2]
+lambda <- MASS::fitdistr(-filter(nci, deltaNCI <= 0)$deltaNCI, "exponential")$estimate
+g.deltaNCI <- ggplot(nci, aes(x = deltaNCI)) +
   geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
-  stat_function(fun = dnorm, args = list(mean = ncimix$mu[1], sd = ncimix$sigma[1]), col = "red") +
-  stat_function(fun = dnorm, args = list(mean = ncimix$mu[2], sd = ncimix$sigma[2]), col = "black") +
-  xlab(expression(NCI))
-gdeltanci <- ggplot(nci, aes(x = deltaNCI)) +
-  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
-  stat_function(fun = dnorm, args = list(mean =  deltancimix$mu[1], sd =  deltancimix$sigma[1]), col = "red") +
-  stat_function(fun = dnorm, args = list(mean =  deltancimix$mu[2], sd =  deltancimix$sigma[2]), col = "black") +
-  geom_vline(xintercept = qnorm(0.01, mean = deltancimix$mu[2], sd = deltancimix$sigma[2]), linetype = "dashed") +
-  geom_text(aes(label = q0.01, y = y),
-            data.frame(deltaNCI = -2, y = 0.4, 
-                       q0.01 = round(qnorm(0.001, mean = deltancimix$mu[2], sd = deltancimix$sigma[2]), 3))) +
-  xlim(-10, 10) +
+  stat_function(fun = dnorm , args = list(mean = mu, sd = sigma)) +
+  geom_vline(xintercept = mu, linetype = "dashed") +
+  geom_text(aes(y = y), label = "Normal", data = data.frame(deltaNCI = 30, y = 0.25)) +
+  geom_text(aes(y = y), label = expression(mu), data = data.frame(deltaNCI = 30, y = 0.2)) +
+  geom_text(aes(y = y), label = round(mu,3), data = data.frame(deltaNCI = 30, y = 0.15)) +
+    geom_text(aes(y = y), label = expression(sigma), data = data.frame(deltaNCI = 30, y = 0.10)) +
+  geom_text(aes(y = y), label = round(sigma,3), data = data.frame(deltaNCI = 30, y = 0.05)) +
   xlab(expression(delta[NCI]))
-cowplot::plot_grid(gnci, gdeltanci, nrow = 2)
+g.deltaNCI.hist <- ggplot(nci, aes(x = deltaNCI > 0, fill = deltaNCI > 0)) +
+  geom_bar() +
+  scale_fill_manual(expression(delta[NCI] > 0), values = c("firebrick", "grey")) +
+  theme(axis.line.x = element_blank(), axis.text.x = element_blank(),
+        axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  geom_text(data = data.frame(deltaNCI = -1), aes(y = 2.5*10^5), label = expression(p)) +
+  geom_text(data = data.frame(deltaNCI = -1), aes(y = 2*10^5), label = round(p,3))
+g.deltaNCI.positive <- ggplot(nci.pos, aes(x = deltaNCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
+  stat_function(fun = dlnorm , args = list(meanlog = mulog, sdlog = sigmalog)) +
+  geom_vline(xintercept = exp(mu), linetype = "dashed") +
+  geom_text(aes(y = y), label = "Logormal", data = data.frame(deltaNCI = 20, y = 0.5)) +
+  geom_text(aes(y = y), label = expression(mu), data = data.frame(deltaNCI = 20, y = 0.4)) +
+  geom_text(aes(y = y), label = round(exp(mulog),3), data = data.frame(deltaNCI = 20, y = 0.3)) +
+    geom_text(aes(y = y), label = expression(sigma), data = data.frame(deltaNCI = 20, y = 0.2)) +
+  geom_text(aes(y = y), label = round(exp(sigmalog),3), data = data.frame(deltaNCI = 20, y = 0.1)) +
+  xlab(expression(delta[NCI]>0))
+g.deltaNCI.negative <- ggplot(nci.neg, aes(x = -deltaNCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
+  stat_function(fun = dexp , args = list(rate = lambda)) +
+  geom_vline(xintercept = lambda, linetype = "dashed") +
+  geom_text(aes(y = y), label = "Exponential", data = data.frame(deltaNCI = -50, y = 0.25)) +
+  geom_text(aes(y = y), label = expression(lambda), data = data.frame(deltaNCI = -50, y = 0.2)) +
+  geom_text(aes(y = y), label = round(lambda,3), data = data.frame(deltaNCI = -50, y = 0.15)) +
+  xlab(expression(-delta[NCI] <= 0))
+cowplot::plot_grid(g.deltaNCI, g.deltaNCI.hist, g.deltaNCI.negative, g.deltaNCI.positive)
 ```
 
-```{r deltancip12015low, fig.cap="deltaNCI below the threshold.", fig.height=8, fig.width=8}
-nci %>% 
-  # mutate(gaps = as.factor(as.numeric(deltaNCI < -1.406))) %>% 
-    mutate(gaps = as.factor(as.numeric(deltaNCI < -35))) %>% 
-  filter(Plot %in% 1:11) %>% 
-  filter(CensusYear %in% 2013:2015) %>% 
-  ggplot(aes(Xfield, Yfield, col = deltaNCI, 
-             group = idTree, alpha = gaps)) +
+```{r spcor, fig.cap="Spatial autocorrelation of deltaNCI."}
+# nci.pos.2015 <- filter(nci.pos, CensusYear == 2015) %>% 
+#   filter(Plot == 1)
+# nci.pos.2015.cor <- pgirmess::correlog(nci.pos.2015[c("Xfield", "Yfield")], nci.pos.2015$deltaNCI, method = "Moran", nbclass = 100)
+# nci.neg.2015 <- filter(nci.neg, CensusYear == 2015) %>% 
+#   filter(Plot == 1)
+# nci.neg.2015.cor <- pgirmess::correlog(nci.neg.2015[c("Xfield", "Yfield")], nci.neg.2015$deltaNCI, method = "Moran", nbclass = 100)
+# nci.cor <- bind_rows(mutate(as.data.frame(nci.pos.2015.cor), type = "positive"),
+#                      mutate(as.data.frame(nci.neg.2015.cor), type = "negative"))
+# write_tsv(nci.cor, "modelling_save/spcor.tsv")
+t <- read_tsv("modelling_save/spcor.tsv") %>% 
+  filter(dist.class < 20) %>% 
+  mutate(coef = round(1000*coef)) %>% 
+  group_by(dist.class) %>% 
+  expand(coef = 1:coef)
+lambdacor <- MASS::fitdistr(t$dist.class, "exponential")$estimate
+read_tsv("modelling_save/spcor.tsv") %>% 
+  as.data.frame() %>% 
+  filter(dist.class < 200) %>% 
+  ggplot(aes(x = dist.class, y = coef, col = type)) + 
+  geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
+  scale_alpha_manual("p < 0.01", values = c(0.3, 1)) +
+  geom_vline(xintercept = 9, col = "black", linetype = "dashed") +
+  xlab("Distance (m)") + ylab("Moran\'s I") +
+  scale_color_discrete(expression(delta[NCI])) +
+  stat_function(fun = function(x) exp(-lambdacor*x), col = "black") +
+  geom_text(label = "Exponential", col = "black",
+            data = data.frame(dist.class = 50, coef = 0.5, type = "positive")) +
+  geom_text(label = expression(lambda),  col = "black",
+            data = data.frame(dist.class = 50, coef = 0.4, type = "positive")) +
+  geom_text(label = round(lambdacor,3),  col = "black",
+            data = data.frame(dist.class = 50, coef = 0.3, type = "positive"))
+```
+
+```{r p1spdNCIdist, fig.cap="Plot1 deltaNCI distribution in space and absolute."}
+t <-  filter(nci, Plot == 1, CensusYear == 2014) %>% 
+  rename(X = Xfield, Y = Yfield)
+g1 <- ggplot(t, aes(x = deltaNCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100) +
+  xlab(expression(delta[NCI]))
+g2 <- ggplot(t, aes(X, Y, col = deltaNCI)) +
   geom_point() +
-  facet_grid(CensusYear ~ Plot, labeller = "label_both") +
   viridis::scale_color_viridis(expression(delta[NCI]), direction = -1) +
-  scale_alpha_discrete(guide = "none") +
   theme(axis.text = element_blank(), axis.title = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank())
+cowplot::plot_grid(g1, g2)
 ```
 
-```{r deltancip1, eval=F}
-g <- read_tsv("modelling_save/nci.tsv") %>% 
-  mutate(CensusYear = as.integer(CensusYear)) %>% 
-  filter(Plot %in% c(1)) %>% 
+### Generator
+
+Using the two equations:
+
+\begin{equation} 
+ NCI \sim \left\{
+    \begin{array}{ll}
+        \mathcal N(\mu_{NCI} = 123, \sigma_{NCI} = 26) \\
+        d_{NCI}=3 & \mbox{Spatial aggregation}
+    \end{array}
+\right.
+\end{equation} 
+
+\begin{equation} 
+\delta NCI \sim \left\{
+    \begin{array}{ll}
+        P(\delta NCI > 0) \sim \mathcal B(p_{\delta NCI} = 1 - 0.271) \\
+        \mathcal {logN} (\mu_{\delta NCI > 0} = 0.749, \sigma_{\delta NCI > 0} = 2.651) & \mbox{if } \delta NCI > 0 \\
+        \mathcal {Exp} (\lambda_{\delta NCI \leq 0} = 123) & \mbox{ifelse} \\
+        d_{\delta NCI}=3 & \mbox{Spatial aggregation}
+    \end{array}
+\right.
+\end{equation} 
+
+We simulated back $NCI$ and $\delta NCI$ dynamics,
+using random generators based on probabilistic laws,
+and disaggregating a grid to the desired size of spatial aggregation ($d=3$). 
+**Beware, spatial generator is currently using the `raster` package**
+**and will need to be reimplemented differently if used in C++ code**.
+Using inferred parameters $p_{\delta NCI}$, $\mu_{\delta NCI > 0}$, $\sigma_{\delta NCI > 0}$, and $\lambda_{\delta NCI \leq 0}$,
+we succesfully simulated back $\delta NCI$ spatial distribution (Fig. \@ref(fig:simspdNCIdist)).
+Using inferred parameters $\mu_{NCI}$, and $\sigma_{NCI}$,
+we succesfully simulated back $NCI$ spatial distribution (Fig. \@ref(fig:simspNCIdist)).
+We then initialized $NCI$ with $NCI$ generator and simulated its dynamics variation over 33 years using $\delta NCI$ generator.
+We obtain satisfying variation over time and space (Fig. \@ref(fig:simulatedNCI) and Fig. \@ref(fig:simncigif)),
+with the appearance of a *true* treefall in the southwest of the simulated plot around 1998.
+We are thus able to simulated $NCI$ spatio-temporal dynamics based on 7 parameters (I'm merging the two $d$ into one):
+
+\begin{equation} 
+NCI_{(x,y),t} = f 
+  \begin{pmatrix}
+    \mu_{NCI} \\ 
+    \sigma_{NCI} \\ 
+    p_{\delta NCI} \\ 
+    \mu_{\delta NCI > 0} \\ 
+    \sigma_{\delta NCI > 0} \\ 
+    \lambda_{\delta NCI \leq 0} \\ 
+    d
+  \end{pmatrix}
+\end{equation} 
+
+We needed then to related background and treefall mortality to $NCI$ spatio-temporal dynamics, 
+and the forest gap dynamics generator was ready. 
+
+```{r rdeltanci, echo=T}
+rdeltanci <- function(
+  n = 1, # number of samples
+  p = 0.271, # probability to be positive
+  mu = 0.749, # mu of lognormal distributon for positive deltanci
+  sigma = 2.651, # sigma of lognormal distributon for positive deltanci
+  lambda = 0.31 # lamnda of exponential distributon for negative deltanci
+){
+  samples <- rep(0, n)
+  P <- rbinom(n, 1, 1 - p) == 1
+  samples[P] <- rlnorm(sum(P), meanlog = log(mu), sdlog = log(sigma))
+  samples[!P] <- -rexp(sum(!P), rate = lambda)
+  return(samples)
+}
+```
+
+```{r rspdeltanci, echo=T}
+rspcor <- function(
+  grid = 50, # grid size
+  generator = "rdeltanci", # can be rnorm for nci
+  args = list(p = 0.271, mu = 0.749, sigma = 2.651, lambda = 0.31), # arguments for the random generator
+  dcor = 3 # spatial autocorrelation size (3*3m)
+){
+  grid2 <- ceiling(grid/dcor)
+  args$n <- grid2^2
+  M2 <- matrix(do.call(generator, args), 
+              ncol = grid2, nrow = grid2)
+  raster::as.matrix(raster::disaggregate(raster::raster(M2), dcor, method="bilinear"))[1:grid, 1:grid] %>% 
+    reshape2::melt() %>% 
+    rename(X = Var1, Y = Var2)
+} 
+```
+
+```{r simspdNCIdist, fig.cap="Simulated deltaNCI distribution in space and absolute."}
+simnci <- data.frame(deltaNCI = rdeltanci(nrow(nci)*10))
+g1 <- ggplot(simnci, aes(x = deltaNCI)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
+  stat_function(fun = dnorm , args = list(mean = mean(simnci$deltaNCI), 
+                                          sd = sd(simnci$deltaNCI))) +
+  geom_vline(xintercept = mean(simnci$deltaNCI), linetype = "dashed") +
+  geom_text(aes(y = y), label = "Normal", data = data.frame(deltaNCI = 30, y = 0.25)) +
+  geom_text(aes(y = y), label = expression(mu), data = data.frame(deltaNCI = 30, y = 0.2)) +
+  geom_text(aes(y = y), label = round(mean(simnci$deltaNCI),3), data = data.frame(deltaNCI = 30, y = 0.15)) +
+    geom_text(aes(y = y), label = expression(sigma), data = data.frame(deltaNCI = 30, y = 0.10)) +
+  geom_text(aes(y = y), label = round(sd(simnci$deltaNCI),3), data = data.frame(deltaNCI = 30, y = 0.05)) +
+  xlab(expression(delta[NCI])) 
+t <- rspcor(grid = 50)
+g2 <- ggplot(t, aes(X, Y, fill = value)) +
+  geom_tile() +
+  viridis::scale_fill_viridis(expression(delta[NCI]), direction = -1) +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank())
+cowplot::plot_grid(g1, g2)  
+```
+
+```{r simspNCIdist, fig.cap="Simulated NCI distribution in space and absolute."}
+t <- rspcor(grid = 50, generator = "rnorm", args = c(mean = 122.73, sd = 25.806), dcor = 4)
+g1 <- ggplot(t, aes(x = value)) +
+  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100) +
+  xlab(expression(NCI))
+g2 <- ggplot(t, aes(X, Y, fill = value)) +
+  geom_tile() +
+  viridis::scale_fill_viridis(expression(NCI), direction = -1) +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank())
+cowplot::plot_grid(g1, g2)  
+```
+
+```{r simncitsv, eval=F}
+t <- rspcor(grid = 50, generator = "rnorm", args = c(mean = 122.73, sd = 25.806), dcor = 4) %>% 
+  mutate(CensusYear = 1984) %>% 
+  mutate(deltaNCI = NA) %>% 
+  rename(NCI = value)
+for(y in 1985:2017){
+  ty <- filter(t, CensusYear == (y - 1)) %>% 
+    dplyr::select(-CensusYear, -deltaNCI) %>% 
+    left_join(rspcor(grid = 50) %>% 
+                mutate(CensusYear = y) %>% 
+                rename(deltaNCI = value), 
+              by = c("X", "Y")) %>% 
+    mutate(NCI = NCI + deltaNCI)
+  t <- bind_rows(t, ty) 
+}
+write_tsv(t, path = "modelling_save/simnci.tsv")
+```
+
+```{r simulatedNCI, fig.cap="Simulated NCI over census years."}
+read_tsv("modelling_save/simnci.tsv", col_types = cols(deltaNCI = col_double())) %>% 
+  mutate(idTree = paste0(X,"-",Y)) %>% 
+  group_by(CensusYear) %>% 
+  mutate(NCImean = mean(NCI)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = CensusYear)) +
+  geom_line(aes(y = NCI, group = idTree), alpha = 0.1) +
+  geom_line(aes(y = NCImean), col = "red", size = 2) +
+  xlab("Census year") +
+  ylab("Simulated Neighbour crowding index in time.") 
+```
+
+```{r simnci, eval=F}
+g <- read_tsv("modelling_save/simnci.tsv", col_types = cols(deltaNCI = col_double())) %>% 
+  mutate( CensusYear = as.integer(CensusYear)) %>% 
+  ggplot(aes(X, Y, fill = log(NCI))) +
+  geom_tile() +
+  viridis::scale_fill_viridis(direction = -1) +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) +
+  transition_time(CensusYear) +
+  labs(title = 'Year: {frame_time}')
+anim_save("modelling_save/simnci.gif", g)
+```
+
+```{r simncigif, fig.cap="Simulated NCI."}
+include_graphics("modelling_save/simnci.gif")
+```
+
+## Mortality
+
+We divided mortality in background mortality, primary treefall, and secondary treefall (Fig. \@ref(fig:plot1mortalitygif)).
+We related mortality to tree $DBH$ and $NCI$ and $\delta NCI$ from the previous census (Fig. \@ref(fig:mortality)).
+We fitted a model using the following equation:
+
+\begin{equation} 
+ P(Mortality_{year}) \sim \mathcal B(logit(\theta_{0,year}+\theta_{DBH}\times DBH+\theta_{NCI}\times NCI+\theta_{\delta NCI}\times \delta  NCI)) \\
+ \theta_{0,year} \sim \mathcal N(\theta_0, \sigma_{year})
+\end{equation} 
+
+We found only effects of $deltaNCI$ (Fig. \@ref(fig:fitmortality)),
+and thus obtained the following unscaled relation to simulate mortality (Tab. \@ref(tab:fitmortality2)):
+
+\begin{equation} 
+ P(Mortality|\begin{pmatrix} \theta_0 = -4.31\\ \theta_{\delta NCI} = -0.03\end{pmatrix}) \sim \mathcal B(logit(\theta_0 + \theta_{\delta NCI}  \times \delta  NCI))
+\end{equation} 
+
+```{r plot1mortality, eval=F}
+g <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(Plot == 1) %>%
+  collect() %>% 
+  mutate_at(c("CodeAlive", "CodeMeas"), as.factor) %>% 
+  mutate(gaps = as.factor(as.numeric(CodeMeas %in% 6:7 & CodeAlive == 0))) %>% 
+  mutate(background = as.factor(as.numeric(CodeMeas == 0 & CodeAlive == 0))) %>% 
+  mutate(death = "alive") %>% 
+  mutate(death = ifelse(gaps == 1, "gaps", death)) %>% 
+  mutate(death = ifelse(background == 1, "background", death)) %>% 
+  ggplot(aes(Xfield, Yfield, col = death, alpha = death, group = idTree)) +
+  geom_point() +
+  scale_color_manual("Mortality", values = c("lightgrey", "red", "blue")) +
+  scale_alpha_discrete("Mortality") +
+  facet_wrap(~ Plot, labeller = "label_both") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) +
+  transition_time(CensusYear) +
+  labs(title = 'Year: {frame_time}')
+anim_save("modelling_save/plot1treefalls.gif", g)
+```
+```{r plot1mortalitygif, fig.cap="Mortality in the Plot 1 of Paracou. In blue death on foot with code measure 0 and in red death by treefalls with code measure 6 and 7."}
+include_graphics("modelling_save/plot1treefalls.gif")
+```
+
+```{r mortality, fig.cap="Background and treefall mortality per plots and census years in Paracou."}
+nci <- read_tsv("modelling_save/nci.tsv") %>% 
+  left_join(src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  dplyr::select(CensusYear) %>% 
+  collect() %>% 
+  unique() %>% 
+  arrange(CensusYear) %>% 
+  mutate(NextCensusYear = lead(CensusYear))) %>%  # current computed is the NCI before the death of individual in the enxt census
+  dplyr::select(idTree, NextCensusYear, NCI) %>% 
+  na.omit() %>% 
+  rename(CensusYear = NextCensusYear) %>% 
   group_by(idTree) %>% 
   arrange(CensusYear) %>% 
   mutate(deltaNCI = (NCI - lag(NCI))/(CensusYear - lag(CensusYear)),
          NCIlag = lag(NCI)) %>% 
   ungroup() %>% 
+  na.omit()
+data <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                     "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(Plot %in% c(1, 6, 11, 13:15)) %>% 
+  filter(CodeAlive == 1 | (CodeAlive == 0 & CodeMeas %in% c(0,6:7))) %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  collect() %>% 
+  left_join(nci) %>% 
   na.omit() %>% 
-   # mutate(gaps = as.factor(as.numeric(deltaNCI < -1.406))) %>% 
-     mutate(gaps = as.factor(as.numeric(deltaNCI < -35))) %>% 
-  ggplot(aes(Xfield, Yfield, col = deltaNCI, 
-             group = idTree, alpha = gaps)) +
-  geom_point() +
-  facet_wrap(~ Plot, labeller = "label_both") +
-  viridis::scale_color_viridis(expression(delta[NCI]), direction = -1) +
-  scale_alpha_discrete(guide = "none") +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank()) +
-   transition_time(CensusYear) +
-  labs(title = 'Year: {frame_time}')
-anim_save("modelling_save/deltanci.gif", g)
+  mutate(Code = paste0(CodeAlive, CodeMeas)) %>%
+  mutate(Status = recode(Code,
+                            "00" = "background",
+                            "06" = "primary treefall",
+                            "07" = "secondry treefall",
+                            "10" = "alive",
+                            "11" = "alive",
+                            "12" = "alive",
+                            "13" = "alive",
+                            "14" = "alive",
+                            "17" = "alive")) %>% 
+  mutate(CensusYearInteger = as.integer(as.factor(CensusYear))) %>% 
+  mutate(death = as.integer(Status != "alive"))
+data %>% 
+  dplyr::select(Status, CensusYear, DBH, NCI, deltaNCI) %>% 
+  reshape2::melt(id.vars = "Status") %>% 
+  group_by(variable) %>% 
+  mutate(valueclass = cut(value, breaks = quantile(value, probs = seq(0, 1, 0.2)), 
+                          include.lowest = T)) %>% 
+  group_by(Status, variable, valueclass) %>% 
+  summarise(N = n()) %>% 
+  reshape2::dcast(variable + valueclass ~ Status) %>% 
+  reshape2::melt(id.vars = c("variable", "valueclass", "alive"), 
+                 variable.name = "type", value.name = "N") %>% 
+  mutate(mortality = N/alive) %>% 
+  ggplot(aes(valueclass, mortality, fill = type)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  facet_wrap(~ variable, scales = "free") +
+  theme(legend.position = "bottom", axis.title = element_blank())
 ```
 
-```{r deltancip1gif, fig.cap="Negative variation of NCI in the Plot 1 of Paracou for values below threshold."}
-include_graphics("modelling_save/deltanci.gif")
+```{r fitmortality, fig.cap="Results of the model with centered data for 10^4 observations."}
+# mdata <- sample_n(data, 10^4)
+# model <- stan_model(file = "modelling_stan/mortality.stan")
+# fit <- sampling(model, data = list(N = nrow(mdata),
+#                                    Y = max(mdata$CensusYearInteger),
+#                                    death = mdata$death,
+#                                    year = mdata$CensusYearInteger,
+#                                    DBH = as.vector(scale(mdata$DBH)),
+#                                    NCI = as.vector(scale(mdata$NCI)),
+#                                    deltaNCI = as.vector(scale(mdata$deltaNCI))),
+#                 include = F, pars = c("theta0y"))
+# mcmc_trace(fit, np = nuts_params(fit))
+# mcmc_pairs(fit, np = nuts_params(fit))
+# save(mdata, fit, file = "modelling_save/fitmortality0.stan")
+load("modelling_save/fitmortality0.stan")
+mcmc_dens(fit, regex_pars = "theta")
 ```
 
-### Clustering
-
-I then used `dbscan` for nearest-neighbour clustering in every plot and census year.
-I needed to chose a distance threshold to define cluster.
-Looking at point sorted by distance (Fig. \@ref(fig:kNNdist)), 
-it seems that we had a good "knee" in the distribution after 10 meters.
-I thus clustered defined gaps using the threshold of a maximum nearest neighbour of 10 meters,
-the result seems okay (Fig. \@ref(fig:gaps)).
-But the methods resulted in numerous gaps across time in Plot 1 (Fig. \@ref(fig:gapsp1gif)).
-
-```{r kNNdist, fig.cap="k-Nearest Neighbor Distance plot."}
-nci %>% 
-  # filter(deltaNCI < -1.406) %>% 
-  filter(deltaNCI < -35) %>% 
-  group_by(Plot, CensusYear) %>% 
-  do(d = data.frame(d = dbscan::kNNdist(.[c("Xfield", "Yfield")], k = 3)) %>% 
-       arrange(d) %>% 
-       mutate(point = 1:n())) %>% 
-  unnest(d) %>% 
-  ggplot(aes(point, d, col = CensusYear,
-             group = as.factor(CensusYear))) + 
-  geom_line() +
-  geom_hline(yintercept = 10, linetype = "dashed") +
-  xlab("Points sorted by distance") +
-  ylab("3-NN distance") +
-  facet_wrap(~ Plot, labeller = "label_both") +
-  viridis::scale_color_viridis()
-```
-
-```{r gapsdata, eval=F}
-nci %>% 
-  # filter(deltaNCI < -1.406) %>% 
-    filter(deltaNCI < -35) %>% 
-  group_by(Plot, CensusYear) %>% 
-  do(gaps = data.frame(idTree = .$idTree, gap = 1,
-                       group = dbscan::dbscan(.[c("Xfield", "Yfield")], eps = 10, minPts = 3)$cluster)) %>% 
-  unnest(gaps) %>% 
-  ungroup() %>% 
-  write_tsv(path = "modelling_save/gaps.tsv")
-```
-
-```{r gaps, fig.height=8, fig.width=8, fig.cap="Identified gaps with clustering."}
-nci %>% 
-  left_join(read_tsv("modelling_save/gaps.tsv")) %>% 
-  filter(Plot %in% 1:11) %>% 
-  filter(CensusYear %in% 2013:2015) %>% 
-  ggplot(aes(Xfield, Yfield, col = as.factor(group), 
-             group = idTree)) +
-  geom_point() +
-  facet_grid(CensusYear ~ Plot, labeller = "label_both") +
-  viridis::scale_color_viridis("Gap", direction = -1, discrete = T) +
-  scale_alpha_discrete(guide = "none") +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank(), panel.border = element_rect(color="black", fill=NA))
-```
-
-```{r gapsp1, eval=F}
-g <- read_tsv("modelling_save/nci.tsv") %>% 
-  left_join(read_tsv("modelling_save/gaps.tsv")) %>% 
-  filter(Plot == 1) %>% 
-  na.omit() %>% 
-  mutate(CensusYear = as.integer(CensusYear)) %>% 
-  ggplot(aes(Xfield, Yfield, col = as.factor(group), 
-             group = idTree)) +
-  geom_point() +
-  facet_wrap(~ Plot, labeller = "label_both") +
-  viridis::scale_color_viridis("Gap", direction = -1, discrete = T) +
-  scale_alpha_discrete(guide = "none") +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank()) +
-   transition_time(CensusYear) +
-  labs(title = 'Year: {frame_time}')
-anim_save("modelling_save/gaps.gif", g)
-```
-
-```{r gapsp1gif, fig.cap="Gaps in the Plot 1 of Paracou for values below threshold."}
-include_graphics("modelling_save/gaps.gif")
-```
-
-## Canopy height model 
-
-**I kept this paragraph as a reminder but I decided to not use canopy hieght model in the end.**
-
-Another way to identify forest gaps is to use canopy height models (CHM) from Lidar campaign.
-I used the R pacakge [`ForestGapR`](https://github.com/carlos-alberto-silva/ForestGapR) [@Silva2019] with CHM from 2004, 2009, and 2013 to detect forest gaps in Paracou undisturbed plots (P1, P6, P11, P13, P14, and P15). 
-I defined gaps with a height below 10$m$ and a gaps size between 10$m^2$ and 1$ha$ (following @Hunter2015, Fig. \@ref(fig:CHM2014)).
-I linked canopy height and inclusion in gaps for censused trees of corresponding censuses,
-using 2003 census to correspond to 2004 Lidar campaign (no tree census in 2004).
-A significant relation (LM, $p < 0.001$) exist between NCI and canopy height in every plot and lidar campaigns but with low variation explained ($R^2=4\%$, Fig. \@ref(fig:canpynci)).
-Moreover, NCI showed a significant difference of groups (KW, $p<0.001$) between forest gaps and closed canopy (Fig. \@ref(fig:gapsnci)A),
-but a non-negligible overlap exists.
-I arbitrarily defined the NCI threshold to 100 (intersection between the two densities, Fig. \@ref(fig:gapsnci)B), 
-but this would result in numerous gaps misenditifications. 
-**Consequently, the question: "how do we define spatially, temporally, and in term of NCI variation the treefall gaps" stays.**
-
-```{r chmdata, eval=F}
-library(raster)
-library(viridis)
-library(ForestGapR)
-
-# parameters
-crs <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
-path <- "../../data/Paracou"
-
-# Paracou
-paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
-  tbl("Paracou") %>% 
-  filter(CodeAlive == 1) %>% 
-  filter(CensusYear %in% c(2003, 2009, 2013)) %>%
-  collect()
-coordinates(paracou) <- ~Xutm + Yutm
-proj4string(paracou) <- crs
-
-# CHM
-dem <- raster(file.path(path, "topography", "DEM_1m_2015.tif"))
-canopy2004 <- raster(file.path(path, "biotic", "Paracou2004_MNC1m.asc"))
-crs(canopy2004) <- crs(dem)
-canopy2004 <- projectRaster(canopy2004, crs = crs)
-canopy2004<- crop(canopy2004, paracou)
-canopy2009 <- raster(file.path(path, "biotic", "MNC_ParacouAvril2009_1m.tif"))
-crs(canopy2009) <- crs(dem)
-canopy2009 <- projectRaster(canopy2009, crs = crs)
-canopy2009 <- crop(canopy2009, canopy2004) # canopy2004 smaller than the others !
-canopy2013 <- raster(file.path(path, "biotic", "ParacouMNS1m2013.asc"))
-dem2013 <- raster(file.path(path, "biotic", "ParacouMNT1m2013.asc"))  
-canopy2013 <- canopy2013 - dem2013
-crs(canopy2013) <- crs(dem)
-canopy2013 <- projectRaster(canopy2013, crs = crs)
-canopy2013 <- crop(canopy2013, canopy2004) # canopy2004 smaller than the others !
-canopy <- stack(canopy2004, canopy2009, canopy2013)
-names(canopy) <- c("CHM 2004", "CHM 2009", "CHM 2013")
-plot(canopy, col = viridis(10))
-
-# Detecting forest gaps
-gaps <- lapply(as.list(canopy), getForestGaps, 10, c(10,1000))
-names(gaps) <- c("gaps.2004", "gaps.2009", "gaps.2013")
-plot(canopy$CHM.2004, main = "Forest Canopy Gap - 2004 - Plot 1", col = viridis(10))
-plot(gaps$gaps.2004, add = T, col = "red", legend = F)
-
-# extracting informations
-canopy.df <- as.data.frame(raster::extract(canopy, paracou)) %>% 
-  mutate(idTree = paracou@data$idTree, CensusYear = paracou@data$CensusYear) %>% 
-  reshape2::melt(id.vars = c("idTree", "CensusYear"), variable.name = "LidarYear", value.name = "canopy") %>% 
-  mutate(LidarYear = as.numeric(gsub("CHM.", "", LidarYear))) %>% 
-  mutate(LidarYearAdj = ifelse(LidarYear == 2004, 2003, LidarYear)) %>% 
-  filter(CensusYear == LidarYearAdj) %>% 
-  dplyr::select(-LidarYearAdj)
-gaps.df <- lapply(gaps, function(g)
-  raster::extract(g, paracou)) %>% 
-    bind_cols() %>% 
-    mutate_all(funs(as.numeric(!is.na(.)))) %>% 
-  mutate(idTree = paracou@data$idTree, CensusYear = paracou@data$CensusYear) %>% 
-  reshape2::melt(id.vars = c("idTree", "CensusYear"), variable.name = "LidarYear", value.name = "gap") %>% 
-  mutate(LidarYear = as.numeric(gsub("gaps.", "", LidarYear))) %>% 
-  mutate(LidarYearAdj = ifelse(LidarYear == 2004, 2003, LidarYear)) %>% 
-  filter(CensusYear == LidarYearAdj) %>% 
-  dplyr::select(-LidarYearAdj)
-left_join(canopy.df, gaps.df) %>% 
-  write_tsv(path = "modelling_save/canopy.tsv")
-```
-
-```{r CHM2014, fig.cap="Detection of forest gaps with canopy height model from 2004 Lidar campaign in Paracou. Gaps have been detected using ForestGapR [@Silva2019] with a maximum height of 10 m and area of 10m2."}
-include_graphics("modelling_save/CHM2004.png")
-```
-
-```{r canpynci, fig.cap="Relation between canopy height and neighbour crowding index among undisturbed plots and Lidar campaigns."}
-read_tsv("modelling_save/nci.tsv") %>% 
-  left_join(read_tsv("modelling_save/canopy.tsv")) %>% 
-  filter(!is.na(gap)) %>% 
-  # lm(NCI ~ canopy, data = .) %>% summary()
-  ggplot(aes(canopy, NCI, col = as.factor(gap), group = NA)) + 
-  geom_point() +
-  geom_smooth(method = "lm") +
-  ggpubr::stat_cor() +
-  xlab("Canopy height (m)") +
-  ylab("Neighbour crowding index") +
-  scale_color_manual("Gap", values = c("darkgrey", "firebrick")) +
-  facet_grid(Plot ~ CensusYear + LidarYear, scales = "free", labeller = "label_both") +
-  scale_x_sqrt()
-```
-
-```{r gapsnci, fig.cap="Relation neighbour crowding index and forest gaps among undisturbed plots and years."}
-g1 <- read_tsv("modelling_save/nci.tsv") %>% 
-  left_join(read_tsv("modelling_save/canopy.tsv")) %>% 
-  filter(!is.na(gap)) %>% 
-  ggplot(aes(as.factor(Plot), NCI, fill = as.factor(gap))) + 
-  geom_boxplot() +
-  geom_hline(yintercept = 100, col = "black", linetype = "dashed") +
-  xlab("Plot") + ylab("Neighbour crowding index") +
-  scale_fill_manual("Gap", values = c("darkgrey", "firebrick")) +
-  coord_flip()
-g2 <- read_tsv("modelling_save/nci.tsv") %>% 
-  left_join(read_tsv("modelling_save/canopy.tsv")) %>% 
-  filter(!is.na(gap)) %>% 
-  ggplot(aes(NCI, fill = as.factor(gap))) + 
-  geom_density(alpha = 0.5) +
-  geom_vline(xintercept = 100, col = "black", linetype = "dashed") +
-  xlab("Neighbour crowding index") +
-  scale_fill_manual("Gap", values = c("darkgrey", "firebrick"))
-cowplot::plot_grid(g1, g2, nrow = 2, labels = LETTERS[1:2])
+```{r fitmortality2}
+# model <- stan_model(file = "modelling_stan/mortality2.stan")
+# fit <- sampling(model, data = list(N = nrow(mdata),
+#                                    Y = max(mdata$CensusYearInteger),
+#                                    death = mdata$death,
+#                                    year = mdata$CensusYearInteger,
+#                                    DBH = mdata$DBH,
+#                                    deltaNCI = mdata$deltaNCI),
+#                 include = F, pars = c("theta0y"))
+# mcmc_trace(fit, np = nuts_params(fit))
+# mcmc_pairs(fit, np = nuts_params(fit))
+# save(mdata, fit, file = "modelling_save/fitmortality2.stan")
+load("modelling_save/fitmortality2.stan")
+broom::tidyMCMC(fit, estimate.method = "median", conf.int = T, rhat = T) %>% 
+  kable(caption = "Model parameters for unscaled deltaNCI and 10^4 observations.")
 ```
