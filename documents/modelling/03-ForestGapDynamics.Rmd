@@ -612,3 +612,54 @@ load("modelling_save/fitmortality2.stan")
 broom::tidyMCMC(fit, estimate.method = "median", conf.int = T, rhat = T) %>% 
   kable(caption = "Model parameters for unscaled deltaNCI and 10^4 observations.")
 ```
+
+## Timesteps
+
+We first thought to relate timesteps to forest gap dynamics,
+defining the timestep as the typical time between two treefalls.
+But in the end defining major treefalls is not that simple, 
+and we used a different method to simulated NCI.
+Consequently, we should find another method to define timesteps,
+as our current definition of death rate and deltaNCI is per year.
+The idea is to aoid simulating tree growth and DBH,
+the main idea being that individuals are mature (reproducing) and in the canopy.
+Following @Hardy2006, *Symphonia globulifera* reach maturity at $DBH_{maturity} = 17$,
+that we may increase to $DBH_{maturity} = 20$ as they reported the minimum adult DBH.
+Then using symcapture analysis, 
+we can relate growth to time with annual growth rate parameters
+$Gmax=0.53~cm.yr^{-1}$, $Dopt=25~cm$, and $Ks=0.70$,
+despite we evidenced strong differences among individuals.
+
+```{r dbhintime, fig.cap="Age at maturity since recruitment per species."}
+agr <- function(dbh, gmax = 0.53, dopt = 25, Ks = 0.7)
+  gmax*exp(-0.5*(log(dbh/dopt)/Ks)^2)
+dbhintime <- function(ymax = 100, gmax = 0.53, dopt = 25, Ks = 0.7){
+  censuses <- data.frame(year = 1, dbh = 10) %>% 
+    mutate(agr = agr(dbh, gmax = gmax, dopt = dopt, Ks = Ks))
+  for(t in 2:100){
+    census <- filter(censuses, year == (t - 1)) %>% 
+      mutate(dbh = dbh + agr) %>% 
+      mutate(agr = agr(dbh, gmax = gmax, dopt = dopt, Ks = Ks)) %>% 
+      mutate(year = t)
+    censuses <- bind_rows(censuses, census)
+  }  
+  return(censuses)
+}
+lapply(list("S. sp.2" = 0.537, "S. globulifera" = 0.542, "S. sp.1" = 0.367), 
+       function(g) dbhintime(gmax = g)) %>% 
+  bind_rows(.id = "Species") %>% 
+  # group_by(Species) %>% filter(dbh >= 20) %>%  filter(dbh == first(dbh))
+  ggplot(aes(year, dbh, col = Species)) +
+  geom_line() +
+  geom_hline(yintercept = 20, linetype = "dashed") +
+  geom_vline(aes(xintercept = year, col = Species), linetype = "dashed",
+             data.frame(year = c(28, 28, 41), 
+                        Species = c("S. sp.2", "S. globulifera", "S. sp.1"))) +
+  xlab("Age since recruitment (year)") + ylab("DBH (cm)") +
+  geom_text(aes(label = label), 
+            data = data.frame(year = c(20, 50), dbh = 25, label = c(28, 41), 
+                              Species = c("S. globulifera", "S. sp.1")))
+```
+
+Another solution is to consider a simpler timestep,
+with a new individual recruited in the gaps at each censuses from the sapling pool.
