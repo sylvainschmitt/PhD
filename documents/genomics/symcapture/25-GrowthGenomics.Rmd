@@ -372,12 +372,12 @@ fitGmaxGeno <- sflist2stanfit(fitGmaxGeno)
 fitGmaxGenoSympho <- fitGmaxGeno
 save(fitGmaxGenoSympho, file = "../../thesis/rdata/fitGmaxGenoSympho.Rdata")
 rm(fitGmaxGenoSympho)
-broom::tidyMCMC(fitGmaxGeno, pars = c("thetap1", "theta2", "theta3", "sigma", "lp__"),
-                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
-  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
-  kable(caption = "Individual growth potential model.",
-        col.names = c("Parameter", "Estimate", "Standard error", 
-                      "$\\hat R$", "$N_{eff}$"))
+# broom.mixed::(fitGmaxGeno, pars = c("thetap1", "theta2", "theta3", "sigma", "lp__"),
+#                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+#   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+#   kable(caption = "Individual growth potential model.",
+#         col.names = c("Parameter", "Estimate", "Standard error", 
+#                       "$\\hat R$", "$N_{eff}$"))
 ```
 
 ```{r gmaxgenoParTrace, fig.cap="Traceplot of model parameters."}
@@ -568,7 +568,11 @@ cowplot::plot_grid(g.TWI, g.a.TWI.NCI, g.a.TWI.Gmax,
 # summary(MASS::rlm(aGmax ~ aNCI, data = t, psi = "psi.huber"))
 # summary(robustbase::lmrob(aGmax ~ aNCI, data = t))
 ```
-
+```{r, eval=F}
+ggplot(t, aes(x = Gmax, fill = pop)) + 
+  geom_density(alpha = 0.5)
+  geom_histogram(aes(y = ..density..), position = "dodge", bins = 10)
+```
 
 ```{r }
 t %>% 

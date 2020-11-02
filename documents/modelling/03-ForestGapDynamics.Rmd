@@ -111,7 +111,7 @@ include_graphics("modelling_save/nci.gif")
 
 ```{r ncip1, fig.cap="NCI over census years in Plot 1."}
 read_tsv("modelling_save/nci.tsv") %>% 
-  filter(Plot == 1) %>%
+  filter(Plot == 6) %>%
   group_by(CensusYear) %>% 
   mutate(NCImean = mean(NCI)) %>% 
   ungroup() %>% 
@@ -182,7 +182,7 @@ We computed the NCI variation as follow:
 \end{equation} 
 
 with $NCI_{i,t}$ and $NCI_{i,t-1}$ the neighbour crowding index in censuses $t$ and $t-1$,
-*beware* $t - (t-1)$ can be longer than one year for censuses seperated by more than one year.
+*beware* $t - (t-1)$ can be longer than one year for censuses separated by more than one year.
 $\delta NCI$ had a normal distribution but inflated in zero (Fig. \@ref(fig:deltaNCIdistribution)).
 We decided to split the distribution in two with a defined probability $p$ (Fig. \@ref(fig:deltaNCIdistribution)):
 (i) $\delta NCI>0$ representing trees in growing patches following a lognormal distribution of parameters $\mu$ and $\sigma$,
@@ -193,9 +193,9 @@ We thus defined NCI distribution for as:
 \begin{equation} 
 \delta NCI \sim \left\{
     \begin{array}{ll}
-        P(\delta NCI > 0) \sim \mathcal B(p_{\delta NCI} = 1 - 0.271) \\
+        P(\delta NCI \leq 0) \sim \mathcal B(logit^{-1}(\alpha + \beta.NCI)) |\alpha=-1.32,\beta=0.003 \\
         \mathcal {logN} (\mu_{\delta NCI > 0} = 0.749, \sigma_{\delta NCI > 0} = 2.651) & \mbox{if } \delta NCI > 0 \\
-        \mathcal {Exp} (\lambda_{\delta NCI \leq 0} = 123) & \mbox{ifelse} \\
+        \mathcal - {Exp} (\lambda_{\delta NCI \leq 0} = 0.31) & \mbox{ifelse} \\
         d_{\delta NCI}=3 & \mbox{Spatial aggregation}
     \end{array}
 \right.
@@ -253,6 +253,20 @@ g.deltaNCI.negative <- ggplot(nci.neg, aes(x = -deltaNCI)) +
   geom_text(aes(y = y), label = round(lambda,3), data = data.frame(deltaNCI = -50, y = 0.15)) +
   xlab(expression(-delta[NCI] <= 0))
 cowplot::plot_grid(g.deltaNCI, g.deltaNCI.hist, g.deltaNCI.negative, g.deltaNCI.positive)
+```
+```{r fideltaNCI, fig.cap="Results of the model with uncentered data for 10^4 observations."}
+# mdata <- nci %>% 
+#   mutate(NCIdecrease = as.integer(deltaNCI <= 0)) %>% 
+#   sample_n(10^4)
+# model <- stan_model(file = "modelling_stan/deltaNCI.stan")
+# fit <- sampling(model, data = list(N = nrow(mdata),
+#                                    NCIdecrease = mdata$NCIdecrease,
+#                                    NCI = mdata$NCIlag))
+# mcmc_trace(fit, np = nuts_params(fit))
+# mcmc_pairs(fit, np = nuts_params(fit))
+# save(mdata, fit, file = "modelling_save/fitdeltaNCI.stan")
+load("modelling_save/fitdeltaNCI.stan")
+mcmc_dens(fit, pars = c("alpha", "beta"), facet_args = list())
 ```
 
 ```{r spcor, fig.cap="Spatial autocorrelation of deltaNCI."}
@@ -319,7 +333,7 @@ Using the two equations:
 \begin{equation} 
 \delta NCI \sim \left\{
     \begin{array}{ll}
-        P(\delta NCI > 0) \sim \mathcal B(p_{\delta NCI} = 1 - 0.271) \\
+        P(\delta NCI \leq 0) \sim \mathcal B(logit^{-1}(\alpha + \beta.NCI)) |\alpha=-1.32,\beta=0.003 \\
         \mathcal {logN} (\mu_{\delta NCI > 0} = 0.749, \sigma_{\delta NCI > 0} = 2.651) & \mbox{if } \delta NCI > 0 \\
         \mathcal {Exp} (\lambda_{\delta NCI \leq 0} = 123) & \mbox{ifelse} \\
         d_{\delta NCI}=3 & \mbox{Spatial aggregation}
@@ -332,10 +346,10 @@ using random generators based on probabilistic laws,
 and disaggregating a grid to the desired size of spatial aggregation ($d=3$). 
 **Beware, spatial generator is currently using the `raster` package**
 **and will need to be reimplemented differently if used in C++ code**.
-Using inferred parameters $p_{\delta NCI}$, $\mu_{\delta NCI > 0}$, $\sigma_{\delta NCI > 0}$, and $\lambda_{\delta NCI \leq 0}$,
-we succesfully simulated back $\delta NCI$ spatial distribution (Fig. \@ref(fig:simspdNCIdist)).
+Using inferred parameters $\alpha$, $\beta$, $\mu_{\delta NCI > 0}$, $\sigma_{\delta NCI > 0}$, and $\lambda_{\delta NCI \leq 0}$,
+we successfully simulated back $\delta NCI$ spatial distribution (Fig. \@ref(fig:simspdNCIdist)).
 Using inferred parameters $\mu_{NCI}$, and $\sigma_{NCI}$,
-we succesfully simulated back $NCI$ spatial distribution (Fig. \@ref(fig:simspNCIdist)).
+we successfully simulated back $NCI$ spatial distribution (Fig. \@ref(fig:simspNCIdist)).
 We then initialized $NCI$ with $NCI$ generator and simulated its dynamics variation over 33 years using $\delta NCI$ generator.
 We obtain satisfying variation over time and space (Fig. \@ref(fig:simulatedNCI) and Fig. \@ref(fig:simncigif)),
 with the appearance of a *true* treefall in the southwest of the simulated plot around 1998.
@@ -346,7 +360,8 @@ NCI_{(x,y),t} = f
   \begin{pmatrix}
     \mu_{NCI} \\ 
     \sigma_{NCI} \\ 
-    p_{\delta NCI} \\ 
+    \alpha \\ 
+    \beta \\ 
     \mu_{\delta NCI > 0} \\ 
     \sigma_{\delta NCI > 0} \\ 
     \lambda_{\delta NCI \leq 0} \\ 
@@ -359,39 +374,39 @@ and the forest gap dynamics generator was ready.
 
 ```{r rdeltanci, echo=T}
 rdeltanci <- function(
-  n = 1, # number of samples
-  p = 0.271, # probability to be positive
+  NCI = rnorm(1, mean = 122.73, sd = 25.806),
+  alpha = -1.32,
+  beta = 0.003,
   mu = 0.749, # mu of lognormal distributon for positive deltanci
   sigma = 2.651, # sigma of lognormal distributon for positive deltanci
   lambda = 0.31 # lamnda of exponential distributon for negative deltanci
 ){
-  samples <- rep(0, n)
-  P <- rbinom(n, 1, 1 - p) == 1
-  samples[P] <- rlnorm(sum(P), meanlog = log(mu), sdlog = log(sigma))
-  samples[!P] <- -rexp(sum(!P), rate = lambda)
+  samples <- rep(0, length(NCI))
+  P <- sapply(arm::invlogit(alpha + beta*NCI), function(p) rbinom(1,1,p)) == 1
+  samples[!P] <- rlnorm(sum(!P), meanlog = log(mu), sdlog = log(sigma))
+  samples[P] <- -rexp(sum(P), rate = lambda)
   return(samples)
 }
 ```
 
 ```{r rspdeltanci, echo=T}
 rspcor <- function(
-  grid = 50, # grid size
-  generator = "rdeltanci", # can be rnorm for nci
-  args = list(p = 0.271, mu = 0.749, sigma = 2.651, lambda = 0.31), # arguments for the random generator
+  M =  matrix(rdeltanci(NCI = rnorm(50*50, mean = 122.73, sd = 25.806)), 
+              ncol = 50, nrow = 50),
   dcor = 3 # spatial autocorrelation size (3*3m)
 ){
-  grid2 <- ceiling(grid/dcor)
-  args$n <- grid2^2
-  M2 <- matrix(do.call(generator, args), 
-              ncol = grid2, nrow = grid2)
-  raster::as.matrix(raster::disaggregate(raster::raster(M2), dcor, method="bilinear"))[1:grid, 1:grid] %>% 
+  M <- raster::raster(M)
+  M <- raster::aggregate(M, dcor)
+  M <- raster::disaggregate(M, dcor, method = "bilinear")
+  raster::as.matrix(M)[1:50,1:50] %>% 
     reshape2::melt() %>% 
     rename(X = Var1, Y = Var2)
 } 
 ```
 
 ```{r simspdNCIdist, fig.cap="Simulated deltaNCI distribution in space and absolute."}
-simnci <- data.frame(deltaNCI = rdeltanci(nrow(nci)*10))
+simnci <- data.frame(NCI = rnorm(nrow(nci)*10, mean = 122.73, sd = 25.806)) %>% 
+  mutate(deltaNCI = rdeltanci(NCI))
 g1 <- ggplot(simnci, aes(x = deltaNCI)) +
   geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
   stat_function(fun = dnorm , args = list(mean = mean(simnci$deltaNCI), 
@@ -403,17 +418,17 @@ g1 <- ggplot(simnci, aes(x = deltaNCI)) +
     geom_text(aes(y = y), label = expression(sigma), data = data.frame(deltaNCI = 30, y = 0.10)) +
   geom_text(aes(y = y), label = round(sd(simnci$deltaNCI),3), data = data.frame(deltaNCI = 30, y = 0.05)) +
   xlab(expression(delta[NCI])) 
-t <- rspcor(grid = 50)
-g2 <- ggplot(t, aes(X, Y, fill = value)) +
+g2 <- ggplot(rspcor(matrix(simnci$deltaNCI[1:(50*50)], ncol = 50, nrow = 50)), 
+             aes(X, Y, fill = value)) +
   geom_tile() +
   viridis::scale_fill_viridis(expression(delta[NCI]), direction = -1) +
   theme(axis.text = element_blank(), axis.title = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank())
-cowplot::plot_grid(g1, g2)  
+cowplot::plot_grid(g1, g2)
 ```
 
 ```{r simspNCIdist, fig.cap="Simulated NCI distribution in space and absolute."}
-t <- rspcor(grid = 50, generator = "rnorm", args = c(mean = 122.73, sd = 25.806), dcor = 4)
+t <- rspcor(matrix(rnorm(50*50, mean = 122.73, sd = 25.806), nrow = 50, ncol = 50), dcor = 4)
 g1 <- ggplot(t, aes(x = value)) +
   geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100) +
   xlab(expression(NCI))
@@ -426,20 +441,14 @@ cowplot::plot_grid(g1, g2)
 ```
 
 ```{r simncitsv, eval=F}
-t <- rspcor(grid = 50, generator = "rnorm", args = c(mean = 122.73, sd = 25.806), dcor = 4) %>% 
+t <- rspcor(matrix(rnorm(50*50, mean = 122.73, sd = 25.806), nrow = 50, ncol = 50), dcor = 4) %>% 
   mutate(CensusYear = 1984) %>% 
-  mutate(deltaNCI = NA) %>% 
   rename(NCI = value)
-for(y in 1985:2017){
-  ty <- filter(t, CensusYear == (y - 1)) %>% 
-    dplyr::select(-CensusYear, -deltaNCI) %>% 
-    left_join(rspcor(grid = 50) %>% 
-                mutate(CensusYear = y) %>% 
-                rename(deltaNCI = value), 
-              by = c("X", "Y")) %>% 
-    mutate(NCI = NCI + deltaNCI)
-  t <- bind_rows(t, ty) 
-}
+for(y in 1985:2017)
+  t <- bind_rows(t, filter(t, CensusYear == y - 1) %>% 
+                   mutate(NCI = NCI + rspcor(matrix(rdeltanci(NCI), 
+                                                    nrow = 50, ncol = 50))$value,
+                          CensusYear = CensusYear + 1)) 
 write_tsv(t, path = "modelling_save/simnci.tsv")
 ```
 
@@ -453,7 +462,7 @@ read_tsv("modelling_save/simnci.tsv", col_types = cols(deltaNCI = col_double()))
   geom_line(aes(y = NCI, group = idTree), alpha = 0.1) +
   geom_line(aes(y = NCImean), col = "red", size = 2) +
   xlab("Census year") +
-  ylab("Simulated Neighbour crowding index in time.") 
+  ylab("Simulated Neighbour crowding index in time.")  
 ```
 
 ```{r simnci, eval=F}
@@ -470,7 +479,7 @@ anim_save("modelling_save/simnci.gif", g)
 ```
 
 ```{r simncigif, fig.cap="Simulated NCI."}
-include_graphics("modelling_save/simnci.gif")
+include_graphics("modelling_save/simnci.gif") 
 ```
 
 ## Mortality
@@ -613,15 +622,15 @@ broom::tidyMCMC(fit, estimate.method = "median", conf.int = T, rhat = T) %>%
   kable(caption = "Model parameters for unscaled deltaNCI and 10^4 observations.")
 ```
 
-## Timesteps
+## Time steps
 
-We first thought to relate timesteps to forest gap dynamics,
-defining the timestep as the typical time between two treefalls.
+We first thought to relate time steps to forest gap dynamics,
+defining the time step as the typical time between two treefalls.
 But in the end defining major treefalls is not that simple, 
 and we used a different method to simulated NCI.
-Consequently, we should find another method to define timesteps,
+Consequently, we should find another method to define time steps,
 as our current definition of death rate and deltaNCI is per year.
-The idea is to aoid simulating tree growth and DBH,
+The idea is to avoid simulating tree growth and DBH,
 the main idea being that individuals are mature (reproducing) and in the canopy.
 Following @Hardy2006, *Symphonia globulifera* reach maturity at $DBH_{maturity} = 17$,
 that we may increase to $DBH_{maturity} = 20$ as they reported the minimum adult DBH.
@@ -629,6 +638,8 @@ Then using symcapture analysis,
 we can relate growth to time with annual growth rate parameters
 $Gmax=0.53~cm.yr^{-1}$, $Dopt=25~cm$, and $Ks=0.70$,
 despite we evidenced strong differences among individuals.
+We found *Symphonia* individuals to reach maturity between 28 and 41 years (Fig. \@ref(fig:dbhintime)),
+and thus decided to use a time step $d_{time}$ of 30 years corresponding to a mortality of 32% (Fig. \@ref(fig:mortalityovertime)).
 
 ```{r dbhintime, fig.cap="Age at maturity since recruitment per species."}
 agr <- function(dbh, gmax = 0.53, dopt = 25, Ks = 0.7)
@@ -661,5 +672,13 @@ lapply(list("S. sp.2" = 0.537, "S. globulifera" = 0.542, "S. sp.1" = 0.367),
                               Species = c("S. globulifera", "S. sp.1")))
 ```
 
-Another solution is to consider a simpler timestep,
-with a new individual recruited in the gaps at each censuses from the sapling pool.
+```{r mortalityovertime, fig.cap="Death probability integrated over time."}
+data.frame(Years = 1:500) %>% 
+  mutate(Pdeath = 1 - dbinom(0, Years, 0.013)) %>% 
+  ggplot(aes(Years, Pdeath)) + 
+  geom_line() + 
+  geom_vline(xintercept = 1:15*30, col = "lightgrey") + 
+  geom_hline(yintercept = 0.32467227, col = "red") +
+  scale_x_sqrt() +
+  ggtitle("P(death over 30 years | Pdeath = 0.013) = 0.32467227")
+```
