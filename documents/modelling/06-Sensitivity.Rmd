@@ -1,0 +1,720 @@
+```{r setupsensitivity, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(gganimate)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+library(ecoevosimulator)
+```
+
+```{r funcmetrics}
+groups <- function(var1, var2, k = 2){
+  df <- data.frame(var1 = var1, var2 = var2)
+  kmeans(df, centers = k)$cluster 
+} 
+wss_score <- function(var1, var2 = NULL, k = 2) {
+  if(!is.null(var2))
+    df <- data.frame(var1 = var1, var2 = var2)
+  else
+    df <- data.frame(var1 = var1)
+  x <- (nrow(df)-1)*sum(apply(df,2,var))
+  wss1 <- sum(kmeans(df, centers = 1)$withinss)
+  wssk <- sum(kmeans(df, centers = k)$withinss)
+  (wss1 / wssk) / k 
+}  
+metrics <- function(sims){
+  sims.dg <- sims %>%
+    mutate(variable = recode(variable, "topography" = "topo")) %>%
+    dplyr::select(-X, -Y) %>% 
+    mutate(variable = paste0(substr(type, 1, 1), "_", variable)) %>%
+    dplyr::select(-type) %>%
+    reshape2::dcast(model + timestep + individual ~ variable, value.var = "value") %>%
+    mutate(
+      Dg_topo = sqrt(((e_topo - g_topo)/sd(e_topo))^2),
+      Dg_nci = sqrt(((e_nci - g_nci)/sd(e_nci))^2)
+    ) %>%
+    dplyr::select(model, timestep, Dg_topo, Dg_nci) %>%
+    group_by(model, timestep) %>%
+    summarise_all(mean) %>%
+    reshape2::melt(c("model", "timestep")) %>%
+    mutate(variable = gsub("Dg_", "", variable)) %>%
+    mutate(metric = "Dg")
+  sims.wss <- sims %>%
+    filter(type == "genotype") %>%
+    mutate(variable = recode(variable, "topography" = "topo")) %>%
+    dplyr::select(-X, -Y, -type) %>% 
+    reshape2::dcast(model + timestep + individual ~ variable) %>%
+    group_by(model, timestep) %>%
+    summarise(wss_score_topo = wss_score(topo),
+              wss_score_nci = wss_score(nci)) %>%
+    reshape2::melt(c("model", "timestep")) %>%
+    mutate(variable = gsub("wss_score_", "", variable)) %>%
+    mutate(metric = "wss score")
+  return(bind_rows(sims.dg, sims.wss))
+}
+```
+
+# Sensitivity
+
+This chapter aims to explore system metrics sensitivity to parameters of topography, NCI, 
+and simulation in order to define parameters to be explored in the virtual experiment.
+The chapter is a bit long as parameters are described one by one.
+You may skip to the conclusion, where the take home message is.
+
+## Global parameters
+
+* `grid`: 50 cells
+* `Nt`: 60 timesteps
+
+## Topography
+
+We tested following parameters with following values for topography:
+
+* `topography`: sinusoidal, squarediamond or paracou
+* `Elim` for `sinusoidal`: seq(1, 10, 1)
+* `amplitude` for `sinusoidal`: seq(1, 10, 1)
+* `ruggedness` for `squarediamond`: seq(1, 10, 1)
+* `Elim` for `paracou`: seq(1, 10, 1)
+* `plot` for `paracou`: seq(1, 15, 1)
+
+The type of topography `topography` influenced distance from local adaptation at simulation start and population structure at simulation end for topography (Fig. \@ref(fig:topography)).
+Environmental limit `Elim` in sinusoidal topography had little influence at the exception from the starting point of local adaptation for topography (Fig. \@ref(fig:Elimsinusoidal)).
+Environmental amplitude `amplitude` in sinusoidal topography decreased local adaptation while increasing population structure for topography (Fig. \@ref(fig:amplitude)).
+Environmental ruggedness `ruggedness` in square-diamond topography decreased local adaptation while increasing population structure until an intermediate optimum (~7) before decreasing also local adaptation for topography (Fig. \@ref(fig:ruggedness)).
+Environmental limit `Elim` in paracou topography decreased both local adaptation and population structure for topography (Fig. \@ref(fig:Elimparacou)).
+Only three Paracou plots showed strong population structure (Fig. \@ref(fig:plot)).
+
+**In conclusion** and regarding the question we are exploring, the more realistic topography, e.g. Paracou topography, is the most interesting. 
+Moreover, plot resulting in population structure should be kept, such as Plot 1. 
+Finally we can keep an environmental limit in Paracou topography close to 1, as increasing it only slow down local adaptation and population structure without changing the dynamics.
+
+```{r topography, fig.cap="Senstivity analysis for `topography`: sinusoidal, squarediamond or paracou."}
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# bind_rows(
+#   mutate(simulator(grid = 50, Nt = 60, 
+#                    topography = sinusoidalTopography(grid = 50), 
+#                    NCI = NCI), 
+#          model = "sinusoidal"),
+#   mutate(simulator(grid = 50, Nt = 60, 
+#                    topography = squareDiamondTopography(grid = 50), 
+#                    NCI = NCI),
+#          model = "squarediamond"),
+#   mutate(simulator(grid = 50, Nt = 60, 
+#                    topography = paracouTopography(grid = 50), 
+#                    NCI = NCI), 
+#          model = "paracou")
+# ) %>% metrics() %>% 
+#   write_tsv(file = "modelling_save/sensitivity/topography.tsv")
+read_tsv("modelling_save/sensitivity/topography.tsv") %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("Topography", discrete = T) +
+  ggtitle("`topography`: sinusoidal, squarediamond or paracou")
+```
+
+```{r Elimsinusoidal, fig.cap="Senstivity analysis for `Elim` for `sinusoidal`: seq(1, 10, 1)."}
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(seq(1, 10, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = sinusoidalTopography(grid = 50, 
+#                                                      Elim = i),
+#                    NCI = NCI),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/Elmim_sinusoidal.tsv")
+read_tsv("modelling_save/sensitivity/Elmim_sinusoidal.tsv") %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_line(aes(group = model)) +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("Elim") +
+  ggtitle("`Elim` for `sinusoidal`: seq(1, 10, 1)")
+```
+
+```{r amplitude, fig.cap="Senstivity analysis for `amplitude`: seq(1, 10, 1)."}
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(seq(1, 10, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = sinusoidalTopography(grid = 50,
+#                                                      amplitude = i),
+#                    NCI = NCI),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/amplitude.tsv")
+read_tsv("modelling_save/sensitivity/amplitude.tsv") %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_line(aes(group = model)) +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("amplitude") +
+  ggtitle("`amplitude`: seq(1, 10, 1)")
+```
+
+```{r ruggedness, fig.cap="Senstivity analysis for `ruggedness`: seq(1, 10, 1)."}
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(seq(1, 10, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = squareDiamondTopography(grid = 50,
+#                                                         ruggedness = i),
+#                    NCI = NCI),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/ruggedness.tsv")
+read_tsv("modelling_save/sensitivity/ruggedness.tsv") %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_line(aes(group = model)) +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("ruggedness") +
+  ggtitle("`ruggedness`: seq(1, 10, 1)")
+```
+
+```{r Elimparacou, fig.cap="Senstivity analysis for `Elim` for `paracou`: seq(1, 10, 1)."}
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(seq(1, 10, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = paracouTopography(grid = 50, 
+#                                                   Elim = i),
+#                    NCI = NCI),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/Elmim_paracou.tsv")
+read_tsv("modelling_save/sensitivity/Elmim_paracou.tsv") %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_line(aes(group = model)) +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("Elim") +
+  ggtitle("`Elim` for `paracou`: seq(1, 10, 1)")
+```
+
+```{r plot, fig.cap="Senstivity analysis for `plot`: seq(1, 15, 1)."}
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(seq(1, 15, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = paracouTopography(grid = 50, 
+#                                                   plot = i),
+#                    NCI = NCI),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/plot.tsv")
+read_tsv("modelling_save/sensitivity/plot.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("plot", discrete = T) +
+  ggtitle("`plot`: seq(1, 15, 1)")
+```
+
+## NCI
+
+We tested following parameters with following values for NCI:
+
+* `timestep`: 10, 30, 50, 70
+* `muNCI`:  -100, 0, 100
+* `sigmaNCI`: 1, 25, 50, 100
+* `alpha`: -1.6, -1.32, -1 (from the posterior)
+* `beta`: 0.001, 0.003, 0.005 (from the posterior)
+* `mu`: 0.1, 0.749, 1.5
+* `sigma`: 1, 2.65, 5
+* `lambda`: 0.1, 0.3, 0.5, 1
+* `d`: 1, 3, 6, 9
+
+Time step length (minimum reproductive time) `timestep` mainly influenced topography with faster local adaptation and population structure with increasing time step, but the dynamics seems to stay the same (Fig. \@ref(fig:timestep)).
+Previous NCI effect on negative NCI probability `beta` and NCI increase mean `mu` and variance `sigma` increased NCI local adaptation and slow down topography population structure (Fig. \@ref(fig:beta), Fig. \@ref(fig:mu), and Fig. \@ref(fig:sigma)).
+NCI mean decrease `lambda` decreased local adaptation (Fig. \@ref(fig:lambda)).
+NCI spatial aggregation `d`, only blocked NCI local adaptation for d equal to one (Fig. \@ref(fig:d)).
+Other parameters, NCI mean `muNCI` and variance `sigmaNCI` and negative NCI probability `alpha`, had little to no effects on genotypes, at the exception of starting point (Fig. \@ref(fig:muNCI), Fig. \@ref(fig:sigmaNCI), and Fig. \@ref(fig:alpha)).
+
+**In conclusion** and regarding the question we are exploring, parameters with little influence or only speeding or slowing dynamics without changing them should be kept to default (`muNCI`, `sigmaNCI`, `alpha`, `d`, and `timestep`). 
+And `mu`,`sigma` and `lambda` should be kept to default too are they are deeply modifying NCI dynamics through time, resulting in unstable NCI (results not shown).
+In a nutshell, all NCI parameters should be set to default from Paracou inferences.
+
+```{r timestep, fig.cap="Senstivity analysis for `timestep`: 10, 30, 50, 70."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(10, 30, 50, 70), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    timestep = i,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      timestep = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/timestep.tsv")
+read_tsv("modelling_save/sensitivity/timestep.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("timestep", discrete = T) +
+  ggtitle("`timestep`: 10, 30, 50, 70")
+```
+
+```{r muNCI, fig.cap="Senstivity analysis for `muNCI`:  -100, 0, 100."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(-100, 0, 100), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      muNCI = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/muNCI.tsv")
+read_tsv("modelling_save/sensitivity/muNCI.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("muNCI", discrete = T) +
+  ggtitle("`muNCI`:  -100, 0, 100")
+```
+
+```{r sigmaNCI, fig.cap="Senstivity analysis for `sigmaNCI`:  1, 25, 50, 100."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(1, 25, 50, 100), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      sigmaNCI = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/sigmaNCI.tsv")
+read_tsv("modelling_save/sensitivity/sigmaNCI.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("sigmaNCI", discrete = T) +
+  ggtitle("`sigmaNCI`:  1, 25, 50, 100")
+```
+
+```{r alpha, fig.cap="Senstivity analysis for `alpha`:  -1.6, -1.32, -1."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(-1.6, -1.32, -1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      alpha = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/alpha.tsv")
+read_tsv("modelling_save/sensitivity/alpha.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("alpha", discrete = T) +
+  ggtitle("`alpha`:  -1.6, -1.32, -1")
+```
+
+```{r beta, fig.cap="Senstivity analysis for `beta`:  0.001, 0.003, 0.005."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(0.001, 0.003, 0.005), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      beta = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/beta.tsv")
+read_tsv("modelling_save/sensitivity/beta.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("beta", discrete = T) +
+  ggtitle("`beta`:  0.001, 0.003, 0.005")
+```
+
+```{r mu, fig.cap="Senstivity analysis for `mu`:  0.1, 0.749, 1.5."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(0.1, 0.749, 1.5), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      mu = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/mu.tsv")
+read_tsv("modelling_save/sensitivity/mu.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("mu", discrete = T) +
+  ggtitle("`mu`:  0.1, 0.749, 1.5")
+```
+
+```{r sigma, fig.cap="Senstivity analysis for `sigma`:  1, 2.65, 5."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(1, 2.65, 5), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      sigma = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/sigma.tsv")
+read_tsv("modelling_save/sensitivity/sigma.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("sigma", discrete = T) +
+  ggtitle("`sigma`:  1, 2.65, 5")
+```
+
+```{r lambda, fig.cap="Senstivity analysis for `lambda`:  0.1, 0.3, 0.5, 1."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(0.1, 0.3, 0.5, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      lambda = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/lambda.tsv")
+read_tsv("modelling_save/sensitivity/lambda.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("lambda", discrete = T) +
+  ggtitle("`lambda`: 0.1, 0.3, 0.5, 1")
+```
+
+```{r d, fig.cap="Senstivity analysis for `d`:  1, 3, 6, 9."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# lapply(c(1, 3, 6, 9), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = generateNCI(grid = 50, Nt = 60,
+#                                      d = i)),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/d.tsv")
+read_tsv("modelling_save/sensitivity/d.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("d", discrete = T) +
+  ggtitle("`d`: 1, 3, 6, 9")
+```
+
+## Simulation
+
+We tested following parameters with following values for simulations:
+
+* `sigmaGtopo`: 0.1, 1, 10
+* `sigmaZtopo`: 0.1, 1, 10
+* `sigmaGnci`: 1, 25, 50, 100
+* `sigmaZnci`: 1, 25, 50, 100
+* `Pdeath`: 0.0013, 0.013, 0.13
+* `Ns`: 2, 4, 8, 16, 32
+* `Rpollination`: 1, 2, 5, 10
+* `Rdispersion`: 1, 2, 5, 10
+* `determinist`: true, false
+
+Genotypic variances with topography `sigmaGtopo` or NCI `sigmaGnci` decreased local adaptation and population structure (Fig. \@ref(fig:sigmaGtopo) and Fig. \@ref(fig:sigmaGnci)). 
+This can seem not logic for local adaptation, but high `sigmaGtopo` increase noise around the genotypes and prevent local adaptation to reach its optimal value. 
+This is more a limit of the model hypothesis with no loss of genetic variance through time, than something realistic.
+Phenotypic plasticity with topography `sigmaZtopo` or NCI `sigmaZnci` decreased local adaptation and population structure (Fig. \@ref(fig:sigmaZtopo) and Fig. \@ref(fig:sigmaZnci)), which is totally expected.
+Annual death probability `Pdeath` fasten local adaptation and population structure (Fig. \@ref(fig:Pdeath)).
+Moreover, too low `Pdeath` prevents local adaptation and population structure (Fig. \@ref(fig:Pdeath)).
+Number of seedlings `Ns` increased local adaptation and population structure (Fig. \@ref(fig:Ns)).
+Note that a high number of seedlings (16) to see local adaptation to NCI (Fig. \@ref(fig:Ns)).
+Radius of seed and pollen dispersal `Rpollination`  and `Rdispersion`, are symmetric, and  decreased local adaptation and population structure (Fig. \@ref(fig:Rpollination) and Fig. \@ref(fig:Rdispersion)).
+Probabilistic selection of seedlings `determinist` decreased local adaptation and prevented population structure (Fig. \@ref(fig:determinist)).
+
+**In conclusion** and regarding the question we are exploring, genotypic variances (`sigmaGtopo` and `sigmaGnci`) are either behaving unrealistically and are thus not of interest. 
+Phenotypic plasticity (`sigmaZtopo` and `sigmaZnc`) is interesting to determine which ratio of plasticity versus adaptation is necessary to observe local adaptation and population structure.
+We may derive pseudo-heritabilities $h = \frac{\sigma_G}{\sigma_G+\sigma_Z}$ to explore this question and deal with percentage for fixed $\sigma_G$.
+`Pdeath` and `Ns`, and oppositely `Rpollination` and `Rdispersion`, are respectively increasing and decreasing both local adaptation and population structure and are thus of interest.
+We may avoid probabilistic selection of seedlings as it slow the model and prevent us to observe expected adaptation and population structure.
+In a nutshell, the joint role of heritability ($h = \frac{\sigma_G}{\sigma_G+\sigma_Z}$) for both NCI and topography, annual death probability (`Pdeath`), number of seedlings (`Ns`) and the radii of seed and pollen dispersal (`Rpollination`  and `Rdispersion`) should be studied on the local adaptation and population structure of the virtual tree community.
+
+
+```{r sigmaGtopo, fig.cap="Senstivity analysis for `sigmaGtopo`:  0.1, 1, 10."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(0.1, 1, 10), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    sigmaGtopo = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/sigmaGtopo.tsv")
+read_tsv("modelling_save/sensitivity/sigmaGtopo.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("sigmaGtopo", discrete = T) +
+  ggtitle("`sigmaGtopo`: 0.1, 1, 10")
+```
+
+```{r sigmaZtopo, fig.cap="Senstivity analysis for `sigmaZtopo`:  0.1, 1, 10."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(0.1, 1, 10), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    sigmaZtopo = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/sigmaZtopo.tsv")
+read_tsv("modelling_save/sensitivity/sigmaZtopo.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("sigmaZtopo", discrete = T) +
+  ggtitle("`sigmaZtopo`: 0.1, 1, 10")
+```
+
+```{r sigmaGnci, fig.cap="Senstivity analysis for `sigmaGnci`:  1, 25, 50, 100."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(1, 25, 50, 100), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    sigmaGnci = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/sigmaGnci.tsv")
+read_tsv("modelling_save/sensitivity/sigmaGnci.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("sigmaGnci", discrete = T) +
+  ggtitle("`sigmaGnci`: 1, 25, 50, 100")
+```
+
+```{r sigmaZnci, fig.cap="Senstivity analysis for `sigmaZnci`:  1, 25, 50, 100."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(1, 25, 50, 100), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    sigmaZnci = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/sigmaZnci.tsv")
+read_tsv("modelling_save/sensitivity/sigmaZnci.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("sigmaZnci", discrete = T) +
+  ggtitle("`sigmaZnci`: 1, 25, 50, 100")
+```
+
+```{r Pdeath, fig.cap="Senstivity analysis for `Pdeath`:  0.0013, 0.013, 0.13."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(0.0013, 0.013, 0.13), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    Pdeath = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/Pdeath.tsv")
+read_tsv("modelling_save/sensitivity/Pdeath.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("Pdeath", discrete = T) +
+  ggtitle("`Pdeath`: 0.0013, 0.013, 0.13")
+```
+
+```{r Ns, fig.cap="Senstivity analysis for `Ns`:  2, 4, 8, 16, 32."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(2, 4, 8, 16, 32), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    Ns = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/Ns.tsv")
+read_tsv("modelling_save/sensitivity/Ns.tsv") %>% 
+  # mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model, group = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  # viridis::scale_color_viridis("Ns", discrete = T) +
+  viridis::scale_color_viridis("Ns") +
+  ggtitle("`Ns`: 2, 4, 8, 16, 32")
+```
+
+```{r Rpollination, fig.cap="Senstivity analysis for `Rpollination`:  2, 4, 8, 16."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(2, 4, 8, 16), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    Rpollination = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/Rpollination.tsv")
+read_tsv("modelling_save/sensitivity/Rpollination.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("Rpollination", discrete = T) +
+  ggtitle("`Rpollination`: 2, 4, 8, 16")
+```
+
+```{r Rdispersion, fig.cap="Senstivity analysis for `Rdispersion`:  seq(1, 10, 1)."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(seq(1, 10, 1), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    Rdispersion = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/Rdispersion.tsv")
+read_tsv("modelling_save/sensitivity/Rdispersion.tsv") %>% 
+  ggplot(aes(timestep, y = value, col = model, group = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("Rdispersion") +
+  ggtitle("`Rdispersion`: seq(1, 10, 1)")
+```
+
+```{r determinist, fig.cap="Senstivity analysis for `determinist`:  true, false."}
+# topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 60)
+# lapply(c(TRUE, FALSE), function(i)
+#   mutate(simulator(grid = 50, Nt = 60,
+#                    topography = topo,
+#                    NCI = NCI,
+#                    determinist = i),
+#          model = i)) %>%
+#   bind_rows() %>%
+#   metrics() %>%
+#   write_tsv(file = "modelling_save/sensitivity/determinist.tsv")
+read_tsv("modelling_save/sensitivity/determinist.tsv") %>% 
+  mutate(model = as.character(model)) %>% 
+  ggplot(aes(timestep, y = value, col = model)) +
+  geom_smooth() +
+  geom_point() +
+  facet_wrap(metric ~ variable, scales = "free", labeller = "label_both") +
+  ylab("") +
+  viridis::scale_color_viridis("determinist", discrete = T) +
+  ggtitle("`determinist`: true, false")
+```
+
+## Conclusion
+
+Following the previous conclusions, I suggest to:
+
+1. Use the topography of Plot 1 in Paracou with an environmental limit set to 1.
+1. Use a generated NCI with default parameters corresponding to values inferred from Paracou data.
+1. Explore the joint role of heritability ($h = \frac{\sigma_G}{\sigma_G+\sigma_Z}$) for both NCI and topography, number of seedlings (`Ns`) and gene flow through the radius of dispersal (`Rdispersion` with `Rpollination` set to 1 or 2) on the local adaptation and population structure of the virtual tree community
+
+> use 6 modalities ^ 4 parameters = 1269 simulations
+
+```{r, fig.cap="Local adaptation (Dg, low value indicating adapted populations) and population structure (WSSscore, high value indicating structured populations) with varying number of seedlings (Ns), radius of seed dispersal (Rdispersion), and phenotypic plasticity of NCI (sigmaZnci) and topography (sigmaZtopo) along NCI and topography.", fig.width=8, fig.height=6}
+lapply(list.files("modelling_save/sensitivity/", full.names = T), function(f){
+         read_tsv(f, col_types = list(model = col_character())) %>%
+           mutate(parameter = f)}) %>% 
+  bind_rows() %>% 
+  mutate(parameter = gsub("modelling_save/sensitivity//", "", parameter)) %>% 
+  mutate(parameter = gsub(".tsv", "", parameter)) %>% 
+  filter(timestep == 60) %>% 
+  filter(parameter %in% c("sigmaZnci", "sigmaZtopo", "Ns", "Rdispersion")) %>% 
+  reshape2::dcast(timestep + parameter + model + variable ~ metric) %>% 
+  ggplot(aes(Dg, `wss score`, label = model)) +
+  geom_point() +
+  ggrepel::geom_text_repel() +
+  facet_wrap(parameter ~ variable, scales = "free", ncol = 4) +
+  xlab(expression(D[G])) +
+  ylab(expression(WSS[score]))
+```
+

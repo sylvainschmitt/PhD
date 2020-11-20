@@ -19,19 +19,23 @@ library(ecoevosimulator)
 
 # Forest gap dynamics
 
-This chapter aims to develop a forest gap dynamics generator and compare it to the forest gap dynamics observed in Parcou plots.
-First, we simulated back neighbour crowding index (NCI) dynamics in space and time.
-Then, we simulated background and treefall mortality in relation to NCI dynamics.
+This chapter introduce the forest gap dynamics generator, mortality, and time-steps used in the simulator.
+Generators and equation have been inferred from tree censuses in Paracou plots.
+First, we simulated neighbourhood crowding index (NCI) dynamics in space and time.
+Then, we inferred mortality and time-steps.
+The forest gap dynamics is defined as a matrix spatially explicit in 2 dimensions and temporally explicit ($grid \times grid \times Nt~(time-steps)$).
 
-## Neighbour crowding index
+## Neighbourhood crowding dynamics
+
+We modeled neighbourhood crowding dynamics with a Markov process starting from an initial $NCI$ distribution,
+and evolving at each iteration with a $\delta NCI$ variation.
 
 ### $NCI$
 
-I computed the neighbour crowding index (NCI) for all trees in plot 1, 6, 11 and 13 to 15 for all census years as follow:
+We computed the neighbourhood crowding index (NCI) for all trees in undisturbed plots (1, 6, 11 and 13 to 15) for all census years as follow:
 
 \begin{equation} 
   NCI_{i,t} = \sum _{j~|~\delta_{i,j}<20m} ^{J_{i,t}} DBH_{j,t}^2 e^{-\frac14.\delta_{i,j}}
-  (\#eq:nci)
 \end{equation} 
 
 with $DBH_{j,t}$ the diameter from neighboring tree $j$ in year $t$ and $\delta_{i,j}$ its distance to individual tree $i$.
@@ -40,11 +44,11 @@ The power of neighbors $DBH$ effect was set to 2 to consider neighbors surface.
 The decrease of neighbors $DBH$ effect with distance was set to 0.25 here
 to represent trees at 20 meters of the focal trees having 1% of the effect of the same tree at 0  meters.
 
-The variation of plot 1 over time seems to show rare decreases in NCI that could be related to falling trees (Fig. \@ref(fig:plotncigif)), 
-as shown by the NCI trajectories of the trees in plot 1 (Fig. \@ref(fig:ncip1)), 
-which include regular increases with few stochastic decreases and a global stable mean.
+The variation of plot 1 over time show only few decrease in NCI, that are related to falling trees (Fig. \@ref(fig:plotncigif)), 
+as revealed by the NCI trajectories of the trees in plot 1 (Fig. \@ref(fig:ncip1)), 
+showcasing regular increase of NCI with few stochastic decrease and a global stable mean.
 $NCI$ followed a normal distribution centered on $\mu_{NCI} = 123$ of variance $\sigma_{NCI} = 26$ 
-in Plot 1 (Fig. \@ref(fig:p1spNCIdist)),
+in all plot and censuses (Fig. \@ref(fig:p1spNCIdist)),
 with spatially aggregated clusters on 10 meters or $d_{NCI} = 3$ cells (Fig. \@ref(fig:spcornci)).
 We thus defined NCI distribution for initialization as:
 
@@ -57,7 +61,25 @@ We thus defined NCI distribution for initialization as:
 \right.
 \end{equation} 
 
-To simulate back NCI dynamics we chose to study the spatio-temporal dynamics of NCI variation. 
+```{r, eval=F}
+src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                "trees", "Paracou.sqlite")) %>% 
+    tbl("Paracou") %>% 
+    filter(CodeAlive == 1) %>% 
+    filter(Plot %in% 1:15) %>%
+    filter(CensusYear == 2017) %>% 
+  group_by(Plot, SubPlot) %>% 
+  select(Genus, Species) %>% 
+  collect() %>% 
+  unique() %>% 
+  summarise(Nspecies = length(unique(Species)),
+            Ngenus = length(unique(Genus))) %>% 
+  mutate(Rha = Nspecies/Ngenus) %>% 
+  ungroup() %>% 
+  summarise_all(mean)
+```
+
+
 
 ```{r ncidata, eval=F}
 computeNCI <- function(CensusYear, Plot, d = 20){
@@ -119,10 +141,10 @@ read_tsv("modelling_save/nci.tsv") %>%
   geom_line(aes(y = NCI, group = idTree), alpha = 0.1) +
   geom_line(aes(y = NCImean), col = "red", size = 2) +
   xlab("Census year") +
-  ylab("Neighbour crowding index (NCI) in Plot 1") 
+  ylab("neighbourhood crowding index (NCI) in Plot 1") 
 ```
 
-```{r p1spNCIdist, fig.cap="Plot1 NCI distribution in space and absolute."}
+```{r p1spNCIdist, fig.cap="Plot1 NCI distribution in space for all plots and censuses."}
 t <-  read_tsv("modelling_save/nci.tsv") %>% 
   filter(Plot == 1, CensusYear == 2014) %>% 
   rename(X = Xfield, Y = Yfield)
@@ -146,7 +168,7 @@ g2 <- ggplot(t, aes(X, Y, col = NCI)) +
 cowplot::plot_grid(g1, g2)
 ```
 
-```{r spcornci, fig.cap="Spatial autocorrelation of NCI."}
+```{r spcornci, fig.cap="Spatial autocorrelation of NCI for all plots and censuses."}
 nci.cor <- pgirmess::correlog(t[c("X", "Y")], t$NCI, method = "Moran", nbclass = 100)
 t <- as.data.frame(nci.cor) %>% 
   filter(dist.class < 20) %>% 
@@ -174,26 +196,36 @@ nci.cor %>%
 
 ### $\delta NCI$
 
-We computed the NCI variation as follow:
+We computed the NCI annual variation for all trees in undisturbed plots (1, 6, 11 and 13 to 15) for all censuses as follow:
 
 \begin{equation} 
-  \delta NCI_{i,t} = \frac{NCI_{i,t} - NCI_{i,t-1}}{t - (t-1)}
-  (\#eq:deltanci)
+  \delta NCI_{i,census} = \frac{NCI_{i,census} - NCI_{i,census-1}}{t_{census} - t_{census-1}}
 \end{equation} 
 
-with $NCI_{i,t}$ and $NCI_{i,t-1}$ the neighbour crowding index in censuses $t$ and $t-1$,
-*beware* $t - (t-1)$ can be longer than one year for censuses separated by more than one year.
-$\delta NCI$ had a normal distribution but inflated in zero (Fig. \@ref(fig:deltaNCIdistribution)).
-We decided to split the distribution in two with a defined probability $p$ (Fig. \@ref(fig:deltaNCIdistribution)):
-(i) $\delta NCI>0$ representing trees in growing patches following a lognormal distribution of parameters $\mu$ and $\sigma$,
-(ii) $\delta NCI \leq 0$ representing trees in or near treefalls following an exponential distribution of parameter $\lambda$,
-with spatially aggregated clusters on 10 meters or $d_{\delta NCI} = 3$ cells (Fig. \@ref(fig:spcor)).
-We thus defined NCI distribution for as:
+with $NCI_{i,census}$ and $NCI_{i,census-1}$ the neighbourhood crowding index in censuses at $t_{census}$ and $t_{census-1}$.
+**Beware**, $t_{census} - t_{census-1}$ can be separated by more than one year, but the normalization gave us an annual $\delta NCI$.
+
+$\delta NCI$ as a whole had a normal distribution inflated in zero (Fig. \@ref(fig:deltaNCIdistribution)).
+We split the distribution of $\delta NCI$ between positive and negative values (Fig. \@ref(fig:deltaNCIdistribution)):
+
+1. $\delta NCI>0$ represents trees in patches of growing trees following a lognormal distribution $\mu$ and $\sigma$.
+1.  $\delta NCI \leq 0$ represents trees near treefalls following an exponential distribution of parameter $\lambda$ that deal with rare events of strong loss of NCI.
+
+We used a Bernoulli model depending on previous $NCI$ to define the probability for $\delta NCI$ to be negative:
+
+\begin{equation} 
+  P(\delta NCI \leq 0) \sim \mathcal B(logit(\alpha + \beta.NCI_{census-1}))
+\end{equation} 
+
+We found significant non null $\alpha = -1.32$ and $\beta = 0.003$ (Fig. \@ref(fig:fideltaNCI)).
+
+$\delta NCI>0$ and $\delta NCI \leq 0$ were both spatially aggregated in clusters of 10 meters or $d_{\delta NCI} = 3$ cells (Fig. \@ref(fig:spcor)).
+We thus defined the distribution of NCI variation for the Markov process as:
 
 \begin{equation} 
 \delta NCI \sim \left\{
     \begin{array}{ll}
-        P(\delta NCI \leq 0) \sim \mathcal B(logit^{-1}(\alpha + \beta.NCI)) |\alpha=-1.32,\beta=0.003 \\
+        P(\delta NCI \leq 0|\begin{array}{ll} \alpha=-1.32 \\ \beta=0.003 \end{array}) \sim \mathcal B(logit^{-1}(\alpha + \beta.NCI)) \\
         \mathcal {logN} (\mu_{\delta NCI > 0} = 0.749, \sigma_{\delta NCI > 0} = 2.651) & \mbox{if } \delta NCI > 0 \\
         \mathcal - {Exp} (\lambda_{\delta NCI \leq 0} = 0.31) & \mbox{ifelse} \\
         d_{\delta NCI}=3 & \mbox{Spatial aggregation}
@@ -201,7 +233,7 @@ We thus defined NCI distribution for as:
 \right.
 \end{equation} 
 
-```{r deltaNCIdistribution, fig.cap="Delta NCI distribution."}
+```{r deltaNCIdistribution, fig.cap="Delta NCI distribution per year in plots 1, 6, 11 and 13 to 15."}
 nci <- read_tsv("modelling_save/nci.tsv") %>% 
   group_by(idTree) %>% 
   arrange(CensusYear) %>% 
@@ -227,13 +259,6 @@ g.deltaNCI <- ggplot(nci, aes(x = deltaNCI)) +
     geom_text(aes(y = y), label = expression(sigma), data = data.frame(deltaNCI = 30, y = 0.10)) +
   geom_text(aes(y = y), label = round(sigma,3), data = data.frame(deltaNCI = 30, y = 0.05)) +
   xlab(expression(delta[NCI]))
-g.deltaNCI.hist <- ggplot(nci, aes(x = deltaNCI > 0, fill = deltaNCI > 0)) +
-  geom_bar() +
-  scale_fill_manual(expression(delta[NCI] > 0), values = c("firebrick", "grey")) +
-  theme(axis.line.x = element_blank(), axis.text.x = element_blank(),
-        axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
-  geom_text(data = data.frame(deltaNCI = -1), aes(y = 2.5*10^5), label = expression(p)) +
-  geom_text(data = data.frame(deltaNCI = -1), aes(y = 2*10^5), label = round(p,3))
 g.deltaNCI.positive <- ggplot(nci.pos, aes(x = deltaNCI)) +
   geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100)  +
   stat_function(fun = dlnorm , args = list(meanlog = mulog, sdlog = sigmalog)) +
@@ -252,9 +277,10 @@ g.deltaNCI.negative <- ggplot(nci.neg, aes(x = -deltaNCI)) +
   geom_text(aes(y = y), label = expression(lambda), data = data.frame(deltaNCI = -50, y = 0.2)) +
   geom_text(aes(y = y), label = round(lambda,3), data = data.frame(deltaNCI = -50, y = 0.15)) +
   xlab(expression(-delta[NCI] <= 0))
-cowplot::plot_grid(g.deltaNCI, g.deltaNCI.hist, g.deltaNCI.negative, g.deltaNCI.positive)
+cowplot::plot_grid(g.deltaNCI, g.deltaNCI.negative, g.deltaNCI.positive, nrow = 3)
 ```
-```{r fideltaNCI, fig.cap="Results of the model with uncentered data for 10^4 observations."}
+
+```{r fideltaNCI, fig.cap="$\\alpha$ and $\\beta$ posteriors for the risk of $\\delta NCI$$ to be negative with uncentered data and 10^4 observations.", fig.height=4}
 # mdata <- nci %>% 
 #   mutate(NCIdecrease = as.integer(deltaNCI <= 0)) %>% 
 #   sample_n(10^4)
@@ -303,23 +329,10 @@ read_tsv("modelling_save/spcor.tsv") %>%
             data = data.frame(dist.class = 50, coef = 0.3, type = "positive"))
 ```
 
-```{r p1spdNCIdist, fig.cap="Plot1 deltaNCI distribution in space and absolute."}
-t <-  filter(nci, Plot == 1, CensusYear == 2014) %>% 
-  rename(X = Xfield, Y = Yfield)
-g1 <- ggplot(t, aes(x = deltaNCI)) +
-  geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100) +
-  xlab(expression(delta[NCI]))
-g2 <- ggplot(t, aes(X, Y, col = deltaNCI)) +
-  geom_point() +
-  viridis::scale_color_viridis(expression(delta[NCI]), direction = -1) +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank())
-cowplot::plot_grid(g1, g2)
-```
-
 ### Generator
 
-Using the two equations:
+Using the equations defining NCI for initialization and NCI variation for the Markov process, 
+we obtained the following definition of NCI dynamics:
 
 \begin{equation} 
  NCI \sim \left\{
@@ -333,7 +346,7 @@ Using the two equations:
 \begin{equation} 
 \delta NCI \sim \left\{
     \begin{array}{ll}
-        P(\delta NCI \leq 0) \sim \mathcal B(logit^{-1}(\alpha + \beta.NCI)) |\alpha=-1.32,\beta=0.003 \\
+        P(\delta NCI \leq 0|\begin{array}{ll} \alpha=-1.32 \\ \beta=0.003 \end{array}) \sim \mathcal B(logit^{-1}(\alpha + \beta.NCI)) \\
         \mathcal {logN} (\mu_{\delta NCI > 0} = 0.749, \sigma_{\delta NCI > 0} = 2.651) & \mbox{if } \delta NCI > 0 \\
         \mathcal {Exp} (\lambda_{\delta NCI \leq 0} = 123) & \mbox{ifelse} \\
         d_{\delta NCI}=3 & \mbox{Spatial aggregation}
@@ -344,16 +357,12 @@ Using the two equations:
 We simulated back $NCI$ and $\delta NCI$ dynamics,
 using random generators based on probabilistic laws,
 and disaggregating a grid to the desired size of spatial aggregation ($d=3$). 
-**Beware, spatial generator is currently using the `raster` package**
-**and will need to be reimplemented differently if used in C++ code**.
-Using inferred parameters $\alpha$, $\beta$, $\mu_{\delta NCI > 0}$, $\sigma_{\delta NCI > 0}$, and $\lambda_{\delta NCI \leq 0}$,
-we successfully simulated back $\delta NCI$ spatial distribution (Fig. \@ref(fig:simspdNCIdist)).
-Using inferred parameters $\mu_{NCI}$, and $\sigma_{NCI}$,
-we successfully simulated back $NCI$ spatial distribution (Fig. \@ref(fig:simspNCIdist)).
+Using inferred parameters we successfully simulated back $NCI$ 
+and $\delta NCI$ spatial distribution (Fig. \@ref(fig:simspdNCIdist) and Fig. \@ref(fig:simspNCIdist)).
 We then initialized $NCI$ with $NCI$ generator and simulated its dynamics variation over 33 years using $\delta NCI$ generator.
-We obtain satisfying variation over time and space (Fig. \@ref(fig:simulatedNCI) and Fig. \@ref(fig:simncigif)),
-with the appearance of a *true* treefall in the southwest of the simulated plot around 1998.
-We are thus able to simulated $NCI$ spatio-temporal dynamics based on 7 parameters (I'm merging the two $d$ into one):
+We obtain satisfying variation over time and space (Fig. \@ref(fig:simulatedNCI) and Fig. \@ref(fig:simncigif)).
+We are thus able to simulated $NCI$ spatio-temporal dynamics based on **8** parameters,
+using only one $d$ parameter for both $NCI$ and $\delta NCI$ spatial structure.
 
 \begin{equation} 
 NCI_{(x,y),t} = f 
@@ -369,10 +378,7 @@ NCI_{(x,y),t} = f
   \end{pmatrix}
 \end{equation} 
 
-We needed then to related background and treefall mortality to $NCI$ spatio-temporal dynamics, 
-and the forest gap dynamics generator was ready. 
-
-```{r rdeltanci, echo=T}
+```{r rdeltanci}
 rdeltanci <- function(
   NCI = rnorm(1, mean = 122.73, sd = 25.806),
   alpha = -1.32,
@@ -389,7 +395,7 @@ rdeltanci <- function(
 }
 ```
 
-```{r rspdeltanci, echo=T}
+```{r rspdeltanci}
 rspcor <- function(
   M =  matrix(rdeltanci(NCI = rnorm(50*50, mean = 122.73, sd = 25.806)), 
               ncol = 50, nrow = 50),
@@ -404,7 +410,7 @@ rspcor <- function(
 } 
 ```
 
-```{r simspdNCIdist, fig.cap="Simulated deltaNCI distribution in space and absolute."}
+```{r simspdNCIdist, fig.cap="Simulated deltaNCI distribution in space for a random time."}
 simnci <- data.frame(NCI = rnorm(nrow(nci)*10, mean = 122.73, sd = 25.806)) %>% 
   mutate(deltaNCI = rdeltanci(NCI))
 g1 <- ggplot(simnci, aes(x = deltaNCI)) +
@@ -427,7 +433,7 @@ g2 <- ggplot(rspcor(matrix(simnci$deltaNCI[1:(50*50)], ncol = 50, nrow = 50)),
 cowplot::plot_grid(g1, g2)
 ```
 
-```{r simspNCIdist, fig.cap="Simulated NCI distribution in space and absolute."}
+```{r simspNCIdist, fig.cap="Simulated NCI distribution in space for a random time."}
 t <- rspcor(matrix(rnorm(50*50, mean = 122.73, sd = 25.806), nrow = 50, ncol = 50), dcor = 4)
 g1 <- ggplot(t, aes(x = value)) +
   geom_histogram(aes(y = ..density..), fill = "lightgrey", col = "grey", bins = 100) +
@@ -462,7 +468,7 @@ read_tsv("modelling_save/simnci.tsv", col_types = cols(deltaNCI = col_double()))
   geom_line(aes(y = NCI, group = idTree), alpha = 0.1) +
   geom_line(aes(y = NCImean), col = "red", size = 2) +
   xlab("Census year") +
-  ylab("Simulated Neighbour crowding index in time.")  
+  ylab("Simulated neighbourhood crowding index in time.")  
 ```
 
 ```{r simnci, eval=F}
@@ -484,20 +490,20 @@ include_graphics("modelling_save/simnci.gif")
 
 ## Mortality
 
-We divided mortality in background mortality, primary treefall, and secondary treefall (Fig. \@ref(fig:plot1mortalitygif)).
-We related mortality to tree $DBH$ and $NCI$ and $\delta NCI$ from the previous census (Fig. \@ref(fig:mortality)).
-We fitted a model using the following equation:
+We used a Bernoulli model to define the probability of death per year $P(death)$ (Fig. \@ref(fig:plot1mortalitygif)),
+based on a $year$ random effect (e.g. climatic effect as El Nino events) 
+and tree $DBH$, $NCI$ and $\delta NCI$ (Fig. \@ref(fig:mortality)):
 
 \begin{equation} 
- P(Mortality_{year}) \sim \mathcal B(logit(\theta_{0,year}+\theta_{DBH}\times DBH+\theta_{NCI}\times NCI+\theta_{\delta NCI}\times \delta  NCI)) \\
+ P(death_{year}) \sim \mathcal B(logit(\theta_{0,year}+\theta_{DBH}. DBH+\theta_{NCI}.NCI+\theta_{\delta NCI}.\delta  NCI)) \\
  \theta_{0,year} \sim \mathcal N(\theta_0, \sigma_{year})
 \end{equation} 
 
-We found only effects of $deltaNCI$ (Fig. \@ref(fig:fitmortality)),
-and thus obtained the following unscaled relation to simulate mortality (Tab. \@ref(tab:fitmortality2)):
+We considered no fixed effects as significant (Fig. \@ref(fig:fitmortality)),
+and thus obtained the following equation to simulate mortality:
 
 \begin{equation} 
- P(Mortality|\begin{pmatrix} \theta_0 = -4.31\\ \theta_{\delta NCI} = -0.03\end{pmatrix}) \sim \mathcal B(logit(\theta_0 + \theta_{\delta NCI}  \times \delta  NCI))
+ P(death) \sim \mathcal B(p = 0.01325208)
 \end{equation} 
 
 ```{r plot1mortality, eval=F}
@@ -527,7 +533,7 @@ anim_save("modelling_save/plot1treefalls.gif", g)
 include_graphics("modelling_save/plot1treefalls.gif")
 ```
 
-```{r mortality, fig.cap="Background and treefall mortality per plots and census years in Paracou."}
+```{r mortality, fig.cap="Mortality for all censuses in Paracou per explanatory variables."}
 nci <- read_tsv("modelling_save/nci.tsv") %>% 
   left_join(src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
                      "trees", "Paracou.sqlite")) %>%
@@ -587,7 +593,7 @@ data %>%
   theme(legend.position = "bottom", axis.title = element_blank())
 ```
 
-```{r fitmortality, fig.cap="Results of the model with centered data for 10^4 observations."}
+```{r fitmortality, fig.cap="Parameters posteriors for the tree mortality model with centered data and 10^4 observations."}
 # mdata <- sample_n(data, 10^4)
 # model <- stan_model(file = "modelling_stan/mortality.stan")
 # fit <- sampling(model, data = list(N = nrow(mdata),
@@ -605,41 +611,21 @@ load("modelling_save/fitmortality0.stan")
 mcmc_dens(fit, regex_pars = "theta")
 ```
 
-```{r fitmortality2}
-# model <- stan_model(file = "modelling_stan/mortality2.stan")
-# fit <- sampling(model, data = list(N = nrow(mdata),
-#                                    Y = max(mdata$CensusYearInteger),
-#                                    death = mdata$death,
-#                                    year = mdata$CensusYearInteger,
-#                                    DBH = mdata$DBH,
-#                                    deltaNCI = mdata$deltaNCI),
-#                 include = F, pars = c("theta0y"))
-# mcmc_trace(fit, np = nuts_params(fit))
-# mcmc_pairs(fit, np = nuts_params(fit))
-# save(mdata, fit, file = "modelling_save/fitmortality2.stan")
-load("modelling_save/fitmortality2.stan")
-broom::tidyMCMC(fit, estimate.method = "median", conf.int = T, rhat = T) %>% 
-  kable(caption = "Model parameters for unscaled deltaNCI and 10^4 observations.")
-```
-
 ## Time steps
 
-We first thought to relate time steps to forest gap dynamics,
-defining the time step as the typical time between two treefalls.
-But in the end defining major treefalls is not that simple, 
-and we used a different method to simulated NCI.
-Consequently, we should find another method to define time steps,
-as our current definition of death rate and deltaNCI is per year.
-The idea is to avoid simulating tree growth and DBH,
-the main idea being that individuals are mature (reproducing) and in the canopy.
-Following @Hardy2006, *Symphonia globulifera* reach maturity at $DBH_{maturity} = 17$,
-that we may increase to $DBH_{maturity} = 20$ as they reported the minimum adult DBH.
-Then using symcapture analysis, 
-we can relate growth to time with annual growth rate parameters
-$Gmax=0.53~cm.yr^{-1}$, $Dopt=25~cm$, and $Ks=0.70$,
-despite we evidenced strong differences among individuals.
-We found *Symphonia* individuals to reach maturity between 28 and 41 years (Fig. \@ref(fig:dbhintime)),
-and thus decided to use a time step $d_{time}$ of 30 years corresponding to a mortality of 32% (Fig. \@ref(fig:mortalityovertime)).
+To avoid simulating tree growth and DBH,
+we simulated mature individuals (reproducing) in the canopy.
+Following @Hardy2006, *Symphonia globulifera* reach maturity at $DBH_{maturity} = 17~cm$ (minimum adult DBH),
+and based on annual growth rate parameters *Symphonia globulifera* has a liberation diameter of $Dopt=25~cm$ 
+([symcapture analyses](https://phdpages.netlify.app/6b189d4142e8224bff99e28abd11cbfdd50c51b1/symcapture/growth-genomics.html)).
+We thus used a maturity DBH of $DBH_{maturity} = 20~cm$.
+Then we related growth to time with annual growth rate parameters
+$Gmax=0.53~cm.yr^{-1}$, $Dopt=25~cm$, and $Ks=0.70$ 
+([symcapture analyses](https://phdpages.netlify.app/6b189d4142e8224bff99e28abd11cbfdd50c51b1/symcapture/growth-genomics.html)),
+despite evidences for strong differences among individuals.
+We found *Symphonia* individuals to reach maturity between 28 and 41 years (Fig. \@ref(fig:dbhintime)).
+Consequently, we decided to use a **time step of 30 years**.
+This time-step corresponds to a mean mortality of 32% of individuals at each step (Fig. \@ref(fig:mortalityovertime)).
 
 ```{r dbhintime, fig.cap="Age at maturity since recruitment per species."}
 agr <- function(dbh, gmax = 0.53, dopt = 25, Ks = 0.7)
@@ -680,5 +666,5 @@ data.frame(Years = 1:500) %>%
   geom_vline(xintercept = 1:15*30, col = "lightgrey") + 
   geom_hline(yintercept = 0.32467227, col = "red") +
   scale_x_sqrt() +
-  ggtitle("P(death over 30 years | Pdeath = 0.013) = 0.32467227")
+  ggtitle("P(death over 30 years | Pdeath = 0.013) = B(30, Pdeath) = 0.32467227")
 ```

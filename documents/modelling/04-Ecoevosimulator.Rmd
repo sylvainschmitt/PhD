@@ -14,96 +14,78 @@ library(ecoevosimulator)
 
 # Ecoevosimulator
 
-This chapter introduce the simulator with the different steps. Additional following chapters develop analyses that supported specific development choices or parameters.
+This chapter introduces the the core of the simulator.
+It uses topography and NCI matrices generated in previous chapters.
 
-Simulations start with **genotypes** and **phenotypes** initialisation, and follows with a cycle of four steps repeated over time:
+Simulation follows three basic steps for each tree in each cell of the $grid \times grid$ matrix over $Nt$ time-steps (Fig. \@ref(fig:simsim)):
 
-* **Forest gap dynamics**
-* **Background mortality**
-* **Reproduction**
-* **Recruitment**
+1. **Death**: The tree risks dying. Dead trees are replaced with reproduction and recruitment. Alive trees form the overlapping generations.
+1. **Reproduction**: Seedlings are produced in each empty cell.
+1. **Recruitment**: One seedling is recruited as a mature tree in canopy among seedlings in each empty cell.
 
-## Parameters summary
-
-* $grid$ *int.* square matrix size
-* $Nt$ *int* number of time steps
-* $E_{lim}$ *double.* gradient maximal absolute value
-* $\mu_G$ *double.* genetic mean (could be set to null)
-* $\sigma^2_G$ *double.* genetic variance
-* $\mu_E$ *double.* environmental mean (could be set to null)
-* $\sigma^2_E$ *double.* environmental variance
-* $P_{fall}$ *double.* treefall probability
-* $R_{gaps}$ *int.* treefall gaps radius
-* $P_{death}$ *double.* background mortality probability
-* $N_s$ *int.* number of seedlings
-* $R_{dispersal}$ *int.* dispersal distance
-* $determinist$ *bool.* determinist (true) or probabilist (false) recruitment
-
-## Initialisation
-
-A tree grow in each cell of the environmental matrix. A tree $i$ is defined through its phenotype composed of a quantitative trait $z_i$ (two quantitative traits in next steps ?).
-The quantitative trait $z_i$ is the sum of its genotypic breeding value $a_i$ and an environmental effect $e_i$, 
-both drawn from a genetic and an environmental normal distribution of parameters $\mu_G$ and $\mu_E$ and $\sigma^2_G$ an $\sigma^2_E$,
-the mean and the variance of genetic and environmental distributions (Fig. \@ref(fig:trees)):
-
-\begin{equation} 
-  z_i = a_i + e_i \\
-  a_i \sim N(\mu_G,\sigma^2_G) \\
-  e_i \sim N(\mu_e,\sigma^2_E)
-  (\#eq:phenotype)
-\end{equation} 
-
-```{r trees, fig.cap="Example of genotype and phenotype matrices intialisation."}
-plotMaps(simulator(50,1))
+```{r simsim, fig.cap="Scheme of the EcoEvoSimulator with death, reproduction and recruitment steps. See text above."}
+knitr::include_graphics("images/EcoEvoSimulator.png")
 ```
 
-## Forest gap dynamics
+We additionally precised the initialization of the model using random draws,
+that might further be modified to represent specific starts.
 
-**This one of the part to be improved, below is a quick implementation.**
+## Death
 
-The simulation occurs over $N_t$ time steps.
-The time step is defined as the time between treefall events. 
-We assume each cell to be filled by one mature canopy tree between two events.
-We thus avoid the simulation of individual growth.
-**But forest gap dynamics temporal and spatial structure should be studied with Paracou data.**
+At each time step and in each cell, 
+the tree risks dying with a random draw in a binomial distribution:
 
-At each time step, every tree have a chance to fall with a probability $P_{fall}$.
-Each fallen tree will create a gap of radius $R_{gaps}$.
-All fallen trees, primary and secondary treefalls, are declared as dead and replaced by recruitment after reproduction.
-Other trees undergo background mortality. 
+\begin{equation} 
+  Death \sim \mathcal B(timestep, Pdeath)
+\end{equation} 
 
-## Background mortality
-
-At each time step, every tree have a chance to die with a probability $P_{death}$.
-This represent standing tree death.
-Trees that survived forest gap dynamics and background mortality keep their genotypes and phenotypes for the next time step.
+where $timestep$ (year) is the number of Bernoulli trials and $Pdeath$ is the annual death probability.
+Dead trees are replaced with reproduction and recruitment steps. 
+Alive trees form the overlapping generations.
 
 ## Reproduction
 
-$N_s$ seeds are dispersed in each empty cells due to treefall or background mortality.
-Seedlings inherit their genotype from a mother at distance $R_{dispersal}$ from the empty cell and from a father at a distance $d$ from the mother (could be separated in $d_m$ and $d_f$).
-The euclidean distance is explecitly computed, thus the dispersal kernel is a circle.
-Parents are dranw from a uniform distribution in the dispersal kernel.
-Seedlings genotype $a_s$ is drawn from a normal centered on parental mean and of half the variance of genetic variation $\sigma^2_G$, 
-and is used to compute seedling trait value $z_s$ with environmental noise:
+At each time step and in each empty cell,
+$N_s$ seedlings are produced with trees from the previous time-step (including the dead tree),
+using a mother at distance $R_{dispersion}$ from the empty cell and a father at distance $R_{pollination}$ from the mother.
+Dispersal kernels are discrete circles with uniform probabilities and include the current cells (auto-fecundation).
+Seedlings genotypes $g_s$ are drawn from a normal distribution centered on parental mean genotype with variance of half of genetic variance $\sigma^2_G$ [@Vincenzi2014].
+Seedlings phenotypes $p_s$ are drawn from a normal distribution centered on seedlings genotypes $g_s$ with plastic variance $\sigma^2_P$:
 
 \begin{equation} 
-  z_s = a_s + e_s \\
-  a_s \sim N(mean(a_{P1},a_{P2}),\frac{\sigma^2_G}{2}) \\
-  e_s \sim N(\mu_e,\sigma^2_E)
-  (\#eq:as)
+  p_s \sim \mathcal N(a_s,\sigma^2_P) \\
+  g_s \sim \mathcal N(\frac{a_{P1}+a_{P2}}{2},\frac{\sigma^2_G}{2})
 \end{equation} 
+
+Note that two genotypes and phenotypes are defined for seedlings, both for topography and forest gap dynamics.
 
 ## Recruitment
 
-One seedlings outcompete other $N_s-1$ seedlings with determinist or probabilist recruitment ($determinist$), 
-and is recruited as a mature canopy tree for the next time step.
-Viability is defined as the inverse of the euclidean distance between seedlings phenotype and the environment of the cell:
+At each time step and in each empty cell,
+one seedling is recruited as a mature tree in canopy among the $N_s$ seedlings.
+Seedlings are recruited with deterministic or probabilistic recruitment depending on their viability.
+Deterministic recruitment selects the successful seedling with the highest viability.
+Probabilistic recruitment draws the successful seedling with a probability proportional to seedlings viability.
+Viability is defined as the inverse of the Euclidean distance between seedlings phenotype $p_s$ and the environment $e_s$ reduced by environment variance $\sigma^2_E$:
 
 \begin{equation} 
-  viability = \frac{1}{\sqrt{(z_s - e_i)^2}}
-  (\#eq:viability)
+  viability_s = \frac{1}{\sqrt{(\frac{p_s - e_s}{\sigma^2_E})^2}}
 \end{equation} 
 
-Determinist recruitment select for the most viable (highest value) seedlings.
-Probabilist recruitment use a random draw with viability as the recruitment probability.
+Note that the Euclidean distance used for viability is calculated in two dimensions composed by topography and forest gap dynamics.
+
+## Initialisation
+
+Currently, the initialization of the model uses random draws, 
+but might further be modified to represent specific initialization.
+
+In each cell at the fist step, 
+a tree is drawn with a genotype $g_i$ drawn from a normal distribution centered on environmental mean $\mu_E$ with a genetic variance $\sigma^2_G$
+and a phenotype $p_i$ drawn from a normal distribution centered $g_i$ with a plastic variance $\sigma^2_P$:
+
+\begin{equation} 
+  p_i \sim \mathcal N(g_i, \sigma^2_E) \\
+  g_i \sim N(\mu_E, \sigma^2_G)
+\end{equation} 
+
+Note that two genotypes and phenotypes are defined for trees, both for topography and forest gap dynamics.

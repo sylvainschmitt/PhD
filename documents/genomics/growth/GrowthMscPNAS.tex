@@ -1,0 +1,543 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{lmodern}
+\usepackage{setspace}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  pdftitle={Forest gap dynamics: an underexplored factor that drives divergent adaptive growth strategies within tropical tree species},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+\usepackage[margin=1in]{geometry}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.77,0.63,0.00}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\usepackage{longtable,booktabs}
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{geometry}
+\geometry{verbose,letterpaper,margin=2.45cm}
+
+% \usepackage[breaklinks=true,pdfstartview=FitH,citecolor=blue]{hyperref}
+\hypersetup{colorlinks,%
+	citecolor=blue,%
+	filecolor=red,%
+	linkcolor=blue,%
+	urlcolor=red,%
+	pdfstartview=FitH}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{microtype}
+
+\usepackage{booktabs}
+
+\usepackage{lineno}
+\linenumbers
+
+
+% flush left while keep identation
+\makeatletter
+\newcommand\iraggedright{%
+  \let\\\@centercr\@rightskip\@flushglue \rightskip\@rightskip
+  \leftskip\z@skip}
+\makeatother
+
+\title{\textbf{Forest gap dynamics: an underexplored factor that drives divergent adaptive growth strategies within tropical tree species}}
+\author{}
+\date{\vspace{-2.5em}}
+
+\begin{document}
+\maketitle
+
+% align only at left, not at right.
+\iraggedright
+
+\setstretch{1.5}
+\textbf{PNAS: 4323/\textasciitilde4000 words (6 pages with references) and /50 references, 150/250 words abstract, 117/120 words significance statement}
+
+\hypertarget{title-page}{%
+\section{Title Page}\label{title-page}}
+
+\textbf{BIOLOGICAL SCIENCES:} Ecology \& Evolution \emph{(Dual classifications are permitted in exceptional cases, subject to Editorial Board approval, within a major category.)}
+
+Sylvain Schmitt\(^a,2\),
+Niklas Tysklind\(^b\),
+Myriam Heuertz\(^{a,1}\),
+Bruno Hérault\(^{c,d,e,1}\)
+
+\emph{\(^a\) Univ. Bordeaux, INRAE, BIOGECO, 69 route d'Arcachon, 33610 Cestas France;}
+\emph{\(^b\) INRAE, UMR EcoFoG (Agroparistech, CNRS, Cirad, Université des Antilles, Université de la Guyane), Campus Agronomique, 97310 Kourou, French Guiana;}
+\emph{\(^c\) CIRAD, UPR Forêts et Sociétés, Yamoussoukro, Côte d'Ivoire;}
+\emph{\(^d\) Forêts et Sociétés, Univ Montpellier, CIRAD, Montpellier, France;}
+\emph{\(^e\) Institut National Polytechnique Félix Houphouët-Boigny, INP-HB, Yamoussoukro, Côte d'Ivoire;}
+\emph{\(^{1}\) M.H. contributed equally to this work with B.H.}
+\emph{\(^{2}\) To whom correspondence should be addressed. E-mail: \href{mailto:sylvain.m.schmitt@gmail.com}{\nolinkurl{sylvain.m.schmitt@gmail.com}}}
+
+\textbf{Keywords:} genotypic adaptation \textbar{} neighbor crowding index \textbar{} \emph{Symphonia globulifera}
+
+\hypertarget{abstract}{%
+\section{Abstract}\label{abstract}}
+
+\textbf{In tropical forests, natural gap dynamics is a primary driver of ecosystem functioning by triggering a wide variety of ecological growth and survival strategies of trees. These strategies have long been studied among species, neglecting individual variation in demographic responses within species. Variation in demographic response is facilitated by overlapping generations which maintain the genetic diversity necessary for temporally-variable but strong selection to act on specific life stages. Tropical trees are long-lived and produce many seedlings whose growth and survival is shaped by forest gap dynamics. Here, we provide evidence that genotypic adaptive growth strategies allow forest tree species to grow in a mosaic of light and competition environments, or successional niches, shaped by time since the last tree fall. Consequently, the successional niche selects individuals with the most suitable adaptive growth strategy to reach the canopy, with fast-growing \emph{hares} in forest gaps and slow-growing \emph{turtles} in shaded closed-canopy patches.}
+
+\hypertarget{significance-statement}{%
+\section{Significance Statement}\label{significance-statement}}
+
+\textbf{The natural gap dynamics from falling trees is one of the main drivers of ecosystem functioning in tropical forests. Trees respond to forest gap dynamics by a wide variety of ecological strategies, but these strategies have long been studied among species, neglecting genetic variability within species. Here we provide genetic evidence for diverse adaptive growth strategies of individuals within mature forest tree species that allow them to grow in a diversity of light and competition environments that vary with time since the last tree fall. We show that the fine spatio-temporal dynamics of forest gaps is a previously neglected factor that, along with others, contributes to maintaining tropical tree within-species genetic diversity, the raw material of evolution.}
+
+\hypertarget{introduction}{%
+\section{Introduction}\label{introduction}}
+
+The heterogeneity of resource distribution in space and time defines the fine-scale habitat structure where species and individuals can grow and coexist (\protect\hyperlink{ref-Lortie2004a}{1}, \protect\hyperlink{ref-weiher_assembly_1995}{2}).
+For instance, the spatial distribution of water and nutrients varies strongly along topographic gradients in tropical forests (\protect\hyperlink{ref-Ferry2010}{3}).
+Therefore, topography drives pervasive differentiation in habitat preference among tree species (\protect\hyperlink{ref-Engelbrecht2007}{4})
+and in functional responses among and within species (\protect\hyperlink{ref-Schmitt2020}{5}).
+In natural tropical forests, competition for light due to forest gap dynamics (\protect\hyperlink{ref-Hubbell1999}{6}, \protect\hyperlink{ref-Molino2001}{7})
+is often greater than the effect of competition for water and nutrients, even in early successional stages (\protect\hyperlink{ref-VanBreugel2012}{8}).
+Forest gap dynamics is characterised by a mosaic of light and competition environments,
+or successional niches, shaped by time since the last treefall.
+Forest succession contrasts a bright environment with reduced competition from adult trees after a treefall with a variety of more shaded environments in which competition from tall trees increases as they fill with vegetation.
+Successional niches trigger a wide variety of demographic responses associated with ecological strategies of individuals and species (\protect\hyperlink{ref-Herault2010}{9}, \protect\hyperlink{ref-Ruger2009}{10}).
+Pioneer species with fast growth, thanks to productive leaf tissue and light wood, rapidly colonize treefall gaps whereas late successional species with slower growth and more conservative tissue progressively establish in more shaded environments (\protect\hyperlink{ref-Craven2015}{11}).
+
+But ``nothing in biology makes sense except in the light of evolution'' (\protect\hyperlink{ref-Dobzhansky1973}{12}).
+Spatial habitat heterogeneity has been shown to drive differential adaptations of tree species,
+in the case of adaptive radiations (\protect\hyperlink{ref-Paun2016}{13}, \protect\hyperlink{ref-Pillon2014}{14}),
+and within tree species, with microgeographic adaptations within the dispersal neighbourhood of an individual (\protect\hyperlink{ref-Brousseau2015}{15}--\protect\hyperlink{ref-Team2013}{17}).
+However, the role of temporal habitat heterogeneity as a driver of adaptive evolution has been much less explored.
+Forest gap dynamics is a spatio-temporal process that has a strong impact on tree ecology (\protect\hyperlink{ref-VanBreugel2012}{8}),
+however, to our knowledge, no studies have explored its role as a driver of adaptation within species.
+
+The assumption that evolution and ecology operate at very different time scales may have impeded such studies (\protect\hyperlink{ref-Pelletier2009}{18}),
+however, evidence is accumulating showing that evolutionary processes can be fast enough to impact ecological processes on a contemporary time scale (\protect\hyperlink{ref-Hairston2005}{19}, \protect\hyperlink{ref-Rudman2017}{20}).
+Theoretical work demonstrated that biological systems with overlapping generations can maintain genetic variation in long-lived stages in which selection is relaxed and which provide diversity for specific, young stages, on which strong temporally variable selection can act (\protect\hyperlink{ref-Ellner1994}{21}).
+For instance, overlapping generations with oscillation between short high-recruitment periods and long population-decline periods explain the spatial genetic structure of the Neotropical tree \emph{Jacaranda copaia} (\protect\hyperlink{ref-Jones2006}{22}).
+
+In tropical forests, the dynamics of forest gaps strongly determines the survival and recruitment of non-mature trees through competition for access to light.
+Once in the canopy, adult trees with full access to light are free from the light-driven selection of forest gap dynamics.
+Adult trees can therefore act as a reservoir of genotypes against the hazards of fine spatio-temporal dynamics of forest gaps.
+Generations of tropical trees broadly overlap, for instance late-successional tree species start reproducing around 20cm of diameter at breast height (DBH),
+while they may grow up to 1m DBH (\protect\hyperlink{ref-Hardy2006}{23}) and live more than a century (\protect\hyperlink{ref-OBrien1995}{24}).
+
+Tropical trees thus disperse many seedlings over time into a mosaic of light conditions that fluctuates spatially and temporally due to the dynamics of forest gaps.
+Individual offspring encounter mainly shady and sometimes bright environments in which they face competition and must grow to survive.
+Since forest gap dynamics opposes rapid growth in a bright environment to slow growth in a shaded environment,
+we hypothesize that individual genotypes within species would be adapted to divergent growth strategies between bright and shaded environments.
+Adaptation to slow growth in shade would allow individuals to persist with conservative tissues;
+whereas adaptation to fast growth in a bright environment would allow individuals to outgrow other seedlings and maintain access to light through an acquisition strategy with cheaper tissues but with less defence against herbivores and pathogens (\protect\hyperlink{ref-Fine2006}{25}).
+Consequently, we hypothesize that forest gap dynamics is a major driver of the spatial and temporal structuring of genotypic diversity within tropical tree species.
+
+Following our hypothesis, we expect that the divergent adaptive growth strategies of individuals would be spatially structured according to the mosaic of successional niches created by the past fine-scale gap dynamics.
+We also expect the divergent adaptive growth strategies to be structured in time.
+Because of strong light and competition-mediated selection on sapling stages (\protect\hyperlink{ref-Lewis2000}{26}),
+genotypic adaptations to growth in different light conditions are expected to be more pronounced in intermediate life stages.
+Seedlings may be mostly affected by very stochastic survival.
+Conversely, older stages maintain diversity as they have been recruited from diverse past successional niches and,
+once in the canopy, they are free from the light-driven selection of forest gap dynamics.
+
+In the present study, we assessed genotypic diversity within closely-related sympatric tree species belonging to the widespread tropical tree species complex \emph{Symphonia globulifera}.
+We addressed the fine-scale spatial and temporal genetic adaptations of individuals through differential growth strategies in response to forest gap dynamics.
+We finally compared the breadth of successional niches encountered by \emph{Symphonia} species to other locally abundant species.
+Combining tree diameter censuses, indirect measures of light environment of the recent past and present, and single nucleotide polymorphisms (SNPs),
+we used population genomics, environmental association analyses, genome wide association and growth modelling to address the following questions:
+
+\begin{itemize}
+\tightlist
+\item
+  Are individual genotypes structured by the mosaic of light and competition environments resulting from forest gap dynamics?
+\item
+  Is the growth of individuals determined by genotypes?
+\item
+  Is there an association between genotypic adaptations to gap dynamics and to growth?
+\item
+  How are genotypic adaptations to gap dynamics and to growth structured in time, i.e., across life stages?
+\item
+  Are breadths of successional niches for \emph{Symphonia} species wider than those of other locally abundant species?
+\end{itemize}
+
+\hypertarget{results}{%
+\section{Results}\label{results}}
+
+\emph{Symphonia globulifera} was locally composed of three sympatric species corresponding to three different gene pools with associated morphotypes and differentiated topographic niches (Schmitt et al., in prep).
+Individual tree genotypes explained a significant variation in individual neighbourhood crowding, an indirect measure of competition and light access during the last three decades, (18\%)
+and in individual growth potential (43\%, Fig. \ref{fig:VarPart}).
+This indicates an adaptive genetic response of \emph{Symphonia} genotypes to successional niches and an adaptive component to growth potential.
+Genotypic adaptations to successional niches and individual growth potential were spatially structured on a similar scale, with higher than average genotypic similarity found up to 47m for both adaptations (\(Moran’s~I, p-value<0.01\), Fig. \ref{fig:SpCor}).
+The adaptive responses to successional niches and to growth potential were significantly correlated, and,
+as predicted based on our hypothesis, the correlation was strongest for intermediate life stages:
+a significant negative correlation (Pearson's \(R=-0.3\), \(p=4.5.10^{-9}\)) was observed between genotypic values for neighbourhood crowding and those for individual growth potential across diameter classes (Fig. \ref{fig:gCor}),
+with a stronger and a more significant signal for individuals in intermediate diameter classes, from 14 to 46cm DBH, than for individuals with smaller or larger DBH.
+These results suggest that individual genotypes within \emph{Symphonia} species are adapted to successional niches that trigger adaptive growth strategies:
+a fast growth potential in response to a preference for low competition and bright environments,
+or a slower growth potential in response to a preference for higher competition and more shaded environments,
+structured in space and in diameter classes.
+Nevertheless, breadths of successional niches for \emph{Symphonia} species (92 and 103 for \emph{S. globulifera} and \emph{S. sp1}, respectively)
+are within the distribution of those of locally abundant species (\(97 \pm 10\), Fig. \ref{fig:ncibreadth}).
+
+\hypertarget{discussion}{%
+\section{Discussion}\label{discussion}}
+
+In agreement with our hypothesis, we found that individual tree genotypes are differentially adapted to regenerate and thrive in response to the fine spatio-temporal dynamics of forest gaps.
+A genetic trade-off exists between divergent adaptive growth strategies under different light conditions.
+The genetic trade-off is spatially structured into patches the size of a typical gap opened by a treefall.
+The genetic trade-off is also structured across life stages with a stronger effect in the intermediate stages,
+than either young stages under diverse selection pressures (Tysklind et al.~2020)
+or in older stages recruited in diverse past environments and currently free from the light-driven selection of forest gap dynamics.
+Therefore, a species uses genetically differentiated growth strategies that allow its individuals to grow in a diversity of successional niches,
+thanks to these divergent adaptive growth strategies to forest gap dynamics,
+decreasing overall the risk of a stochastic local extinction.
+Consequently, the effect of forest gap dynamics on genetic adaptations among tropical tree species (\protect\hyperlink{ref-Herault2010}{9}, \protect\hyperlink{ref-Ruger2019}{27})
+is maintained within species in the species complex \emph{Symphonia globulifera}.
+
+Our results observed in a complex containing three species reveal the influence of forest gap dynamics on genotypes on tree species of tropical forests.
+Breadths of successional niches for \emph{Symphonia} species are similar to those of most of the locally abundant species (Fig. \ref{fig:ncibreadth}).
+As the process driving genotypic adaptations is not specific to \emph{Symphonia} nor to species complexes,
+we can assume it would be present in tree species of tropical mature forests.
+Indeed, locally abundant species could only adapt to such broad successional niches through plasticity,
+if not through genotypic adaptations.
+But the strength of competition for light due to forest gap dynamics (\protect\hyperlink{ref-VanBreugel2012}{8})
+advocates more for genotypic adaptations than a single genotype superior across a wide variety of successional niches (\protect\hyperlink{ref-Ellner1994}{21}),
+likely due to physiological or adaptive constraints.
+
+Forest gap dynamics of natural (\protect\hyperlink{ref-Scotti2015}{28}) or anthropogenic (\protect\hyperlink{ref-Leclerc2015}{29}) origin was evidenced as a driver of genetic diversity and structure with varying directions depending on the disturbance intensity.
+However, to our knowledge, no studies have investigated genotypic adaptations to forest gap dynamics until now.
+Temporal dynamics and spatial stochasticity may have been an impediment to the hypothesis of selection based on forest gap dynamics,
+but patches with varying successional stages and steady-state are abundant, while disturbance events are episodic (\protect\hyperlink{ref-Chambers2013}{30}).
+Our study, linking genotype distribution to forest gap dynamics, was only possible thanks to a long-term and large-sized study site that allows us to study the eco-evolutionary dynamics of a complex phenotype such as the individual growth trajectory.
+Combined with results of Chambers et al.~(\protect\hyperlink{ref-Chambers2013}{30}),
+the relative temporal stability of forest patches and the strength of forest gap dynamics on ecosystem functioning probably make it a major driver of diversity distribution in tropical forests.
+
+The existence of a few taller individuals growing all the way to the canopy, i.e.~the \emph{winners},
+and relegating a group of \emph{losers} to the understory has already been demonstrated in tropical forests (\protect\hyperlink{ref-Farrior2016}{31}).
+But our analyses revealed that the \emph{winners} are not determined entirely at random but may result from a subtle match between the light environment produced by the forest gap stage and the relevance of individual genotypic adaptations to such an environment.
+Therefore, the \emph{winners} are not necessarily the fastest growing individuals, i.e.~with the strongest vigor sensu Aubry-Kientz et al.~(\protect\hyperlink{ref-Aubry-Kientz2015}{32}),
+but slow-growing individuals might also represent \emph{winners} in shaded closed-canopy patches.
+To conclude, genetic adequacy with forest gap dynamics determines successful individuals reaching the canopy through divergent growth strategies,
+with \emph{hares} in forest gaps and \emph{turtles} in more shaded closed-canopy patches.
+
+\hypertarget{material-and-methods}{%
+\section{Material and methods}\label{material-and-methods}}
+
+\textbf{Study design.}
+The study was conducted in the Guiana Plateau region, at the Paracou field station.
+The site is made of 16 permanent plots which have been censused (diameter at breast height over 10cm) every 1-2 years for more than 35 years.
+Nine of the plots were logged and subjected to human-induced disturbance in 1986.
+We sampled leaf tissue from 402 individuals previously morphologically identified as \emph{Symphonia globulifera} and \emph{Symphonia sp. 1} (\emph{SI Materials and Methods}).
+
+\textbf{Sequence capture.}
+We designed in silico 20,000 80-mer probes for sequence capture on \emph{Symphonia globulifera}.
+The genetic resources used for the design consisted of two draft genomes, a transcriptome, and reduced-representation genomic sequence reads.
+We prepared and pooled libraries for each individual with a few repeats,
+captured sequences by hybridization with probes,
+and sequenced them in two lanes of an Illumina HiSeq 4000 instrument, following standard protocols.
+We called, filtered and annotated single nucleotide polymorphisms (SNPs) of sequenced libraries against the references used to build the experiment with standards used in quantitative genomics (\emph{SI Materials and Methods}).
+
+\textbf{Genetic analyses.}
+We investigated population genetic structure using \texttt{admixture} (\protect\hyperlink{ref-Alexander2011}{33})
+and the \texttt{introgress} R package (\protect\hyperlink{ref-Gompert2010}{34}).
+We validated species delimitation with a second blind-identification of every collected individual in November 2019.
+Population genetics is further described in Schmitt et al.~(in prep) and \emph{SI Materials and Methods}.
+We inferred individual kinship using \texttt{KING} (\protect\hyperlink{ref-Manichaikul2010}{35}),
+as the method is robust to population structure.
+We set negative kinship values to null as they were confounding with population structure,
+and we further ensured that the matrix was positive-definite using the \texttt{nearPD} function from the R package \texttt{Matrix}.
+
+\textbf{Neighbour crowding index.}
+We used mean neighbourhood crowding over the last 30 years as an indirect measurement of access to light and forest gap dynamics, defined as follow:
+
+\[NCI_i=\overline{\sum_{j|\delta_{i,j}<20m}DBH^2_{j,t}.e^{-\frac14\delta_{i,j}}}\]
+
+with \(DBH_{j,t}\) the diameter of the neighbouring tree \(j\) in year \(t\) and \(\delta_{i,j}\) its distance to the individual tree \(i\).
+\(NCI_i\) is computed for all neighbours at a distance \(\delta_{i,j}\) inferior to the maximum neighbouring distance of 20 meters.
+The power of neighbours \(DBH_{j,t}\) effect was set to 2 to represent a surface.
+The decrease of neighbours diameter effect with distance was set to -0.25 to represent trees at 20 meters of the focal trees having 1\% of the effect of the same tree at 0 meters.
+\(NCI_i\) is computed as the mean of yearly \(NCI_{i,t}\) over the last 30 years denoted by the overline.
+
+\textbf{Individual maximum growth potential.}
+The individual growth of individual \(i\) in population \(p\) between individual recruitment \(y_0\) and 2017, correspond to the difference of diameter at breast height \(DBH\) between the two years, and is defined with a hierarchical model in a lognormal distribution as follow:
+\[DBH_{y=2017,p,i} - DBH_{y=y0,p,i} \sim logN(log[\sum_{y=y0}^{y=2017}AGR(DBH_{y,p,i})], \sigma^2_1)\]
+where the difference of \(DBH_{y=2017,p,i}-DBH_{y=y0,p,i}\) is defined with a lognormal distribution located on the logarithm of the sum of annual growth rates \(AGR\) during the period \(y_0\) to 2017 and of shape \(\sigma^2_1\).
+The annual growth rates \(AGR\) for individual \(i\) in population \(p\) at year \(y\) with a diameter of \(DBH_{y,p,i}\) is defined following a Gompertz model (\protect\hyperlink{ref-Gompertz1825}{36}), already identified as the best model for growth-trajectories in Paracou (\protect\hyperlink{ref-Herault2011}{37}):
+\[AGR(DBH_{y,p,i}) = Gmax_i.exp(-\frac12[\frac{log(\frac{DBH_{y,p,i}}{Doptp})}{Ksp}]^2)\]
+where \(Gmax_i\) is the maximum growth potential (maximal \(AGR\) during individual life) for individual \(i\) further used in association analyses, \(Dopt_p\) is the population optimal diameter at which the individual reaches its maximum growth potential, and \(Ks_p\) is the population kurtosis defining the width of the bell-shaped growth-trajectory (\protect\hyperlink{ref-Herault2011}{37}).
+To ease model inference population optimal diameter \(Dopt_p\) and kurtosis \(Ks_p\) were defined as a random population effect centered on a genus \(Dopt\) and \(Ks\) with corresponding variances \(\sigma^2_{Dopt}\) and \(\sigma^2_{Ks}\).
+
+\textbf{Genotypic values estimate and associations.}
+We used population and individual kinship in an homemade bayesian Animal model with a lognormal distribution to estimate genetic variance associated to the neighbourhood crowding where individual grow and individual maximum growth potential.
+The Animal model was directly inferred with neighbourhood crowding, while the Animal model was nested in a hierarchical model to describe individual maximum growth potential \(Gmax_i\) in the previous growth model (\emph{SI Materials and Methods}).
+To estimate variances on a normal-scale, we log-transformed population fixed effect, genetic additive values, and we calculated conditional and marginal \(R^2\) (\protect\hyperlink{ref-Nakagawa2013}{38}) to partition observed variance.
+We investigated the relationships between genotypic associations to neighbourhood crowding and individual maximum growth and their structure in space and time with respectively spatial autocorrelogram, using the \texttt{pgirmess} R package (\protect\hyperlink{ref-Giraudoux2018}{39}), and decomposed relations over diameter classes.
+
+\hypertarget{acknowledgments}{%
+\section{Acknowledgments}\label{acknowledgments}}
+
+We thank the University of Bordeaux for a PhD grant to Sylvain Schmitt.
+We are grateful to Pascal Petronelli and the CIRAD inventory team for their work on tree inventories and botanical identification,
+and to Christophe Plomion for comments on an early version of the manuscript.
+This study was funded through an Investissement d'Avenir grant of the ANR: CEBA (ANR-10-LABEX-0025), and the ``projet innovant'' LOCOCAP.
+
+\hypertarget{authors-contributions}{%
+\section{Authors' contributions}\label{authors-contributions}}
+
+All authors conceived the ideas and designed methodology;
+SS, MH, and NT sampled individuals;
+SS and MH realized the gene capture experiment;
+SS, MH and BH analysed outputs;
+SS and BH led the writing of the manuscript.
+All authors contributed critically to the drafts and gave final approval for publication.
+
+\hypertarget{references}{%
+\section{References}\label{references}}
+
+\hypertarget{refs}{}
+\leavevmode\hypertarget{ref-Lortie2004a}{}%
+1. C. J. Lortie\emph{et al.}, Rethinking plant community theory. \emph{Oikos} \textbf{107}, 433--438 (2004).
+
+\leavevmode\hypertarget{ref-weiher_assembly_1995}{}%
+2. E. Weiher, P. A. Keddy, Assembly rules, null models, and trait dispersion: new questions from old patterns. \emph{Oikos} \textbf{74}, 159--164 (1995).
+
+\leavevmode\hypertarget{ref-Ferry2010}{}%
+3. B. Ferry, F. Morneau, J. D. Bontemps, L. Blanc, V. Freycon, Higher treefall rates on slopes and waterlogged soils result in lower stand biomass and productivity in a tropical rain forest. \emph{Journal of Ecology} \textbf{98}, 106--116 (2010).
+
+\leavevmode\hypertarget{ref-Engelbrecht2007}{}%
+4. B. M. J. Engelbrecht\emph{et al.}, Drought sensitivity shapes species distribution patterns in tropical forests. \emph{Nature} \textbf{447}, 80--82 (2007).
+
+\leavevmode\hypertarget{ref-Schmitt2020}{}%
+5. S. Schmitt\emph{et al.}, Topography consistently drives intra- and inter-specific leaf trait variation within tree species complexes in a Neotropical forest. \emph{Oikos} \textbf{129}, 1521--1530 (2020).
+
+\leavevmode\hypertarget{ref-Hubbell1999}{}%
+6. S. P. Hubbell\emph{et al.}, Light-gap disturbances, recruitment limitation, and tree diversity in a neotropical forest. \emph{Science} \textbf{283}, 554--557 (1999).
+
+\leavevmode\hypertarget{ref-Molino2001}{}%
+7. J.-F. Molino, D. Sabatier, Tree Diversity in Tropical Rain Forests: A Validation of the Intermediate Disturbance Hypothesis. \emph{Science} \textbf{294}, 1702--1704 (2001).
+
+\leavevmode\hypertarget{ref-VanBreugel2012}{}%
+8. M. van Breugel, P. van Breugel, P. A. Jansen, M. Martínez-Ramos, F. Bongers, The relative importance of above- versus belowground competition for tree growth during early succession of a tropical moist forest. \emph{Plant Ecology} \textbf{213}, 25--34 (2012).
+
+\leavevmode\hypertarget{ref-Herault2010}{}%
+9. B. Herault, J. Ouallet, L. Blanc, F. Wagner, C. Baraloto, Growth responses of neotropical trees to logging gaps. \emph{Journal of Applied Ecology} \textbf{47}, 821--831 (2010).
+
+\leavevmode\hypertarget{ref-Ruger2009}{}%
+10. N. Rüger, A. Huth, S. P. Hubbell, R. Condit, Response of recruitment to light availability across a tropical lowland rain forest community. \emph{Journal of Ecology} \textbf{97}, 1360--1368 (2009).
+
+\leavevmode\hypertarget{ref-Craven2015}{}%
+11. D. Craven, J. S. Hall, G. P. Berlyn, M. S. Ashton, M. van Breugel, Changing gears during succession: shifting functional strategies in young tropical secondary forests. \emph{Oecologia} \textbf{179}, 293--305 (2015).
+
+\leavevmode\hypertarget{ref-Dobzhansky1973}{}%
+12. T. Dobzhansky, Nothing in biology make sense except in the light of evolution. \emph{The american biology teacher} \textbf{35}, 125--129 (1973).
+
+\leavevmode\hypertarget{ref-Paun2016}{}%
+13. O. Paun\emph{et al.}, Processes Driving the Adaptive Radiation of a Tropical Tree (Diospyros, Ebenaceae) in New Caledonia, a Biodiversity Hotspot. \emph{Systematic Biology} \textbf{65}, 212--227 (2016).
+
+\leavevmode\hypertarget{ref-Pillon2014}{}%
+14. Y. Pillon, H. C. F. Hopkins, F. Rigault, T. Jaffré, E. A. Stacy, Cryptic adaptive radiation in tropical forest trees in New Caledonia. \emph{New Phytologist} \textbf{202}, 521--530 (2014).
+
+\leavevmode\hypertarget{ref-Brousseau2015}{}%
+15. L. Brousseau, M. Foll, C. Scotti-Saintagne, I. Scotti, Neutral and Adaptive Drivers of Microgeographic Genetic Divergence within Continuous Populations: The Case of the Neotropical Tree Eperua falcata (Aubl.). \emph{PLOS ONE} \textbf{10}, e0121394 (2015).
+
+\leavevmode\hypertarget{ref-Richardson2014}{}%
+16. J. L. Richardson, M. C. Urban, D. I. Bolnick, D. K. Skelly, Microgeographic adaptation and the spatial scale of evolution. \emph{Trends in Ecology and Evolution} \textbf{29}, 165--176 (2014).
+
+\leavevmode\hypertarget{ref-Team2013}{}%
+17. L. Brousseau, D. Bonal, J. Cigna, I. Scotti, Highly local environmental variability promotes intrapopulation divergence of quantitative traits: an example from tropical rain forest trees. \emph{Annals of Botany} \textbf{112}, 1169--1179 (2013).
+
+\leavevmode\hypertarget{ref-Pelletier2009}{}%
+18. F. Pelletier, D. Garant, A. P. Hendry, Eco-evolutionary dynamics. \emph{Philosophical Transactions of the Royal Society B: Biological Sciences} \textbf{364}, 1483--1489 (2009).
+
+\leavevmode\hypertarget{ref-Hairston2005}{}%
+19. N. G. Hairston, S. P. Ellner, M. A. Geber, T. Yoshida, J. A. Fox, Rapid evolution and the convergence of ecological and evolutionary time. \emph{Ecology Letters} \textbf{8}, 1114--1127 (2005).
+
+\leavevmode\hypertarget{ref-Rudman2017}{}%
+20. S. M. Rudman, M. Kreitzman, K. M. A. Chan, D. Schluter, Evosystem Services: Rapid Evolution and the Provision of Ecosystem Services. \emph{Trends in Ecology and Evolution} \textbf{32}, 403--415 (2017).
+
+\leavevmode\hypertarget{ref-Ellner1994}{}%
+21. S. Ellner, N. G. Hairston Jnr, Role of overlapping generations in maintaining genetic variation in a fluctuating environment. \emph{American Naturalist} \textbf{143}, 403--417 (1994).
+
+\leavevmode\hypertarget{ref-Jones2006}{}%
+22. F. A. Jones, S. P. Hubbell, Demographic spatial genetic structure of the Neotropical tree, Jacaranda copaia. \emph{Molecular Ecology} \textbf{15}, 3205--3217 (2006).
+
+\leavevmode\hypertarget{ref-Hardy2006}{}%
+23. O. J. Hardy\emph{et al.}, Fine-scale genetic structure and gene dispersal inferences in 10 Neotropical tree species. \emph{Molecular Ecology} \textbf{15}, 559--571 (2005).
+
+\leavevmode\hypertarget{ref-OBrien1995}{}%
+24. S. T. O'Brien, S. P. Hubbell, P. Spiro, R. Condit, R. B. Foster, Diameter, height, crown, and age relationships in eight neotropical tree species. \emph{Ecology} \textbf{76}, 1926--1939 (1995).
+
+\leavevmode\hypertarget{ref-Fine2006}{}%
+25. P. V. A. Fine\emph{et al.}, The growth-defense trade-off and habitat specialization by plants in amazonian forests. \emph{Ecology} \textbf{87}, S150--S162 (2006).
+
+\leavevmode\hypertarget{ref-Lewis2000}{}%
+26. S. L. Lewis, E. V. J. Tanner, Effects of above- and belowground competition on growth and survival of rain forest tree seedlings. \emph{Ecology} \textbf{81}, 2525--2538 (2000).
+
+\leavevmode\hypertarget{ref-Ruger2019}{}%
+27. N. Rüger\emph{et al.}, Demographic trade-offs predict tropical forest dynamics. \emph{Science} \textbf{368}, 165--168 (2020).
+
+\leavevmode\hypertarget{ref-Scotti2015}{}%
+28. I. Scotti, W. Montaigne, K. Cseke, S. Traissac, Life after disturbance (II): the intermediate disturbance hypothesis explains genetic variation in forest gaps dominated by Virola michelii Heckel (Myristicaceae). \emph{Annals of Forest Science} \textbf{72}, 1035--1042 (2015).
+
+\leavevmode\hypertarget{ref-Leclerc2015}{}%
+29. T. Leclerc, R. Vimal, V. Troispoux, S. Périgon, I. Scotti, Life after disturbance (I): changes in the spatial genetic structure of Jacaranda copaia (Aubl.) D. Don (Bignonianceae) after logging in an intensively studied plot in French Guiana. \emph{Annals of Forest Science} \textbf{72}, 509--516 (2015).
+
+\leavevmode\hypertarget{ref-Chambers2013}{}%
+30. J. Q. Chambers\emph{et al.}, The steady-state mosaic of disturbance and succession across an old-growth central Amazon forest landscape. \emph{Proceedings of the National Academy of Sciences of the United States of America} \textbf{110}, 3949--3954 (2013).
+
+\leavevmode\hypertarget{ref-Farrior2016}{}%
+31. C. E. Farrior, S. a Bohlman, S. Hubbell, S. W. Pacala, Dominance of the suppressed: Power-law size structure in tropical forests. \emph{Science} \textbf{351}, 2014--2016 (2016).
+
+\leavevmode\hypertarget{ref-Aubry-Kientz2015}{}%
+32. M. Aubry-Kientz, V. Rossi, J.-J. Boreux, B. Hérault, A joint individual-based model coupling growth and mortality reveals that tree vigor is a key component of tropical forest dynamics. \emph{Ecology and evolution} \textbf{5}, 2457--65 (2015).
+
+\leavevmode\hypertarget{ref-Alexander2011}{}%
+33. D. H. Alexander, K. Lange, Enhancements to the ADMIXTURE algorithm for individual ancestry estimation. \emph{BMC Bioinformatics} \textbf{12} (2011).
+
+\leavevmode\hypertarget{ref-Gompert2010}{}%
+34. Z. Gompert, C. Alex Buerkle, Introgress: A software package for mapping components of isolation in hybrids. \emph{Molecular Ecology Resources} \textbf{10}, 378--384 (2010).
+
+\leavevmode\hypertarget{ref-Manichaikul2010}{}%
+35. A. Manichaikul\emph{et al.}, Robust relationship inference in genome-wide association studies. \emph{Bioinformatics} \textbf{26}, 2867--2873 (2010).
+
+\leavevmode\hypertarget{ref-Gompertz1825}{}%
+36. B. Gompertz, On the nature of the function expressive of the law of humanmortality, and on a newmode of determining the value of life contingencies. \emph{Philosophical Transactions of the Royal Society of London} \textbf{115}, 513--583 (1825).
+
+\leavevmode\hypertarget{ref-Herault2011}{}%
+37. B. Hérault\emph{et al.}, Functional traits shape ontogenetic growth trajectories of rain forest tree species. \emph{Journal of Ecology} \textbf{99}, 1431--1440 (2011).
+
+\leavevmode\hypertarget{ref-Nakagawa2013}{}%
+38. S. Nakagawa, H. Schielzeth, A general and simple method for obtaining R2 from generalized linear mixed-effects models. \emph{Methods in Ecology and Evolution} \textbf{4}, 133--142 (2013).
+
+\leavevmode\hypertarget{ref-Giraudoux2018}{}%
+39. P. Giraudoux, J.-P. Antonietti, C. Beale, D. Pleydell, M. Treglia, 'pgirmess': Spatial Analysis and Data Mining for Field Ecologists (2018).
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics{GrowthMscPNAS_files/figure-latex/VarPart-1.pdf}
+\caption{\label{fig:VarPart}Variance partitioning for neighbourhood crowding index (NCI), an indirect measurement of access to light, and for individual maximum growth potential (Gmax). Variation of each variable has been partitioned into among-species (red), among-genotype (green), and residual (blue) variation.}
+\end{figure}
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics{GrowthMscPNAS_files/figure-latex/SpCor-1.pdf}
+\caption{\label{fig:SpCor}Spatial autocorrelogram for raw variable and genotypic values of neighbourhood crowding index (NCI), an indirect measurement of access to light, and individual maximum growth potential (Gmax). The spatial autocorrelogram shows Moran's I value for different distance classes with significant values represented by filled points against transparent non-significant values. Colours of lines and points represent neighbourhood crowding index (blue) and individual maximum growth potential (red). Linetype represents raw variable (dashed) and associated genotypic values (continuous).}
+\end{figure}
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics{GrowthMscPNAS_files/figure-latex/gCor-1.pdf}
+\caption{\label{fig:gCor}Relation between genotypic values for individual growth potential (Gmax) and neighbourhood crowding index (NCI), an indirect measurement of access to light, for different classes of diameters. Regression lines represent a linear model of form y \textasciitilde{} x. Annotations give for each diameter class the Pearson's R correlation coefficient and the associated p-value.}
+\end{figure}
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics{GrowthMscPNAS_files/figure-latex/ncibreadth-1.pdf}
+\caption{\label{fig:ncibreadth}Niche breadth in neighbourhood crowding index (NCI) for species abundant in Paracou. Niche breadth is defined by the difference between the 95th and 5th quantiles of neighbourhood crowding index (NCI) for individuals with a diameter at breast height between 10 and 20 cm. Niche breadth has been calculated for species with at least fifty individuals meeting previous criteria. The analyses used only control plots, and not human disturbed plots. Dashed lines represent niche breadth for Symphonia globulifera (red) and Symphonia sp. 1 (blues).}
+\end{figure}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{save}\NormalTok{(}\DataTypeTok{list =} \KeywordTok{ls}\NormalTok{(), }\DataTypeTok{file =} \StringTok{"../../thesis/rdata/Ch4Msc.Rdata"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\end{document}

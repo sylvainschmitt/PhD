@@ -1,3 +1,10 @@
+# PhD 0.1.9223
+* growth: figures for PNAS
+* parvicapture: Manaus
+* symcapture: spatial structure
+* modelling: metrics, sensitivity, virtual experiment
+* thesis: title
+
 # PhD 0.1.9222
 * modelling: time steps & system metrics
 

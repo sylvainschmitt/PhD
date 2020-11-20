@@ -172,16 +172,18 @@ pcas <- lapply(list.files(file.path(path, "..", "variants", "kinship_filtered"))
              delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
     mutate(filter = f)) %>% 
   bind_rows() %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
   left_join(individuals)
-kmeans <- group_by(pcas, filter) %>% 
-  cbind(group_by(pcas, filter) %>% 
+kmeans <- pcas
+kmeans$cluster <- group_by(pcas, filter) %>% 
           filter(sum(PCA1) != 0) %>% 
           dplyr::select(PCA1, PCA2) %>%
-          do(hc = cutree(hclust(dist(as.matrix(.))), k = 3)) %>% 
+          do(hc = cutree(hclust(dist(as.matrix(.))), k = 3) %>% 
           broom::tidy(hc)) %>% 
-  dplyr::rename(cluster = x)
+  unnest(hc) %>% 
+  dplyr::select(x) %>% 
+  unlist()
 filter(kmeans, filter == "filtered.0.9928.n5") %>% 
   ungroup() %>%
   dplyr::select(Sample, cluster) %>% 
@@ -241,7 +243,7 @@ read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>%
     mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
                           "2" = "E. sagotiana cluster",
                           "1" = "E. coriacea cluster")) %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F, convert = T) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
   left_join(individuals) %>% 
   filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>%

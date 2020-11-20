@@ -17,12 +17,33 @@ library(ecoevosimulator)
 
 This chapter aims to define system outputs and response variables for sensitivity and virtual experiment analyses.
 We were interested in three things: (1) local adaptation and (2) population structure.
-We used a simulation with Plot 1 of Paracou on a grid of 50 and other parameters set to default values (Fig. \@ref(fig:simdef)),
-which allowed us to obtain a more structured population.
+We used Plot 1 of Paracou on a grid of 50 and other parameters set to default values,
+which allowed us to obtain a more structured population (Fig. \@ref(fig:simmaps)).
+We simulate three conditions, one with varying NCI, one with varying topography, and one with both varying (Fig. \@ref(fig:simtraj)).
 
-```{r simdef, fig.cap="Default simulation used to explore system outputs."}
-sim <- simulator(topography = "paracou", grid = 50, plot = 1)
-plotSim(sim)   
+```{r simtets}
+# Topo <- paracouTopography(grid = 50, plot = 1)
+Topo <- sinusoidalTopography(grid = 50)
+NCI <- generateNCI(grid = 50, Nt = 60)
+Topo0 <- matrix(0, nrow(Topo), ncol(Topo))
+NCI0 <- matrix(0, nrow(NCI), ncol(NCI))
+NCIfix <- matrix(rep(NCI[30,], nrow(NCI)), nrow(NCI), ncol(NCI), byrow = T)
+sim.all <- simulator(grid = 50, Nt = 60, topography = Topo, NCI = NCI)
+sim.nci <- simulator(grid = 50, Nt = 60, topography = Topo0, NCI = NCI, sigmaZtopo = 0.1, sigmaGtopo = 0.1)
+sim.topo <- simulator(grid = 50, Nt = 60, topography = Topo, NCI = NCI0, sigmaGnci = 0.1, sigmaZnci = 0.1)
+sims <- bind_rows(
+  mutate(sim.all, model = "all"),
+  mutate(sim.nci, model = "nci"),
+  mutate(sim.topo, model = "topo")
+)
+```
+
+```{r simmaps, fig.cap="Environments used to explore system outputs.", fig.width=6, fig.height=6}
+plotMaps(sim.all) 
+```
+
+```{r simtraj, fig.cap="Simulation trajectories with one or both genotypes."}
+cowplot::plot_grid(plotTrajectories(sim.nci), plotTrajectories(sim.topo), plotTrajectories(sim.all)) 
 ```
 
 ## Local adaptation
@@ -34,27 +55,32 @@ $$D_G=\overline{\sqrt{(\frac{E_i-G_i}{\sigma_G})^2}}$$
 
 A value close to zero would indicates a perfect match between genotypes and environment whereas a high value would indicate no local adaptation.
 Note that $D_G$ in multidimensional space is limited by the less adapted variable (Fig. \@ref(fig:dg)).
+Due to the random initialization, NCI is initialized closed to its equilibrium, and its local adaptations appear small.
 
 ```{r dg, fig.cap="Genetic distance Dg for topography, forest gap dynamics and both."}
-sim %>% 
+sims %>% 
   mutate(variable = recode(variable, "topography" = "topo")) %>% 
-  mutate(year = timestep*30, variable = paste0(substr(type, 1, 1), "_", variable)) %>% 
-  dplyr::select(-timestep, -X, -Y, -type) %>% 
-  reshape2::dcast(year + individual ~ variable, value.var = "value") %>% 
+  mutate(variable = paste0(substr(type, 1, 1), "_", variable)) %>% 
+  dplyr::select(-X, -Y, -type) %>% 
+  reshape2::dcast(model + timestep + individual ~ variable, value.var = "value") %>% 
   mutate(
     Dg_topo = sqrt(((e_topo - g_topo)/sd(e_topo))^2),
     Dg_nci = sqrt(((e_nci - g_nci)/sd(e_nci))^2),
     Dg_both = sqrt(((e_topo - g_topo)/sd(e_topo))^2 + ((e_nci - g_nci)/sd(e_nci))^2)
   ) %>% 
-  dplyr::select(year, Dg_topo, Dg_nci, Dg_both) %>% 
-  group_by(year) %>%
+  dplyr::select(model, timestep, Dg_topo, Dg_nci, Dg_both) %>% 
+  group_by(model, timestep) %>%
   summarise_all(mean) %>% 
-  reshape2::melt("year", value.name = "Dg") %>%
+  reshape2::melt(c("model", "timestep"), value.name = "Dg") %>%
   mutate(variable = gsub("Dg_", "", variable)) %>% 
-  ggplot(aes(year, Dg, col = variable)) +
-  geom_line() +
+  filter(!(variable == "topo" & model == "ncifix")) %>% 
+  filter(!(variable == "topo" & model == "nci")) %>% 
+  filter(!(variable == "nci" & model == "topo")) %>% 
+  ggplot(aes(timestep, Dg, col = variable)) +
+  geom_smooth() +
   geom_point() +
-  ylab(expression(D[G]))   
+  ylab(expression(D[G]))   +
+  facet_wrap(~model, labeller = "label_both", scales = "free")
 ```
 
 ## Population structure
@@ -63,22 +89,21 @@ For population structure, to simplify the problem we can explore when we have at
 It allowed us to explore continuously the segregation of the first two clusters.
 And the methodology can be used for any other defined number of clusters $K$.
 In one-dimensional or two-dimensional space (topography, forest gap dynamics or both), 
-we defined two metrics $WSS_{score}$ and $D_{clust}$ based on K-means clustering for $k=2$.
-
-We can use the reduced euclidean distance between clusters to measure population structure:
-
-$$D_{clust}=\sqrt{(G_{cluster~1}-G_{cluster~2})^2}$$
-A value close to zero would indicates no population structure,
-whereas a high value would indicate structured populations in at least two clusters.
-
-Or we can use the fraction of the sum of squares between K-means for $K=1$ and $K=2$ times the expected value of 0.5 :
+we defined $WSS_{score}$ based on K-means clustering for $k=2$:
 
 $$WSS_{score}= \frac{WSS_{k=1}}{WSS_{k=2}} \times \frac12$$
+with $WSS$ representing weighted sum of squares, e.g. variance in the cloud, for $k=1$ and $k=2$ groups.
 Indeed, if the cluster are perfectly grouped we expect $WSS_{score}$ to be equal to 1.
 Higher values indicates high clustering between groups.
+In the end, $WSS_{score}$ gave good results (Fig. \@ref(fig:wssgraph)).
 
-In the end, $WSS_{score}$ and $D_{clust}$ gives the same information (Fig. \@ref(fig:gstrMetrics)),
-so we kept $D_{clust}$ as it is mirroring $D_G$ and it has a better ecological explanation.
+```{r groups}
+groups <- function(var1, var2, k = 2){
+  df <- data.frame(var1 = var1, var2 = var2)
+  # cutree(hclust(dist(as.matrix(df))), k = k) # I don't know why hclust doesn't work so I used kmeans
+  kmeans(df, centers = k)$cluster 
+}  
+```
 
 ```{r wss_score}
 wss_score <- function(var1, var2 = NULL, k = 2) {
@@ -90,147 +115,143 @@ wss_score <- function(var1, var2 = NULL, k = 2) {
   wss1 <- sum(kmeans(df, centers = 1)$withinss)
   wssk <- sum(kmeans(df, centers = k)$withinss)
   (wss1 / wssk) / k 
-} 
-```
-
-```{r groups}
-groups <- function(var1, var2, k = 2){
-  df <- data.frame(var1 = var1, var2 = var2)
-  # cutree(hclust(dist(as.matrix(df))), k = k) # I don't know why hclust doesn't work so I used kmeans
-  kmeans(df, centers = k)$cluster 
-} 
+}  
 ```
 
 ```{r gstr}
 k <- 2
-gstr <- sim %>% 
-  mutate(year = as.integer(timestep*30)) %>% 
+gstr <- sims %>% 
   filter(type == "genotype") %>% 
-  dplyr::select(-type, -timestep, -X, -Y) %>% 
-  reshape2::dcast(year + individual ~ variable) %>% 
+  dplyr::select(-type, -X, -Y) %>% 
+  reshape2::dcast(model + timestep + individual ~ variable) %>%
+  group_by(model, timestep) %>% 
   mutate(nci = scale(nci), topography = scale(topography)) %>% 
-  group_by(year) %>% 
-  mutate(group = as.character(groups(nci, topography)))  
+  mutate(group = as.character(groups(nci, topography)))   
 ```
 
 ```{r popstr, eval=F}
-g <- ggplot(gstr, aes(nci, topography, col = group)) +
+g <-  ggplot(gstr, aes(nci, topography, col = group)) +
   geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
   geom_vline(xintercept = 0, linetype = "dashed", col = "lightgrey") +
   geom_point() +
   viridis::scale_color_viridis(discrete = T) +
-  transition_time(year) +
-  labs(title = 'Year: {frame_time}')
-anim_save("modelling_save/popstr.gif", g)  
+  facet_wrap(~ model) +
+  transition_time(timestep) +
+  labs(title = 'Timestep: {frame_time}')
+anim_save("modelling_save/popstr.gif", g)   
 ```
 ```{r popstrgif, fig.cap="Genotypes in the normalized space of topography and forest gap dynamics along time steps."}
-include_graphics("modelling_save/popstr.gif")  
+include_graphics("modelling_save/popstr.gif")    
 ```
 
-```{r gstrMetrics, fig.cap="Metrics to measure population structure (Wss and Dclust, see text above)."}
-gstr.wss <- gstr %>% 
-  group_by(year) %>% 
+```{r wssgraph, fig.cap="WSSscore to measure population structure."}
+gstr %>% 
+  group_by(model, timestep) %>% 
   summarise(wss_score_topo = wss_score(topography),
-            wss_score_nci = wss_score(nci),
-            wss_score_both = wss_score(nci, topography)) %>% 
-  reshape2::melt("year") %>% 
-  mutate(variable = gsub("wss_score_", "", variable)) %>% 
-  mutate(metric = "wss score")
-gstr.dclust <- gstr %>% 
-  dplyr::select(-individual) %>% 
-  group_by(year, group) %>% 
-  summarise_all(mean) %>% 
-  reshape2::melt(c("year", "group")) %>% 
-  mutate(variable = paste0(variable, "_", group)) %>% 
-  reshape2::dcast(year ~ variable) %>% 
-  mutate(
-    Dclust_topo = sqrt((topography_1 - topography_2)^2), 
-    Dclust_nci = sqrt((nci_1 - nci_2)^2),
-    Dclust_both = sqrt((topography_1 - topography_2)^2 + (nci_1 - nci_2)^2)
-  ) %>% 
-  dplyr::select(year, starts_with("D")) %>% 
-  reshape2::melt("year") %>% 
-  mutate(variable = gsub("Dclust_", "", variable)) %>% 
-  mutate(metric = "Dclust")
-bind_rows(gstr.wss, gstr.dclust) %>%  
-  ggplot(aes(year, value, col = variable)) +
-  geom_line() +
-  facet_wrap(~ metric, scale = "free") 
+            wss_score_nci = wss_score(nci)) %>% 
+  reshape2::melt(c("model", "timestep")) %>% 
+  mutate(variable = gsub("wss_score_", "", variable)) %>%  
+  filter(!(variable == "topo" & model == "nci")) %>% 
+  filter(!(variable == "nci" & model == "topo")) %>% 
+  ggplot(aes(timestep, value, col = variable)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(~ model, scale = "free") +
+  ylab(expression(WSS[score])) 
 ```
 
 ## Uncertainty
 
 Last but not least, we explored the uncertainty of our simulations with defined system metrics $D_G$ et $D_{clust}$.
 We ran 100 simulations with Paracou Plot 1 on a grid of 50 and default parameters.
-System metrics are predictable but uncertainty is not negligible. 
-We thus may need to use 
+System metrics are predictable and uncertainty is low (Fig. \@ref(fig:simuncertain)).
 
-```{r simuncertain, fig.cap="Uncertainty for system metrics with 100 simulations using Paracou Plot 1 on a grid of 50 and default parameters.", eval=F}
-Topo <- paracouTopography(grid = 50, plot = 1)
-NCI <- generateNCIsim()
-
-## I need to extract Topo and NCI from simulator
-
-sims <- simulatorCpp(Topo = Topo, NCI = NCI, grid = 50,) %>%
-  mutate(sim = 1)
-for(i in 2:100)
-  sims <- bind_rows(sims, simulator() %>%
-                      mutate(sim = i))
-
-# sims <- sims %>% 
-#   mutate(variable = recode(variable, "topography" = "topo")) %>% 
-#   mutate(year = timestep*30)
-
-# sims.dg <- sims %>% 
-#   mutate(variable = paste0(substr(type, 1, 1), "_", variable)) %>% 
-#   dplyr::select(-timestep, -X, -Y, -type) %>% 
-#   reshape2::dcast(sim + year + individual ~ variable, value.var = "value") %>% 
+```{r simuncertain, fig.cap="Uncertainty for system metrics with 100 simulations using Paracou Plot 1 on a grid of 50 and default parameters."}
+# rm(NCI, Topo, i, n, sims, sims.dclust, sims.dg)
+# 
+# n <- 100
+# Topo <- paracouTopography(grid = 50, plot = 1)
+# NCI <- generateNCI(grid = 50, Nt = 30)
+# Topo0 <- matrix(0, nrow(Topo), ncol(Topo))
+# NCI0 <- matrix(0, nrow(NCI), ncol(NCI))
+# sims <- bind_rows(
+#   simulator(grid = 50, Nt = 30, topography = Topo, NCI = NCI) %>% 
+#     mutate(model = "all"),
+#   simulator(grid = 50, Nt = 30, topography = Topo0, NCI = NCI, 
+#             sigmaZtopo = 0.1, sigmaGtopo = 0.1) %>% 
+#     mutate(model = "nci"),
+#   simulator(grid = 50, Nt = 30, topography = Topo, NCI = NCI0, 
+#             sigmaGnci = 0.1, sigmaZnci = 0.1) %>% 
+#     mutate(model = "topo")
+# ) %>% 
+#   mutate(sim = 1)
+# for(i in 2:n){
+#   sims <- bind_rows(sims,
+#                     bind_rows(
+#                       simulator(grid = 50, Nt = 30, topography = Topo, NCI = NCI) %>% 
+#                         mutate(model = "all"),
+#                       simulator(grid = 50, Nt = 30, topography = Topo0, NCI = NCI, 
+#                                 sigmaZtopo = 0.1, sigmaGtopo = 0.1) %>% 
+#                         mutate(model = "nci"),
+#                       simulator(grid = 50, Nt = 30, topography = Topo, NCI = NCI0, 
+#                                 sigmaGnci = 0.1, sigmaZnci = 0.1) %>% 
+#                         mutate(model = "topo")
+#                     ) %>%
+#                       mutate(sim = i))
+#   cat(i, " done \n")
+# }
+# rm(NCI, Topo, NCI0, Topo0, i, n)
+# 
+# sims <- sims %>%
+#   mutate(variable = recode(variable, "topography" = "topo")) %>%
+#   dplyr::select(-X, -Y)
+# 
+# sims.dg <- sims %>%
+#   mutate(variable = paste0(substr(type, 1, 1), "_", variable)) %>%
+#   dplyr::select(-type) %>%
+#   reshape2::dcast(model + sim + timestep + individual ~ variable, value.var = "value") %>%
 #   mutate(
 #     Dg_topo = sqrt(((e_topo - g_topo)/sd(e_topo))^2),
 #     Dg_nci = sqrt(((e_nci - g_nci)/sd(e_nci))^2),
 #     Dg_both = sqrt(((e_topo - g_topo)/sd(e_topo))^2 + ((e_nci - g_nci)/sd(e_nci))^2)
-#   ) %>% 
-#   dplyr::select(sim, year, Dg_topo, Dg_nci, Dg_both) %>% 
-#   group_by(sim, year) %>%
-#   summarise_all(mean) %>% 
-#   reshape2::melt(c("sim", "year")) %>%
-#   mutate(variable = gsub("Dg_", "", variable)) %>% 
-#   group_by(year, variable) %>% 
-#   summarise(m = mean(value), q5 = quantile(value, 0.05), q95 = quantile(value, 0.95)) %>% 
-#   mutate(metric = "Dg")
+#   ) %>%
+#   dplyr::select(model, sim, timestep, Dg_topo, Dg_nci, Dg_both) %>%
+#   group_by(model, sim, timestep) %>%
+#   summarise_all(mean) %>%
+#   reshape2::melt(c("model", "sim", "timestep")) %>%
+#   mutate(variable = gsub("Dg_", "", variable)) %>%
+#   mutate(metric = "Dg") %>%
+#   group_by(model, metric, timestep, variable) %>%
+#   summarise(q05 = quantile(value, 0.05),
+#             q50 = quantile(value, 0.50),
+#             q95 = quantile(value, 0.95)) %>%
+#   ungroup()
+# 
+# sims.wss <- sims %>%
+#   filter(type == "genotype") %>%
+#   dplyr::select(-type) %>%
+#   reshape2::dcast(model + sim + timestep + individual ~ variable) %>%
+#   group_by(model, sim, timestep) %>%
+#   summarise(wss_score_topo = wss_score(topo),
+#             wss_score_nci = wss_score(nci),
+#             wss_score_both = wss_score(nci, topo)) %>%
+#   reshape2::melt(c("model", "sim", "timestep")) %>%
+#   mutate(variable = gsub("wss_score_", "", variable)) %>%
+#   mutate(metric = "wss score") %>%
+#   group_by(model, metric, timestep, variable) %>%
+#   summarise(q05 = quantile(value, 0.05),
+#             q50 = quantile(value, 0.50),
+#             q95 = quantile(value, 0.95)) %>%
+#   ungroup()
+# 
+# write_tsv(bind_rows(sims.dg, sims.wss),
+#           file = "modelling_save/uncertainty.tsv")
 
-# sims.dclust <- sims %>% 
-#   filter(type == "genotype") %>% 
-#   dplyr::select(-type, -timestep, -X, -Y) %>% 
-#   reshape2::dcast(sim + year + individual ~ variable) %>% 
-#   mutate(nci = scale(nci), topo = scale(topo)) %>% 
-#   group_by(sim, year) %>% 
-#   mutate(group = as.character(groups(nci, topo))) %>% 
-#   dplyr::select(-individual) %>% 
-#   group_by(sim, year, group) %>% 
-#   summarise_all(mean) %>% 
-#   reshape2::melt(c("sim", "year", "group")) %>% 
-#   mutate(variable = paste0(variable, "_", group)) %>% 
-#   reshape2::dcast(sim + year ~ variable) %>% 
-#   mutate(
-#     Dclust_topo = sqrt((topo_1 - topo_2)^2), 
-#     Dclust_nci = sqrt((nci_1 - nci_2)^2),
-#     Dclust_both = sqrt((topo_1 - topo_2)^2 + (nci_1 - nci_2)^2)
-#   ) %>% 
-#   dplyr::select(sim, year, starts_with("D")) %>% 
-#   reshape2::melt(c("sim", "year")) %>% 
-#   mutate(variable = gsub("Dclust_", "", variable)) %>% 
-#     group_by(year, variable) %>% 
-#   summarise(m = mean(value), q5 = quantile(value, 0.05), q95 = quantile(value, 0.95)) %>% 
-#   mutate(metric = "Dclust")
-
-# sims.metrics <- bind_rows(sims.dg, sims.dclust)
-
-# write_tsv(sims.metrics, file = "modelling_save/uncertainty.tsv")
-
-read_tsv("modelling_save/uncertainty.tsv") %>% 
-  ggplot(aes(year, col = variable, fill = variable)) +
-  geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.5) +
-  geom_line(aes(y = m)) +
-  facet_wrap(~ metric, scales = "free")
+vroom::vroom("modelling_save/uncertainty.tsv") %>%
+  filter(!(variable == "topo" & model == "nci")) %>% 
+  filter(!(variable == "nci" & model == "topo")) %>% 
+  ggplot(aes(timestep, col = variable, fill = variable)) +
+  geom_ribbon(aes(ymin = q05, ymax = q95), alpha = 0.5) +
+  geom_line(aes(y = q50)) +
+  facet_wrap(metric ~ model, scales = "free", labeller = "label_both")
 ```

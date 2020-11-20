@@ -15,27 +15,36 @@ library(ecoevosimulator)
 
 # Topography
 
-This chapter aims to develop topography generators and compare theim to the topographic wetness index observed in Parcou plots.
-Specifically we want a generator that can be tweaked with few parameters, and that include a flat topography (no topography effect).
+This chapter introduce topography generators used in the simulator,
+and compares it to the the actual topographic wetness index observed in Paracou plots.
+Specifically, we included generators that can be tweaked with few parameters, and that included a flat topography (no topography effect).
+The topography is defined as a matrix spatially explicit  in 2 dimensions ($grid \times grid$) and temporally constant.
 
 ## Generators
 
-I developed two generators. One is mathematic, a.k. the sinusoidal topography, and one is algorithmic, a.k. the square-diamond topography.
-The sinusoidal topography is based on three parameters, the $grid$ size, the environmental gradient limit $Elim$ and the $amplitude$, and is computed with the following formula:
+I developed two generators, **sinusoidal topography** and **square-diamond topography**,
+and used a third one based on Paracou data, **Paracou topography**.
+
+The **sinusoidal topography** is based on three parameters, 
+the $grid$ size, the environmental gradient limit $Elim$ and the $amplitude$, 
+and is computed with the following formula:
 
 $$M = Elim\times sin(amplitude.E \times E')|E=vect(-1,1)_{grid}$$
 
-The square-diamond topography is computed with the [square-diamond algorithm](https://medium.com/@nickobrien/diamond-square-algorithm-explanation-and-c-implementation-5efa891e486f) (see the scheme below or use the link for a better explanation).
+The **square-diamond topography** is computed with the [square-diamond algorithm](https://medium.com/@nickobrien/diamond-square-algorithm-explanation-and-c-implementation-5efa891e486f) (see the scheme below or use the link for a better explanation).
 
 ```{r sda, fig.cap="Square diamond algorithm scheme."}
 include_graphics("http://jmecom.github.io/images/ds-wikipedia.png")
 ```
 
+The **Paracou topography** is simply the raster of topographic wetness index in plots 1, 6, 11 and 13 to 16 aggregated as a matrix with cells of size $3\times3 m^2$.
+
 ## Paracou plots
 
-Paracou plots show only few bottomlands and plateaus per plot. Globally plots are spatially autocorrelated up to 100 meters and randomly structured after.
+Paracou plots showed only few bottom-lands and plateaus per plot (Fig. \@ref(fig:plot)). 
+Globally, plots are spatially auto-correlated up to 100 meters and randomly structured after (Fig. \@ref(fig:plotcor)).
 
-```{r plot, fig.cap="Topography wetness index in Paracou plots."}
+```{r plotTWI, fig.cap="Topography wetness index in Paracou plots (grid of $1 \\times 1 m^2$)."}
 # wetness <- lapply(1:15, function(P){
 #   plot <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
 #                                "trees", "Paracou.sqlite")) %>% 
@@ -63,7 +72,7 @@ Paracou plots show only few bottomlands and plateaus per plot. Globally plots ar
 wetness <- read_tsv("modelling_save/wetness.tsv")
 ggplot(wetness, aes(X, Y, fill = value)) +
   geom_tile() +
-  viridis::scale_fill_viridis() +
+  viridis::scale_fill_viridis("Topographic\nWetness\nIndex\n(TWI)") +
   facet_wrap(~ Plot, scales = "free") +
   theme(axis.text = element_blank(), axis.title = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank())
@@ -88,42 +97,36 @@ ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(Plot))) + geom_hline(y
   scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
   geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
   geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
-  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
+  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable") +
+  viridis::scale_color_viridis("Plot", discrete = T)
 ```
 
 ## Flat topography
 
-Setting the $amplitude$ or the environmental gradient limit $Elim$ to 0 in the sinusoidal topography generator allows the generation of a flat topography as desired to test no effect of topography.
+Setting the $amplitude$ or the environmental gradient limit $Elim$ to 0 in the sinusoidal topography generator allows the generation of a flat topography as desired to test no effect of topography (Fig. \@ref(fig:flat)).
 
-```{r flat, fig.cap="Topography generated with the sinusoidal function for an amplitude of 0, a limit of 0, and a grid of 2^6+1."}
-flat <- sinusoidalTopography(grid = 2^6+1, Elim = 0, amplitude = 0)  %>%
+```{r flat, fig.cap="Topography generated with the sinusoidal function for an amplitude of 0, a limit of 0, and a grid of 50"}
+flat <- sinusoidalTopography(grid = 50, Elim = 0, amplitude = 0)  %>%
   reshape2::melt(NULL) %>% 
   dplyr::rename(X = Var1, Y = Var2)
 ggplot(flat, aes(X, Y, fill = value)) +
   geom_tile() +
-  viridis::scale_fill_viridis()
+  viridis::scale_fill_viridis("Value of\ntopography")
 ```
 
 ## Diagonal topography
 
-Setting the $amplitude$ close to 0 and playing with the environmental gradient limit $Elim$ in the sinusoidal topography generator allows the generation of a diagonal topography. The diagonal topography is structured positively between 0-25 cells and above 50 cells. The positive correlation after 100 cells can be problematic compared to TWI in Paracou.
+Setting the $amplitude$ close to 0 and playing with the environmental gradient limit $Elim$ in the sinusoidal topography generator allows the generation of a diagonal topography (Fig. \@ref(fig:diagonal)).
+The diagonal topography is structured positively between 0-25 cells and above 50 cells (Fig. \@ref(fig:diagcor)).
+The positive correlation after 100 cells can be problematic compared to TWI in Paracou.
 
-```{r diagonal, fig.cap="Topography generated with the sinusoidal function for an amplitude of 0.01, a variable limit, and a grid of 2^6+1."}
+```{r diagonal, fig.cap="Topography generated with the sinusoidal function for an amplitude of 0.01 and a grid of 50"}
 diagonal <- lapply(c(5, 8, 10, 15), function(l)
-  sinusoidalTopography(grid = 2^6+1, Elim = l, amplitude = 1)  %>%
+  sinusoidalTopography(grid = 50, Elim = l, amplitude = 1)  %>%
   reshape2::melt(NULL) %>% 
   dplyr::rename(X = Var1, Y = Var2) %>% 
   mutate(Elim = l)) %>%
   bind_rows()
-ggplot(diagonal, aes(X, Y, fill = value)) +
-  geom_tile() +
-  viridis::scale_fill_viridis() +
-  facet_wrap(~ Elim, scales = "free", labeller = "label_both") +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank())
-```
-
-```{r diagcor, fig.cap="Spatial autocorrelogram (Moran’s I) of simulated topography."}
 n <- 500
 cor <- lapply(c(5, 8, 10, 15), function(l){
   t <- diagonal %>% 
@@ -135,34 +138,37 @@ cor <- lapply(c(5, 8, 10, 15), function(l){
     mutate(Elim = l)
 }) %>% 
   bind_rows()
+ggplot(diagonal, aes(X, Y, fill = value)) +
+  geom_tile() +
+  viridis::scale_fill_viridis("Value of\ntopography") +
+  facet_wrap(~ Elim, scales = "free", labeller = "label_both") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank()) 
+```
+
+```{r diagcor, fig.cap="Spatial autocorrelogram (Moran’s I) of simulated topography."}
 ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(Elim))) + geom_hline(yintercept = 0) +
   geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
   scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
   geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
   geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
-  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable") 
+  xlab("Distance (m)") + ylab("Moran\'s I") +
+  viridis::scale_color_viridis("Elim", discrete = T) 
 ```
 
 ## Sinusoidal topography
 
-Playing with the $amplitude$ and setting the environmental gradient limit $Elim$ to 10 in the sinusoidal topography generator allows the generation of a sinusoidal topography. The sinusoidal topography is structured positively at low amplitude but the structure disappear with increasing amplitude. The positive correlation after 100 cells can be problematic compared to TWI in Paracou.
+Playing with the $amplitude$ and setting the environmental gradient limit $Elim$ to 10 in the sinusoidal topography generator allows the generation of a sinusoidal topography (Fig. \@ref(fig:sinusoidal)).
+The sinusoidal topography is structured positively at low amplitude but the structure disappear with increasing amplitude (Fig. \@ref(fig:sincor)). 
+The positive correlation after 100 cells can be problematic compared to TWI in Paracou.
 
-```{r sinusoidal, fig.cap="Topography generated with the sinusoidal function for a variable amplitudz, a limit of 10, and a grid of 2^6+1."}
+```{r sinusoidal, fig.cap="Topography generated with the sinusoidal function for a limit of 10, and a grid of 50."}
 sinusoidal <- lapply(c(1, 5, 10, 20), function(a)
-  sinusoidalTopography(grid = 2^6+1, Elim = 10, amplitude = a)  %>%
+  sinusoidalTopography(grid = 50, Elim = 10, amplitude = a)  %>%
   reshape2::melt(NULL) %>% 
   dplyr::rename(X = Var1, Y = Var2) %>% 
   mutate(amplitude = a)) %>%
   bind_rows()
-ggplot(sinusoidal, aes(X, Y, fill = value)) +
-  geom_tile() +
-  viridis::scale_fill_viridis() +
-  facet_wrap(~ amplitude, scales = "free", labeller = "label_both") +
-  theme(axis.text = element_blank(), axis.title = element_blank(),
-        axis.line = element_blank(), axis.ticks = element_blank())
-```
-
-```{r sincor, fig.cap="Spatial autocorrelogram (Moran’s I) of simulated topography."}
 n <- 500
 cor <- lapply(c(1, 5, 10, 20), function(a){
   t <- sinusoidal %>% 
@@ -174,58 +180,65 @@ cor <- lapply(c(1, 5, 10, 20), function(a){
     mutate(amplitude = a)
 }) %>% 
   bind_rows()
+ggplot(sinusoidal, aes(X, Y, fill = value)) +
+  geom_tile() +
+  viridis::scale_fill_viridis("Value of\ntopography") +
+  facet_wrap(~ amplitude, scales = "free", labeller = "label_both") +
+  theme(axis.text = element_blank(), axis.title = element_blank(),
+        axis.line = element_blank(), axis.ticks = element_blank())
+```
+
+```{r sincor, fig.cap="Spatial autocorrelogram (Moran’s I) of simulated topography."}
 ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(amplitude))) + geom_hline(yintercept = 0) +
   geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
   scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
   geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
   geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
-  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
+  xlab("Distance (m)") + ylab("Moran\'s I") +
+  viridis::scale_color_viridis("amplitude", discrete = T) 
 ```
 
-## Square-Diamond Topography
+## Square-Diamond topography
 
-The square-diaond topography generator produced pretty realistic topography. 
-Playing with the $rudgeness$ did not changed a lot apart from the environmental variaiton values (values scaled in the graph).
-The square-diamond topography is structured positively at 0-30 cells and also around 50 cells with high rudgeness.
-The correlogram of the square-diaond topography is the closer to observed TWI, but the generator includes much more randomness.
+The square-diamond topography generator produced realistic topography (Fig. \@ref(fig:squareDiamond)). 
+Playing with the $ruggedness$ changed the variation of topographic values (values scaled in the figure).
+The square-diamond topography is structured positively at 0-30 cells and also around 50 cells with high ruggedness (Fig. \@ref(fig:sdtcor)).
+The spatial auto-correlation of the square-diamond topography is the closer to observed TWI in Paracou plots,
+but the generator includes more randomness.
 
-```{r squareDiamond, fig.cap="Topography generated with the Diamond-Square algorithm for a variable rudgeness and a grid of 2^6+1."}
+```{r squareDiamond, fig.cap="Topography generated with the Diamond-Square algorithm for a grid of 50."}
 sdt <- lapply(c(0.1, 1, 10, 100), function(r)
-  squareDiamondTopography(grid = 2^6+1, rudgeness = r)  %>%
+  squareDiamondTopography(grid = 50, ruggedness = r)  %>%
   reshape2::melt(NULL) %>% 
   dplyr::rename(X = Var1, Y = Var2) %>% 
-  mutate(rudgeness = r) %>% 
+  mutate(ruggedness = r) %>% 
     mutate(value = scale(value))) %>% 
+  bind_rows()
+n <- 500
+cor <- lapply(c(0.1, 1, 10, 100), function(R){
+  t <- sdt %>% 
+    filter(ruggedness == R) %>% 
+    sample_n(n)
+  pgirmess::correlog(t[c("X", "Y")], t$value, 
+                     method = "Moran", nbclass = 25) %>% 
+    as.data.frame() %>% 
+    mutate(ruggedness = R)
+}) %>% 
   bind_rows()
 ggplot(sdt, aes(X, Y, fill = value)) +
   geom_tile() +
-  viridis::scale_fill_viridis() +
-  facet_wrap(~ rudgeness, scales = "free", labeller = "label_both") +
+  viridis::scale_fill_viridis("Value of\ntopography") +
+  facet_wrap(~ ruggedness, scales = "free", labeller = "label_both") +
   theme(axis.text = element_blank(), axis.title = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank())
 ```
 
 ```{r sdtcor, fig.cap="Spatial autocorrelogram (Moran’s I) of simulated topography."}
-n <- 500
-cor <- lapply(c(0.1, 1, 10, 100), function(R){
-  t <- sdt %>% 
-    filter(rudgeness == R) %>% 
-    sample_n(n)
-  pgirmess::correlog(t[c("X", "Y")], t$value, 
-                     method = "Moran", nbclass = 25) %>% 
-    as.data.frame() %>% 
-    mutate(rudgeness = R)
-}) %>% 
-  bind_rows()
-ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(rudgeness))) + geom_hline(yintercept = 0) +
+ggplot(cor, aes(x = dist.class, y = coef, col = as.factor(ruggedness))) + geom_hline(yintercept = 0) +
   geom_point(aes(alpha = p.value < 0.01)) + geom_line() +
   scale_alpha_manual("p < 0.01", values = c(0.3, 1)) + scale_x_log10() +
   geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
   geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
-  xlab("Distance (m)") + ylab("Moran\'s I") + scale_color_discrete("Variable")
+  xlab("Distance (m)") + ylab("Moran\'s I") +
+  viridis::scale_color_viridis("ruggedness", discrete = T) 
 ```
-
-## Conclusion
-
-I think I'll use the square-diaond topography generator with high rudgeness besides the randomness.
-Further testing with the simulator using global outputs could help take a decision.

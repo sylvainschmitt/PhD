@@ -441,29 +441,64 @@ $plink \
   --allow-extra-chr \
   --keep sp1.fam \
   --recode vcf-iid \
-  --thin-count 10000 \
-  --out sp1
+  --thin-count 1000 \
+  --out sp1.1k
 ```
 
 ```{r spagedisymphofile, eval=F, echo=T}
-snps <- vroom::vroom(file.path(path, "..", "variantCalling", "spagedi", "sp1.genpop"), skip = 10002, 
-                     col_names = c("Lib", "Lat", "Long", paste0("SNP", 1:10000)))
+snps <- vroom::vroom(file.path(path, "..", "variantCalling", "spagedi", "globuliferaTypeRegina.1k.genepop"), skip = 1002, 
+                     col_names = c("Lib", "Lat", "Long", paste0("SNP", 1:1000)))
 XY <- mutate(snps, Ind = gsub(".g.vcf", "", Lib)) %>% 
   dplyr::select(Ind) %>% 
   left_join(dplyr::select(trees, Ind, Xutm, Yutm))
 snps$Lat <- XY$Xutm
 snps$Long <- XY$Yutm
-write_tsv(snps, path = file.path(path, "..", "variantCalling", "spagedi", "sp1.spagedi.in"), col_names = T)
+write_tsv(snps, path = file.path(path, "..", "variantCalling", "spagedi", "globuliferaTypeRegina.1k.spagedi.in"), col_names = T)
 ```
 
 ```{bash spagedi header, eval=F, echo=T}
 // #ind #cat #coord #loci #dig/loc #ploidy// this an example (lines beginning by // are comment lines)
-230	0	2	10000	3	2
-6	10	25	50	100	150	200
+231	0	2	1000	3	2
+8	25	50	100	200	400	800 1600 3200
+
+spagedi
+sp1.1k.spagedi.in  
+sp1.1k.spagedi.out
+e
+return
+13
+3
+return
+1000
+34
+3
 ```
 
 Locus	intra-individual (inbreeding coef)	1	2	3	4	5	6	7	average	0-2704.88	b-lin(slope linear dist)	b-log(slope log dist)
 ALL LOCI	-0.0480	0.0079	0.0049	0.0046	0.0036	0.0035	0.0023	-0.0001	0.0001		-1.34448E-06	-0.00128963
+          F       F1      F2                                                                       b-log
+Sp = –b-log / (1 − F1)
+
+I de Moran
+
+```{r}
+# Sp1
+blog <- -0.00045741
+f1 <- 0.0024
+Sp <- -blog/(1-f1)
+paste("Sp =", Sp)
+# Paracou
+blog <- -0.00110023
+f1 <- 0.0063
+Sp <- -blog/(1-f1)
+paste("Sp =", Sp)
+# Regina
+blog <- -0.00013177
+f1 <- 0.0037
+Sp <- -blog/(1-f1)
+paste("Sp =", Sp)
+```
+
 
 ```{r}
 read_tsv(file.path(path, "..", "variantCalling", "spagedi", "sp1.spagedi.out"), skip = 40528,
@@ -475,5 +510,7 @@ read_tsv(file.path(path, "..", "variantCalling", "spagedi", "sp1.spagedi.out"), 
   geom_smooth(method = "lm") +
   ggpubr::stat_regline_equation(label.y = 0.16) +
   ggpubr::stat_cor(label.y = 0.12)
+devtools::install_github("lukembrowne/rSpagedi")
+spagedi_output <- rSpagedi::makeSpagediList(path_to_out = file.path(path, "..", "variantCalling", "spagedi", "sp1.spagedi.out"))
 ```
 

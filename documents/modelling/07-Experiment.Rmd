@@ -1,0 +1,386 @@
+```{r setupexperiment, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(gganimate)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+library(ecoevosimulator)
+```
+
+# Virtual experiment
+
+This chapter present the simulation and associated results of the virtual experiment.
+The chapter is a bit long as results are described one by one.
+You may skip to the conclusion, where the take home message is.
+
+## Simulations
+
+We did simulations on a grid of 50 over 60 time-steps.
+We used Plot 1 of Paracou with default parameters for topography.
+We generated NCI with default parameters.
+We ran 6000 simulations with varying heritability ($h = \frac{\sigma_G}{\sigma_G+\sigma_Z}$) for both NCI and topography, number of seedlings (`Ns`) and gene flow through the radius of dispersal (`Rdispersion` with `Rpollination` set to 1 or 2).
+
+```{r prepdataR, eval=F, echo=T}
+topo <- paracouTopography(grid = 50, plot = 1)
+NCI <- generateNCI(grid = 50, Nt = 60)
+save(topo, NCI, file = "modelling_cluster/data.Rdata")
+```
+
+```{r, prepsimR, eval=F}
+n <- 10 # number of modalities
+Htopo <- round(seq(0.1, 0.9, length.out =  n), 1)
+Hnci <- round(seq(0.1, 0.9, length.out =  n), 1)
+sigmaGtopo <- 1
+sigmaGnci <- 26
+sigmaZtopo <-  round((sigmaGtopo / Htopo) - sigmaGtopo, 1)
+sigmaZnci <- round((sigmaGnci / Hnci) - sigmaGnci)
+Ns <- 2^seq(2, min(n+1,7))
+Rdispersion <- floor(seq(1, 10, length.out = n))
+n.sims <- length(sigmaZtopo)*length(sigmaZnci)*length(Ns)*length(Rdispersion)
+cat(paste0(paste(n.sims, "simulations.\n"),
+           paste(3.9*n.sims/1000, "Go.\n"),
+           "sigmaZtopo=(", paste(sigmaZtopo, collapse = " "), ")\n", 
+           "sigmaZnci=(", paste(sigmaZnci, collapse = " "), ")\n",
+           "Ns=(", paste(Ns, collapse = " "), ")\n",
+           "Rdispersion=(", paste(Rdispersion, collapse = " "), ")\n"))
+```
+
+```{bash simcluster, eval=F, echo=T}
+sigmaZtopo=(9 4 2.3 1.5 1 1 0.7 0.4 0.2 0.1)
+sigmaZnci=(234 104 61 39 26 26 17 11 6 3)
+Ns=(4 8 16 32 64 128)
+Rdispersion=(1 2 3 4 5 6 7 8 9 10)
+for sztopo in "${sigmaZtopo[@]}" ; 
+  do 
+  for sznci in "${sigmaZnci[@]}" ; 
+  do 
+    for ns in "${Ns[@]}" ; 
+    do 
+      for rd in "${Rdispersion[@]}" ; 
+      do 
+        echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.6.2 ; Rscript simulation.R $sztopo $sznci $ns $rd" ; 
+      done ; 
+    done ; 
+  done ; 
+done > simulations.sh
+split -dl 1000 simulations.sh sims --additional-suffix=.sh
+sarray -J EES6 -o out/%j.log -e out/%j.log -t 1:00:00 --cpus-per-task=1 --mail-type=BEGIN,END,FAIL sims6.sh
+watch 'squeue -u sschmitt'
+```
+
+```{r outputs, eval=F, echo=F}
+lapply(list.files("modelling_cluster/simulations", full.names = T),
+                  function(f) mutate(
+                    read_tsv(f, col_types = cols(
+                      timestep = col_double(),
+                      variable = col_character(),
+                      value = col_double(),
+                      metric = col_character()
+                    )), 
+                    file = f,
+                  )) %>% 
+  bind_rows() %>% 
+  mutate(file = gsub("modelling_cluster/simulations/simulation_", "", file)) %>% 
+  mutate(file = gsub(".tsv", "", file)) %>% 
+  separate(file, c("sigmaZtopo", "sigmaZnci", "Ns", "Rdispersion"), "_") %>% 
+  mutate(sigmaZtopo = as.numeric(gsub("sigmaZtopo=", "", sigmaZtopo)),
+         sigmaZnci = as.numeric(gsub("sigmaZnci=", "", sigmaZnci)),
+         Ns = as.numeric(gsub("Ns=", "", Ns)),
+         Rdispersion = as.numeric(gsub("Rdispersion=", "", Rdispersion))) %>% 
+  rename(metric.value = value) %>% 
+    mutate(Htopo = sigmaGtopo / (sigmaZtopo + sigmaGtopo),
+         Hnci = sigmaGnci / (sigmaZnci + sigmaGnci)) %>% 
+  dplyr::select(-sigmaZtopo, -sigmaZnci) %>% 
+  reshape2::melt(c("timestep", "variable", "metric", "metric.value"),
+                 variable.name = "parameter", value.name = "parameter.value") %>% 
+  write_tsv(file = "modelling_save/simulations.tsv")
+```
+
+## Results
+
+We obtained varying local adaptations (Dg) and population structure (WSSscore) of the virtual tree communities per variable one-by-one or in combination to explore interactions.
+As there are many figures, they wont be discussed here, but they will be used to illustrate results found in regressions.
+
+### One dimension
+
+```{r dgone, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability (Hnci and Htopo), number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  filter(metric == "Dg") %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  mutate(parameter.value = as.factor(round(parameter.value, 1))) %>% 
+  ggplot(aes(x = parameter.value, y = metric.value)) +
+  geom_boxplot() +
+  facet_grid(variable ~ parameter, scales = "free_x") +
+  xlab("") + ylab(expression(D[G]))
+```
+
+```{r wssone, fig.cap="Population strucutre (WSSscore, high value correspond to structured populations) for topography depending on heritability (Hnci and Htopo), number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  filter(metric == "wss score") %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  mutate(parameter.value = as.factor(round(parameter.value, 1))) %>% 
+  ggplot(aes(x = parameter.value, y = metric.value)) +
+  geom_boxplot() +
+  facet_grid(variable ~ parameter, scales = "free_x") +
+  xlab("") + ylab(expression(WSS[score]))
+```
+### Two dimensions
+
+#### Local adaptation
+
+```{r dgtwoHtopoHnci, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and heritability to topography (Htopo)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg") %>% 
+  filter(parameter %in% c("Hnci", "Htopo")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Htopo), y = metric.value, fill = as.factor(Hnci))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Htopo") + ylab(expression(D[G])) +
+  facet_wrap(~ variable, nrow = 2) +
+  viridis::scale_fill_viridis("Hnci", discrete = T)
+```
+
+```{r dgtwoHtopoNs, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and number of seedlings (Ns)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg") %>% 
+  filter(parameter %in% c("Ns", "Htopo")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Htopo), y = metric.value, fill = as.factor(Ns))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Htopo") + ylab(expression(D[G])) +
+  facet_wrap(~ variable, nrow = 2) +
+  viridis::scale_fill_viridis("Ns", discrete = T)
+```
+
+
+```{r dgtwoHtopoRdispersion, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg") %>% 
+  filter(parameter %in% c("Htopo", "Rdispersion")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Htopo), y = metric.value, fill = as.factor(Rdispersion))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Htopo") + ylab(expression(D[G])) +
+  facet_wrap(~ variable, nrow = 2) +
+  viridis::scale_fill_viridis("Rdispersion", discrete = T)
+```
+
+```{r dgtwoNsRdispersion, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg") %>% 
+  filter(parameter %in% c("Ns", "Rdispersion")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Ns), y = metric.value, fill = as.factor(Rdispersion))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Ns") + ylab(expression(D[G])) +
+  facet_wrap(~ variable, nrow = 2) +
+  viridis::scale_fill_viridis("Rdispersion", discrete = T)
+```
+
+#### Population structure
+
+```{r wsstwoHtopo, fig.cap="Population strucutre (WSSscore, high value correspond to structured populations) for topography depending on heritability (Hnci and Htopo), number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(!(variable == "nci" & metric == "wss score")) %>% 
+  filter(metric == "wss score") %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  reshape2::melt(c("variable", "metric", "metric.value", "Htopo"),
+                 variable.name = "parameter", value.name = "parameter.value") %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Htopo), y = metric.value, fill = as.factor(parameter.value))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Htopo") + ylab(expression(WSS[score])) +
+  facet_wrap(~ parameter, scales = "free", nrow = 3) +
+  viridis::scale_fill_viridis("Prameter\nvalue", discrete = T)
+```
+
+```{r wsstwoHnci, fig.cap="Population strucutre (WSSscore, high value correspond to structured populations) for topography depending on heritability (Hnci and Htopo), number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(!(variable == "nci" & metric == "wss score")) %>% 
+  filter(metric == "wss score") %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  reshape2::melt(c("variable", "metric", "metric.value", "Hnci"),
+                 variable.name = "parameter", value.name = "parameter.value") %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Hnci), y = metric.value, fill = as.factor(parameter.value))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Hnci") + ylab(expression(WSS[score])) +
+  facet_wrap(~ parameter, scales = "free", nrow = 3) +
+  viridis::scale_fill_viridis("Prameter\nvalue", discrete = T)
+```
+
+```{r wsstwoNs, fig.cap="Population strucutre (WSSscore, high value correspond to structured populations) for topography depending on heritability (Hnci and Htopo), number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(!(variable == "nci" & metric == "wss score")) %>% 
+  filter(metric == "wss score") %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  reshape2::melt(c("variable", "metric", "metric.value", "Ns"),
+                 variable.name = "parameter", value.name = "parameter.value") %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Ns), y = metric.value, fill = as.factor(parameter.value))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Ns") + ylab(expression(WSS[score])) +
+  facet_wrap(~ parameter, scales = "free", nrow = 3) +
+  viridis::scale_fill_viridis("Prameter\nvalue", discrete = T)
+```
+
+```{r wsstwoRdispersion, fig.cap="Population strucutre (WSSscore, high value correspond to structured populations) for topography depending on heritability (Hnci and Htopo), number of seedlings (Ns) and seed dispersal radius (Rdispersion)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(!(variable == "nci" & metric == "wss score")) %>% 
+  filter(metric == "wss score") %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  reshape2::melt(c("variable", "metric", "metric.value", "Rdispersion"),
+                 variable.name = "parameter", value.name = "parameter.value") %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  ggplot(aes(x = as.factor(Rdispersion), y = metric.value, fill = as.factor(parameter.value))) +
+  geom_boxplot(position = "dodge") +
+  xlab("Rdispersion") + ylab(expression(WSS[score])) +
+  facet_wrap(~ parameter, scales = "free", nrow = 3) +
+  viridis::scale_fill_viridis("Prameter\nvalue", discrete = T)
+```
+
+## Regressions
+
+At the exception of population structure with NCI, 
+heritability (H), number of seedlings (Ns) and seed dispersal (Rdispersion) explained most of the variation (Tab. \@ref(tab:lmsumtab)) in local adaptation ($R^2>0.9$) and population structure ($R^2=0.82$).
+
+Local adaptation to NCI and topography (Dg) mainly increased with the heritability to the corresponding variable (Fig. \@ref(fig:lmfig) and Tab. \@ref(tab:lmtab)).
+But local adaptation to NCI and topography improved by heritability of the other variable,
+e.g. increased heritiability to NCI (Hnci) increased local adaptation to topography (DG_topo),
+reinforced by significant and positive interactions (Htopo:Hnci).
+Number of seedlings increased and dispersal decreased local adaptation to NCI and topography.
+Dispersal interacted with number of seedlings, with increased dispersal increasing local adaptation under high number of seedlings.
+Last but not least, number of seedlings interaction with heritability of the focal variable increased local adaptation of the focal variable while decreasing local adaptation to the other variable.
+For instance, increasing number of seedlings with increasing heritabitliy to NCI, increased local adaptation to NCI while decreasing local adaptation to topography.
+
+Population structure along topography (WSSscore) mainly increased with the heritability to topography, NCI and their interaction (Htopo, Hnci, Htopo:Hnci, Fig. \@ref(fig:lmfig) and Tab. \@ref(tab:lmtab)).
+Population structure along topography also increased with Number of seedlings and its interaction to dispersal and heritability to topography.
+But, dispersal and the interaction between number of seedlings and heritbaility to NCI decreased population structure along topography.
+
+```{r lmsumtab}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(metric.value ~ Htopo + Hnci + Ns + Rdispersion + 
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>% 
+       broom::glance()) %>% 
+  unnest(lm) %>% 
+  dplyr::select(metric, variable, r.squared) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  mutate(metric = recode(metric, "Dg" = "$D_g$", "wss score" = "$WSS_{score}$")) %>% 
+  kable(caption = "Summary results of linear regressions.", 
+        col.names = c("Metric", "Variable", "$R^2$"), digits = 2)
+```
+
+```{r lmfig, fig.cap="Parameters effects and their interaction on local adaptation (Dg, low value correspond to locally addapted trees) and population structure (WSSscore, high value correspond to structured populations) for topography and NCI. Parameters values have been scaled to ease their comparison."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  group_by(parameter) %>%
+  mutate(parameter.value = as.vector(scale(parameter.value, center = F))) %>%
+  filter(!(variable == "nci" & metric == "wss score")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>%
+       broom::tidy()) %>%
+  unnest(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  filter(p.value < 0.05) %>% 
+  dplyr::select(metric, variable, term, estimate, std.error) %>% 
+    mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  mutate(metric = recode(metric, "Dg" = "log(D[G])", "wss score" = "log(WSS[score])")) %>% 
+  ggplot(aes(term)) +
+  geom_hline(yintercept = 0, col = "lightgrey", linetype = "dashed") +
+  geom_hline(yintercept = c(0.05, -0.05), col = "lightgrey", linetype = "dotted") +
+  geom_point(aes(y = estimate, alpha = (abs(estimate) > 0.05))) +
+  geom_segment(aes(xend = term, y = estimate - std.error, yend = estimate + std.error)) +
+  coord_flip() +
+  facet_wrap(~ metric + variable, labeller = "label_parsed") +
+  xlab("") + ylab("Standardized effect") +
+  scale_alpha_manual(guide = "none", values = c(0.2, 1))
+```
+
+```{r lmtab}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  group_by(parameter) %>%
+  mutate(parameter.value = as.vector(scale(parameter.value, center = F))) %>%
+  # filter(!(variable == "nci" & metric == "wss score")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>%
+       broom::tidy()) %>% 
+  unnest(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  filter(p.value < 0.05) %>% 
+  dplyr::select(metric, variable, term, estimate, std.error, p.value) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  mutate(metric = recode(metric, "Dg" = "$D_g$", "wss score" = "$WSS_{score}$")) %>% 
+  kable(caption = "Results of linear regressions.", digits = 4,
+        col.names = c("Metric", "Variable", "Parameter", "Estimate", "Standard error", "p-value"))
+```
+
+## Conclusion
+
+We found the following strong effects:
+
+* Local adaptation to topography (Dg_topo), that should elicit a tracking strategy, is reinforced by strong effects of the heritability of topography  alone (Htopo -0.6) and in interaction with the number of seedlings (Htopo:Ns -0.4) and the heritability of NCI (Htopo:Hnci -0.3).
+* Local adaptation to NCI (Dg_nci), that should elicit a bet hedging strategy, is reinforced by less strong effects of the heritability of NCI  alone (Hnci -0.3) and in interaction with the number of seedlings (Hnci:Ns -0.1) and the heritability of topography (Htopo:Hnci -0.1).
+* Population structure with topography (WSSscore_topo) follows local adaptation to topography (Dg_topo), and is thus reinforced by strong effects of the heritability of topography  alone (Htopo -0.4) and in interaction with the number of seedlings (Htopo:Ns -0.2) and the heritability of NCI (Htopo:Hnci -0.2).
+
+We also found the following smaller effects:
+
+* Local adaptation to topography (Dg_topo) also decreased with smaller effects of the heritability of NCI  alone (Hnci 0.06) and in interaction with the number of seedlings (Hnci:Ns 0.08), the number of seedlings (Ns 0.11), the radius of dispersion (Rdispersion 0.09), and the interaction between the heritability of topography and the radius of dispersion (Htopo:Rdispersion 0.08).
+* Local adaptation to NCI (Dg_nci) also decreased with smaller effects of the interaction between the heritability of NCI and the radius of dispersion (Hnci:Rdispersion 0.06).
+* Population structure with topography (WSSscore_topo) follows local adaptation to topography (Dg_topo), and decreased thus with smaller effects of the heritability of NCI in interaction with the number of seedlings (Hnci:Ns -0.10)and the radius of dispersion (Rdispersion -0.10).
+
+In summary:
+
+* Strong local adaptation that tracks the temporally-fixed topography allows populations to structure along topography, 
+whereas reduced local adaptation bet-edging the temporally-variable NCI doesn't allow population to structure with NCI.
+* Local adaptation and population structure along topography increase with increasing heritability to topography and NCI, 
+but decrease if heritability to NCI becomes stronger than heritability to topography, i.e. genotypes get more locally adapted to NCI.
+* The number of seedlings, related to selection, increases the effect of heritability on local adaptation and population structure.
+* The radius of dispersion, related to gene flow, decreases local adaptation and population structure.

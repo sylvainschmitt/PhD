@@ -1,0 +1,193 @@
+```{r setupManaus, include=FALSE, eval=T}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F, eval = T)
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Genomic/Larson_capture/Lecythidaceae_parvifolia_GATK_variant_calls/"
+eschwcol <- c("#1b9e77", "#d95f02", "#7570b3")
+names(eschwcol) <- c("E. decolorans cluster", 
+                     "E. sagotiana cluster",
+                     "E. coriacea cluster") 
+```
+
+# Manaus
+
+## All
+
+```{bash ManausAll, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+mkdir all
+$plink \
+  --vcf 78_lecythid_combine_GenotypeGVCFs_output.vcf \
+  --allow-extra-chr \
+  --mac 1 \
+  --pca var-wts \
+  --make-bed --out all/78_lecythid_combine_GenotypeGVCFs_output
+```
+
+```{r ManauskmeansDataAll}
+pca <- read_delim(file.path(path, "all", "78_lecythid_combine_GenotypeGVCFs_output.eigenvec"),
+                  delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(read_delim(file.path(path, "taxon_list.txt"), delim = " ", col_names = c("Sample", "Genus", "Species"))) %>% 
+  mutate(SpeciesLong = paste0(substr(Genus, 1, 1), ". ", Species))
+pca$cluster <- paste("Cluster", cutree(hclust(dist(pca[c("PCA1", "PCA2")])), k = 3))
+```
+
+### Number of clusters
+
+```{r ManauskmeansKAll, fig.cap="K-means best K."}
+wss <- function(data, kmax = 15) {
+  x <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 1:kmax) x[i] <- sum(kmeans(data, centers=i)$withinss)
+  data.frame(k = 1:kmax, wss = x)
+}
+wss(pca[c("PCA1", "PCA2")]) %>% 
+  ggplot(aes(k, wss)) +
+  geom_point() +
+  geom_line() +
+  xlab("K") + ylab("Within group sum of squares") +
+  geom_vline(xintercept = 3, linetype = "dashed")
+```
+
+### PCA
+
+```{r ManauskmeansPCAAll, fig.cap="Principal component analysis."}
+pca %>% 
+    mutate(cluster = recode(cluster, "Cluster 3" =  "Cluster E. sp.01.LECY",
+                          "Cluster 1" = "Cluster E. alvimii,\nE. nana, & E. tetrapetala",
+                          "Cluster 2" = "Cluster others")) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = cluster,
+                   label = Sample)) +
+  geom_point(size=2, alpha = 0.5) +
+  theme(legend.position = "bottom") +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+### Cluster & Species
+
+```{r ManauskmeansAll, fig.cap="Population structure detection in PCA."}
+pca %>% 
+  mutate(cluster = recode(cluster, "Cluster 3" =  "Cluster E. sp.01.LECY",
+                          "Cluster 1" = "Cluster E. alvimii,\nE. nana, & E. tetrapetala",
+                          "Cluster 2" = "Cluster others")) %>%
+  ggplot(aes(x = Sample, y = 1, fill = SpeciesLong)) + 
+  geom_bar(stat = "identity") + 
+  facet_wrap(~ cluster, scales = "free") +
+  viridis::scale_fill_viridis("", discrete = T) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), 
+        axis.line = element_blank(), axis.ticks = element_blank(),
+        legend.position = "bottom", legend.text = element_text(size = 8, face = "italic"))
+```
+
+```{r ManauskmeansConfusionAll}
+pca %>% 
+    mutate(cluster = recode(cluster, "Cluster 3" =  "Cluster E. sp.01.LECY",
+                          "Cluster 1" = "Cluster E. alvimii, E. nana, & E. tetrapetala",
+                          "Cluster 2" = "Cluster others")) %>%
+  reshape2::dcast(SpeciesLong ~ cluster) %>% 
+  kable(caption = "Confusion matrix between genetic cluster and botanical identification.")
+```
+
+## Cluster others
+
+```{r ManausC1fam}
+read_delim(file.path(path, "taxon_list.txt"), delim = " ", col_names = c("Sample", "Genus", "Species")) %>% 
+  filter(!(Species %in% c("alvimii", "nana", "tetrapetala", "sp.01.LECY", "corrugata"))) %>% 
+  mutate(FID = Sample, IID = Sample, PAT = 0, MAT = 0, SEX = 0, PHENOTYPE = -9) %>% 
+  dplyr::select(FID, IID, PAT, MAT, SEX, PHENOTYPE) %>% 
+  write_tsv(file.path(path, "C1.fam"), col_names = F)
+```
+
+```{bash ManausC1, eval=F, echo=T}
+plink=~/Tools/plink_linux_x86_64_20190617/plink 
+mkdir C1
+$plink \
+  --vcf 78_lecythid_combine_GenotypeGVCFs_output.vcf \
+  --allow-extra-chr \
+  --mac 1 \
+  --keep C1.fam \
+  --pca var-wts \
+  --make-bed --out C1/78_lecythid_combine_GenotypeGVCFs_output
+```
+
+```{r ManauskmeansDataC1}
+pca <- read_delim(file.path(path, "C1", "78_lecythid_combine_GenotypeGVCFs_output.eigenvec"),
+                  delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(read_delim(file.path(path, "taxon_list.txt"), delim = " ", col_names = c("Sample", "Genus", "Species"))) %>% 
+  mutate(SpeciesLong = paste0(substr(Genus, 1, 1), ". ", Species))
+pca$cluster <- paste("Cluster", cutree(hclust(dist(pca[c("PCA1", "PCA2")])), k = 4))
+```
+
+### Number of clusters
+
+```{r ManauskmeansKC1, fig.cap="K-means best K."}
+wss <- function(data, kmax = 15) {
+  x <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 1:kmax) x[i] <- sum(kmeans(data, centers=i)$withinss)
+  data.frame(k = 1:kmax, wss = x)
+}
+wss(pca[c("PCA1", "PCA2")]) %>% 
+  ggplot(aes(k, wss)) +
+  geom_point() +
+  geom_line() +
+  xlab("K") + ylab("Within group sum of squares") +
+  geom_vline(xintercept = 4, linetype = "dashed")
+```
+
+### PCA
+
+```{r ManauskmeansPCAC1, fig.cap="Principal component analysis."}
+pca %>% 
+    mutate(cluster = recode(cluster, 
+                            "Cluster 1" =  "Cluster\nE. atropetiolata\n& E. cyathiformis",
+                            "Cluster 2" = "Cluster\nE. coriacea\net al.",
+                            "Cluster 3" = "Cluster\nE. laevicarpa,\nE. collina, E. bracteosa, E. rankiniae",
+                            "Cluster 4" = "Cluster\nE. pseudodecolorans"
+                            )) %>%
+  ggplot(aes(x = PCA1, y = PCA2, col = cluster,
+                   label = Sample)) +
+  geom_point(size=2, alpha = 0.5) +
+  viridis::scale_color_viridis(discrete = T) +
+  theme(legend.position = "bottom", legend.text = element_text(size = 8, face = "italic"))
+```
+
+### Cluster & Species
+
+```{r ManauskmeansC1, fig.cap="Population structure detection in PCA."}
+pca %>% 
+    mutate(cluster = recode(cluster, 
+                            "Cluster 1" =  "Cluster E. atropetiolata & E. cyathiformis",
+                            "Cluster 2" = "Cluster E. coriacea	et al.",
+                            "Cluster 3" = "Cluster E. laevicarpa, E. collina,\nE. bracteosa, E. rankiniae",
+                            "Cluster 4" = "Cluster E. pseudodecolorans"
+                            )) %>%
+  ggplot(aes(x = Sample, y = 1, fill = SpeciesLong)) + 
+  geom_bar(stat = "identity") + 
+  facet_wrap(~ cluster, scales = "free") +
+  viridis::scale_fill_viridis("", discrete = T) +
+  theme(axis.title = element_blank(), axis.text = element_blank(), 
+        axis.line = element_blank(), axis.ticks = element_blank(),
+        legend.position = "bottom", legend.text = element_text(size = 8, face = "italic"))
+```
+
+```{r ManauskmeansConfusionC1}
+pca %>% 
+    mutate(cluster = recode(cluster, 
+                            "Cluster 1" =  "Cluster E. atropetiolata & E. cyathiformis",
+                            "Cluster 2" = "Cluster E. coriacea	et al.",
+                            "Cluster 3" = "Cluster E. laevicarpa, E. collina, E. bracteosa, E. rankiniae",
+                            "Cluster 4" = "Cluster E. pseudodecolorans"
+                            )) %>%
+  reshape2::dcast(SpeciesLong ~ cluster) %>% 
+  kable(caption = "Confusion matrix between genetic cluster and botanical identification.")
+```
+
+

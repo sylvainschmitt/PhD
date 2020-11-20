@@ -133,6 +133,35 @@ rm(DBH)
 save(p16, file = "./symcapture_save/p16.Rdata")
 ```
 
+```{r, eval=F}
+ids <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king.id"))
+K <- read_tsv(file.path(path, "..", "variantCalling", "growth", "plink2.king"),
+         col_names = ids$IID) %>% 
+  as.data.frame()
+row.names(K) <- ids$IID
+K %>% 
+  rownames_to_column("IID1") %>% 
+  reshape2::melt("IID1", variable.name = "IID2", value.name = "raw.kinship") %>% 
+  left_join(dplyr::select(trees, IID, pop) %>% 
+              rename(IID1 = IID, pop1 = pop)) %>% 
+    left_join(dplyr::select(trees, IID, pop) %>% 
+              rename(IID2 = IID, pop2 = pop)) %>% 
+  filter(pop1 == pop2) %>% 
+  mutate(positive.kinship = ifelse(raw.kinship < 0, 0, raw.kinship)) %>% 
+  mutate(scaled.kinship = positive.kinship*2) %>% 
+  # dplyr::select(pop1, raw.kinship, positive.kinship, scaled.kinship) %>% 
+  dplyr::select(pop1, positive.kinship) %>% 
+  reshape2::melt("pop1") %>% 
+  # ggplot(aes(value)) +
+  # geom_histogram() +
+  # facet_grid(pop1 ~ variable, scales = "free")
+  group_by(pop1, variable) %>%
+  # summarise(mean = mean(value), var = var(value)) %>% 
+  summarise(var = var(value)) %>% 
+  kable()
+```
+
+
 ```{r mdata}
 trees <- trees %>% 
   na.omit(pop) %>% # remove admixed

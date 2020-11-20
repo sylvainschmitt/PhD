@@ -247,10 +247,10 @@ fitEnv <- lapply(fitEnv, sflist2stanfit)
 fitEnvParvi <- fitEnv
 save(fitEnvParvi, file = "../../thesis/rdata/fitEnvParvi.Rdata")
 rm(fitEnvParvi)
-lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
+lapply(fitEnv, broom.mixed::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
        droppars = NULL, rhat = T) %>% 
   bind_rows(.id = "Variable") %>% 
-  separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
+  separate(term, c("parameter", "population"), convert = T) %>% 
   mutate(population = ifelse(is.na(population), "", population)) %>% 
   mutate(population = recode(population, "3" =  "E. decolorans cluster", 
                           "2" = "E. sagotiana cluster",
