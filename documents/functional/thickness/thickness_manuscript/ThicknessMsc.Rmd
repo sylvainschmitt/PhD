@@ -2,20 +2,20 @@
 title: The extractable water drives a leaf thinning of tropical trees during the rainy season
 date: 'Journal? `r Sys.Date()` '
 output:
-  bookdown::word_document2:
-    reference_docx: ./template/template.docx
+  bookdown::html_document2:
+    number_sections: false  
+    toc: true
+    toc_float: yes
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
       in_header: ./template/preamble.tex
     number_sections: false
     toc: false
-  bookdown::html_document2:
-    number_sections: false  
-    toc: true
-    toc_float: yes
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/newphyto.csl
+csl: /home/sylvain/Documents/Bibliography/csl/joe.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 ---
@@ -132,7 +132,7 @@ In other words, increased extractible water drives leaf thinning and increased t
 
 ```{r pars}
 load("../thickness_save/fits.Rdata")
-broom::tidyMCMC(fits$LogRxSDSI, 
+broom.mixed::tidyMCMC(fits$LogRxSDSI, 
                 pars =  c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma"),
                 droppars = NULL, ess = F, rhat = F, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error) %>% 
@@ -159,12 +159,13 @@ data <- read_tsv("../thickness_save/data.tsv") %>%
   mutate(Species = recode(Species,
                         "globulifera"= "S. globulifera",
                         "sp.1" = "S. sp1"))
-load("../thickness_save/fits.Rdata")
-as.data.frame(fits$LogRxSDSI, pars = "predicted") %>% 
+# load("../thickness_save/fits.Rdata")
+load("../thickness_save/fitLT.Rdata")
+as.data.frame(fitLTLogRxSDSI, pars = "predicted") %>% 
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -177,7 +178,8 @@ as.data.frame(fits$LogRxSDSI, pars = "predicted") %>%
   scale_color_manual("", values = c("#0000EE", "#CD2626")) +
   theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
   xlab("Relative extractable water (REW)") +
-  ylab("Leaf thickness (LT)")
+  ylab("Leaf thickness (LT, µm)") +
+  geom_text(y = 200, label = expression(R^2==0.45), col = "black", data = data.frame(REW = 0.5))
 ```
 
 # Discussion

@@ -1,0 +1,110 @@
+```{r setupmodels2, include=FALSE, eval=TRUE, cache=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+options(mc.cores = 4)
+rstan_options(auto_write = TRUE)
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F, eval = T)
+```
+
+
+```{r mdata2}
+data <- read_tsv("thickness_save/data.tsv") %>% 
+  mutate(Species = ifelse(Species == "Indet.",
+                          c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+                                                                      "sp.1" =  "S")], Species)) %>% 
+  filter(!is.na(Species)) %>% 
+  mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+  mutate(IndNum = as.numeric(as.factor(idTree))) %>%
+  mutate(Species = recode(Species,
+                        "globulifera"= "S. globulifera",
+                        "sp.1" = "S. sp1"))
+mdata <- list(
+  L = nrow(data),
+  S = max(data$SpeciesNum),
+  I = max(data$IndNum),
+  LT = data$WMA,
+  REW = as.vector(scale(data$REW)),
+  logDBH = as.vector(scale(log(data$DBH))),
+  species = data$SpeciesNum,
+  individual = data$IndNum
+)
+```
+
+# Models
+
+This chapter develop all the models used to infer water content per leaf area with relative extractible water.
+
+$$WCLA_{l,i,s} \sim \mathcal{logN}(log(\alpha_s + \gamma_i + {\beta_{REW}}_s.REW_i + \beta_{DBH}.log(DBH_i)),\sigma)$$
+$$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
+
+```{r LogRxSDSISampling2, include=FALSE}
+# modeLogRxSDSI <- stan_model("thickness_models/LogRxSDSI.stan")
+# fitWCLALogRxSDSI <- sampling(modeLogRxSDSI, mdata, init = "0")
+# save(fitWCLALogRxSDSI, file = "thickness_save/fitWCLA.Rdata")
+load("thickness_save/fitWCLA.Rdata")
+```
+
+```{r LogRxSDSITable2}
+broom.mixed::tidyMCMC(fitWCLALogRxSDSI, pars = c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma", "lp__"),
+                droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
+  dplyr::select(term, estimate, std.error, rhat, ess) %>% 
+  kable(caption = "Parameters estimate.",
+        col.names = c("Parameter", "Estimate", "Standard error", "$\\hat R$", "$N_{eff}$")) 
+```
+
+```{r LogRxSDSITrace2, fig.cap="Traceplot of model parameters."}
+mcmc_trace(as.array(fitWCLALogRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitWCLALogRxSDSI)) +
+  viridis::scale_color_viridis(discrete = T)
+```
+
+```{r LogRxSDSIPairs2, message=FALSE, fig.cap="Pairs of model parameters."}
+mcmc_pairs(as.array(fitWCLALogRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitWCLALogRxSDSI))
+```
+
+```{r LogRxSDSIPosteriors2, message=FALSE, fig.cap="Posteriors of model parameters."}
+mcmc_intervals(as.array(fitWCLALogRxSDSI), regex_pars =  c("alpha", "beta"), np = nuts_params(fitWCLALogRxSDSI))
+```
+
+```{r LogRxSDSIPredictions2, message=FALSE, fig.cap="Model predictions."}
+as.data.frame(fitWCLALogRxSDSI, pars = "predicted") %>% 
+  reshape2::melt(NULL) %>% 
+  group_by(variable) %>% 
+  summarise(WCLAm = median(value), WCLAq5 = quantile(value, 0.05), WCLAq95 = quantile(value, 0.95)) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
+  dplyr::select(-X1) %>% 
+  left_join(mutate(data, LeafNum = 1:n()) %>% 
+              dplyr::select(LeafNum, REW)) %>% 
+  left_join(dplyr::select(data, SpeciesNum, Species) %>% unique()) %>% 
+  unique() %>% 
+  ggplot(aes(x = REW, col = Species)) +
+  geom_point(aes(y = WCLA), data = data, alpha = 0.3) +
+  geom_ribbon(aes(ymin = WCLAq5, ymax = WCLAq95), 
+              fill = "lightgrey", alpha = 0.5) +
+  geom_line(aes(y = WCLAm)) +
+  scale_y_log10()
+```
+
+```{r  LogRxSDSIVariance2, fig.cap="Model variance partitionning."}
+mcmc_intervals_data(fitWCLALogRxSDSI, regex_pars = c("V")) %>%
+  mutate(variance = recode_factor(parameter,
+                           "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
+                           "Vindividual" = "Individual", "Vresidual" = "Residual")) %>%
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>%
+  ggplot(aes(x = "WCLA", fill = variance)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white",
+            position = position_stack(vjust = .5)) +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(),
+        axis.ticks.x = element_blank()) +
+  scale_fill_discrete(expression(sigma^2))
+```

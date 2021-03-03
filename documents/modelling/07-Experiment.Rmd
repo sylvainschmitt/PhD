@@ -152,6 +152,103 @@ vroom::vroom("modelling_save/simulations.tsv") %>%
   viridis::scale_fill_viridis("Hnci", discrete = T)
 ```
 
+```{r dgtwoHtopoHnci, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and heritability to topography (Htopo)."}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg", variable == "topo") %>% 
+  filter(parameter %in% c("Hnci", "Htopo")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  group_by(variable, metric, Htopo, Hnci) %>% 
+  summarise_all(max) %>% 
+  ggplot(aes(x = Htopo, y = Hnci, z = 1-metric.value)) +
+  geom_contour() +
+  # geom_tile() +
+  xlab(expression(H[topographie])) + ylab(expression(H[nci])) +
+  viridis::scale_fill_viridis("Adaptation\nlocale")
+```
+
+```{r dgtwoHtopoHnci, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and heritability to topography (Htopo)."}
+data <- vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg", variable == "topo") %>% 
+  filter(parameter %in% c("Hnci", "Htopo")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  group_by(variable, metric, Htopo, Hnci) %>% 
+  summarise(m = mean(metric.value), q5 = quantile(metric.value, 0.05), q95 = quantile(metric.value, 0.95))%>% 
+  reshape2::melt(c("variable", "metric", "Htopo", "Hnci"), variable.name = "quantile")
+  
+ library("scatterplot3d")
+scatterplot3d(x = data$Htopo, y = data$Hnci, z = 1 - data$value, 
+              pch = 16, color = c("#999999", "#E69F00", "#56B4E9")[as.numeric(as.factor(data$quantile))],
+              xlab = expression(H[topographie]), ylab = expression(H[NCI]), zlab = "Adaptation locale", 
+              box = T, type="h", )
+
+```
+
+```{r dgtwoHtopoHnci, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and heritability to topography (Htopo)."}
+data <- vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  filter(metric == "Dg", variable == "topo") %>% 
+  filter(parameter %in% c("Hnci", "Htopo")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+   mutate(variable = recode(variable, "nci" = "NCI", "topo" = "Topography")) %>% 
+  group_by(variable, metric, Htopo, Hnci) %>% 
+  summarise(m = mean(metric.value), q5 = quantile(metric.value, 0.05), q95 = quantile(metric.value, 0.95)) %>% 
+  reshape2::dcast(Htopo ~ Hnci, value.var = "m") %>% 
+  column_to_rownames("Htopo")
+
+
+library(plotly)
+# volcano is a numeric matrix that ships with R
+fig <- plot_ly(z = ~ 1 - as.matrix(data)) %>% add_surface(
+  contours = list(
+    z = list(
+      show=TRUE,
+      usecolormap=TRUE,
+      highlightcolor="#ff0000",
+      project=list(z=TRUE)
+      )
+    )
+  )
+fig <- fig %>% layout(
+    scene = list(
+      camera=list(
+        eye = list(x=1.87, y=0.88, z=-0.64)
+        )
+      )
+  )
+
+fig
+
+fig <- plot_ly(
+  type = 'surface',
+  contours = list(
+    x = list(show = TRUE, start = 1.5, end = 2, size = 0.04, color = 'white'),
+    z = list(show = TRUE, start = 0.5, end = 0.8, size = 0.05)),
+  x = ~ row.names(data),
+  y = ~ names(data),
+  z = ~ 1-as.matrix(data))
+fig <- fig %>% layout(
+    scene = list(
+      xaxis = list(nticks = 20),
+      zaxis = list(nticks = 4),
+      camera = list(eye = list(x = 0, y = -1, z = 0.5))))
+fig
+
+fig <- plot_ly(z = ~1 - as.matrix(data))
+fig <- fig %>% add_surface()
+
+fig
+```
+
 ```{r dgtwoHtopoNs, fig.cap="Local adaptation (Dg, low value correspond to locally addapted trees) for topography and NCI depending on heritability to NCI (Hnci) and number of seedlings (Ns)."}
 vroom::vroom("modelling_save/simulations.tsv") %>% 
   filter(timestep == 60) %>% 
@@ -319,6 +416,7 @@ vroom::vroom("modelling_save/simulations.tsv") %>%
   mutate(parameter.value = as.vector(scale(parameter.value, center = F))) %>%
   filter(!(variable == "nci" & metric == "wss score")) %>% 
   reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  # mutate(Rdispersion = 1 - Rdispersion) %>% 
   group_by(metric, variable) %>% 
   do(lm = lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
                Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>%
@@ -384,3 +482,32 @@ whereas reduced local adaptation bet-edging the temporally-variable NCI doesn't 
 but decrease if heritability to NCI becomes stronger than heritability to topography, i.e. genotypes get more locally adapted to NCI.
 * The number of seedlings, related to selection, increases the effect of heritability on local adaptation and population structure.
 * The radius of dispersion, related to gene flow, decreases local adaptation and population structure.
+
+```{r lmfigpres, eval=F, fig.width=4, fig.height=5}
+vroom::vroom("modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  group_by(parameter) %>%
+  mutate(parameter.value = as.vector(scale(parameter.value, center = F))) %>%
+  filter(!(variable == "nci" & metric == "wss score")) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>%
+       broom::tidy()) %>%
+  unnest(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  filter(p.value < 0.05) %>% 
+  dplyr::select(metric, variable, term, estimate, std.error) %>% 
+  filter(metric == "Dg", variable == "topo") %>% 
+  # filter(term %in% c("Htopo", "Hnci", "Htopo:Hnci")) %>% 
+  ggplot(aes(term)) +
+  geom_hline(yintercept = 0, col = "lightgrey", linetype = "dashed") +
+  geom_hline(yintercept = c(0.05, -0.05), col = "lightgrey", linetype = "dotted") +
+  geom_point(aes(y = estimate, alpha = (abs(estimate) > 0.05))) +
+  geom_segment(aes(xend = term, y = estimate - std.error, yend = estimate + std.error)) +
+  coord_flip() +
+  xlab("") + ylab("") +
+  scale_alpha_manual(guide = "none", values = c(0.2, 1)) +
+  scale_y_reverse()
+```

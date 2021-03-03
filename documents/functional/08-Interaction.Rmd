@@ -174,9 +174,42 @@ preds <- lapply(models, function(model){
 
 ### Summary
 
+```{r summarySpeciesSigmaInterIntra}
+lapply(fits, function(fit)
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
+                                "betaTWI", "gammaTWI", "sigma_p",
+                                "sigma_t", "lp__"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "model") %>% 
+  separate(model, c("Genus", "trait"), "-") %>% 
+  mutate(SpeciesNum = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(Genus, trait, term, SpeciesNum, estimate, std.error, rhat) %>% 
+  mutate(SpeciesNum = gsub("([[:punct:]])", "", SpeciesNum)) %>% 
+  mutate(SpeciesNum = as.numeric(SpeciesNum)) %>% 
+  left_join(species) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+    filter(term %in% c("sigmat", "lp")) %>% 
+  mutate(term = recode_factor(term, 
+                              sigmat = "$\\sigma^2_{t}$",
+                              lp = "log-likelihood")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              LMA = "$LMA$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "All", SpeciesLong)) %>% 
+  reshape2::dcast(Genus + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Species = SpeciesLong) %>% 
+  kable(caption = "Model parameters for each species with reduced traits and descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F)
+```
+
 ```{r summarySpeciesInterIntra}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
                                 "betaTWI", "gammaTWI", "sigma_p",
                                 "sigma_t", "lp__"), 
                   droppars = NULL, rhat = T)) %>%

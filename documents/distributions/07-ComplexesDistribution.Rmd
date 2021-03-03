@@ -217,7 +217,7 @@ The model inference correctly converged without divergent transition and resulte
 
 ```{r summaryCompdist}
 lapply(fits, function(fit)
-  broom::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
                   droppars = NULL, rhat = T)) %>%
   bind_rows(.id = "complex") %>% 
   mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 

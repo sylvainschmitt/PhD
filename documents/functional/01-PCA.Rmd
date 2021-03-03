@@ -124,6 +124,21 @@ axes.boxplots <- pca.plot$data %>%
 cowplot::plot_grid(pca.plot, axes.boxplots, rel_widths = c(3,2))
 ```
 
+```{r PCAall, eval=F}
+data$leaf %>% 
+  filter(Species %in% c("coriacea", "decolorans", "sagotiana", "globulifera", "sp.1")) %>%
+  mutate(LMA = 1/SLA) %>% 
+  autoplot(princomp(~ LMA + LDMC + LT + LA + CC, data = ., cor = T), 
+           data = .,
+           colour = "SpeciesLong", alpha = 0.5, size = "DBH",
+           loadings.label.size = 6,
+           loadings.label.colour = 'black', loadings.label.vjust = 1.1,
+           loadings = T, loadings.label = T, loadings.colour = 'black') +
+  geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
+  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+  scale_colour_brewer("", palette = "Set1")
+```
+
 #### Within complexes
 
 Within *Symphonia globulifera* complex, 75.1% of total variance was conserved on the two first axis from the PCA of leaf traits (figure \@ref(fig:PCAleafSymphonia)). The first axis mainly increased with SLA and decreased with LDMC and CC, i.e. while SLA increased, leaf dry matter and chlorophyll diminished. Nevertheless the weights of the two remaining variables (LA and LT) on this axis were also significant. The first axis highlighted a strong correlation between CC and LDMC, whereas SLA and LA were still decoupled. The second axis was more related with LT and LA. Similarly to results between complexes, besides both axes showed significative morphotype segregation ($p-value < 0.001$), the two morphotypes (*S. sp1* and *S. globulifera*) were segregated with no overlap along the second axis, with decreasing LT and LA from *S. globulifera* to *S. sp1*. Finally, the same observation can be raised about diameter repartition along the first axis of PCA between complexes (figure \@ref(fig:PCAleafComplexes)) and within *Symphonia complexes*, with decreasing diameter, SLA and LA increase whereas dry matter, chlorophyll content and leaf thickness lessen.

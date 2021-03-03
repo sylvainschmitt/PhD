@@ -8,7 +8,7 @@ library(tidyverse)
 library(raster)
 library(bayesplot)
 library(rstan)
-library(rstanarm)
+# library(rstanarm)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -523,3 +523,30 @@ hi.index %>%
   viridis::scale_color_viridis() +
   theme(legend.position = "bottom")
 ```
+
+```{r, eval=F}
+hi.index %>% 
+    filter(pair != "pr") %>% 
+  mutate(pair = recode_factor(pair,
+                              "sp" = "S. sp1 - S. globulifera Paracou",
+                              "sr" = "S. sp1 - S. globulifera Regina")) %>% 
+  left_join(trees) %>% 
+  filter(pop != "Admixed") %>% 
+  mutate_at(c("h", "lower", "upper"), ~ifelse(pop == "S. sp1", 1-., .)) %>% 
+  dplyr::select(Ind, pop, DBHtoday, lower, h, upper, Gmax, TWI, NCI) %>% 
+  reshape2::melt(c("Ind", "pop", "DBHtoday", "lower", "h", "upper")) %>% 
+  group_by(pop, variable) %>% 
+  mutate(diffmeanpop = mean(value) - value) %>% 
+  filter(pop != "S. gobulifera Regina") %>% 
+  mutate(pop = recode(pop, "S. globulifera Paracou" = "S. sp.2")) %>% 
+  ggplot(aes(x = diffmeanpop, col = DBHtoday)) +
+  geom_point(aes(y = 1 - h)) +
+  geom_errorbar(aes(ymin = 1 - lower, ymax = 1 - upper), alpha = 0.3) +
+  facet_grid(pop ~ variable, scales = "free") +
+  xlab("Écart à la moyenne de la population") +
+  ylab("Index d'hybrditation (introgress)") +
+  viridis::scale_color_viridis(guide = "none") +
+  theme(legend.position = "bottom") +
+  geom_smooth(method = "lm", aes(y = 1 - h), col = "black")
+```
+

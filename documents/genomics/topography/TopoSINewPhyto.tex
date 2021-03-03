@@ -71,6 +71,46 @@
 \makeatother
 
 % code highlights
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.77,0.63,0.00}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
 
 % hyperlinks
 \IfFileExists{upquote.sty}{\usepackage{upquote}}{}
@@ -151,6 +191,8 @@ The following Supporting Information is available for this article:
 
 \textbf{Fig. S\ref{fig:bayescanOutliers}.} Outlier SNPs among \emph{Symphonia} species
 
+\textbf{Fig. S\ref{fig:conhetero}.} Conspecifics and congenerics in local neighborhood
+
 \newpage
 
 \hypertarget{method-s1-design-of-the-probes-set-for-symphonia.}{%
@@ -192,7 +234,7 @@ We masked repetitive regions with \texttt{RepeatMasker} (Smit \emph{et al.} \pro
 Chakraborty, M., Baldwin-Brown, J.G., Long, A.D. \& Emerson, J.J. (2016). Contiguous and accurate de novo assembly of metazoan genomes with modest long read coverage. \emph{Nucleic Acids Research}, \textbf{44}, 1--12.
 
 \leavevmode\hypertarget{ref-Eaton2020}{}%
-Eaton, D.A. \& Overcast, I. (2020). ipyrad: Interactive assembly and analysis of RADseq datasets. \emph{Bioinformatics (Oxford, England)}, \textbf{36}, 2592--2594.
+Eaton, D.A.R. \& Overcast, I. (2020). ipyrad: Interactive assembly and analysis of RADseq datasets. \emph{Bioinformatics (Oxford, England)}, \textbf{36}, 2592--2594.
 
 \leavevmode\hypertarget{ref-Haas2013}{}%
 Haas, B.J., Papanicolaou, A., Yassour, M., Grabherr, M., Philip, D., Bowden, J., Couger, M.B., Eccles, D., Li, B., Macmanes, M.D., Ott, M., Orvis, J., Pochet, N., Strozzi, F., Weeks, N., Westerman, R., William, T., Dewey, C.N., Henschel, R., Leduc, R.D., Friedman, N. \& Regev, A. (2013). \emph{De novo transcript sequence recostruction from RNA-Seq: reference generation and analysis with Trinity}.
@@ -207,7 +249,7 @@ Li, H. \& Durbin, R. (2009). Fast and accurate short read alignment with Burrows
 Olsson, S., Seoane-Zonjic, P., Bautista, R., Claros, M.G., González-Martínez, S.C., Scotti, I., Scotti-Saintagne, C., Hardy, O.J. \& Heuertz, M. (2017). Development of genomic tools in a widespread tropical tree, Symphonia globulifera L.f.: a new low-coverage draft genome, SNP and SSR markers. \emph{Molecular Ecology Resources}, \textbf{17}, 614--630. Retrieved from \url{http://doi.wiley.com/10.1111/1755-0998.12605}
 
 \leavevmode\hypertarget{ref-Smit2015}{}%
-Smit, A., Hubley, R. \& Green, P. (2015). RepeatMasker Open-4.0. \textless{}http://www.repeatmasker.org\textgreater{}.
+Smit, A., Hubley, R. \& Green, P. (2015). RepeatMasker Open-4.0. \textless http://www.repeatmasker.org\textgreater.
 
 \leavevmode\hypertarget{ref-Vargas2019}{}%
 Vargas, O.M., Heuertz, M., Smith, S.A. \& Dick, C.W. (2019). Target sequence capture in the Brazil nut family (Lecythidaceae): Marker selection and in silico capture from genome skimming data. \emph{Molecular Phylogenetics and Evolution}, \textbf{135}, 98--104. Retrieved from \url{https://www.sciencedirect.com/science/article/pii/S1055790318304895}
@@ -349,5 +391,19 @@ E. sagotiana & 20 & 16 & 80\tabularnewline
 \includegraphics{TopoSINewPhyto_files/figure-latex/bayescanOutliers-1.pdf}
 \caption{\label{fig:bayescanOutliers}High-differentiation outlier SNPs for \emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon).}
 \end{figure}
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics{TopoSINewPhyto_files/figure-latex/conhetero-1.pdf}
+\caption{\label{fig:conhetero}The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio.}
+\end{figure}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{save}\NormalTok{(}\DataTypeTok{list =} \KeywordTok{ls}\NormalTok{(), }\DataTypeTok{file =} \StringTok{"../../thesis/rdata/Ch3SupMat.Rdata"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
 
 \end{document}

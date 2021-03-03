@@ -112,6 +112,28 @@ nci <- lapply(unique(bkgmortality$Plot), function(p){
 write_tsv(nci, path = "modelling_save/nci.tsv")
 ```
 
+```{r, eval=F}
+library(raster)
+nci <- read_tsv("modelling_save/nci.tsv") 
+coordinates(nci) <- ~Xutm + Yutm
+proj4string(nci) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0')
+nci$twi <- extract(wetness, nci)
+as.data.frame(nci) %>% 
+  ggplot(aes(twi, NCI)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method = "lm") +
+  ggpubr::stat_cor() +
+  xlab("Topographic Wetness Index (TWI)") +
+  ylab("Neighbour Crowding Index (NCI)")
+```
+
+
 ```{r plotnci, eval=F}
 g <- read_tsv("modelling_save/nci.tsv") %>% 
   mutate( CensusYear = as.integer(CensusYear)) %>% 

@@ -261,6 +261,69 @@ lapply(fitsModel, function(fit)
 
 <!-- old supp -->
 
+```{r OverlapBreadth, eval=F}
+paracou <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>% 
+  filter(CensusYear == 2017) %>% 
+  collect() %>% 
+  mutate(SpeciesLong = paste(Genus, Species))
+env <- paracou %>%
+   dplyr::select(SpeciesLong, idTree, Xutm, Yutm) %>%
+   unique() %>% 
+  na.omit()
+coordinates(env) <- ~Xutm + Yutm
+proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+env <- spTransform(env, CRSobj = crs)
+twi <- raster(file.path(path, "topography", "TWI_1m.tif"))
+twi <- projectRaster(twi, crs = crs)
+env <- data.frame(cbind(env@data, twi = raster::extract(twi, env)))
+env <- filter(env, SpeciesLong %in% c("Symphonia sp.1", 
+                                      "Symphonia globulifera",
+                                      "Eschweilera sagotiana", 
+                                      "Eschweilera coriacea", 
+                                      "Eschweilera decolorans"))
+env %>%
+  group_by(SpeciesLong) %>%
+  summarise(q95 = quantile(twi, 0.95), 
+            q05 = quantile(twi, 0.05),
+            m = mean(twi)) %>%
+  mutate(breadth = q95 - q05)
+data <- data.frame(
+  SpeciesLong = c("Symphonia sp.1", "Symphonia globulifera", 
+                  "Eschweilera coriacea", "Eschweilera coriacea",
+                  "Eschweilera decolorans", "Eschweilera decolorans",
+                  "Eschweilera sagotiana", "Eschweilera sagotiana"),
+  mean = c(1.788297, 4.007671,
+           2.199841, 2.199841,
+           1.870706, 1.870706,
+           1.833784, 1.833784),
+  breadth = c(2.163335, 4.781191, 
+              3.890977, 3.890977, 
+              1.757455, 1.757455,
+              2.155754, 2.155754),
+  overlap = c(1.686337, 1.686337, 
+              1.743297,  2.077999,
+              1.821052, 1.743297,
+              1.821052, 2.077999),
+  with = c("Symphonia globulifera", "Symphonia sp.1",
+           "Eschweilera decolorans", "Eschweilera sagotiana",
+           "Eschweilera sagotiana", "Eschweilera coriacea",
+           "Eschweilera decolorans", "Eschweilera coriacea"))
+ggplot(data, aes(breadth, overlap, col = SpeciesLong, 
+                 label = paste("with", with), group = NA)) +
+  geom_smooth(method = "lm") +
+  geom_point() +
+  ggrepel::geom_text_repel(box.padding = 1) +
+  ggpubr::stat_cor()
+ggplot(data, aes(mean, overlap, col = SpeciesLong, 
+                 label = paste("with", with), group = NA)) +
+  geom_smooth(method = "lm") +
+  geom_point() +
+  ggrepel::geom_text_repel(box.padding = 1) +
+  ggpubr::stat_cor()
+```
+
 ```{r varcomp, fig.cap="Variance decomposition between ecological levels.", eval=F}
 traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
   googlesheets::gs_read("AllTraits") %>%

@@ -58,6 +58,8 @@ The following Supporting Information is available for this article:
 
 **Fig. S\@ref(fig:bayescanOutliers).** Outlier SNPs among *Symphonia* species
 
+**Fig. S\@ref(fig:conhetero).** Conspecifics and congenerics in local neighborhood
+
 \newpage
 
 # Method S1: Design of the probes set for *Symphonia*.
@@ -353,6 +355,29 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
   scale_y_sqrt() +
   ggtitle("4 020 significant SNPs (5.7%)", 
           "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
+```
+
+\newpage
+
+```{r conhetero, fig.cap="The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera  clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio."}
+read_tsv("../../distributions/distribution_save/congenerics.tsv") %>% 
+  mutate(Species = recode(Species, "grandiflora_form2" = "grandiflora")) %>% 
+  group_by(Genus, Species) %>% 
+  summarise(sdgen = sd(congenerics), congenerics = mean(congenerics), 
+            sdsp = sd(conspecifics), conspecifics = mean(conspecifics)) %>% 
+  ggplot(aes(conspecifics, congenerics, 
+             col = paste(paste0(substr(Genus, 1, 1), "."), Species))) + 
+  geom_abline(col = "lightgrey") +
+  geom_point(size = 3) +
+  geom_segment(aes(x = conspecifics - sdsp, xend = conspecifics + sdsp,
+                   y = congenerics, yend = congenerics), alpha = 0.5) +
+  geom_segment(aes(x = conspecifics, xend = conspecifics, 
+                   y = congenerics - sdgen, yend = congenerics + sdgen),
+               alpha = 0.5) +
+  scale_color_discrete("Species") +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Number of conspecifics within 25 meter radius") +
+  ylab("Number of consgenerics within 25 meter radius")
 ```
 
 ```{r thesis, eval=F, echo=T}

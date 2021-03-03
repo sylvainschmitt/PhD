@@ -277,10 +277,53 @@ lapply(list(NCI = fitNCI, Gmax = fitGmaxGeno),
   scale_fill_discrete(expression(sigma^2)) 
 ```
 
+```{r VarPart2, fig.cap="Variance partitioning for neighbourhood crowding index (NCI), an indirect measurement of access to light, and for individual maximum growth potential (Gmax). Variation of each variable has been partitioned into among-species (red), among-genotype (green), and residual (blue) variation."}
+lapply(list(NCI = fitNCI, Gmax = fitGmaxGenoEnv), 
+       mcmc_intervals_data, regex_pars = c("Vp", "Vg", "Vtwi", "Vnci", "Vr")) %>% 
+  bind_rows(.id = "variable") %>% 
+  mutate(parameter = recode(parameter, "Vp" = "Species", 
+                            "Vg" = "Genotype", 
+                            "Vtwi" = "TWI",
+                            "Vnci" = "NCI",
+                            "Vr" = "Residual")) %>%
+  mutate(variable = factor(variable, levels = c("NCI", "Gmax"))) %>%
+  mutate(parameter = factor(parameter, levels = c("Species", "Genotype", "NCI", "TWI", "Residual"))) %>%
+  group_by(variable) %>% 
+  mutate(pct = paste0(round(m / sum(m) * 100), "%")) %>% 
+  ggplot(aes(x = variable, fill = parameter)) +
+  geom_col(aes(y = m)) +
+  geom_text(aes(y = m, label = pct), col = "white", position = position_stack(vjust = .5)) +
+  facet_wrap(~ variable, scales = "free") +
+  theme(axis.title.x = element_blank(), axis.title.y = element_blank(),
+        axis.text.x = element_blank(), axis.line.x = element_blank(), axis.ticks.x = element_blank(),
+        legend.position = "bottom") +
+  scale_fill_discrete(expression(sigma^2)) 
+```
+
 \newpage 
 
 ```{r SpCor, fig.cap="Spatial autocorrelogram for raw variable and genotypic values of neighbourhood crowding index (NCI), an indirect measurement of access to light, and individual maximum growth potential (Gmax). The spatial autocorrelogram shows Moran’s I value for different distance classes with significant values represented by filled points against transparent non-significant values. Colours of lines and points represent neighbourhood crowding index (blue) and individual maximum growth potential (red). Linetype represents raw variable (dashed) and associated genotypic values (continuous)."}
 cor %>% 
+  filter(dist.class < 10^3) %>% 
+  filter(variable %in% c("Gmax", "NCI", "gGmax", "gNCI")) %>% 
+  mutate(type = ifelse(substr(variable, 1, 1) == "g", "genotype", "variable")) %>% 
+  mutate(variable = gsub("^g", "", variable)) %>% 
+  ggplot(aes(x = dist.class, y = coef, col = variable, linetype = type)) + 
+  geom_hline(yintercept = 0) +
+  geom_point(aes(alpha = p.value < 0.01)) + 
+  geom_line() +
+  scale_alpha_manual(guide = "none", values = c(0.3, 1)) + 
+  scale_linetype("") +
+  scale_color_discrete("") +
+  scale_x_log10() +
+  geom_vline(xintercept = c(27, 53), col = "lightgrey", linetype = "dashed") +
+  geom_vline(xintercept = 150, col = "lightgrey", linetype = "dotted") +
+  xlab("Distance (m)") + ylab("Moran\'s I") +
+  theme(legend.position = "bottom")
+```
+
+```{r SpCor2, fig.cap="Spatial autocorrelogram for raw variable and genotypic values of neighbourhood crowding index (NCI), an indirect measurement of access to light, and individual maximum growth potential (Gmax). The spatial autocorrelogram shows Moran’s I value for different distance classes with significant values represented by filled points against transparent non-significant values. Colours of lines and points represent neighbourhood crowding index (blue) and individual maximum growth potential (red). Linetype represents raw variable (dashed) and associated genotypic values (continuous)."}
+cor2 %>% 
   filter(dist.class < 10^3) %>% 
   filter(variable %in% c("Gmax", "NCI", "gGmax", "gNCI")) %>% 
   mutate(type = ifelse(substr(variable, 1, 1) == "g", "genotype", "variable")) %>% 
@@ -320,11 +363,87 @@ t %>%
   scale_color_manual(guide = "none", values = c("darkgrey", "black"))
 ```
 
+```{r gCor2, fig.cap="Relation between genotypic values for individual growth potential (Gmax) and neighbourhood crowding index (NCI), an indirect measurement of access to light, for different classes of diameters. Regression lines represent a linear model of form y ~ x. Annotations give for each diameter class the Pearson’s R correlation coefficient and the associated p-value.", fig.width=8}
+n <- 6
+t2 %>% 
+  arrange(DBHtoday) %>% 
+  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>%
+  group_by(DBHclass) %>% 
+  mutate(DBHclassCm = paste0(round(min(DBHtoday)), " - ", round(max(DBHtoday)), " cm")) %>% 
+  ggplot(aes(aGmax, aNCI)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~ DBHclassCm, scales = "free") +
+  geom_smooth(method = "lm", col = "black") +
+  scale_size_continuous(guide = "none") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.85, ) +
+  xlab("Genetic additive values for individual growth potential (Gmax)") +
+  ylab("Genetic additive values for \n neighbourhood crowding index (NCI)") +
+  scale_color_manual(guide = "none", values = c("black"))
+```
+
+```{r gCor3, eval=F, fig.width=8}
+n <- 6
+t %>% 
+  arrange(DBHtoday) %>% 
+  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>%
+  mutate(significance = ifelse(DBHclass %in% c(1,6), "0", "1")) %>% 
+  group_by(DBHclass) %>% 
+  mutate(DBHclassCm = paste0(round(min(DBHtoday)), " - ", round(max(DBHtoday)), " cm")) %>%
+  filter(DBHclass %in% c(1,3,6)) %>% 
+  ggplot(aes(aGmax, aNCI)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~ DBHclassCm, scales = "free") +
+  geom_smooth(method = "lm", aes(col = significance)) +
+  scale_size_continuous(guide = "none") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.85, ) +
+  xlab("Genetic additive values for individual growth potential (Gmax)") +
+  ylab("Genetic additive values for \n neighbourhood crowding index (NCI)") +
+  scale_color_manual(guide = "none", values = c("darkgrey", "black"))
+```
+
+```{r gCorAll, eval=F, fig.width=8}
+n <- 1
+t %>% 
+  arrange(DBHtoday) %>% 
+  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>%
+  mutate(significance = ifelse(DBHclass %in% c(1,6), "0", "1")) %>% 
+  group_by(DBHclass) %>% 
+  mutate(DBHclassCm = paste0(round(min(DBHtoday)), " - ", round(max(DBHtoday)), " cm")) %>% 
+  ggplot(aes(aGmax, aNCI)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~ DBHclassCm, scales = "free") +
+  geom_smooth(method = "lm", aes(col = significance)) +
+  scale_size_continuous(guide = "none") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.85, ) +
+  xlab("Genetic additive values for individual growth potential (Gmax)") +
+  ylab("Genetic additive values for \n neighbourhood crowding index (NCI)") +
+  scale_color_manual(guide = "none", values = c("black"))
+```
+
+```{r gCorAll, eval=F, fig.width=8}
+n <- 1
+t2 %>% 
+  arrange(DBHtoday) %>% 
+  mutate(DBHclass = rep(1:n, each = ceiling(nrow(.)/n))[1:nrow(.)]) %>%
+  mutate(significance = ifelse(DBHclass %in% c(1,6), "0", "1")) %>% 
+  group_by(DBHclass) %>% 
+  mutate(DBHclassCm = paste0(round(min(DBHtoday)), " - ", round(max(DBHtoday)), " cm")) %>% 
+  ggplot(aes(aGmax, aNCI)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~ DBHclassCm, scales = "free") +
+  geom_smooth(method = "lm", aes(col = significance)) +
+  scale_size_continuous(guide = "none") +
+  ggpubr::stat_cor(method = "pearson", label.x = 0.5, label.y = 0.85, ) +
+  xlab("Genetic additive values for individual growth potential (Gmax)") +
+  ylab("Genetic additive values for \n neighbourhood crowding index (NCI)") +
+  scale_color_manual(guide = "none", values = c("black"))
+```
+
 \newpage 
 
 ```{r ncibreadth, fig.cap="Niche breadth in neighbourhood crowding index (NCI) for species abundant in Paracou. Niche breadth is defined by the difference between the 95th and 5th quantiles of neighbourhood crowding index (NCI) for individuals with a diameter at breast height between 10 and 20 cm. Niche breadth has been calculated for species with at least fifty individuals meeting previous criteria. The analyses used only control plots, and not human disturbed plots. Dashed lines represent niche breadth for Symphonia globulifera (red) and Symphonia sp. 1 (blues)."}
 load("../symcapture/symcapture_save/NCI2017all.Rdata")
-t2 <- trees %>% 
+t3 <- trees %>% 
   filter(Species != "Indet.") %>% 
   filter(DBH >= 10 & DBH <= 20) %>% 
   group_by(Genus, Species) %>% 
@@ -334,12 +453,12 @@ t2 <- trees %>%
   group_by(Genus, Species, N) %>% 
   summarise(NCI95 = quantile(NCI, 0.95), NCI05 = quantile(NCI, 0.05)) %>% 
   mutate(NCIbreadth = NCI95 - NCI05)
-ggplot(t2, aes(NCIbreadth)) + 
+ggplot(t3, aes(NCIbreadth)) + 
   geom_histogram(fill = "lightgrey", bins = 30) + 
   geom_vline(aes(xintercept = NCIbreadth,
                  col = paste0(substr(Genus, 1, 1), ". ", Species)),
              linetype = "dashed",
-             data = filter(t2, Genus %in% c("Symphonia"))) +
+             data = filter(t3, Genus %in% c("Symphonia"))) +
   ylab("Number of species") + xlab("Niche breadth in neighbourhood crowding index (NCI)") +
   scale_color_discrete("Studied species") +
   theme(legend.position = "bottom", legend.text = element_text(face = "italic"))

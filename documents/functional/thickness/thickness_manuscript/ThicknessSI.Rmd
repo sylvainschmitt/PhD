@@ -75,11 +75,11 @@ model {
 
 ```{r cor, fig.cap="Correlations among leaf thickness descriptors. Pearson's r below the diagonal and corresponding color above the diagonal."}
 read_tsv("../thickness_save/data.tsv") %>% 
-  dplyr::select(LT, DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, 
+  dplyr::select(LT, WMA, DBH, T55, T30, Hr55, Hr30, Patm, windaspect, windspeed, 
                 rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   na.omit() %>%
   cor() %>% 
-  corrplot::corrplot.mixed()
+  corrplot::corrplot.mixed(tl.pos = "lt")
 ```
 
 \newpage

@@ -17,9 +17,11 @@ data <- read_tsv("thickness_save/data.tsv")
 ```{r data, eval=F}
 path <- "../../../data/Paracou/weather/"
 # LT 
-traits <- readxl::read_xlsx(path = file.path(path, "Measures_Symphonia.xlsx"), sheet = "AllTraits") %>% 
-  dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, Leaf, Morphotype, Bark, Dawkins, LT) %>% 
-  na.omit()
+traits <- readxl::read_xlsx(path = file.path(path, "Measures_Symphonia.xlsx"), sheet = "AllMeasures") %>% 
+  mutate(LT = LTmean, WMA = (FreshWeight - DryWeight)/LAexclude*10000) %>% 
+  dplyr::select(idTree, Plot, SubPlot, TreeFieldNum, Leaf, Morphotype, Bark, Dawkins, LT, WMA) %>% 
+  na.omit() %>% 
+  filter(WMA > 0)
 individuals <- read_tsv(file.path(path, "Measures_Symphonia - Individuals.tsv")) %>% 
   mutate(date = dmy(paste(Date))) %>% 
   mutate(time = dmy_hm(paste(Date, Time))) %>% 
@@ -99,6 +101,7 @@ Tables have been joined with dates and shortest time difference into the `data.t
 * **Leaf**: leaf id in the PhD database
 * **Morphotype**: Pracou database identification of *Symphonia* morphotype
 * **LT**: leaf thickness in $\mu m$
+* **WCLA**: leaf water content per leaf area in $g.cm^{-2}$
 * **timeweather**: weather sampling time YYYY-MM-DD hh:mm:ss
 * **T55**: Air temperature at 55 m in degree celsius
 * **T30**: Air temperature at 30 m in degree celsius
@@ -122,14 +125,14 @@ Tables have been joined with dates and shortest time difference into the `data.t
 Figures \@ref(fig:cor) and \@ref(fig:pca) showed variables covariations among them and with leaf thickness. There are a lot of positive and negative covariations, as expected. And leaf thickness (LT) is mainly correlated to relative extractible water (REW), atmospheric pressure (Patm) and cummulated rain over five days (rainfivedays).
 
 ```{r cor, fig.cap="Variables correlations. Pearson's r below the diagonal and corresponding color above the diagonal."}
-dplyr::select(data, LT, DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+dplyr::select(data, LT, WCLA, DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   na.omit() %>%
   cor() %>% 
   corrplot::corrplot.mixed()
 ```
 
 ```{r pca, fig.cap="Principal component analysis of variables."}
-autoplot(princomp(~ LT + DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
+autoplot(princomp(~ LT + WCLA + DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
                     rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
                   data = data, cor = T),
            loadings.label.size = 6,
@@ -150,8 +153,8 @@ I thus suggest to build a hierarchical/mixed model with weather fixed effect tho
 
 ```{r lmplot, fig.cap="Linear regressions per explanatory variables."}
 dplyr::select(data,
-              date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT,
+              DBH, WCLA, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   ggplot(aes(x = value, y = LT)) +
   geom_point(alpha = 0.3) +
@@ -162,32 +165,32 @@ dplyr::select(data,
 ```{r lmtab}
 a <- dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT,
-              DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, WCLA, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   group_by(variable) %>% 
-  do(lm = lm(LT ~ value, data = .)) %>% 
-  broom::tidy(lm) %>% 
+  do(lm = broom::tidy(lm(LT ~ value, data = .))) %>% 
+  unnest(lm) %>% 
   filter(term != "(Intercept)") %>% 
-  dplyr::select(variable, p.value) %>% 
+  dplyr::select(variable, estimate, p.value) %>% 
   arrange(p.value)
 b <- dplyr::select(data,
               date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, LT, 
-              DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+              DBH, WCLA, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "LT")) %>% 
   group_by(variable) %>% 
-  do(lm = lm(LT ~ value, data = .)) %>% 
-  broom::glance(lm) %>% 
+  do(lm = broom::glance(lm(LT ~ value, data = .))) %>% 
+  unnest(lm) %>% 
   dplyr::select(variable, r.squared, adj.r.squared)
 left_join(a, b) %>% 
   arrange(desc(adj.r.squared)) %>% 
   dplyr::mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
-  kable(col.names = c("Variable", "$p$", "$R^2$", "$R^2_{adj}$"),
-        caption = "Linear regressions per explanatory variables.")
+  kable(col.names = c("Variable", "Estimate", "$p$", "$R^2$", "$R^2_{adj}$"),
+        caption = "Linear regressions of LT with each explanatory variables.")
 ```
 
 
 ```{r oob, fig.cap="Variable importance calculated with an out-of-bag method applied on a random forest. Variable importance is represented by the mean increase in mean square error (MSE)."}
-randomForest::randomForest(LT ~ DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
+randomForest::randomForest(LT ~ DBH + WCLA + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
                              rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
                            data = data,  na.action = na.omit,
                            ntree = 1000, replace = F , importance = T,
@@ -199,5 +202,118 @@ randomForest::randomForest(LT ~ DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm +
   ggplot(aes(variable, MSEinc)) + 
   geom_col() +
   coord_flip() +
-  xlab("") + ylab("Mean increase in mean square error.")
+  xlab("") + ylab("Mean increase in mean square error for LT.")
 ```
+
+## Relation to Water Content per Leaf Area (WCLA)
+
+```{r lmp2lot, fig.cap="Linear regressions per explanatory variables."}
+cowplot::plot_grid(
+  plotlist = list(
+    ggplot(data, aes(x = WCLA, y = LT)) +
+      geom_point(alpha = 0.3) +
+      geom_smooth(),
+    ggplot(data, aes(x = DBH, y = WCLA)) +
+      geom_point(alpha = 0.3) +
+      geom_smooth(),
+    ggplot(data, aes(x = REW, y = WCLA)) +
+      geom_point(alpha = 0.3) +
+      geom_smooth()
+    ), nrow = 3)
+```
+
+```{r lm2tab}
+a <- dplyr::select(data,
+              date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, WCLA,
+              DBH, WCLA, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+  reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "WCLA")) %>% 
+  group_by(variable) %>% 
+  do(lm = broom::tidy(lm(WCLA ~ value, data = .))) %>% 
+  unnest(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  dplyr::select(variable, estimate, p.value) %>% 
+  arrange(p.value)
+b <- dplyr::select(data,
+              date, timetree, idTree, Leaf, Plot, SubPlot, TreeFieldNum, Morphotype, WCLA, 
+              DBH, WCLA, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+  reshape2::melt(id.vars = c("date", "timetree", "idTree", "Leaf", "Plot", "SubPlot", "TreeFieldNum", "Morphotype", "WCLA")) %>% 
+  group_by(variable) %>% 
+  do(lm = broom::glance(lm(WCLA ~ value, data = .))) %>% 
+  unnest(lm) %>% 
+  dplyr::select(variable, r.squared, adj.r.squared)
+left_join(a, b) %>% 
+  arrange(desc(adj.r.squared)) %>% 
+  dplyr::mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  kable(col.names = c("Variable", "estimate", "$p$", "$R^2$", "$R^2_{adj}$"),
+        caption = "Linear regressions of WCLA with each explanatory variables.")
+```
+
+
+```{r oob2, fig.cap="Variable importance calculated with an out-of-bag method applied on a random forest. Variable importance is represented by the mean increase in mean square error (MSE)."}
+randomForest::randomForest(WCLA ~ DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm + windaspect + windspeed + 
+                             rain + rainday + rainfivedays + vpd55 +  PET + REW + rainfall,
+                           data = data,  na.action = na.omit,
+                           ntree = 1000, replace = F , importance = T,
+                           do.trace = F, keep.forest = T, keep.inbag = T)$importance %>% 
+  as.data.frame() %>% 
+  rownames_to_column("variable") %>% 
+  dplyr::rename(MSEinc = "%IncMSE") %>% 
+  arrange(desc(MSEinc)) %>% 
+  ggplot(aes(variable, MSEinc)) + 
+  geom_col() +
+  coord_flip() +
+  xlab("") + ylab("Mean increase in mean square error for WCLA.")
+```
+
+## Weather graph
+
+```{r weatherg, fig.cap="Observed leaf thickness (µm) variation with half-hourly, daily and five-day rainfall (mm) and with relative extractable water between October and December. Light blue points and columns represent observed half-hourly, daily and five-day rainfall (mm) and relative extractable water between October and December, respectively from left to right and top to bottom. Black box plots represent half-hourly our daily distribution of measured leaf thickness among Symphonia individuals. Blue and black lines represent polynomial regression for weather data and leaf thickness data, respectively."}
+g.rain <- ggplot(data, aes(x = timetree)) +
+  geom_point(aes(y = rain), col = "lightblue", 
+             data = unique(dplyr::select(data, timetree, rain)) %>% 
+               filter(rain < 2)) +
+  geom_smooth(aes(y = rain, group = NA), col = "blue",
+              data = unique(dplyr::select(data, timetree, rain)), se = F) +
+  geom_boxplot(aes(y = LT/400, group = timetree), alpha = 0.5, col = "black") +
+  geom_smooth(aes(y = LT/400, group = NA), col = "black", alpha = 0.5, se = F) +
+  scale_y_continuous(name = "", 
+                     sec.axis = sec_axis(~.*400, name = "")) +
+  ggtitle("Half-hourly rain (mm)") +
+  xlab("")
+g.rainday <- ggplot(data, aes(x = date, group = date)) +
+  geom_col(aes(y = rainday), fill = "lightblue", col = NA, 
+           data = unique(dplyr::select(data, date, rainday))) +
+  geom_smooth(aes(y = rainday, group = NA), col = "blue", 
+              data = unique(dplyr::select(data, date, rainday)), se = F) +
+  geom_boxplot(aes(y = LT/10), alpha = 0.5, col = "black") +
+  geom_smooth(aes(y = LT/10, group = NA), col = "black", alpha = 0.5, se = F) +
+  scale_y_continuous(name = "", 
+                     sec.axis = sec_axis(~.*10, name = "")) +
+  ggtitle("Daily rain (mm)") +
+  xlab("")
+g.rainfidays <- ggplot(data, aes(x = date, group = date)) +
+  geom_col(aes(y = rainfivedays), fill = "lightblue", col = NA, 
+           data = unique(dplyr::select(data, date, rainfivedays))) +
+  geom_smooth(aes(y = rainfivedays, group = NA), col = "blue", 
+              data = unique(dplyr::select(data, date, rainfivedays)), se = F) +
+  geom_boxplot(aes(y = LT*2), alpha = 0.5, col = "black") +
+  geom_smooth(aes(y = LT*2, group = NA), col = "black", alpha = 0.5, se = F) +
+  scale_y_continuous(name = "", 
+                     sec.axis = sec_axis(~./2, name = "")) +
+  ggtitle("Five-day rain (mm)") +
+  xlab("")
+g.rew <- ggplot(data, aes(x = date, group = date)) +
+  geom_col(aes(y = REW), fill = "lightblue", col = NA, 
+           data = unique(dplyr::select(data, date, REW))) +
+  geom_smooth(aes(y = REW, group = NA), col = "blue", 
+              data = unique(dplyr::select(data, date, REW)), se = F) +
+  geom_boxplot(aes(y = LT/500), alpha = 0.5, col = "black") +
+  geom_smooth(aes(y = LT/500, group = NA), col = "black", alpha = 0.5, se = F) +
+  scale_y_continuous(name = "Relative extractable water", 
+                     sec.axis = sec_axis(~.*500, name = "Leaf thickness (µm)")) +
+  xlab("")
+gridExtra::grid.arrange(g.rain, g.rainday, g.rainfidays, g.rew,   
+                        layout_matrix = rbind(c(1, 2, 3),
+                                              c(4, 4, 4)))
+```
+

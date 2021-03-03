@@ -1,0 +1,188 @@
+```{r setupInteractionAll, include=FALSE}
+#rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 8, fig.width = 6,
+  cache = F, cache.lazy = F)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "../../data/Paracou/"
+```
+
+```{r dataInteractionAll, eval=T}
+# traitsSymphonia <- googlesheets::gs_title("Measures_Symphonia") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   mutate(SLA = as.numeric(SLA), LDMC = as.numeric(LDMC)) %>%
+#   mutate(Genus = "Symphonia") %>%
+#   rename(Species = Morphotype) %>%
+#   mutate(Species = ifelse(Species == "Indet.",
+#                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
+#                                      "sp.1" =  "S")], Species))
+# traitsEschweilera <- googlesheets::gs_title("Measures_Eschweilera") %>%
+#   googlesheets::gs_read("AllTraits") %>%
+#   filter(!(Plot == 14 & SubPlot == 1 & TreeFieldNum == 760)) %>%  # outlier
+#   filter(!(Species %in% c("congestiflora","simiorum","persistens")))
+# traits <- bind_rows(traitsEschweilera, traitsSymphonia) %>%
+#   mutate(SpeciesLong = paste(substr(Genus, 1, 1), Species)) %>%
+#   group_by(idTree, Plot, SubPlot, TreeFieldNum, Genus, Species,
+#            SpeciesLong, Bark, Dawkins) %>%
+#   summarise_at(vars("SLA", "LDMC", "LT", "LA", "CC",
+#                     "brBT", "brBD", "brWD"), mean, na.rm = T) %>%
+#   ungroup() %>%
+#   mutate(invSLA=1/SLA) %>%
+#   mutate(invLA=1/LA)
+# load("./functional_save/env.Rdata")
+# Individuals <-  left_join(traits, env, by = "idTree", suffix = c("", ".y"))
+# rm(traitsEschweilera, traitsSymphonia, traits, paracou, env)
+# save(Individuals, file = "./functional_save/Individuals.Rdata")
+load("./functional_save/Individuals.Rdata")
+sdDBH <- sd(Individuals$DBH)
+Individuals <- Individuals %>% 
+  rename(LMA = invSLA) %>% 
+  group_by(Species) %>% 
+  filter(n() > 20) %>% 
+  ungroup() %>% 
+  group_by(SpeciesLong) %>% 
+  mutate(TWIs = mean(TWI, na.rm = T)) %>% 
+  mutate(TWIis = TWI - TWIs) %>% 
+  ungroup() %>% 
+  mutate_at(vars("LMA", "LDMC", "LT", "invLA", "CC", "DBH", "TWIs", "TWIis"),
+            funs(./sd(., na.rm = T))) %>% 
+  group_by(Genus) %>% 
+  mutate(SpeciesNum = as.numeric(as.factor(Species))) %>% 
+  ungroup()
+# ggplot(Individuals, aes(LT*LDMC, LMA)) + 
+#   geom_point() + 
+#   geom_smooth(method = "lm") +
+#   ggtitle("LMA = 0.98 + 0.12 LT.LDMC",
+#           "r2 = 0.72; n = 742; P < 0.001")
+```
+
+```{r mdataInteractionAll}
+traits <- c("LMA", "LDMC", "LT", "invLA", "CC")
+complexes <- c("Symphonia", "Eschweilera")
+# traits <- c("LMA", "invLA")
+# complexes <- c("Symphonia")
+models <- sapply(complexes, function(complex) paste0(complex, "-", traits))
+mdata <- lapply(models, function(model){
+  trait <- strsplit(model, "-")[[1]][2]
+  complex <- strsplit(model, "-")[[1]][1]
+  data_ind <- Individuals[!is.na(unlist(Individuals[,trait])),] %>% 
+    filter(Genus == complex)
+  data_sp <- data_ind %>% 
+    dplyr::select(SpeciesNum, TWIs) %>% 
+    unique() %>% 
+    arrange(SpeciesNum) 
+  list(N = nrow(data_ind),
+       S = nrow(data_sp),
+       P = max(as.numeric(as.factor(data_ind$Plot))),
+       Trait = unlist(data_ind[trait]),
+       DBH = data_ind$DBH,
+       TWI = data_ind$TWI,
+       species = data_ind$SpeciesNum,
+       plot = as.numeric(as.factor(data_ind$Plot)))
+  })
+names(mdata) <- models
+```
+
+```{r fitsInteractionAll}
+# model <- stan_model("functional_cluster/InteractionAll.stan")
+# fits <- lapply(mdata, function(x)
+#   sampling(model, chains = 2, data = x, save_warmup = F))
+# names(fits) <- models
+# save(fits, file = "./functional_save/AllTWI.Rdata")
+load("./functional_save/AllTWI.Rdata")
+S_sqrt_trans <- function() scales::trans_new("S_sqrt",
+                                             function(x) sign(x)*sqrt(abs(x)),
+                                             function(x) x^2*sign(x)) 
+```
+
+```{r speciesAll}
+species <- Individuals %>% 
+  dplyr::select(SpeciesLong, Genus, Species, SpeciesNum) %>% 
+  unique()
+```
+
+# Interaction Model
+
+## Results
+
+### Summary
+
+```{r summarySpeciesSigmaAll}
+lapply(fits, function(fit)
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
+                                "betaTWI", "sigma_p",
+                                "sigma_t", "lp__"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "model") %>% 
+  separate(model, c("Genus", "trait"), "-") %>% 
+  mutate(SpeciesNum = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(Genus, trait, term, SpeciesNum, estimate, std.error, rhat) %>% 
+  mutate(SpeciesNum = gsub("([[:punct:]])", "", SpeciesNum)) %>% 
+  mutate(SpeciesNum = as.numeric(SpeciesNum)) %>% 
+  left_join(species) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+    filter(term %in% c("sigmat", "lp")) %>% 
+  mutate(term = recode_factor(term, 
+                              sigmat = "$\\sigma^2_{t}$",
+                              lp = "log-likelihood")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              LMA = "$LMA$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "All", SpeciesLong)) %>% 
+  reshape2::dcast(Genus + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Species = SpeciesLong) %>% 
+  kable(caption = "Model parameters for each species with reduced traits and descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F)
+```
+
+```{r summarySpeciesAll}
+lapply(fits, function(fit)
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "sigma_a", "betaDBH", 
+                                "betaTWI","sigma_p",
+                                "sigma_t", "lp__"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "model") %>% 
+  separate(model, c("Genus", "trait"), "-") %>% 
+  mutate(SpeciesNum = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(Genus, trait, term, SpeciesNum, estimate, std.error, rhat) %>% 
+  mutate(SpeciesNum = gsub("([[:punct:]])", "", SpeciesNum)) %>% 
+  mutate(SpeciesNum = as.numeric(SpeciesNum)) %>% 
+  left_join(species) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = recode_factor(term, 
+                              alpha = "$\\alpha$",
+                              sigmaa = "$\\sigma^2_{\\alpha}$",
+                              betaDBH = "$\\beta_{DBH}$", 
+                              betaTWI = "$\\beta_{TWI}$", 
+                              gammaTWI = "$\\gamma_{TWI}$",
+                              sigmap = "$\\sigma^2_{Plot}$",
+                              sigmat = "$\\sigma^2_{t}$",
+                              lp = "log-likelihood")) %>% 
+  mutate(trait = recode_factor(trait, 
+                              LMA = "$LMA$",
+                              LDMC = "$LDMC$", 
+                              LT = "$LT$", 
+                              invLA = "$\\frac{1}{LA}$",
+                              CC = "$CC$")) %>% 
+  mutate(SpeciesLong = ifelse(is.na(SpeciesLong), "All", SpeciesLong)) %>% 
+  reshape2::dcast(Genus + term + SpeciesLong ~ trait, value.var = "estimate") %>% 
+  rename(Parameter = term, Species = SpeciesLong) %>% 
+  kable(caption = "Model parameters for each species with reduced traits and descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F)
+```

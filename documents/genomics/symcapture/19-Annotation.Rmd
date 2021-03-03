@@ -246,3 +246,48 @@ snps %>%
 # grep anonymous snpSynonymy.annotation | cut -f1 > snp.anonymous
 ```
 
+## Genomic diversity
+
+```{bash}
+plink=~/Tools/plink_linux_x86_64_20190617/plink
+pops=(sp1 sp2 sp3)
+for pop in "${pops[@]}" ; 
+  do 
+  $plink \
+   --bfile ../paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou \
+   --allow-extra-chr \
+   --set-missing-var-ids @_# \
+   --keep $pop.fam \
+   --geno 0 \
+   --max-mac 1 \
+   --make-bed \
+   --out $pop
+  head $pop.fam -n 1 > $pop.ind1.fam
+  $plink \
+   --bfile $pop \
+   --allow-extra-chr \
+   --keep $pop.ind1.fam \
+   --make-bed \
+   --out $pop.ind1
+done
+$plink \
+ --bfile sp1.ind1 \
+ --allow-extra-chr \
+ --merge-list merge.list \
+ --geno 0 \
+ --make-bed \
+ --out all.ind1 \
+ --recode A
+```
+
+```{r}
+t <- read_delim("../../../data/Symphonia_Paracou/Sequences/variantCalling/genomicStructure/all.ind1.raw", delim = " ") %>% 
+  dplyr::select(-FID, -PAT, -MAT, -SEX, -PHENOTYPE) %>% 
+  reshape2::melt("IID") %>% 
+  mutate(IID = recode(IID,
+                      "P1-1-117.g.vcf" = "sp1",
+                      "P1-1-2101.g.vcf" = "sp2",
+                      "P10-3-2262.g.vcf" = "sp3")) %>% 
+  rename(population = IID, snp = variable, allele = value)
+```
+

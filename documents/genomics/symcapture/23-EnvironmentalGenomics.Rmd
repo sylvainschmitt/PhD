@@ -7,9 +7,9 @@ if(knitr:::is_latex_output()) options(knitr.table.format = "latex")
 library(tidyverse)
 library(bayesplot)
 library(raster)
-library(rstan)
+# library(rstan)
 options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = T)
+# rstan_options(auto_write = T)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(
   echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
@@ -213,6 +213,69 @@ mdata$RE$y <- mdata$RE$y + 1 # for the lognormal
 save(mdata, file = file.path("symcapture_save", 'dataEnv.Rdata'))   
 ```
 
+```{r, eval=F}
+# K <- read_tsv("../../../data/Symphonia_Paracou/Sequences/variantCalling/spagedi/sp1.1k.spagedi.out",
+#          skip = 32787) %>%
+# K <- read_tsv("../../../data/Symphonia_Paracou/Sequences/variantCalling/spagedi/globuliferaTypeParacou.1k.spagedi.out",
+#          skip = 4392) %>% 
+K <- read_tsv("../../../data/Symphonia_Paracou/Sequences/variantCalling/spagedi/globuliferaTypeRegina.1k.spagedi.out",
+         skip = 4149) %>% 
+  rename(IID1 = `Name i`, IID2 = `Name j`, kinship = `ALL LOCI`) %>%
+  dplyr::select(IID1, IID2, kinship)
+D <- as.matrix(dist(trees[c("Xutm", "Yutm")]))
+row.names(D) <- trees$IID
+colnames(D) <- trees$IID
+D <- reshape2::melt(D) %>% 
+  rename(IID1 = Var1, IID2 = Var2, distance = value)
+E <- as.matrix(dist(trees[c("NCI")]))
+row.names(E) <- trees$IID
+colnames(E) <- trees$IID
+E <- reshape2::melt(E) %>% 
+  rename(IID1 = Var1, IID2 = Var2, nci = value)
+t <- K %>% 
+  left_join(D) %>% 
+  left_join(E) %>% 
+  left_join(E2) %>% 
+  filter(IID1 != IID2)
+K.mat <- reshape2::dcast(t, IID2 ~ IID1, value.var = "kinship") %>% 
+  filter(!is.na(IID2)) %>% 
+  column_to_rownames("IID2") %>% 
+  as.matrix() %>% 
+  as.dist() %>% 
+  as.matrix()
+D.mat <- reshape2::dcast(t, IID2 ~ IID1, value.var = "distance") %>% 
+  filter(!is.na(IID2)) %>% 
+  column_to_rownames("IID2") %>% 
+  as.matrix() %>% 
+  log() %>% 
+  as.dist() %>% 
+  as.matrix()
+E.mat <- reshape2::dcast(t, IID2 ~ IID1, value.var = "nci") %>% 
+  filter(!is.na(IID2)) %>% 
+  column_to_rownames("IID2") %>% 
+  as.matrix() %>% 
+  as.dist() %>% 
+  as.matrix()
+rd <- vegan::mantel(K.mat, D.mat, na.rm = TRUE, permutations = 999)
+re <- vegan::mantel(K.mat, E.mat, na.rm = TRUE, permutations = 999)
+cowplot::plot_grid(
+  ggplot(t, aes(distance, kinship)) +
+    geom_density_2d_filled(alpha = 0.5) +
+    geom_density_2d(size = 0.25, colour = "black") +
+    scale_x_log10()+
+    geom_smooth(method = "lm") +
+    ggtitle(paste("Mantel", rd$statistic), paste("p", rd$signif)),
+  ggplot(t, aes(nci, kinship)) +
+    geom_density_2d_filled(alpha = 0.5) +
+    geom_density_2d(size = 0.25, colour = "black") +
+    geom_smooth(method = "lm")+
+    ggtitle(paste("Mantel", re$statistic), paste("p", re$signif)),
+  nrow = 2
+)
+
+```
+
+
 ## Genetic variance
 
 We used between individual kinship and a lognormal Animal model [@Wilson2010] to estimate genetic variance associated to individuals global phenotype leaving in a given environment [see environmental association analyses with genome wide assocaition study analyses in @Rellstab2015a]. Animal model is calculated for the environemental values $y$ of the $N$ individuals with following formula:
@@ -260,7 +323,7 @@ for(var in c("TWI", "RE", "NCI")){
   }
 }
 fitEnv <- lapply(fitEnv, sflist2stanfit)
-lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
+lapply(fitEnv, broom.mixed::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), 
        droppars = NULL, rhat = T) %>% 
   bind_rows(.id = "Variable") %>% 
   separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 

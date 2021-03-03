@@ -217,18 +217,18 @@ GO <- src_sqlite(file.path("..", "..", "..", "data", "Symphonia_Genomic", "Nikla
                      "Trinotate", "symphonia.trinity500.trinotate.sqlite")) %>% 
   tbl("Transcript") %>% 
   filter(transcript_id %in% local(unique(trsc$trsc))) %>% 
-  dplyr::select(gene_id, transcript_id, annotation) %>% 
+  dplyr::select(gene_id, transcript_id, annotation, sequence) %>% 
   dplyr::rename(gene = gene_id, trsc = transcript_id) %>% 
   collect() %>% 
   separate(annotation, paste0("X", 1:16), "\t") %>% 
   dplyr::rename(orf = X3, PFAM = X8, UniProt = X11, KEGG = X12, GO = X13) %>% 
-  dplyr::select(trsc, gene, orf, GO) %>% 
+  dplyr::select(trsc, gene, orf, GO, sequence) %>%
   filter(GO != ".") %>% 
   left_join(trsc) %>% 
-  group_by(gene, GO) %>% 
-  summarise(qval = min(qval)) %>% 
+  group_by(gene, GO, sequence) %>% 
+  summarise(qval = min(qval)) %>%
   ungroup() %>% 
-  dplyr::select(gene, qval, GO) %>% 
+  dplyr::select(gene, qval, GO, sequence) %>%
   separate_rows(GO, sep = "`") %>% 
   separate(GO, c("GOid", "GOtype", "GOname"), "\\^")
   
@@ -248,6 +248,20 @@ clusterProfiler::enricher(unique(filter(GO, qval < 0.05)$gene),
   viridis::scale_fill_viridis() +
   theme(axis.title = element_blank())
 # http://revigo.irb.hr/ for result vizualisation
+
+## revision
+# t <- GO %>% 
+#   filter(gene %in% c("TRINITY_DN795961_c2_g1", 
+#                      "TRINITY_DN796902_c0_g1",
+#                      "TRINITY_DN800044_c7_g3",
+#                      "TRINITY_DN817465_c3_g1",
+#                      "TRINITY_DN827983_c2_g1",
+#                      "TRINITY_DN828088_c2_g1")) %>% 
+#   dplyr::select(gene, sequence) %>% 
+#   unique() %>% 
+#   group_by(gene) %>% 
+#   sample_n(1)
+# t$sequence
 ```
 
 > TRINITY_DN795961_c2_g1/TRINITY_DN796902_c0_g1/TRINITY_DN800044_c7_g3/TRINITY_DN817465_c3_g1/TRINITY_DN827983_c2_g1/TRINITY_DN828088_c2_g1

@@ -51,7 +51,8 @@ Complexes <- suppressWarnings(bind_rows(
   data.frame(Complex = "Talisia", Genus = "Talisia",
              Species = c("hexaphylla", "praealta", "simaboides")),
   data.frame(Complex = "Symphonia", Genus = "Symphonia",
-             Species = c("globulifera", "sp.1"))))
+             Species = c("globulifera", "sp.1")))) %>% 
+  mutate_all(as.character)
 complexes <- unique(Complexes$Complex)
 d <- 20
 trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
@@ -406,6 +407,7 @@ preds <- lapply(names(fitsComplex), function(complex)
            NCI >= min(filter(dataComplex, Complex == complex)$NCI))
   ) %>% bind_rows() %>% 
   mutate(value = ifelse(variable == "TWI", TWI, NCI))
+
 preds %>% 
   left_join(group_by(dataComplex, Complex) %>% 
               summarise(Yo = n()/nrow(.)),
@@ -415,10 +417,32 @@ preds %>%
   geom_hline(aes(yintercept = Yo, col = complex), lty = "dashed") +
   geom_line(aes(y = mean)) +
   facet_wrap(~ variable, nrow = 1, scales = "free_x") + 
-  xlab("") + ylab("Species complex relative abundance") +
+  xlab("Environmental values") + ylab("Probability of occurrence") +
   scale_y_sqrt() +
-  scale_color_discrete("") +
+  scale_color_manual("", values = c(rcartocolor::carto_pal(5, "Safe")[1:5])) +
   theme(legend.position = "bottom")
+
+# preds %>%
+#   left_join(group_by(dataComplex, Complex) %>%
+#               summarise(Yo = n()/nrow(.)),
+#             by = c("complex" = "Complex")) %>%
+#   # mutate(Yp = mean / Yo) %>%
+#   group_by(complex, variable) %>%
+#     mutate(Yp = mean/max(mean)) %>% 
+#   summarise(sp = sum(sqrt((1-Yp)^2))/nrow(.)) %>%
+#   reshape2::dcast(complex ~ variable)
+# 
+# preds %>%
+#   left_join(group_by(dataComplex, Complex) %>%
+#               summarise(Yo = n()/nrow(.)),
+#             by = c("complex" = "Complex")) %>%
+#   group_by(complex, variable) %>%
+#   mutate(Yp = mean - Yo) %>%
+#   # mutate(Yp = mean/max(mean)) %>% 
+#   ggplot(aes(value, Yp, col = complex)) +
+#   geom_line() +
+#   geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+#   facet_wrap(~ variable, scales = "free")
 ```
 
 ```{r speciesParameters, fig.cap="$TWI$ and $NCI$ effects on species relative distribution within species complexes. Parameters posteriors for species within species complexes is represented as their position in the $\\beta$-$\\gamma$ space for each descriptor and each complex, with the point representing the mean value of the parameter posterior, thin lines the 80% confidence interval. The color indicates the sign of anddetermining the shape of the distribution represented by the 4 subplots with corresponding colors.", fig.width=6, fig.height=12} 
@@ -489,6 +513,7 @@ predSpecies <- lapply(names(fits), function(complex)
     mutate(complex = complex)) %>% bind_rows() %>% 
   left_join(species) %>% 
   mutate(value = ifelse(variable == "TWI", TWI, NCI))
+# cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 t <- predSpecies %>%
   group_by(complex) %>% 
   left_join(data %>%
@@ -506,14 +531,23 @@ t <- predSpecies %>%
        geom_hline(aes(yintercept = RelAbund, col = Species), linetype = "dashed") +
        facet_grid(complex ~ variable, scales = "free_x") +
        theme(legend.position = "bottom", legend.title = element_blank(),
-             legend.text = element_text(face = "italic"), strip.text = element_text(face = "bold")) +
-       ylab("Species relative abundance") + xlab("Standardized value") +
+             legend.text = element_text(face = "italic"), 
+             strip.text = element_text(face = "bold")) +
+       ylab("Relative probability\nof occurence") + xlab("Environmental values") +
        scale_y_sqrt() +
-       scale_color_manual(values = c(RColorBrewer::brewer.pal(6, "Dark2")[1:6], 
-                                     RColorBrewer::brewer.pal(3, "Dark2")[1:2],
-                                     RColorBrewer::brewer.pal(8, "Dark2")[1:8],
-                                     RColorBrewer::brewer.pal(3, "Dark2")[1:2],
-                                     RColorBrewer::brewer.pal(3, "Dark2")[1:3])))
+       # scale_color_manual(values = c(RColorBrewer::brewer.pal(6, "Dark2")[1:6],
+       #                               RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+       #                               RColorBrewer::brewer.pal(8, "Dark2")[1:8],
+       #                               RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+       #                               RColorBrewer::brewer.pal(3, "Dark2")[1:3])))
+       scale_color_manual(values = c(rcartocolor::carto_pal(6, "Safe")[1:6],
+                                     rcartocolor::carto_pal(3, "Safe")[1:2],
+                                     rcartocolor::carto_pal(8, "Safe")[1:8],
+                                     rcartocolor::carto_pal(3, "Safe")[1:2],
+                                     rcartocolor::carto_pal(3, "Safe")[1:3])))
+       # scale_colour_manual(values=cbbPalette))
+       # guides(col = guide_legend(nrow = 3, byrow = TRUE)))
+t$g[[2]] <- t$g[[2]] + guides(col = guide_legend(nrow = 3, byrow = TRUE))
 # cowplot::plot_grid(plotlist = t$g, ncol = 2)
 gridExtra::grid.arrange(
   grobs = t$g,
@@ -522,6 +556,45 @@ gridExtra::grid.arrange(
                         c(5, 2),
                         c(5, 2))
 )
+
+# predSpecies %>% 
+#   group_by(complex) %>% 
+#   left_join(data %>%
+#               group_by(Complex) %>%
+#               mutate(N_complex = n()) %>%
+#               group_by(Complex, N_complex, Genus, Species) %>%
+#               summarise(N_species = n()) %>%
+#               mutate(RelAbund = N_species / N_complex),
+#             by = c("complex" = "Complex", "Species" = "Species")) %>%
+#   ungroup() %>% 
+#   mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>%
+#   mutate(Species = paste0(substr(Genus, 1,1), ". ", Species)) %>% 
+#     group_by(Species, variable) %>% 
+#   mutate(Yp = mean/max(mean)) %>% 
+#   # mutate(Yp = mean / RelAbund) %>% 
+#   group_by(complex, Species, variable) %>% 
+#   summarise(sp = sum(sqrt((1-Yp)^2))/nrow(.)) %>%
+#   reshape2::dcast(complex + Species ~ variable)
+# 
+# predSpecies %>% 
+#   group_by(complex) %>% 
+#   left_join(data %>%
+#               group_by(Complex) %>%
+#               mutate(N_complex = n()) %>%
+#               group_by(Complex, N_complex, Genus, Species) %>%
+#               summarise(N_species = n()) %>%
+#               mutate(RelAbund = N_species / N_complex),
+#             by = c("complex" = "Complex", "Species" = "Species")) %>%
+#   ungroup() %>% 
+#   mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>%
+#   mutate(Species = paste0(substr(Genus, 1,1), ". ", Species)) %>% 
+#   group_by(Species, variable) %>% 
+#   # mutate(Yp = mean/max(mean)) %>% 
+#   mutate(Yp = mean - RelAbund) %>%
+#   ggplot(aes(value, Yp, col = Species)) +
+#   geom_line() +
+#   geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+#   facet_grid(complex ~ variable, scales = "free")
 ```
 
 ```{r thesis, eval=F, echo=T}

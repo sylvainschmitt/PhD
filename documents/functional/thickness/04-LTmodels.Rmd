@@ -39,7 +39,7 @@ mdata <- list(
 )
 ```
 
-# Models
+# LT Models
 
 This chapter develop all the models used to infer leaf thickness variation with relative extractible water.
 
@@ -89,7 +89,7 @@ as.data.frame(fits$LogRxSDSI, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -107,7 +107,7 @@ as.data.frame(fits$LogRxSDSI, pars = "predicted") %>%
 
 ```{r varpart, fig.cap="Variance partitionning for the selected model."}
 load("thickness_save/fits.Rdata")
-mcmc_intervals_data(fits$RxSDSI, regex_pars = c("V")) %>%
+mcmc_intervals_data(fits$LogRxSDSI, regex_pars = c("V")) %>%
   mutate(variance = recode_factor(parameter,
                            "Vrew" = "REW", "Vdbh" = "DBH", "Vspecies" = "Species",
                            "Vindividual" = "Individual", "Vresidual" = "Residual")) %>%
@@ -144,6 +144,10 @@ Summary of all variables, laws, and parameters choice and used in subsequent mod
 * $\sigma$ residual variation
 * $\gamma_i$ individual random effect 
 * $\sigma_I$ individual random effect variation
+
+```{r, cache=FALSE}
+opts_chunk$set(eval = F)
+```
 
 ## Models
 
@@ -182,7 +186,7 @@ as.data.frame(fitR, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>%  
@@ -228,7 +232,7 @@ as.data.frame(fitRS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -275,7 +279,7 @@ as.data.frame(fitRxS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -322,7 +326,7 @@ as.data.frame(fitRxSS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -370,7 +374,7 @@ as.data.frame(fitD, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, DBH)) %>% 
@@ -417,7 +421,7 @@ as.data.frame(fitDS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, DBH)) %>% 
@@ -464,7 +468,7 @@ as.data.frame(fitDxS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, DBH)) %>% 
@@ -511,7 +515,7 @@ as.data.frame(fitDxSS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, DBH)) %>% 
@@ -558,7 +562,7 @@ as.data.frame(fitRxSDS, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -606,7 +610,7 @@ as.data.frame(fitRxSDSI, pars = "predicted") %>%
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 
@@ -634,6 +638,10 @@ mcmc_intervals_data(fitRxSDSI, regex_pars = c("V")) %>%
   scale_fill_discrete(expression(sigma^2))
 ```
 
+```{r, cache=FALSE}
+opts_chunk$set(eval = T)
+```
+
 ### $log(RxS,D,S,I)$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope & individual random effect
 
 $$LT_{l,i,s} \sim \mathcal{logN}(log(\alpha_s + \gamma_i + {\beta_{REW}}_s.REW_i + \beta_{DBH}.log(DBH_i)),\sigma)$$
@@ -641,13 +649,13 @@ $$\gamma_i \sim \mathcal{N}(0,\sigma_I)$$
 
 ```{r LogRxSDSISampling, include=FALSE}
 # modeLogRxSDSI <- stan_model("thickness_models/LogRxSDSI.stan")
-# fitLogRxSDSI <- sampling(modeLogRxSDSI, mdata) 
-load("thickness_save/fits.Rdata")
-fitLogRxSDSI <- fits$LogRxSDSI
+# fitLTLogRxSDSI <- sampling(modeLogRxSDSI, mdata, init = "0")
+# save(fitLTLogRxSDSI, file = "thickness_save/fitLT.Rdata")
+load("thickness_save/fitLT.Rdata")
 ```
 
 ```{r LogRxSDSITable}
-broom::tidyMCMC(fitLogRxSDSI, pars = c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma", "lp__"),
+broom.mixed::tidyMCMC(fitLTLogRxSDSI, pars = c("alpha", "beta_rew", "beta_dbh", "sigmaI", "sigma", "lp__"),
                 droppars = NULL, ess = T, rhat = T, estimate.method = "median") %>% 
   dplyr::select(term, estimate, std.error, rhat, ess) %>% 
   kable(caption = "Parameters estimate.",
@@ -655,7 +663,7 @@ broom::tidyMCMC(fitLogRxSDSI, pars = c("alpha", "beta_rew", "beta_dbh", "sigmaI"
 ```
 
 ```{r LogRxSDSITrace, fig.cap="Traceplot of model parameters."}
-mcmc_trace(as.array(fitLogRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitLogRxSDSI)) +
+mcmc_trace(as.array(fitLTLogRxSDSI), regex_pars =  c("alpha", "beta", "sigma"), np = nuts_params(fitLTLogRxSDSI)) +
   viridis::scale_color_viridis(discrete = T)
 ```
 
@@ -668,11 +676,11 @@ mcmc_intervals(as.array(fitLogRxSDSI), regex_pars =  c("alpha", "beta"), np = nu
 ```
 
 ```{r LogRxSDSIPredictions, message=FALSE, fig.cap="Model predictions."}
-as.data.frame(fitLogRxSDSI, pars = "predicted") %>% 
+as.data.frame(fitLTLogRxSDSI, pars = "predicted") %>% 
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
-  separate(variable, c("X1", "LeafNum", "SpeciesNum"), "[:punct:]", convert = T) %>% 
+  separate(variable, c("X1", "LeafNum", "SpeciesNum"), convert = T) %>% 
   dplyr::select(-X1) %>% 
   left_join(mutate(data, LeafNum = 1:n()) %>% 
               dplyr::select(LeafNum, REW)) %>% 

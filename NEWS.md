@@ -1,3 +1,14 @@
+# PhD 0.1.9224
+* Defense is done !!
+* distribution: review 2
+* functional: prep defense
+* thickness: in prep
+* growth: ready to submit but switched to overleaf
+* symcapture: split to going repository
+* topography: review 1
+* modelling: defense, msc begins
+* thesis: title updated post defense
+
 # PhD 0.1.9223
 * growth: figures for PNAS
 * parvicapture: Manaus

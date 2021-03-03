@@ -473,28 +473,39 @@ fitParvi <- lapply(fitParvi, rstan::sflist2stanfit)
 names(fitParvi) <- paste0("Eschweilera.", names(fitParvi))
 fitEnv <- c(fitSympho, fitParvi)
 rm(fitSympho, fitParvi)
-# lapply(fitEnv, broom::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), droppars = NULL, rhat = F) %>% 
-#   bind_rows(.id = "fit") %>% 
-#   separate(fit, c("complex", "variable")) %>% 
-#   separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>% 
-#   mutate(population = ifelse(is.na(population), "", paste0(complex, population))) %>% 
-#   mutate(population = recode(population, 
-#                              "Symphonia1" = "S. globulifera Paracou",
-#                              "Symphonia2" = "S. globulifera Régina", 
-#                              "Symphonia3" = "S. sp.1",
-#                              "Eschweilera3" =  "E. decolorans", 
-#                              "Eschweilera2" = "E. sagotiana",
-#                              "Eschweilera1" = "E. coriacea")) %>% 
-#   mutate(parameter = recode(parameter, 
-#                             "mu" = "$\\mu_s$",
-#                             "Vp" = "$V_{species}$", 
-#                             "Vg" = "$V_{genotype}$",
-#                             "Vr" = "$V_{residuals}$")) %>% 
-#   kable(caption = "Parameters and associated standard deviation of the animal model for *Symphonia* and *Eschweilera* with topographic wetness index (TWI) and relative elevation (RE).",
-#         format = "pandoc", digits = 3,
-#         col.names = c("Species complex", "Topographic variable", "Parameter",  
-#                       "Species", "Estimate", "Standard deviation")) %>% 
-#   kableExtra::add_footnote("Parameters include species mean ($\\mu_s$), variance ($V_{species}$), genotype variance ($V_{genotype}$), and residuals variance ($V_{residuals}$). Parameters have been infered with bayesian modelling of the animal model (Model S1) independently for the two species complexes and the two topographic variables.", notation = "none")
+lapply(fitEnv, broom.mixed::tidyMCMC, c("mu", "Vp", "Vg", "Vr"), droppars = NULL, rhat = F) %>%
+  bind_rows(.id = "fit") %>%
+  separate(fit, c("complex", "variable")) %>%
+  # separate(term, c("parameter", "population"), "[:punct:]", convert = T) %>%
+  separate(term, c("parameter", "population"), convert = T) %>%
+  mutate(population = ifelse(is.na(population), "", paste0(complex, population))) %>%
+  mutate(population = recode(population,
+                             "Symphonia1" = "S. sp2",
+                             "Symphonia2" = "S. sp3",
+                             "Symphonia3" = "S. sp.1",
+                             "Eschweilera3" =  "E. decolorans",
+                             "Eschweilera2" = "E. sagotiana",
+                             "Eschweilera1" = "E. coriacea")) %>%
+  mutate(parameter = recode(parameter,
+                            "mu" = "$\\mu_s$",
+                            "Vp" = "$V_{species}$",
+                            "Vg" = "$V_{genotype}$",
+                            "Vr" = "$V_{residuals}$")) %>% 
+  mutate(estimate = paste0(round(estimate, 3),
+                           " (", 
+                           round(std.error, 3),
+                           ")")) %>% 
+  mutate(population = ifelse(population == "", complex, population)) %>% 
+  reshape2::dcast(parameter + population ~ variable, 
+                  value.var = "estimate") %>% 
+  kable(caption = "Parameters and associated standard deviation of the animal model for *Symphonia* and *Eschweilera* with topographic wetness index (TWI) and relative elevation (RE).",
+        format = "pandoc", digits = 3,
+        col.names = c("Parameter", "Taxon", "RE", "TWI")) %>%
+  kableExtra::add_footnote("Parameters include species mean ($\\mu_s$), variance ($V_{species}$), genotype variance ($V_{genotype}$), and residuals variance ($V_{residuals}$). Parameters have been infered with bayesian modelling of the animal model (Model S1) independently for the two species complexes and the two topographic variables.", notation = "none")
+```
+
+```{r}
+opts_chunk$set(eval = F)
 ```
 
 ```{r maps, fig.cap="Map of sampled individuals for species complexes *Symphonia* and *Eschweilera* clade *Parvifolia*. Colours represent species determined based on the genetic structure of capture datasets, which was not necessarily in agreement with original botanical identification. Grey level represents hill shading to visualize topography.", fig.width=6, fig.height=5}
