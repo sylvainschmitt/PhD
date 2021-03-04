@@ -1,11 +1,12 @@
 ---
-title: An eco-evolutionary perspective on local coexistence within Neotropical species complexes, insights from a virtual experiment
+title: Topography and forest gaps dynamics jointly control adaptation and populations structure in a tropical tree species, insights from a virtual experiment 
 output:
+  bookdown::word_document2: 
+    number_sections: false
   bookdown::html_document2:
     number_sections: false
     toc: true
     toc_float: yes
-  bookdown::word_document2: default
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -24,9 +25,7 @@ library(knitr)
 library(tidyverse)
 library(bayesplot)
 theme_set(bayesplot::theme_default())
-opts_chunk$set(echo = F, message = F, warning = F, 
-               fig.height = 4, fig.width = 6,
-               cache = T, cache.lazy = F)
+opts_chunk$set(echo = F, message = F, warning = F, cache = T, cache.lazy = F)
 ```
 
 1. Sylvain Schmitt
@@ -64,6 +63,10 @@ xx ; xx ; xx
 
 # Introduction
 
+* tropical forest outstanding diversity
+* drivers of tree and species coexistence
+* ecological theories
+* evolutionary inputs
 * topography effect on local adaptation and population structure
 * forest gap dynamics effect on local adaptation and population structure
 * joint interaction?
@@ -91,7 +94,7 @@ Then, simulations follow three basic steps for each tree in each cell of the  gr
 The source code is written as a R package in R and C++.
 Version 1.0.0 used in this study is available at https://github.com/sylvainschmitt/ecoevosimulator .
 
-```{r ecoevosim, fig.cap="Representation of life cyle for individual trees in a spatially explicit grid in the simulator. Trees risk dying at each time step with a year-probability drawn in a binomial distribution (top). Dead trees (right) are replaced by recruitment of parent trees reproduction (bottom). A single individual is selected in each cell (left) from all seedlings based on their viability. See material and methods for further details."}
+```{r ecoevosim, fig.cap="Representation of life cyle for individual trees in a spatially explicit grid in the simulator. Trees risk dying at each time step with a year-probability drawn in a binomial distribution (top). Dead trees (right) are replaced by recruitment from the reproduction of parent trees (bottom). A single individual is selected in each cell (left) from all seedlings based on their viability. See material and methods for further details."}
 include_graphics("figures/EcoEvoSimulator.png")
 ```
 
@@ -108,8 +111,6 @@ The TWI is defined by the watershed of the cell divided by the local slope,
 and thus represents a relative measure of soil moisture availability [@Kopecky2010],
 where a higher TWI represents greater soil moisture availability.
 Water access and topography have been identified as crucial to forest dynamics [@ferry2010higher] and species distribution [@Allie2015; @Schmitt2020].
-The TWI was directly derived at 1 m resolution from a 1 m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign carried out in 2015 at the Paracou field station (5°18′N, 52°53′W) in French Guiana.
-
 
 The neighbourhood crowding index [NCI; @Uriarte2004a] was used as a proxy of forest gap dynamics [@Schmitt2020a].
 The neighbourhood crowding index $NCI_i$ for each tree individual $i$  was defined with the following formula:
@@ -119,18 +120,17 @@ The neighbourhood crowding index $NCI_i$ for each tree individual $i$  was defin
   (\#eq:nci)
 \end{equation} 
 
-where $DBH_j$ is the diameter at breast height of neighbouring tree j 
-and $\delta_{i,j}$ its distance to individual tree i.
+where $DBH_j$ is the diameter at breast height of neighbouring tree $j$ 
+and $\delta_{i,j}$ its distance to individual tree $i$.
 $NCI_i$ is defined for neighbours at a distance $\delta_{i,j}$ of up to 20m.
 The size effect of neighbours was taken as their squared diameter, 
 and hence proportional to their basal area. 
 The distance effect of neighbours was set to $-\frac{1}{4}$,
 corresponding to neighbours beyond 20m having less than 1% effect compared to the effect of neighbours at 0m.
-We computed NCI for all individual and every census years at the Paracou field station (5°18′N, 52°53′W) in French Guiana.
 We simulated NCI over time using four distributions:
 
 1. a normal distribution to initialize NCI values in each cells
-1. a bernoulli distribution to decide if the cell observed an increase NCI at the next time-step, i.e. growing neighbours, or a decrease in NCI at the next time-step, i.e. a treefall
+1. a bernoulli distribution to decide if the cell observed an increase in NCI at the next time-step, i.e. growing neighbours, or a decrease in NCI at the next time-step, i.e. a treefall
 1. a lognormal distribution for increasing NCI, i.e. growing neighbours
 1. an exponential distribution  for decreasing NCI, i.e. a treefall
 
@@ -149,7 +149,7 @@ We used the following formula to simulate NCI over time $t$:
   (\#eq:ncisim)
 \end{equation} 
 
-We aggregated the simulated NCI at three meters to represent spatial auto-correlation in observed values of NCI in the Paracou field station.
+We aggregated the simulated NCI at 3m to represent spatial auto-correlation.
 
 ### Initialization 
 
@@ -193,7 +193,7 @@ i.e. including tree dying at the current time-step.
 The mother tree is selected at a distance $R_{dispersion}$ from the empty cell.
 The father tree is selected at a distance $R_{pollination}$ from the mother tree.
 Dispersal kernels are discrete circles with uniform probabilities and include the empty cell, i.e. allowing auto-fecundation. 
-Seedlings genotypes $g_s$ are drawn from a normal distribution centered on parental mean genotype with variance of half of genetic variance $\frac{\sigma^2_G}{2}$ [@Vincenzi2014].
+Seedlings genotypes $g_s$ are drawn from a normal distribution centered on parental mean genotype with variance of half of genetic variance $\frac{\sigma^2_G}{2}$ [following @Vincenzi2014].
 Seedlings phenotypes $p_s$ are drawn from a normal distribution centered on seedlings genotypes $g_s$ with plastic variance $\sigma^2_P$:
 
 \begin{equation} 
@@ -201,9 +201,6 @@ Seedlings phenotypes $p_s$ are drawn from a normal distribution centered on seed
   g_s ∼ \mathcal N (\frac{g_{mother}+g_{father}}{2}, \frac{\sigma^2_G}{2})
   (\#eq:repro)
 \end{equation} 
-
-Note that two genotypes and phenotypes are defined for each seedling, 
-for topography and forest gap dynamics.
 
 ### Selection
 
@@ -219,21 +216,22 @@ Note that the Euclidean distance used for viability is calculated in two dimensi
 
 ## Simulation experiment
 
-We varied four biological parameters of interest (Tab. \@ref(tab:params), see SI? for choice):
+We varied four biological parameters of interest (Tab. \@ref(tab:params), see SI? for the choice of parameters):
 
 * heritability associated with topography, $h^2_{TWI}$, from 0.1 to 0.9
 * heritability associated with forest gap dynamics, $h^2_{NCI}$, from 0.1 to 0.9
 * number of seedlings, $N_s$, from 4 to 128
 * dispersion radius, $R_{dispersion}$, from 1 to 10 cells
 
-We used a grid of 50x50 over 60 time-steps of length 30 years (estimated time to reach canopy for *Symphonia globulifera* trees since recruitment at 10cm DBH, SI?).
-TWI was extracted directly and standardized to the unit.
-Values of NCI parameters and death probability were inferred from NCI values and death events observed in the Paracou field station across all censuses.
+We used a grid of 50x50 over 60 time-steps of length 30 years (estimated time to reach the canopy for *Symphonia globulifera* trees since recruitment at 10cm DBH, SI?).
+The TWI was directly derived at 1m resolution from a 1m resolution digital elevation model using SAGA-GIS [@Conrad2015] based on a LiDAR campaign carried out in 2015 at the Paracou field station (5°18′N, 52°53′W) in French Guiana.
+TWI was standardized to the unit.
+Values of NCI parameters and death probability were inferred from NCI values and death events observed in the Paracou field station across all censuses (SI?).
 Pollination radius was set to one to focus on the variation of dispersion radius as they are symmetric (SI?).
 Simulation stochasticity was low (SI?).
 We thus ran one simulation per parameter set, 
 resulting in 6,000 simulations 
-($10~h^2_{TWI}\times10~h^2_{NCI}\times6~N_s\times10~R_{dispersion}$)
+($10~h^2_{TWI}\times10~h^2_{NCI}\times6~N_s\times10~R_{dispersion}$).
 
 
 ```{r params}
@@ -272,10 +270,10 @@ data.frame(
     "1", "$[1:10]$"
   ),
   Description = c(
-    "grid size", 
-    "number of time-steps (ca 3m)",
-    "length of a timestep (years)",
-    "TWI mean",
+    "Grid size", 
+    "Number of time-steps (ca 3m)",
+    "Length of a time-step (years)",
+    "TWI mean (normal distribution)",
     "TWI plastic variance",
     "NCI mean",
     "NCI plastic variance",
@@ -298,15 +296,16 @@ data.frame(
 
 ### Local adaptation
 
-In one cell, we defined local adaptation as the Euclidean distance between observed between tree genotype $g_i$ and tree environment $e_i$ reduced by environment variance $\sigma^2_E$. 
+We defined local adaptation as the inverse of the Euclidean distance between tree genotype $g_i$ and tree environment $e_i$ reduced by environment variance $\sigma^2_E$. 
 We used the mean value $D_G$ across the grid as a metric of local adaptation at time-step $t$:
 
 \begin{equation} 
-  D_G(t) = \overline{\sqrt{(\frac{g_i(t)−e_i(t)}{\sigma^2_E})^2}}
+  D_G(t) = \overline{[\sqrt{(\frac{g_i(t)−e_i(t)}{\sigma^2_E})^2}]^{-1}}
   (\#eq:Dg)
 \end{equation}
 
-When $D_G(t)$ approaches 0, individual genotypes perfectly fit their local environment, indicating maximal local adaptation.
+A $D_G(t)$ close to zero indicates an absence of local adaptation,
+whereas high $D_G(t)$ indicates strong local adaptation.
 
 ### Population structure
 
@@ -328,15 +327,179 @@ In a nutshell, $WSS_{score}$ close to one indicates an absence of population str
 We tested the effect of the four biological parameters and their first order interaction on the variation of local adaptation $D_G$ and population structure $WSS_{score}$ for $TWI$ and $NCI$ after 60 time-steps (ca 1,800 years): heritabilites associated with TWI ($h^2_{TWI}$ and NCI ($h^2_{NCI}$) number of seedlings ($N_s$),  and dispersion radius ($R_{dispersion}$) as follows:
 
 $$
-log(Y) \sim \mathcal N(\mu + \theta_{topo} \times h^2_{TWI} + \theta_{gaps} \times h^2_{NCI} + \\ \theta_{seed} \times N_s + \theta_{disp} \times R_{dispersion} +  \theta_{topo:gaps} \times h^2_{TWI} \times h^2_{NCI} + \\\theta_{topo:seed} \times h^2_{TWI} \times N_s + \theta_{topo:disp} \times h^2_{TWI} \times R_{dispersion} + \\ \\\theta_{gaps:seed} \times h^2_{NCI} \times N_s + \theta_{gaps:disp} \times h^2_{NCI} \times R_{dispersion} +\\ \theta_{seed:disp} \times N_s \times R_{dispersion}, ^\sigma)
+log(Y) \sim \mathcal N(\mu + \theta_{topo} \times h^2_{TWI} + \theta_{gaps} \times h^2_{NCI} + \\ \theta_{seed} \times N_s + \theta_{disp} \times R_{dispersion} +  \theta_{topo:gaps} \times h^2_{TWI} \times h^2_{NCI} + \\\theta_{topo:seed} \times h^2_{TWI} \times N_s + \theta_{topo:disp} \times h^2_{TWI} \times R_{dispersion} + \\ \\\theta_{gaps:seed} \times h^2_{NCI} \times N_s + \theta_{gaps:disp} \times h^2_{NCI} \times R_{dispersion} +\\ \theta_{seed:disp} \times N_s \times R_{dispersion}, \sigma^2)
 $$
 
-
-
+where all $\theta$ model the effect of each biological parameters and their first order interactions on $log(Y)$ under a normal law of variance $\sigma^2$.
+The analysis was conducted four times for each metric (local adaptation $D_G$ and population structure $WSS_{score}$) and each environmental variable (topography $TWI$ and forest gap dynamics $NCI$).
+Response variable $Y$ was log-transformed to improve the normality of the residuals.
 
 # Results
 
+At the exception of population structure $WSS_{score}$ with $NCI$, the four biological parameters and their paired interactions explained most of the variation (Fig. \@ref(fig:parmetersfig)) in local adaptation $D_G$ ($R^2>0.9$) and population structure $WSS_{score}$ ($R^2=0.82$ for $TWI$).
+
+<!-- Local adaptation $D_G$ to $NCI$ and $TWI$ mainly increased with the heritability to the corresponding variable. -->
+<!-- But local adaptation $D_G$ to $NCI$ and $TWI$ was improved by heritability associated to the other variable,  -->
+<!-- e.g. increased heritiability to $NCI$ ($h^2_{NCI}$) increased local adaptation $D_G$ to $TWI$, -->
+<!-- reinforced by significant and positive interactions (Htopo:Hnci).  -->
+<!-- Number of seedlings increased and dispersal decreased local adaptation to NCI and topography. Dispersal interacted with number of seedlings, with increased dispersal increasing local adaptation under high number of seedlings. Last but not least, number of seedlings interaction with heritability of the focal variable increased local adaptation of the focal variable while decreasing local adaptation to the other variable. For instance, increasing number of seedlings with increasing heritabitliy to NCI, increased local adaptation to NCI while decreasing local adaptation to topography. -->
+
+<!-- Population structure along topography (WSSscore) mainly increased with the heritability to topography, NCI and their interaction (Htopo, Hnci, Htopo:Hnci, Fig. 6.11 and Tab. 6.2). Population structure along topography also increased with Number of seedlings and its interaction to dispersal and heritability to topography. But, dispersal and the interaction between number of seedlings and heritbaility to NCI decreased population structure along topography. -->
+
+```{r R2, eval=F}
+vroom::vroom("../modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(parameter.value = round(parameter.value, 1)) %>% 
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(metric.value ~ Htopo + Hnci + Ns + Rdispersion + 
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + 
+               Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>% 
+       broom::glance()) %>% 
+  unnest(lm) %>% 
+  dplyr::select(metric, variable, r.squared) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "TWI")) %>% 
+  mutate(metric = recode(metric, "Dg" = "$D_G$", "wss score" = "$WSS_{score}$")) %>%
+  reshape2::dcast(metric ~ variable) %>% 
+  kable(caption = "Goodness of fit ($R^2$) for the four linear regressions. $D_G$ and $WSS_{score}$ represent local adaptation and population structure, respectively. $TWI$ and $NCI$ represent topography and forest gap dynamics, respectively.", 
+        col.names = c("Metric", "NCI", "TWI"), digits = 2)
+```
+
+```{r parmetersfig, fig.cap="Effects of biological parameters and their paired interactions on local adaptation ($D_G$) and population structure ($WSS_{score}$) for topography ($TWI$) and forest gap dynamics ($NCI$). Parameters values have been scaled to ease their comparison. topo, gaps, seed, and disp are refereing to the heritiability associated with topography ($h^2_{TWI}$), the heritability associated with forest gap dynamics ($h^2_{NCI}$), the number of seedlings ($N_s$), and the radius of dispersion ($R_{dispersion}$), respectively."}
+vroom::vroom("../modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(metric.value = ifelse(metric == "Dg", 1/metric.value, metric.value)) %>% 
+  group_by(parameter) %>%
+  mutate(parameter.value = as.vector(scale(parameter.value, center = F))) %>%
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + Hnci:Ns + 
+               Hnci:Rdispersion + Ns:Rdispersion, data = .) %>%
+       broom::tidy()) %>%
+  unnest(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  dplyr::select(metric, variable, term, estimate, std.error) %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "TWI")) %>% 
+  mutate(metric = recode(metric, "Dg" = "log(D[G])", 
+                         "wss score" = "log(WSS[score])")) %>%
+  mutate(term = recode_factor(term, 
+                              "Ns:Rdispersion" = "seed:disp",
+                              "Hnci:Rdispersion" = "gaps:disp",
+                              "Hnci:Ns" = "gaps:seed",
+                              "Htopo:Rdispersion" = "topo:disp",
+                              "Htopo:Ns" = "topo:seed",
+                              "Htopo:Hnci" = "topo:gaps",
+                              "Rdispersion" = "disp",
+                              "Ns" = "seed", 
+                              "Hnci" = "gaps",
+                              "Htopo" = "topo"
+  )) %>%
+  ggplot(aes(term, col = term)) +
+  geom_hline(yintercept = 0, col = "lightgrey", linetype = "dashed") +
+  geom_hline(yintercept = c(0.05, -0.05), col = "lightgrey", linetype = "dotted") +
+  geom_point(aes(y = estimate, alpha = (abs(estimate) > 0.05))) +
+  geom_segment(aes(xend = term, y = estimate - std.error, 
+                   yend = estimate + std.error)) +
+  coord_flip() +
+  facet_grid(metric ~ variable, labeller = "label_parsed") +
+  xlab("") + ylab("Standardized effect") +
+  scale_alpha_manual(guide = "none", values = c(0.2, 1)) +
+  scale_color_manual(guide = "none", values = rcartocolor::carto_pal(10, "Safe")) +
+  theme(axis.text.y = element_text(colour = rcartocolor::carto_pal(10, "Safe"))) +
+  geom_text(aes(label = R2), col = "black", x = "gaps:disp", y = 0.4,
+            data = data.frame(R2 = paste0("R² = ", c(0.93, 0.91, 0.18, 0.82)),
+                              metric = c("log(D[G])", "log(D[G])",
+                                         "log(WSS[score])", "log(WSS[score])"),
+                              variable = c("NCI", "TWI", "NCI", "TWI")))
+```
+
+```{r parmeterstab}
+vroom::vroom("../modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(metric.value = ifelse(metric == "Dg", 1/metric.value, metric.value)) %>% 
+  group_by(parameter) %>%
+  mutate(parameter.value = as.vector(scale(parameter.value, center = F))) %>%
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  do(lm = lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + 
+               Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = .) %>%
+       broom::tidy()) %>% 
+  unnest(lm) %>% 
+  filter(term != "(Intercept)") %>% 
+  filter(p.value < 0.05) %>% 
+  filter(abs(estimate) > 0.05) %>% 
+  mutate(est = paste0(round(estimate, 3), " (",
+                      round(std.error, 3), ")")) %>% 
+  dplyr::select(metric, variable, term, est) %>%
+  reshape2::dcast(term ~ metric + variable) %>% 
+  mutate_all(funs(ifelse(is.na(.), "", .))) %>% 
+  mutate(term = recode(term,
+                       "Htopo" = "$h^2_{TWI}$",
+                       "Hnci" = "$h^2_{NCI}$",
+                       "Ns" = "$N_s$",
+                       "Rdispersion" = "$R_{dispersion}$",
+                       "Htopo:Hnci" = "$h^2_{TWI} \\times h^2_{NCI}$",
+                       "Htopo:Ns" = "$h^2_{TWI} \\times N_s$",
+                       "Htopo:Ns" = "$h^2_{TWI} \\times N_s$",
+                       "Htopo:Rdispersion" = "$h^2_{TWI} \\times R_{dispersion}$",
+                       "Hnci:Ns" = "$h^2_{NCI} \\times N_s$",
+                       "Hnci:Rdispersion" = "$h^2_{NCI} \\times R_{dispersion}$",
+                       "Ns:Rdispersion" = "$N_s \\times R_{dispersion}$",
+  )) %>%
+  kable(caption = "Results of linear regressions.",
+        col.names = c("Parameter", "$D_G$ for $NCI$", "$D_G$ for $TWI$",
+                      "$WSS_{score}$ for $TWI$"))
+```
+
+
+```{r interaction, fig.cap="Interaction."}
+t1 <- vroom::vroom("../modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(metric.value = ifelse(metric == "Dg", 1/metric.value, metric.value)) %>% 
+  group_by(parameter) %>%
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable) %>% 
+  filter(metric == "Dg", variable == "topo")
+m1  <- lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + 
+               Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, data = t1)
+Inter.HandPick1 <- effects::effect('Htopo*Hnci', m1,
+                                  xlevels=list(Htopo = seq(0, 1, 0.01),
+                                               Hnci = seq(0, 1, 0.01))) %>% 
+  as.data.frame()
+ggplot(data=Inter.HandPick1, aes(x = Htopo, y = fit, group = Hnci))+
+  geom_line(size=2, aes(color=Hnci))+
+  ylab(expression(D[G]~TWI)) +
+  xlab(expression(h[TWI]^2)) +
+  scale_colour_gradient2(expression(h[NCI]^2), midpoint = 0.5,
+                        low = scales::muted("blue"),
+                        high = scales::muted("red")) +
+  geom_vline(xintercept = 9/65, col = "lightgrey", linetype = "dashed") +
+  geom_hline(yintercept = filter(Inter.HandPick1, 
+                                 Hnci == round(18/95,2), 
+                                 Htopo == round(9/65,2))$fit,
+             col = "lightgrey", linetype = "dashed") +
+  geom_vline(xintercept = 44/100, col = "lightgrey", linetype = "dashed") +
+  geom_hline(yintercept = filter(Inter.HandPick1, 
+                                 Hnci == round(24/100,2), 
+                                 Htopo == round(44/100,2))$fit,
+             col = "lightgrey", linetype = "dashed")
+```
+
 # Discussion
+
+* Strong local adaptation that tracks the temporally-fixed topography allows populations to structure along topography, whereas reduced local adaptation bet-edging the temporally-variable forest gap dynamics doesn’t allow population to structure with forest gap dynamics.
+* Local adaptation and population structure along topography increase with increasing heritability to topography and forest gap dynamics, but decrease if heritability to forest gap dynamics becomes stronger than heritability to topography, i.e. genotypes get more locally adapted to forest gap dynamics.
+* The number of seedlings, related to selection, increases the effect of heritability on local adaptation and population structure.
+* The radius of dispersion, related to gene flow, decreases local adaptation and population structure.
+
+> The topography and dynamics of forest gaps jointly favour or limit the local adaptation and structure of the populations of a tropical tree species, depending on the interaction between the biological parameters of the species.
 
 # Acknowledgements
 
