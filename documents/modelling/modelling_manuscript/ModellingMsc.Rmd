@@ -1,12 +1,12 @@
 ---
 title: Topography and forest gaps dynamics jointly control adaptation and populations structure in a tropical tree species, insights from a virtual experiment 
 output:
-  bookdown::word_document2: 
-    number_sections: false
   bookdown::html_document2:
     number_sections: false
     toc: true
     toc_float: yes
+  bookdown::word_document2: 
+    number_sections: false
   bookdown::pdf_document2:
     includes:
       before_body: ./template/doc_prefix.tex
@@ -63,13 +63,17 @@ xx ; xx ; xx
 
 # Introduction
 
-* tropical forest outstanding diversity
-* drivers of tree and species coexistence
-* ecological theories
-* evolutionary inputs
-* topography effect on local adaptation and population structure
-* forest gap dynamics effect on local adaptation and population structure
-* joint interaction?
+The maintenance of biodiversity is a long-standing issue in ecology [@Hutchinson1941] and evolution [@Darwin1909]. Biodiversity is characterized by nested levels, ranging from genes to ecosystems. The Earth has a large number of terrestrial and marine ecosystems, however, the exceptional biodiversity of tropical rainforests has always fascinated biologists [@connell_diversity_1978]. Tropical forests are home to the greatest diversity of species in the world [@Gaston2000],  a fact that remains partly unexplained and whose origin is subject to debate [@wright2002plant]. The five thousand described tree species in the Amazon belong to only eight hundred and ten genera [@TerSteege2013]. Even at the hectare scale, tropical forests harbor species-rich genera with closely related species coexisting in sympatry [@Caron2019]. Closely related species are expected to share similar niche and functional strategies due to phylogenetic constraints [@Wiens2010]. Similarities in niche and function are generally expected to lead to increased competition between closely related species and ultimately to the local competitive exclusion of one species by the other. Despite the local abundance and regional success of closely related species that thrive in sympatry [@Gentry1988; @Pinheiro2018; @TerSteege2013], little is known about the eco-evolutionary forces driving the local coexistence of closely related species [@baraloto_using_2012-1; @Cannon2019a; @Levi2019; @TerSteege2013].
+
+
+At the species level, different ecological theories have been developed to explain the coexistence of species and thus the persistence of biodiversity. Niche theory explains local coexistence of species by ecological niche differences that limit competitive exclusion [@Lortie2004a; @weiher_assembly_1995]. Heterogeneity in resource distribution across space and time defines a small-scale habitat where species can coexist. For example, topography has a pervasive effect in differentiating habitat preferences among species [@gunatilleke_specieshabitat_2006; @kraft_functional_2008; @Allie2015]. In addition, forest gap dynamics is an important driver of competition between above- and below-ground resources over space and time [@Hubbell1999; @VanBreugel2012], and has been recognized as a driver of coexistence of species closely related by habitat differentiation [@Yamasaki2013]. Conversely, neutral theory explains the local coexistence of functionally equivalent species through stochastic dynamics of life, death, reproduction, and dispersal [@Hubbell2001].  Emerging similarity theory reconciles niche and neutrality theories by suggesting the coexistence of distinct groups of species that are functionally similar within groups [@Scheffer2006; @Herault2007]. Ecological theories have also explored biotic interactions to explain species coexistence, such as the Janzen-Connell hypothesis, which explains species coexistence and maintenance of tropical diversity through interactions between dispersal distance and density-dependent offspring survival [@Clark1984; @Hyatt2003]. Beyond density-dependence, theories have explored the particular and primary role of tree fall and succession in natural tropical forests. After a tree fall, pioneer species first develop in light gaps, while late-successional species later develop under a closed canopy [@Craven2015], defining successional niches among species [@Herault2010]. Therefore, forest gap dynamics underscore the importance of considering temporal and spatial dynamics to understand species coexistence [@Soininen2010].
+
+Traditionally, ecological theories focus on species, ignoring genotypic and phenotypic variation within species [@mcgill_rebuilding_2006], and therefore they ignore the evolutionary forces that determine the past and future of biodiversity. But "nothing in biology makes sense except in the light of evolution" [@Dobzhansky1973]. The assumption that evolution and ecology operate at very different spatial and temporal scales may have been an obstacle to understanding the role of eco-evolutionary processes in the coexistence of species [@Pelletier2009]. However, eco-evolutionary processes have been documented for some time [@Tutt1896] and may play an important role in species and community dynamics [@Bailey2009]. Individual adaptation in trees has traditionally been studied among populations using common gardens representing provenances sampled over broad ecological and spatial gradients [e.g. @Dewoody2015]. But fine environmental variation at the spatio-temporal scale can occur locally and lead to individual adaptations as well. There is evidence for eco-evolutionary processes at the microgeographic scale, for example in the vicinity of organism dispersal [@Richardson2014], and under gene flow [@Tigano2016; @Savolainen2007a]. Topography and forest gap dynamics have been shown to promote intraspecific divergence and microgeographic adaptations in neotropical tree species [@Brousseau2015; @Team2013; @Schmitt2020].  Other studies have found microgeographic changes in genetic structure and diversity of neotropical trees without identifying adaptations [@Jones2006; @Audigeos2013], including the effect of topography [@Torroba-Balmori2017], logging [@Degen2006; @Leclerc2015], and forest gaps [@Scotti2015]. Few studies have identified traits underlying genetic adaptations to local factors, such as serotiny adaptations to fire in Mediterranean pine [@Budde2014]. The *Symphonia globulifera* species complex particularly showed signatures of local adaptation to topography among species and adaptive growth strategies to forest gap dynamics within species [@Schmitt2020]. Nevertheless, to our knowledge, no study has examined the joint effect of topography and forest gap dynamics on the eco-evolutionary dynamics of tropical trees.
+
+The long-term temporal dynamics of forest gaps [@Chambers2013]
+and tree eco-evolution [@Petit2006] is obviously an impediment to such studies.
+
+
 * evolution simulator
 * ecological simulator
 * eco-evo-simulator with changing environment
@@ -116,7 +120,7 @@ The neighbourhood crowding index [NCI; @Uriarte2004a] was used as a proxy of for
 The neighbourhood crowding index $NCI_i$ for each tree individual $i$  was defined with the following formula:
 
 \begin{equation} 
-  NCI_i = \sum^J_{j|δi,j<20m} DBH_j^2e^{-\frac14\delta_{i,j}}
+  NCI_i = \sum^J_{j|\delta_{i,j}<20m} DBH_j^2e^{-\frac14\delta_{i,j}}
   (\#eq:nci)
 \end{equation} 
 
@@ -336,15 +340,24 @@ Response variable $Y$ was log-transformed to improve the normality of the residu
 
 # Results
 
-At the exception of population structure $WSS_{score}$ with $NCI$, the four biological parameters and their paired interactions explained most of the variation (Fig. \@ref(fig:parmetersfig)) in local adaptation $D_G$ ($R^2>0.9$) and population structure $WSS_{score}$ ($R^2=0.82$ for $TWI$).
+At the exception of population structure $WSS_{score}$ with $NCI$, the four biological parameters and their paired interactions explained most of the variation (Fig. \@ref(fig:parmetersfig) and Tab. \@ref(tab:parmeterstab)) in local adaptations $D_G$ ($R^2>0.9$) and population structure $WSS_{score}$ ($R^2=0.82$ for $TWI$).
+Strong local adaptation to temporally-fixed topography promote populations structure, 
+whereas reduced local adaptation to temporally-variable forest gap dynamics does not promote populations structure.
 
-<!-- Local adaptation $D_G$ to $NCI$ and $TWI$ mainly increased with the heritability to the corresponding variable. -->
-<!-- But local adaptation $D_G$ to $NCI$ and $TWI$ was improved by heritability associated to the other variable,  -->
-<!-- e.g. increased heritiability to $NCI$ ($h^2_{NCI}$) increased local adaptation $D_G$ to $TWI$, -->
-<!-- reinforced by significant and positive interactions (Htopo:Hnci).  -->
-<!-- Number of seedlings increased and dispersal decreased local adaptation to NCI and topography. Dispersal interacted with number of seedlings, with increased dispersal increasing local adaptation under high number of seedlings. Last but not least, number of seedlings interaction with heritability of the focal variable increased local adaptation of the focal variable while decreasing local adaptation to the other variable. For instance, increasing number of seedlings with increasing heritabitliy to NCI, increased local adaptation to NCI while decreasing local adaptation to topography. -->
+The heritability associated with topography $h^2_{TWI}$ favoured local adaptation and population structure along topography ($D_G$ and $WSS_{score}$ for $TWI$), 
+while the heritability associated to forest gap dynamics $h^2_{NCI}$ limited local adaptation to topography ($D_G$ for $TWI$) but favoured local adaptation to forest gap dynamics ($D_G$ for $NCI$).
+Moreover, the interaction between heritabilities associated with topography and forest gap dynamics ($h^2_{TWI}\times h^2_{NCI}$) favoured local adaptations to topography and forest gap dynamics ($D_G$  for $TWI$ and $NCI$, Fig. \@ref(fig:interaction)), and population structure along topography ($WSS_{score}$ for $TWI$).
+Local adaptation and population structure along topography increased with increasing heritability to topography and forest gap dynamics, but decreased if heritability to forest gap dynamics became stronger than heritability to topography, i.e. genotypes got more locally adapted to forest gap dynamics (Fig. \@ref(fig:interaction)).
 
-<!-- Population structure along topography (WSSscore) mainly increased with the heritability to topography, NCI and their interaction (Htopo, Hnci, Htopo:Hnci, Fig. 6.11 and Tab. 6.2). Population structure along topography also increased with Number of seedlings and its interaction to dispersal and heritability to topography. But, dispersal and the interaction between number of seedlings and heritbaility to NCI decreased population structure along topography. -->
+The number of seedlings $N_s$ alone limited local adaptation to topography ($D_G$ for $TWI$),
+and its interaction with heritabilities associated with topography $h^2_{TWI} \times N_s$ or forest gap dynamics $h^2_{NCI} \times N_s$ reinforced the effect of heritiabilites on the system.
+The number of seedlings, related to the strength selection, 
+increased the effect of heritability on local adaptation and population structure.
+
+The radius of dispersion $R_{dispersion}$ alone limited local adaptation and population structure along topography ($D_G$ and $WSS_{score}$ for $TWI$),
+and its interaction with heritabilities associated with topography $h^2_{TWI} \times N_s$ and forest gap dynamics $h^2_{NCI} \times N_s$ limited local adaptation to topography ($D_G$ for $TWI$) and forest gap dynamics ($D_G$ for $NCI$), respectively. 
+The radius of dispersion, related to the distance of the gene flow, 
+decreased local adaptation and population structure.
 
 ```{r R2, eval=F}
 vroom::vroom("../modelling_save/simulations.tsv") %>% 
@@ -366,7 +379,7 @@ vroom::vroom("../modelling_save/simulations.tsv") %>%
         col.names = c("Metric", "NCI", "TWI"), digits = 2)
 ```
 
-```{r parmetersfig, fig.cap="Effects of biological parameters and their paired interactions on local adaptation ($D_G$) and population structure ($WSS_{score}$) for topography ($TWI$) and forest gap dynamics ($NCI$). Parameters values have been scaled to ease their comparison. topo, gaps, seed, and disp are refereing to the heritiability associated with topography ($h^2_{TWI}$), the heritability associated with forest gap dynamics ($h^2_{NCI}$), the number of seedlings ($N_s$), and the radius of dispersion ($R_{dispersion}$), respectively."}
+```{r parmetersfig, fig.cap="Effects of biological parameters and their paired interactions on local adaptation ($D_G$) and population structure ($WSS_{score}$) for topography ($TWI$) and forest gap dynamics ($NCI$). Parameters values have been scaled to ease their comparison. topo, gaps, seed, and disp are refereing to the heritiability associated with topography ($h^2_{TWI}$), the heritability associated with forest gap dynamics ($h^2_{NCI}$), the number of seedlings ($N_s$), and the radius of dispersion ($R_{dispersion}$), respectively. Significant ($p < 0.05$) and strong ($|standardized~effect| > 0.05$) effects are opaque, whereas weak or non-significant effects are transparent. Dashed grey lines indicate a null effect, whereas dotted grey lines indicate an absolute standardized effect of 0.05."}
 vroom::vroom("../modelling_save/simulations.tsv") %>% 
   filter(timestep == 60) %>% 
   dplyr::select(-timestep) %>% 
@@ -451,13 +464,13 @@ vroom::vroom("../modelling_save/simulations.tsv") %>%
                        "Hnci:Rdispersion" = "$h^2_{NCI} \\times R_{dispersion}$",
                        "Ns:Rdispersion" = "$N_s \\times R_{dispersion}$",
   )) %>%
-  kable(caption = "Results of linear regressions.",
+  kable(caption = "Effects of biological parameters and their paired interactions on local adaptation ($D_G$) and population structure ($WSS_{score}$) for topography ($TWI$) and forest gap dynamics ($NCI$). Parameters values have been scaled to ease their comparison. Biological parameters include the heritiability associated with topography ($h^2_{TWI}$), the heritability associated with forest gap dynamics ($h^2_{NCI}$), the number of seedlings ($N_s$), and the radius of dispersion ($R_{dispersion}$). The table show parameters effect and standard deviation in bracket for parameters with a significant ($p < 0.05$) and strong ($|standardized~effect| > 0.05$) effect.",
         col.names = c("Parameter", "$D_G$ for $NCI$", "$D_G$ for $TWI$",
                       "$WSS_{score}$ for $TWI$"))
 ```
 
 
-```{r interaction, fig.cap="Interaction."}
+```{r interaction, fig.cap="Projection of the effects of the heritiability associated with topography ($h^2_{TWI}$), the heritability associated with forest gap dynamics ($h^2_{NCI}$), and their interaction ($h^2_{TWI} \\times h^2_{NCI}$) on local adaptation to topography ($D_G$ for $TWI$). The x-axis shows the variation in the heritiability associated with topography ($h^2_{TWI}$). The colour scale shows the varaition in the heritability associated with forest gap dynamics ($h^2_{NCI}$) from low in blue to high in red. The y-axis shows the projected mean local adaptation to topography ($D_G$ for $TWI$)."}
 t1 <- vroom::vroom("../modelling_save/simulations.tsv") %>% 
   filter(timestep == 60) %>% 
   dplyr::select(-timestep) %>% 
@@ -479,27 +492,12 @@ ggplot(data=Inter.HandPick1, aes(x = Htopo, y = fit, group = Hnci))+
   xlab(expression(h[TWI]^2)) +
   scale_colour_gradient2(expression(h[NCI]^2), midpoint = 0.5,
                         low = scales::muted("blue"),
-                        high = scales::muted("red")) +
-  geom_vline(xintercept = 9/65, col = "lightgrey", linetype = "dashed") +
-  geom_hline(yintercept = filter(Inter.HandPick1, 
-                                 Hnci == round(18/95,2), 
-                                 Htopo == round(9/65,2))$fit,
-             col = "lightgrey", linetype = "dashed") +
-  geom_vline(xintercept = 44/100, col = "lightgrey", linetype = "dashed") +
-  geom_hline(yintercept = filter(Inter.HandPick1, 
-                                 Hnci == round(24/100,2), 
-                                 Htopo == round(44/100,2))$fit,
-             col = "lightgrey", linetype = "dashed")
+                        high = scales::muted("red"))
 ```
 
 # Discussion
 
-* Strong local adaptation that tracks the temporally-fixed topography allows populations to structure along topography, whereas reduced local adaptation bet-edging the temporally-variable forest gap dynamics doesn’t allow population to structure with forest gap dynamics.
-* Local adaptation and population structure along topography increase with increasing heritability to topography and forest gap dynamics, but decrease if heritability to forest gap dynamics becomes stronger than heritability to topography, i.e. genotypes get more locally adapted to forest gap dynamics.
-* The number of seedlings, related to selection, increases the effect of heritability on local adaptation and population structure.
-* The radius of dispersion, related to gene flow, decreases local adaptation and population structure.
-
-> The topography and dynamics of forest gaps jointly favour or limit the local adaptation and structure of the populations of a tropical tree species, depending on the interaction between the biological parameters of the species.
+> The topography and dynamics of forest gaps jointly favoured or limited the local adaptation and structure of the populations of a tropical tree species, depending on the interaction between four biological parameters of the species.
 
 # Acknowledgements
 

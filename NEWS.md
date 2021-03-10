@@ -1,3 +1,6 @@
+# PhD 0.1.9226
+* modelling: msc: intro begins
+
 # PhD 0.1.9225
 * modelling: msc fig & tab
 
