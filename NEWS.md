@@ -1,3 +1,9 @@
+# PhD 0.1.9227
+* distribution: Apocynaceae
+* functional: weather data
+* symcapture: check data for *New Phyto*
+* modelling: manuscript and first share
+
 # PhD 0.1.9226
 * modelling: msc: intro begins
 

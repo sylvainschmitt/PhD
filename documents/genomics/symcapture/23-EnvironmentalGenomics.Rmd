@@ -275,6 +275,25 @@ cowplot::plot_grid(
 
 ```
 
+```{r}
+trees %>% 
+  mutate(DBH = CircCorr/pi) %>% 
+  mutate(DBHclass = cut(DBH, breaks = c(10, 20, 35, 96))) %>% 
+  group_by(DBHclass) %>% 
+  mutate(DBHclassCm = paste0(round(min(DBH)), " - ", round(max(DBH)), " cm")) %>% 
+  mutate(pop = recode(pop, "sp1" = "S. sp.1",
+                      "globuliferaTypeParacou" = "S. sp.2",
+                      "globuliferaTypeRegina" = "S. sp.3")) %>% 
+  ggplot(aes(TWI, col = pop, fill = pop)) + 
+  geom_histogram(position = "dodge", binwidth = 1, alpha = 0.5, col = NA) +
+  geom_density(aes(y=1 * ..count..), fill = NA) +
+  facet_wrap(~DBHclassCm, scales = "free", nrow = 1) +
+  scale_y_sqrt() +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  scale_color_manual("", values =  c("#CD2626", "#1E90FF", "#0000EE")) +
+  scale_fill_manual("", values =  c("#CD2626", "#1E90FF", "#0000EE"))
+```
+
 
 ## Genetic variance
 

@@ -330,6 +330,118 @@ lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), patt
   scale_fill_gradient(high = "#132B43", low = "#56B1F7")
 ```
 
+
+```{r FstPval, eval=F, echo=T}
+library(tidyverse)
+library(vcfR)
+library(adegenet)
+library(StAMPP)
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+snps <- read.vcfR("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.vcf.gz")
+snps.sub <- snps[1:100]
+# snps.sub <- snps
+snps.sub <- vcfR2genlight(snps.sub)
+pop <-   read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop"))
+pop(snps.sub)  <- left_join(data.frame(IID = indNames(snps.sub)), pop)$pop
+snps.sub <- snps.sub[!is.na(pop(snps.sub)),]
+#  On the other hand, for a single test (e.g. for a single fst value), it is a good practice to report p<1/m, with m being a number of permutations, often rounding it up to the nearest decimal fraction depending on the convention (e.g. <0.001, <0.0001).
+fst <- stamppFst(snps.sub, nboots = 1000, percent = 95, nclusters = 4)
+left_join(reshape2::melt(fst$Pvalues) %>% 
+            rename(Population1 = Var1, Population2 = Var2, Pvalues = value) %>% 
+            na.omit(),
+          reshape2::melt(fst$Fsts) %>% 
+            rename(Population1 = Var1, Population2 = Var2, Fsts = value) %>% 
+            na.omit()) %>% 
+  write_tsv("symcapture_save/symphoFst.tsv")
+fst$Bootstraps %>% 
+  reshape2::melt(id.vars = c("Population1", "Population2")) %>% 
+  dplyr::select(-variable) %>% 
+  rename(nullFst = value) %>% 
+  write_tsv("symcapture_save/symphoNullFst.tsv")
+```
+
+```{r FstPvalRes}
+Fst <- read_tsv("symcapture_save/symphoFst.tsv")
+FstNull <- read_tsv("symcapture_save/symphoNullFst.tsv")
+ggplot(filter(FstNull, nullFst > 0.1), aes(nullFst)) +
+  geom_histogram(binwidth = 0.0001) +
+  facet_wrap(~ Population1 + Population2, scales = "free") +
+  geom_vline(data = data.frame(
+    Population2 = c("globuliferaTypeParacou", "globuliferaTypeRegina", "globuliferaTypeRegina"),
+    Population1 = c("sp1", "sp1", "globuliferaTypeParacou"),
+    nullFst = c(0.125, 0.152, 0.136)
+    ), aes(xintercept = nullFst), col = "red")
+```
+
+```{r , eval=F}
+library(assigner)
+library(radiator)
+# data.fst <- readr::read_tsv(file = "https://raw.githubusercontent.com/thierrygosselin/package_data/master/assigner_data_fst.tsv.gz")
+fst <- assigner::fst_WC84(
+  data = tidy_genlight(snps.sub), 
+  # pop.levels = unique(pop$pop),
+  pairwise = TRUE,
+  ci = TRUE, 
+  iteration.ci = 100,
+  quantiles.ci = c(0.025, 0.975),
+  parallel.core = 4,
+  heatmap.fst = TRUE,
+  filename = "testing_fst",
+  verbose = TRUE
+)
+```
+```{r}
+library(radiator)
+library(hierfstat)
+
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+snps <- read.vcfR("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.vcf.gz")
+snps.sub <- snps[1:100]
+pop <-   read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("IID", "pop"))
+
+hierfstat::pairwise.WCfst(snps.sub)
+tidy_genlight(snps.sub)
+read_tsv(file.path(path, "bayescenv", "paracou3pop.popmap"),
+                     col_names = c("INDIVIDUALS", "STRATA")) %>% 
+  write_tsv("symcapture_save/strata.tsv")
+snps <- genomic_converter("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/symcapture.all.biallelic.snp.filtered.nonmissing.paracou.vcf.gz", 
+                  strata = "symcapture_save/strata.tsv",
+                  output = "snprelate")
+snps <- genomic_converter(tidy_vcf(snps.sub), 
+                  strata = "symcapture_save/strata.tsv",
+                  output = "genepop")
+snps$snprelate
+library(SNPRelate)
+snprelate.fst <- snpgdsFst(
+  gdsobj = snps$snprelate,
+  population = tidy_genlight(snps.sub)$STRATA, # factors required
+  sample.id = tidy_genlight(snps.sub)$INDIVIDUALS,
+  snp.id = NULL,
+  method = "W&C84",
+  remove.monosnp = TRUE,
+  maf = NaN,
+  missing.rate = NaN,
+  autosome.only = FALSE,
+  with.id = FALSE,
+  verbose = TRUE
+)
+
+fst <- fst_WC84(
+  data = snps, 
+  # pop.levels = unique(pop$pop),
+  pairwise = TRUE,
+  ci = TRUE, 
+  iteration.ci = 100,
+  quantiles.ci = c(0.025, 0.975),
+  parallel.core = 4,
+  heatmap.fst = TRUE,
+  filename = "testing_fst",
+  verbose = TRUE
+)
+```
+
 ### Tajima's $D$
 
 Tajima's $D$ between population was globally low and significantly negative with a mean value of -0.795 and was significantly different between populations (ANOVA, p<2e-16) with *S. globulifera type Regina* having a globally higher value (Fig. \@ref(fig:TajimaDR)). We expect positive selection (or selective sweeps) to give us a negative Tajima’s $D$ in a population that doesn’t have any demographic changes going on (population expansion/contraction, migration, etc). On the other hand with balancing selection, alleles are kept at intermediate frequencies. This produces a positive Tajima’s $D$ because there will be more pairwise differences than segregating sites. Consequently, Tajima's $D$ indicates here that are population are under selection with a stronger selection operating on *S. globulifera type Paracou* and *S. sp1* than *S. globulifera type Regina*. No significant differences existed between SNP types.

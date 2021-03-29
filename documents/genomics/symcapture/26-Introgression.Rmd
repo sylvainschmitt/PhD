@@ -220,16 +220,17 @@ hi.index %>%
 hi.index %>% 
   mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
   mutate(pair = recode(pair, 
-                       sp = "S. sp1 - S. globulifera type Paracou", 
-                       sr = "S. sp1 - S. globulifera type Regina",
-                       pr = "S. globulifera type Paracou - S. globulifera type Regina")) %>% 
+                       sp = "S. sp.1 - S. sp.2", 
+                       sr = "S. sp.1 - S. sp.3",
+                       pr = "S. sp.2 - S. sp.3")) %>% 
   left_join(symcapture.admix[[3]] %>% 
               rownames_to_column(var = "Ind") %>%
               reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
-              mutate(genepool = recode(genepool, Cluster1 = "S. sp1", 
-                                       Cluster2 = "S. globulifera type Paracou", 
-                                       Cluster3 = "S. globulifera type Regina"))) %>%
-  arrange(pair, desc(h)) %>%
+              mutate(genepool = recode(genepool, 
+                                       Cluster1 = "S. sp1", 
+                                       Cluster2 = "S. sp.2", 
+                                       Cluster3 = "S. sp.3"))) %>%
+  arrange(desc(pair), desc(h)) %>%
   mutate(order = 1:nrow(.)) %>% 
   ggplot(aes(reorder(Ind, order), group = NA)) +
   geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +

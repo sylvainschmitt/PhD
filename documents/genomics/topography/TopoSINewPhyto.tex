@@ -71,46 +71,6 @@
 \makeatother
 
 % code highlights
-\usepackage{color}
-\usepackage{fancyvrb}
-\newcommand{\VerbBar}{|}
-\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
-\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
-% Add ',fontsize=\small' for more characters per line
-\usepackage{framed}
-\definecolor{shadecolor}{RGB}{248,248,248}
-\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
-\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
-\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.77,0.63,0.00}{#1}}
-\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
-\newcommand{\BuiltInTok}[1]{#1}
-\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
-\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
-\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
-\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
-\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
-\newcommand{\ExtensionTok}[1]{#1}
-\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
-\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\ImportTok}[1]{#1}
-\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
-\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
-\newcommand{\NormalTok}[1]{#1}
-\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
-\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
-\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
-\newcommand{\RegionMarkerTok}[1]{#1}
-\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
-\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
-\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
 
 % hyperlinks
 \IfFileExists{upquote.sty}{\usepackage{upquote}}{}
@@ -293,7 +253,7 @@ model {
 \newpage
 
 \begin{longtable}[]{@{}lrrr@{}}
-\caption{\label{tab:kmeansConfusion}Confusion matrix (percentage) between genetic cluster and botanical identification for \emph{Eschweilera} clade \emph{Parvifolia}.}\tabularnewline
+\caption{\label{tab:kmeansConfusion}Confusion matrix (percentage) between genetic species and botanical identification for \emph{Eschweilera} clade \emph{Parvifolia}.}\tabularnewline
 \toprule
 Species & E. coriacea cluster & E. decolorans cluster & E. sagotiana cluster\tabularnewline
 \midrule
@@ -400,10 +360,30 @@ E. sagotiana & 20 & 16 & 80\tabularnewline
 \caption{\label{fig:conhetero}The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio.}
 \end{figure}
 
-\begin{Shaded}
-\begin{Highlighting}[]
-\KeywordTok{save}\NormalTok{(}\DataTypeTok{list =} \KeywordTok{ls}\NormalTok{(), }\DataTypeTok{file =} \StringTok{"../../thesis/rdata/Ch3SupMat.Rdata"}\NormalTok{)}
-\end{Highlighting}
-\end{Shaded}
+\newpage
+
+\begin{longtable}[]{@{}lrrr@{}}
+\caption{\label{tab:blindIdentification}Confusion matrix (count) between genetic species and second blind-identification of individual morphotypes for \emph{Symphonia}.}\tabularnewline
+\toprule
+Species & S .sp.1 morphotype & S .sp.2 morphotype & S .sp.3 morphotype\tabularnewline
+\midrule
+\endfirsthead
+\toprule
+Species & S .sp.1 morphotype & S .sp.2 morphotype & S .sp.3 morphotype\tabularnewline
+\midrule
+\endhead
+S. sp.1 & 28 & 6 & 0\tabularnewline
+S. sp.2 & 0 & 11 & 0\tabularnewline
+S. sp.3 & 0 & 0 & 21\tabularnewline
+\bottomrule
+\end{longtable}
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics{TopoSINewPhyto_files/figure-latex/gnomFrac-1.pdf}
+\caption{\label{fig:gnomFrac}Distribution of derived or minor allele among species from \emph{Symphonia} and \emph{Eschweilera} clade \emph{Parvifolia}. For \emph{Symphonia}, count and percentage represent the number of derived alleles within and among american species compared to the african reference from Olsson \emph{et al.} (\protect\hyperlink{ref-Olsson2017}{2017}). For \emph{Eschweilera}, count and percentage represent the number of minor alleles within and among species because of the de novo reference.}
+\end{figure}
 
 \end{document}

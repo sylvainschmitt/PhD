@@ -150,14 +150,14 @@ read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>%
     mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
                           "2" = "E. sagotiana cluster",
                           "1" = "E. coriacea cluster")) %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F, convert = T) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
   left_join(individuals) %>% 
   filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>%
   reshape2::dcast(Species ~ cluster) %>% 
   mutate_if(is.numeric, funs(round(./sum(.)*100))) %>% 
   mutate(Species = paste0("E. ", Species)) %>% 
-  kable(caption = "Confusion matrix (percentage) between genetic cluster and botanical identification for \\emph{Eschweilera} clade \\emph{Parvifolia}.",
+  kable(caption = "Confusion matrix (percentage) between genetic species and botanical identification for \\emph{Eschweilera} clade \\emph{Parvifolia}.",
         format = "pandoc")
 ```
 
@@ -360,7 +360,27 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
 \newpage
 
 ```{r conhetero, fig.cap="The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera  clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio."}
-read_tsv("../../distributions/distribution_save/congenerics.tsv") %>% 
+congeners <- read_tsv("../../distributions/distribution_save/congenerics.tsv") 
+sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+         col_names = c("Library", "GeneticSpecies"), delim = " ") %>% 
+  mutate(Genus = "Symphonia") %>% 
+  separate(Library, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
+  mutate(GeneticSpecies = recode(GeneticSpecies,
+                                 "sp1" = "sp.1",
+                                 "globuliferaTypeParacou" = "sp.2",
+                                 "globuliferaTypeRegina" = "sp.3"))
+paracou <- src_sqlite("../../../data/Paracou/trees/Paracou.sqlite") %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia", CensusYear == 2015) %>% 
+  select(Plot, SubPlot, TreeFieldNum, idTree) %>% 
+  collect()
+left_join(congeners,
+          left_join(sympho, paracou) %>% 
+            select(idTree, Genus, GeneticSpecies)) %>% 
+  mutate(Species = ifelse(!is.na(GeneticSpecies), GeneticSpecies, Species)) %>% 
+  select(-GeneticSpecies) %>% 
+  filter(Species != "globulifera") %>% 
   mutate(Species = recode(Species, "grandiflora_form2" = "grandiflora")) %>% 
   group_by(Genus, Species) %>% 
   summarise(sdgen = sd(congenerics), congenerics = mean(congenerics), 
@@ -374,12 +394,109 @@ read_tsv("../../distributions/distribution_save/congenerics.tsv") %>%
   geom_segment(aes(x = conspecifics, xend = conspecifics, 
                    y = congenerics - sdgen, yend = congenerics + sdgen),
                alpha = 0.5) +
-  scale_color_discrete("Species") +
+  scale_color_discrete("") +
   theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
   xlab("Number of conspecifics within 25 meter radius") +
-  ylab("Number of consgenerics within 25 meter radius")
+  ylab("Number of congenerics \n (non-conspecifics) within 25 meter radius") +
+  guides(colour = guide_legend(nrow = 3))
 ```
 
-```{r thesis, eval=F, echo=T}
-save(list = ls(), file = "../../thesis/rdata/Ch3SupMat.Rdata")
+\newpage
+
+```{r blindIdentification, include=T}
+data.frame(
+  Species = c("S. sp.1", "S. sp.2", "S. sp.3"),
+  Sp1 = c(28, 0, 0),
+  Sp2 = c(6, 11, 0),
+  Sp3 = c(0, 0, 21)
+) %>% 
+  kable(caption = "Confusion matrix (count) between genetic species and second blind-identification of individual morphotypes for \\emph{Symphonia}.",
+        format = "pandoc", col.names = c("Species", "S .sp.1 morphotype", "S .sp.2 morphotype", "S .sp.3 morphotype"))
+```
+
+\newpage
+
+```{r gnomFrac, fig.cap="Distribution of derived or minor allele among species from *Symphonia* and *Eschweilera* clade *Parvifolia*. For *Symphonia*, count and percentage represent the number of derived alleles within and among american species compared to the african reference from @Olsson2017. For *Eschweilera*, count and percentage represent the number of minor alleles within and among species because of the de novo reference.", fig.height=10, fig.width=10}
+# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --thin-count 1000 --recode A-transpose --out paracou
+# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --recode A-transpose --out paracou
+# pop.sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+#                    col_names = c("library", "species"), delim = " ") %>% 
+#   mutate(species = recode(species,
+#                                  "sp1" = "sp.1",
+#                                  "globuliferaTypeParacou" = "sp.2",
+#                                  "globuliferaTypeRegina" = "sp.3"))
+# snps.sympho <- vroom::vroom("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/paracou.traw") %>% 
+#   rename(snp = SNP) %>% 
+#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>% 
+#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>% 
+#   mutate(library = gsub("0_", "", library)) %>% 
+#   left_join(pop.sympho) %>% 
+#   filter(!is.na(species)) %>% 
+#   group_by(snp, species) %>% 
+#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>% 
+#   filter(alt)
+# vroom::vroom_write(snps.sympho, "save/snps.sympho.tsv")
+# pop.parvi <- read_tsv("../../../data/Eschweilera_Paracou/Sequences/variants/final/filtered.kmeans") %>% 
+#     mutate(cluster = recode(cluster, "3" =  "E. decolorans", 
+#                           "2" = "E. sagotiana",
+#                           "1" = "E. coriacea")) %>% 
+#   rename(library = Sample, species = cluster)
+# snps.parvi <- vroom::vroom("../../../data/Eschweilera_Paracou/Sequences/variants/final/paracou.traw") %>% 
+#   rename(snp = SNP) %>%
+#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>%
+#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>%
+#   mutate(library = gsub("0_", "", library)) %>%
+#   left_join(pop.parvi) %>%
+#   filter(!is.na(species)) %>%
+#   group_by(snp, species) %>%
+#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>%
+#   filter(alt)
+# vroom::vroom_write(snps.parvi, "save/snps.parvi.tsv")
+snps.sympho <- vroom::vroom("save/snps.sympho.tsv")
+snps.parvi <- vroom::vroom("save/snps.parvi.tsv")
+snps.list <- list(
+  Symphonia = list("S. sp.1" = filter(snps.sympho, species == "sp.1")$snp,
+                  "S. sp.2" = filter(snps.sympho, species == "sp.2")$snp,
+                  "S. sp.3" = filter(snps.sympho, species == "sp.3")$snp),
+  Eschweilera = list("E. decolorans" = filter(snps.parvi, species == "E. decolorans")$snp,
+                  "E. sagotiana" = filter(snps.parvi, species == "E. sagotiana")$snp,
+                  "E. coriacea" = filter(snps.parvi, species == "E. coriacea")$snp)
+)
+cowplot::plot_grid(ggvenn::ggvenn(snps.list$Symphonia,
+                                  fill_color = c("#CD2626", "#1E90FF", "#0000EE"),
+                                  text_size = 3, set_name_size = 5, 
+                                  stroke_size	= 0.5, stroke_color = "lightgrey"), 
+                   ggvenn::ggvenn(snps.list$Eschweilera, 
+                                  fill_color = c("#1b9e77", "#d95f02", "#7570b3"),
+                                  text_size = 3, set_name_size = 5,
+                                  stroke_size	= 0.5, stroke_color = "lightgrey"))
+```
+
+```{r, eval=FALSE}
+# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --geno 0 --recode A-transpose --out paracou.filtered
+# pop.sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+#                    col_names = c("library", "species"), delim = " ") %>%
+#   mutate(species = recode(species,
+#                                  "sp1" = "sp.1",
+#                                  "globuliferaTypeParacou" = "sp.2",
+#                                  "globuliferaTypeRegina" = "sp.3"))
+# snps.sympho <- vroom::vroom("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/paracou.filtered.traw") %>%
+#   rename(snp = SNP) %>%
+#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>%
+#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>%
+#   mutate(library = gsub("0_", "", library)) %>%
+#   left_join(pop.sympho) %>%
+#   filter(!is.na(species)) %>%
+#   group_by(snp, species) %>%
+#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>%
+#   filter(alt)
+# vroom::vroom_write(snps.sympho, "save/snps.sympho.filtered.tsv")
+snps.sympho <- vroom::vroom("save/snps.sympho.filtered.tsv")
+snps.list <- list("S. sp.1" = filter(snps.sympho, species == "sp.1")$snp,
+                  "S. sp.2" = filter(snps.sympho, species == "sp.2")$snp,
+                  "S. sp.3" = filter(snps.sympho, species == "sp.3")$snp)
+ggvenn::ggvenn(snps.list,
+               fill_color = c("#CD2626", "#1E90FF", "#0000EE"),
+               text_size = 3, set_name_size = 5, 
+               stroke_size	= 0.5, stroke_color = "lightgrey")
 ```

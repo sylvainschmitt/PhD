@@ -124,8 +124,12 @@ Tables have been joined with dates and shortest time difference into the `data.t
 
 Figures \@ref(fig:cor) and \@ref(fig:pca) showed variables covariations among them and with leaf thickness. There are a lot of positive and negative covariations, as expected. And leaf thickness (LT) is mainly correlated to relative extractible water (REW), atmospheric pressure (Patm) and cummulated rain over five days (rainfivedays).
 
+```{r corTest}
+cor.test(data$LT, data$WMA)
+```
+
 ```{r cor, fig.cap="Variables correlations. Pearson's r below the diagonal and corresponding color above the diagonal."}
-dplyr::select(data, LT, WCLA, DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
+dplyr::select(data, LT, WMA, DBH, T55, T30, Hr55, Hr30, minutes, Patm, windaspect, windspeed, rain, rainday, rainfivedays, vpd55, PET, rainfall, REW) %>% 
   na.omit() %>%
   cor() %>% 
   corrplot::corrplot.mixed()

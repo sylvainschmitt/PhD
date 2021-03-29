@@ -1,0 +1,330 @@
+```{r setupApocynaceae, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+library(parallel)
+library(tidyverse)
+library(ggfortify)
+library(ggrepel)
+library(raster)
+library(leaflet)
+library(rstan)
+library(bayesplot)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 6,
+  cache = T, cache.lazy = F, eval=T)
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = T)
+path <- "~/Documents/BIOGECO/PhD/data/Paracou/"
+crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0' # global crs definition
+```
+
+
+# Apocynaceae distributions
+
+The aim of this document is to study the distribution at micro-environmental scale with topographic wetness index of the whole species complexes or genus in Paracou for all censuses and all plots and species within complexes or genus.
+
+```{r treesApo}
+trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CodeAlive == 1) %>% 
+  dplyr::select(idTree, Xutm, Yutm, Genus, Species) %>% 
+  collect() %>% 
+  unique()
+```
+
+```{r envApo}
+# env <- trees %>%
+#   dplyr::select(idTree, Xutm, Yutm) %>%
+#   unique()
+# coordinates(env) <- ~Xutm + Yutm
+# proj4string(env) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+# env <- spTransform(env, CRSobj = crs)
+# twi <- raster(file.path(path, "topography", "TWI_1m.tif"))
+# twi <- projectRaster(twi, crs = crs)
+# env$twi <- raster::extract(twi, env)
+# rm(twi)
+# save(env, file = "./distribution_save/env.Rdata")
+load("./distribution_save/env.Rdata")
+```
+
+```{r complexesApo}
+Complexes <- bind_rows(
+  data.frame(Complex = "Ambelania", Genus = "Ambelania", Species = "acida"),
+  data.frame(Complex = "Aspidosperma", Genus = "Aspidosperma",
+             Species = c("album", "cruentum", "excelsum", "helstonei",
+                         "oblongum", "sandwithianum", "spruceanum")),
+  data.frame(Complex = "Couma", Genus = "Couma", Species = "guianensis"),
+  data.frame(Complex = "Geissospermum", Genus = "Geissospermum", Species = "laeve"),
+  data.frame(Complex = "Himatanthus", Genus = "Himatanthus",
+             Species = c("articulatus", "bracteatus")),
+  data.frame(Complex = "Lacmellea", Genus = "Lacmellea", Species = "aculeata"),
+  data.frame(Complex = "Macoubea", Genus = "Macoubea", Species = "guianensis"),
+  data.frame(Complex = "Parahancornia", Genus = "Parahancornia", Species = "fasciculata"),
+  data.frame(Complex = "Rauvolfia", Genus = "Rauvolfia", Species = "paraensis"),
+  data.frame(Complex = "Tabernaemontana", Genus = "Tabernaemontana",
+             Species = c("attenuata", "undulata"))) %>% 
+  mutate_all(as.character)
+```
+
+```{r dataApo}
+data <- trees %>% 
+  left_join(env@data) %>% 
+  left_join(Complexes) %>% 
+  filter(twi >= 0) %>% 
+  mutate(Complex = ifelse(is.na(Complex), "no", Complex)) %>% 
+  group_by(Species) %>% 
+  filter(n() > 10) %>%
+  ungroup()
+data %>%
+  filter(Complex != "no") %>% 
+  group_by(Complex, Species) %>%
+  summarise(N = n()) %>% 
+  kable(caption = "Species and number of individuals.")
+```
+
+## Species complex or Genus
+
+```{r mdataApoC}
+complexes <- unique(Complexes$Complex)
+mdata <- lapply(complexes, function(complex) {
+  list(N = nrow(data),
+       K = 1,
+       Y = as.numeric(data$Complex == complex),
+       X = dplyr::select(data, twi) %>%
+         as.matrix(),
+       N_pred = 100,
+       X_pred = data.frame(
+         TWI = seq(min(data$twi), max(data$twi), length.out = 100)
+       ) %>% as.matrix()
+       )
+})
+names(mdata) <- complexes
+save(mdata, file = "./distribution_save/complexesDataApo.Rdata")
+```
+
+```{bash fitApoCbash, eval=F}
+complexes=(Ambelania Aspidosperma Couma Himatanthus Lacmellea Macoubea Parahancornia Rauvolfia Tabernaemontana)
+for complex in "${complexes[@]}" ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript complex.R $complex" ; done > complex.sh
+sarray -J complex -o out/%j.complex.out -e out/%j.complex.err -t 36:00:00 --constraint=broadwell --cpus-per-task=2 --mail-type=BEGIN,END,FAIL complex.sh
+```
+
+```{r fitApoC}
+fits <- list()
+for(complex in complexes[-c(4,6)]){
+  load(paste0("./distribution_save/complexes", complex, ".Rdata"))
+  fits[[complex]] <- fit
+}
+preds <- lapply(names(fits), function(complex)
+  as.data.frame(fits[[complex]], pars = "Y_pred") %>% 
+    reshape2::melt(NULL) %>% 
+    group_by(variable) %>% 
+    summarise(mean = mean(value), 
+              q5 = quantile(value, 0.05), q95 = quantile(value, 0.95)) %>% 
+    dplyr::select(-variable) %>% 
+    cbind(data.frame(mdata[[complex]]$X_pred) %>% 
+                mutate(variable = rep(c("TWI"), each = 100))) %>% 
+    mutate(complex = complex)
+  ) %>% bind_rows()
+```
+
+```{r mcmcApoC, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$Ambelania, pars = c("beta", "gamma", "lp__")),
+             facet_args = list(labeller = label_parsed))
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+```{r summaryApoC}
+lapply(fits, function(fit)
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", term)) %>% 
+  dplyr::select(complex, term, descriptor, estimate) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "_{TWI}$", `2` = "_{NCI}$")) %>%
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(term = recode_factor(term, alpha = "$\\alpha$", 
+                              beta = "$\\beta", 
+                              gamma = "$\\gamma")) %>% 
+  mutate(term = paste0(term, descriptor)) %>% 
+  reshape2::dcast(complex ~ term, value.var = "estimate") %>% 
+  kable(caption = "Model parameters for each complex with scaled descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1)  
+```
+
+```{r predictionsApoC, fig.cap="Model parameters posterior and predictions."}
+preds %>% 
+  left_join(group_by(data, Complex) %>% 
+              summarise(Yo = n()/nrow(.)),
+            by = c("complex" = "Complex")) %>% 
+  ggplot(aes(x = TWI, col = complex)) +
+  geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.2) +
+  geom_hline(aes(yintercept = Yo, col = complex), lty = "dashed") +
+  geom_line(aes(y = mean)) +
+  facet_wrap(~ variable, nrow = 1, scales = "free_x") + 
+  xlab("") + ylab("Species complex relative abundance") +
+  scale_y_log10() +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom",
+        strip.background = element_blank(),
+        strip.text.x = element_blank())
+```
+
+## Species
+
+```{r mdataApoS}
+complexes
+complexes <- c("Aspidosperma")
+mdata <- lapply(complexes, function(complex) {
+  data<- filter(data, Complex == complex)
+  list(N = nrow(data),
+       S = length(unique(data$Species)),
+       K = 1,
+       Y = sapply(levels(as.factor(data$Species)),
+                  function(sp) as.numeric(data$Species == sp)),
+       X = dplyr::select(data, twi) %>%
+         as.matrix(),
+       N_pred = 100,
+       X_pred = data.frame(
+         TWI = seq(min(data$twi), 
+                   max(data$twi), length.out = 100)
+       ) %>% as.matrix()
+  )
+})
+names(mdata) <- complexes
+save(mdata, file = "./distribution_save/speciesDataApo.Rdata")
+```
+
+```{bash fitApoSbash, eval=F}
+complexes=(Aspidosperma)
+for complex in "${complexes[@]}" ; do echo "module purge ; module load compiler/gcc-7.2.0 ; module load system/R-3.5.3 ; R_LIBS_USER=\" \" Rscript species.R $complex" ; done > species.sh
+sarray -J species -o out/%j.species.out -e out/%j.species.err -t 36:00:00 --constraint=broadwell --cpus-per-task=2 --mail-type=BEGIN,END,FAIL species.sh
+```
+
+```{r fitApoS}
+fits <- list()
+for(complex in complexes){
+  load(paste0("./distribution_save/species", complex, ".Rdata"))
+  fits[[complex]] <- fit
+}
+species <- lapply(mdata, function(data) 
+  data.frame(species = 1:length(colnames(data$Y)),
+             Species = colnames(data$Y))
+  ) %>% bind_rows(.id = "complex") %>% 
+  mutate(SpeciesLong = paste(substr(complex, 1, 1), Species))
+predSpecies <- lapply(names(fits), function(complex)
+  as.data.frame(fits[[complex]], pars = "Y_pred") %>% 
+    reshape2::melt(NULL) %>% 
+    group_by(variable) %>% 
+    summarise(mean = mean(value), 
+              q5 = quantile(value, 0.05), q95 = quantile(value, 0.95)) %>% 
+    separate(variable, c("X1", "X2", "Ind", "species"), convert = T) %>% 
+    dplyr::select(-X1, -X2, -Ind) %>% 
+    cbind(data.frame(mdata[[complex]]$X_pred) %>% 
+                mutate(variable = rep(c("TWI"), each = 100))) %>% 
+    mutate(complex = complex)) %>% bind_rows() %>% 
+  left_join(species) %>% 
+  mutate(value = ifelse(variable == "TWI", TWI, NCI))
+```
+
+```{r mcmcApoS, fig.cap="Markov chains trace plot after warmup for leaf thickness model."}
+# lapply(fits, check_divergences)
+mcmc_trace(as.array(fits$Aspidosperma, pars = c("alpha", "beta", "gamma", "lp__")),
+             facet_args = list(labeller = label_parsed))
+# mcmc_pairs(as.array(fits$invSLA), regex_pars = pars)
+```
+
+```{r summaryApoS}
+lapply(fits, function(fit)
+  broom.mixed::tidyMCMC(fit, pars = c("alpha", "beta", "gamma"), 
+                  droppars = NULL, rhat = T)) %>%
+  bind_rows(.id = "complex") %>% 
+  mutate(index = gsub("([[:alpha:]])", "", term)) %>% 
+  mutate(index = gsub("([[:punct:]])", "", index)) %>% 
+  mutate(term = gsub("([[:digit:]])", "", term)) %>% 
+  mutate(term = gsub("([[:punct:]])", "", term)) %>% 
+  mutate(species = as.numeric(substr(index, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(SpeciesLong = gsub("P ", "E ", SpeciesLong)) %>% 
+  mutate(descriptor = substr(index, 2, 2)) %>% 
+  dplyr::select(complex, term, SpeciesLong, descriptor, estimate) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "_{TWI}$", `2` = "_{NCI}$")) %>% 
+  mutate(term = recode_factor(term, alpha = "$\\alpha$", 
+                              beta = "$\\beta_", 
+                              gamma = "$\\gamma_")) %>% 
+  mutate(term = paste0(term, descriptor)) %>% 
+  reshape2::dcast(SpeciesLong ~ term, value.var = "estimate") %>%
+  kable(caption = "Model parameters for each complex with scaled descriptors.",
+        escape = F, digits = 3, format = "pandoc") %>% 
+  kable_styling(full_width = F) %>% 
+  column_spec(1, bold = T) %>%
+  collapse_rows(columns = 1:3)
+```
+
+```{r posteriorApoS, fig.cap="Model parameters posterior."}
+col <- RColorBrewer::brewer.pal(4, name = "Set1")
+lapply(lapply(fits, as.array, pars = c("beta", "gamma")), 
+       bayesplot::mcmc_intervals_data, prob_outer = 0.8) %>% 
+  bind_rows(.id = "complex") %>% 
+  mutate(descriptor = gsub("([[:alpha:]])", "", parameter)) %>% 
+  mutate(descriptor = gsub("([[:punct:]])", "", descriptor)) %>% 
+  mutate(parameter = gsub("([[:digit:]])", "", parameter)) %>% 
+  mutate(parameter = gsub("([[:punct:]])", "", parameter)) %>% 
+  mutate(species = as.numeric(substr(descriptor, 1, 1))) %>% 
+  left_join(species) %>% 
+  mutate(SpeciesLong = gsub("P ", "E ", SpeciesLong)) %>% 
+  mutate(descriptor = substr(descriptor, 2, 2)) %>% 
+  mutate(descriptor = recode_factor(descriptor, `1` = "TWI", `2` = "NCI")) %>% 
+  dplyr::select(complex, parameter, descriptor, SpeciesLong, ll, l, m, h, hh) %>% 
+  reshape2::melt(id.vars = c("complex", "parameter", "descriptor", "SpeciesLong")) %>% 
+  mutate(parameter = paste0(parameter, "_", variable)) %>%
+  reshape2::dcast(complex + descriptor + SpeciesLong ~ parameter) %>% 
+  mutate(form = 10*as.numeric(beta_m > 0) + as.numeric(gamma_m > 0)) %>% 
+  mutate(form = recode(form, "11" = "pp", "1" = "np", "10" = "pn", "0" = "nn")) %>% 
+  ggplot(aes(label = SpeciesLong, col = form)) +
+  geom_hline(yintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_vline(xintercept = 0, linetype = "dashed", col = "lightgrey") +
+  geom_point(aes(x = beta_m, y = gamma_m), alpha = 1) +
+  geom_segment(aes(x = beta_ll, xend = beta_hh, y = gamma_m, yend = gamma_m), alpha = 0.3) +
+  geom_segment(aes(x = beta_m, xend = beta_m, y = gamma_ll, yend = gamma_hh), alpha = 0.3) +
+  geom_text_repel(aes(x = beta_m, y = gamma_m), size = 3, point.padding = 1) +
+  facet_grid(complex ~ descriptor) +
+  coord_equal() +
+  xlab(expression(beta)) + ylab(expression(gamma)) +
+  scale_color_manual(guide = "none", values = col)
+```
+
+```{r predictionApoS, fig.cap="Relative abundance of species within species complexes. Predicted relative abundance of species within species complexes with dashed line indicating observed relative abundance of species within species complex in Paracou, and solid line and area representing respectively the mean and the 95% confidence interval of projected relative abundance of species complexes depending on descriptors. The color indicates the species complex."}
+predSpecies %>%
+  group_by(complex) %>% 
+  left_join(data %>%
+              group_by(Complex) %>%
+              mutate(N_complex = n()) %>%
+              group_by(Complex, N_complex, Genus, Species) %>%
+              summarise(N_species = n()) %>%
+              mutate(RelAbund = N_species / N_complex),
+            by = c("complex" = "Complex", "Species" = "Species")) %>%
+  mutate(Species = ifelse(Species == "grandiflora_form2", "grandiflora", Species)) %>%
+  mutate(Species = paste0(substr(Genus, 1,1), ". ", Species)) %>%
+  ggplot(data = ., aes(x = value, col = Species)) + 
+  geom_ribbon(aes(ymin = q5, ymax = q95), alpha = 0.2) +
+  geom_line(aes(y = mean), lwd = 1.3) +
+  geom_hline(aes(yintercept = RelAbund, col = Species), linetype = "dashed") +
+  facet_grid(complex ~ variable, scales = "free_x") +
+  guides(col = guide_legend(nrow=2)) +
+  theme(legend.position = "bottom", legend.title = element_blank()) +
+  ylab("Species relative abundance") + xlab("Standardized value") +
+  scale_y_sqrt() +
+  scale_color_manual(values = c(RColorBrewer::brewer.pal(6, "Dark2")[1:6], 
+                                RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+                                RColorBrewer::brewer.pal(8, "Dark2")[1:8],
+                                RColorBrewer::brewer.pal(3, "Dark2")[1:2],
+                                RColorBrewer::brewer.pal(3, "Dark2")[1:3]))
+```
