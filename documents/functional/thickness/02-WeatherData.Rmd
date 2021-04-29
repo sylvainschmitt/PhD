@@ -75,6 +75,16 @@ rm(rew)
 write_tsv(data, path = "thickness_save/data.tsv")
 ```
 
+```{r, eval=F}
+read_csv(file.path(path, "REW_1978-2017_Fabien.csv")) %>% 
+  filter(year == 2017) %>% 
+  group_by(month) %>% 
+  summarise(precipitation = sum(precipitation)) %>% 
+  mutate(dry = as.numeric(precipitation < 100)) %>% 
+  group_by(dry) %>% 
+  summarise(precipitation = mean(precipitation))
+```
+
 # Weather data
 
 This chapter introduce and explore environmental variables correlations and relations with leaf thickness. Leaf thickness is used per leaf (and not per tree or per plot).
@@ -124,7 +134,7 @@ Tables have been joined with dates and shortest time difference into the `data.t
 
 Figures \@ref(fig:cor) and \@ref(fig:pca) showed variables covariations among them and with leaf thickness. There are a lot of positive and negative covariations, as expected. And leaf thickness (LT) is mainly correlated to relative extractible water (REW), atmospheric pressure (Patm) and cummulated rain over five days (rainfivedays).
 
-```{r corTest}
+```{r corTest, eval=F}
 cor.test(data$LT, data$WMA)
 ```
 
@@ -272,18 +282,19 @@ randomForest::randomForest(WCLA ~ DBH + T55 + T30 + Hr55 + Hr30 + minutes + Patm
 ## Weather graph
 
 ```{r weatherg, fig.cap="Observed leaf thickness (µm) variation with half-hourly, daily and five-day rainfall (mm) and with relative extractable water between October and December. Light blue points and columns represent observed half-hourly, daily and five-day rainfall (mm) and relative extractable water between October and December, respectively from left to right and top to bottom. Black box plots represent half-hourly our daily distribution of measured leaf thickness among Symphonia individuals. Blue and black lines represent polynomial regression for weather data and leaf thickness data, respectively."}
-g.rain <- ggplot(data, aes(x = timetree)) +
-  geom_point(aes(y = rain), col = "lightblue", 
-             data = unique(dplyr::select(data, timetree, rain)) %>% 
-               filter(rain < 2)) +
-  geom_smooth(aes(y = rain, group = NA), col = "blue",
-              data = unique(dplyr::select(data, timetree, rain)), se = F) +
-  geom_boxplot(aes(y = LT/400, group = timetree), alpha = 0.5, col = "black") +
-  geom_smooth(aes(y = LT/400, group = NA), col = "black", alpha = 0.5, se = F) +
-  scale_y_continuous(name = "", 
-                     sec.axis = sec_axis(~.*400, name = "")) +
-  ggtitle("Half-hourly rain (mm)") +
-  xlab("")
+# g.rain <- ggplot(data, aes(x = timetree)) +
+#   geom_point(aes(y = rain), col = "lightblue", 
+#              data = unique(dplyr::select(data, timetree, rain)) %>% 
+#                filter(rain < 2)) +
+#   geom_smooth(aes(y = rain, group = NA), col = "blue",
+#               data = unique(dplyr::select(data, timetree, rain)), se = F) +
+#   geom_boxplot(aes(y = LT/400, group = timetree), alpha = 0.5, col = "black") +
+#   geom_smooth(aes(y = LT/400, group = NA), col = "black", alpha = 0.5, se = F) +
+#   scale_y_continuous(name = "", 
+#                      sec.axis = sec_axis(~.*400, name = "")) +
+#   ggtitle("Half-hourly rain (mm)") +
+#   xlab("") +
+#   theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
 g.rainday <- ggplot(data, aes(x = date, group = date)) +
   geom_col(aes(y = rainday), fill = "lightblue", col = NA, 
            data = unique(dplyr::select(data, date, rainday))) +
@@ -295,6 +306,7 @@ g.rainday <- ggplot(data, aes(x = date, group = date)) +
                      sec.axis = sec_axis(~.*10, name = "")) +
   ggtitle("Daily rain (mm)") +
   xlab("")
+  # theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
 g.rainfidays <- ggplot(data, aes(x = date, group = date)) +
   geom_col(aes(y = rainfivedays), fill = "lightblue", col = NA, 
            data = unique(dplyr::select(data, date, rainfivedays))) +
@@ -306,6 +318,7 @@ g.rainfidays <- ggplot(data, aes(x = date, group = date)) +
                      sec.axis = sec_axis(~./2, name = "")) +
   ggtitle("Five-day rain (mm)") +
   xlab("")
+  # theme(axis.text.x = element_text(angle = 45, vjust = 0.5))
 g.rew <- ggplot(data, aes(x = date, group = date)) +
   geom_col(aes(y = REW), fill = "lightblue", col = NA, 
            data = unique(dplyr::select(data, date, REW))) +
@@ -316,8 +329,11 @@ g.rew <- ggplot(data, aes(x = date, group = date)) +
   scale_y_continuous(name = "Relative extractable water", 
                      sec.axis = sec_axis(~.*500, name = "Leaf thickness (µm)")) +
   xlab("")
-gridExtra::grid.arrange(g.rain, g.rainday, g.rainfidays, g.rew,   
-                        layout_matrix = rbind(c(1, 2, 3),
-                                              c(4, 4, 4)))
+# gridExtra::grid.arrange(g.rain, g.rainday, g.rainfidays, g.rew,   
+#                         layout_matrix = rbind(c(1, 2, 3),
+#                                               c(4, 4, 4)))
+gridExtra::grid.arrange(g.rainday, g.rainfidays, g.rew,   
+                        layout_matrix = rbind(c(1, 2),
+                                              c(3, 3)))
 ```
 

@@ -15,7 +15,7 @@ output:
   bookdown::word_document2:
     reference_docx: ./template/template.docx
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+csl: /home/sylvain/Documents/Bibliography/csl/molecol.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 always_allow_html: yes
@@ -29,6 +29,41 @@ always_allow_html: yes
 <!-- 1.	if your file of Supplemental Information is very large, create a Table of Contents -->
 <!-- 1.	Your Supplemental Information will not be copy-edited.  Do not leave in track-changes and other editing marks.  The document will be posted "as is.” -->
 <!-- 1.	Save as PDF if possible -->
+
+# Method S1: Design of the probes set for *Symphonia*.
+
+For *Symphonia globulifera*, the genomic and transcriptomic resources used for the design were comprised of a published low-coverage draft genome from Africa [@Olsson2017], an unpublished draft genome from French Guiana [Scotti et al., in prep], an unpublished transcriptome from 20 juveniles from French Guiana [Tysklind et al., in prep], and reduced-representation genomic sequence reads of individuals from French Guiana [Torroba-Balmori et al., unpublished]. 
+We aligned genomic reads on the two genome drafts with `bwa` [@Li2009]. 
+We kept scaffolds from the two genome drafts with a length superior to 1 kbp and at least one matching alignment with a read with a single match on the genome, and merged the two filtered genome drafts with `quickmerge` [@Chakraborty2016]. 
+We aligned transcripts on the new filtered genome draft with `BLAT` [@Kent2002] and selected 533 scaffolds without transcript-match, *i.e.* anonymous scaffolds. 
+We masked repetitive regions with `RepeatMasker` [@Smit2015] and selected 533 1-kbp anonymous loci within the 533 previous scaffolds.
+
+Similarly, we filtered transcripts from the 20 juveniles of *Symphonia globulifera* from French Guiana [Tysklind et al., in prep] based on SNP quality, type and frequency. 
+We further detected  open reading frames (ORFs) using `transdecoder` [@Haas2013], 
+and selected transcripts with non-overlapping  ORFs including a start codon.
+We kept ORFs with an alignment on scaffolds from the aforementioned genome draft for *Symphonia* using `BLAT` [@Kent2002],
+and masked repetitive regions with `RepeatMasker` [@Smit2015]. 
+We selected 1,150 genic loci of 500-bp to 1-kbp, from 100 bp before the start to a maximum of 900 bp after the end of the ORFs, resulting in 1-Mbp genomic loci that included a coding region.
+
+\newpage
+
+# Method S2: Design of the probes set for *Eschweilera*.
+
+For *Eschweilera*, the genomic and transcriptomic resources used for the design were comprised of transcriptomes from  *Eschweilera sagotiana* and *Eschweilera coriacea* [@Vargas2019], and unpublished reduced representation genomic reads (M. Heuertz pers. com.).
+We mapped reciprocally *E. coriacea* and *E. sagotiana* transcriptomes using `BLAT` [@Kent2002], and in reciprocal best matches, we kept a single transcript to avoid paralogs and have robust targets among species.
+We further detected  open reading frames (ORFs) using `transdecoder` [@Haas2013], 
+and selected transcripts with non-overlapping  ORFs including a start codon.
+We selected 1,530 transcriptomic loci of 500-bp to 1-kbp, from 100 bp before the start to a maximum of 900 bp after the end of the ORFs, resulting in 0.83-Mbp of transcriptomic loci. 
+To build anonymous targets, we built a *de novo* assembly of ddRAD-seq genomic data using `ipyrad` [@Eaton2020], mapped consensus sequences on transcripts using `BLAT` [@Kent2002], and kept consensus sequences with no match on transcripts.
+We masked repetitive regions with `RepeatMasker` [@Smit2015] and selected  2.2k anonymous loci resulting in a length 0.52-Mbp.
+
+\newpage
+
+# References
+
+<div id="refs"></div>
+
+\newpage
 
 # Model S1: Stan code for the bayesian inference of the animal model.
 
@@ -63,7 +98,6 @@ model {
 }
 ```
 
-
 \newpage
 
 ```{r config, message=FALSE, warning=FALSE, include=FALSE}
@@ -74,13 +108,36 @@ theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 6, cache = T)
 ```
 
+```{r kmeansConfusion}
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+individuals <-read_tsv("figures/Parvicapture - Extraction.tsv") %>% 
+  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
+  unique() %>% 
+  na.omit()
+read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>% 
+    mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
+                          "2" = "E. sagotiana cluster",
+                          "1" = "E. coriacea cluster")) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F, convert = T) %>% 
+  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
+  left_join(individuals) %>% 
+  filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>%
+  reshape2::dcast(Species ~ cluster) %>% 
+  mutate_if(is.numeric, funs(round(./sum(.)*100))) %>% 
+  mutate(Species = paste0("E. ", Species)) %>% 
+  kable(caption = "Confusion matrix (percentage) between genetic species and botanical identification for \\emph{Eschweilera} clade \\emph{Parvifolia}.",
+        format = "pandoc")
+```
+
+\newpage
+
 ```{r symcapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Symphonia globulifera} as described in the manuscript.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
 include_graphics("figures/Symcapture.png")
 ```
 
 \newpage
 
-```{r parvicapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Eschweilera} clade \\emph{Parvifolia} as described in the manuscript.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
+```{r parvicapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Eschweilera} clade \\emph{Parvifolia} as described in the manuscript.", out.width="0.5\\linewidth", fig.align="center", fig.pos="H"}
 include_graphics("figures/Parvicapture.png")
 ```
 
@@ -100,8 +157,8 @@ ggplot(libmiss, aes(libraries, snps)) +
   geom_line() +
   geom_vline(xintercept = Nlibs, linetype = "dashed")  +
   geom_hline(yintercept = libmiss$snps[Nlibs], linetype = "dashed") +
-  xlab("Libraries ranked per species abundance") +
-  ylab("SNP abundance")
+  xlab("number of libraries ranked by number of called SNPs") +
+  ylab("number of called SNPs")
 ```
 
 \newpage
@@ -136,33 +193,36 @@ snpmissN <- group_by(snpmissN, filter, libraries) %>%
 ggplot(snpmiss, aes(snps, libraries, col = gsub("filtered.", "", filter))) + 
   geom_point() + 
   geom_line() +
-  scale_x_sqrt() +
+  scale_x_sqrt(n.breaks	= 10) +
   scale_y_log10() +
   scale_color_discrete("Libraries filter\n(minimum missing\ndata rate)") +
   geom_hline(yintercept = c(5, 10), linetype = "dashed") +
   geom_vline(aes(xintercept = snps), linetype = "dashed", data = snpmissN) +
-  xlab("SNP ranked per library abundance") +
-  ylab("Library abundance")
+  xlab("number of filtered SNPs ranked by number of genotyped libraries") +
+  ylab("number of libraries")
 ```
 
 \newpage
 
-```{r outgroup, fig.cap="Outgroup detection with individual clustering in the genomic principal component analysis (gPCA) in two groups using K-means for every filter."}
+```{r outgroup, fig.cap="Outgroup detection with \\emph{Eschweilera} individual clustering in the genomic principal component analysis (gPCA) in two groups using K-means for every filter."}
 pcas <- lapply(list.files(file.path(path, "Sequences", "variants", "snps_filtered")), function(f)
   read_delim(file.path(path, "Sequences", "variants", "snps_filtered", f, "filtered.eigenvec"),
              delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
     mutate(filter = f)) %>% 
   bind_rows() %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5)
-group_by(pcas, filter) %>% 
-  filter(sum(PCA1) != 0) %>% 
-  cbind(group_by(pcas, filter) %>% 
+t <- group_by(pcas, filter) %>% 
           filter(sum(PCA1) != 0) %>% 
           dplyr::select(., PCA1, PCA2) %>% 
-          do(hc = cutree(hclust(dist(as.matrix(.))), k = 2)) %>% 
-          broom::tidy(hc)) %>% 
-  dplyr::rename(cluster = x) %>% 
+          do(hc = cutree(hclust(dist(as.matrix(.))), k = 2) %>% 
+          broom::tidy()) %>% 
+            unnest(hc) %>% 
+          ungroup()
+group_by(pcas, filter) %>% 
+  filter(sum(PCA1) != 0) %>% 
+  ungroup() %>% 
+  mutate(cluster = t$x) %>% 
   group_by(filter, cluster) %>% 
   mutate(N = n()) %>%
   group_by(filter) %>% 
@@ -182,7 +242,7 @@ group_by(pcas, filter) %>%
 
 \newpage
 
-```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals. Y axis indicates corss-validation mean error, suggesting that 2 or 3 groups represent the best Paracou individuals structure."}
+```{r admixtureSympoCV, fig.cap="Cross-validation for the clustering of \\emph{Symphonia} individuals using admixture. Y axis indicates cross-validation mean error, suggesting that K = 2 or K = 3 gene pools represent the best solution for genetic structure in \\emph{Symphonia} in Paracou."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_names = F) %>% 
   dplyr::select(X3, X4) %>% 
@@ -198,7 +258,7 @@ read_delim(file.path(path, "admixture", "paracou", "CV.out"), delim = " ", col_n
 
 \newpage
 
-```{r admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10."}
+```{r admixtureSympo, fig.cap="Population structure of \\emph{Symphonia} individuals from K=2 to K=10 using admixture."}
 fam <- read_tsv(file.path(path, "..", "variantCalling", "paracou",
                           "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.fam"),
          col_names = c("FID", "IID", "FIID", "MIID", "sex", "phenotype")) %>% 
@@ -215,7 +275,7 @@ gridExtra::grid.arrange(p$plot[[1]])
 
 \newpage
 
-```{r introgress, fig.cap="Population structure with hybrid index (black line and white interval confidence) and admixture coefficient (vertical bars)."}
+```{r introgress, fig.cap="Genotypinc constitution of \\emph{Symphonia} using hybrid index. Admixture coefficients (black line) are given with 90% confidence interval (light shade). Admixture coefficients of 10 and 90% are indicated by white stippled lines."}
 load(file = file.path("../symcapture/symcapture_save/introgress.Rdata"))
 hi.index %>% 
   mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
@@ -247,7 +307,7 @@ hi.index %>%
 
 \newpage
 
-```{r bayescanOutliers, fig.cap="Species-specific SNPs for \\emph{Symphonia} individuals detected with bayescan."}
+```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon)."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
   mutate(snpNb = as.numeric(row.names(.))) %>% 
@@ -270,25 +330,144 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
 
 \newpage
 
-```{r kmeansConfusion}
-path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
-individuals <-read_tsv("figures/Parvicapture - Extraction.tsv") %>% 
-  dplyr::select(IdGenetic, Genus, Species, Plot, SubPlot, TreeFieldNum) %>% 
-  unique() %>% 
-  na.omit()
-read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>% 
-    mutate(cluster = recode(cluster, "3" =  "E. decolorans cluster", 
-                          "2" = "E. sagotiana cluster",
-                          "1" = "E. coriacea cluster")) %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F, convert = T) %>% 
-  dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
-  left_join(individuals) %>% 
-  filter(Species %in% c("coriacea", "decolorans", "sagotiana")) %>%
-  reshape2::dcast(Species ~ cluster) %>% 
-  mutate_if(is.numeric, funs(round(./sum(.)*100))) %>% 
-  mutate(Species = paste0("E. ", Species)) %>% 
-  kable(caption = "Confusion matrix (percentage) between genetic cluster and botanical identification for \\emph{Eschweilera} clade \\emph{Parvifolia}.",
-        format = "pandoc")
+```{r conhetero, fig.cap="The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera  clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio."}
+congeners <- read_tsv("../../distributions/distribution_save/congenerics.tsv") 
+sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+         col_names = c("Library", "GeneticSpecies"), delim = " ") %>% 
+  mutate(Genus = "Symphonia") %>% 
+  separate(Library, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
+  mutate(GeneticSpecies = recode(GeneticSpecies,
+                                 "sp1" = "sp.1",
+                                 "globuliferaTypeParacou" = "sp.2",
+                                 "globuliferaTypeRegina" = "sp.3"))
+paracou <- src_sqlite("../../../data/Paracou/trees/Paracou.sqlite") %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia", CensusYear == 2015) %>% 
+  select(Plot, SubPlot, TreeFieldNum, idTree) %>% 
+  collect()
+left_join(congeners,
+          left_join(sympho, paracou) %>% 
+            select(idTree, Genus, GeneticSpecies)) %>% 
+  mutate(Species = ifelse(!is.na(GeneticSpecies), GeneticSpecies, Species)) %>% 
+  select(-GeneticSpecies) %>% 
+  filter(Species != "globulifera") %>% 
+  mutate(Species = recode(Species, "grandiflora_form2" = "grandiflora")) %>% 
+  group_by(Genus, Species) %>% 
+  summarise(sdgen = sd(congenerics), congenerics = mean(congenerics), 
+            sdsp = sd(conspecifics), conspecifics = mean(conspecifics)) %>% 
+  ggplot(aes(conspecifics, congenerics, 
+             col = paste(paste0(substr(Genus, 1, 1), "."), Species))) + 
+  geom_abline(col = "lightgrey") +
+  geom_point(size = 3) +
+  geom_segment(aes(x = conspecifics - sdsp, xend = conspecifics + sdsp,
+                   y = congenerics, yend = congenerics), alpha = 0.5) +
+  geom_segment(aes(x = conspecifics, xend = conspecifics, 
+                   y = congenerics - sdgen, yend = congenerics + sdgen),
+               alpha = 0.5) +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Number of conspecifics within 25 meter radius") +
+  ylab("Number of congenerics \n (non-conspecifics) within 25 meter radius") +
+  guides(colour = guide_legend(nrow = 3))
 ```
 
-<!-- # References -->
+\newpage
+
+```{r blindIdentification, include=T}
+data.frame(
+  Species = c("S. sp.1", "S. sp.2", "S. sp.3"),
+  Sp1 = c(28, 0, 0),
+  Sp2 = c(6, 11, 0),
+  Sp3 = c(0, 0, 21)
+) %>% 
+  kable(caption = "Confusion matrix (count) between genetic species and second blind-identification of individual morphotypes for \\emph{Symphonia}.",
+        format = "pandoc", col.names = c("Species", "S .sp.1 morphotype", "S .sp.2 morphotype", "S .sp.3 morphotype"))
+```
+
+\newpage
+
+```{r gnomFrac, fig.cap="Distribution of derived or minor allele among species from *Symphonia* and *Eschweilera* clade *Parvifolia*. For *Symphonia*, count and percentage represent the number of derived alleles within and among american species compared to the african reference from @Olsson2017. For *Eschweilera*, count and percentage represent the number of minor alleles within and among species because of the de novo reference.", fig.height=10, fig.width=10}
+# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --thin-count 1000 --recode A-transpose --out paracou
+# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --recode A-transpose --out paracou
+# pop.sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+#                    col_names = c("library", "species"), delim = " ") %>% 
+#   mutate(species = recode(species,
+#                                  "sp1" = "sp.1",
+#                                  "globuliferaTypeParacou" = "sp.2",
+#                                  "globuliferaTypeRegina" = "sp.3"))
+# snps.sympho <- vroom::vroom("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/paracou.traw") %>% 
+#   rename(snp = SNP) %>% 
+#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>% 
+#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>% 
+#   mutate(library = gsub("0_", "", library)) %>% 
+#   left_join(pop.sympho) %>% 
+#   filter(!is.na(species)) %>% 
+#   group_by(snp, species) %>% 
+#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>% 
+#   filter(alt)
+# vroom::vroom_write(snps.sympho, "save/snps.sympho.tsv")
+# pop.parvi <- read_tsv("../../../data/Eschweilera_Paracou/Sequences/variants/final/filtered.kmeans") %>% 
+#     mutate(cluster = recode(cluster, "3" =  "E. decolorans", 
+#                           "2" = "E. sagotiana",
+#                           "1" = "E. coriacea")) %>% 
+#   rename(library = Sample, species = cluster)
+# snps.parvi <- vroom::vroom("../../../data/Eschweilera_Paracou/Sequences/variants/final/paracou.traw") %>% 
+#   rename(snp = SNP) %>%
+#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>%
+#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>%
+#   mutate(library = gsub("0_", "", library)) %>%
+#   left_join(pop.parvi) %>%
+#   filter(!is.na(species)) %>%
+#   group_by(snp, species) %>%
+#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>%
+#   filter(alt)
+# vroom::vroom_write(snps.parvi, "save/snps.parvi.tsv")
+snps.sympho <- vroom::vroom("save/snps.sympho.tsv")
+snps.parvi <- vroom::vroom("save/snps.parvi.tsv")
+snps.list <- list(
+  Symphonia = list("S. sp.1" = filter(snps.sympho, species == "sp.1")$snp,
+                  "S. sp.2" = filter(snps.sympho, species == "sp.2")$snp,
+                  "S. sp.3" = filter(snps.sympho, species == "sp.3")$snp),
+  Eschweilera = list("E. decolorans" = filter(snps.parvi, species == "E. decolorans")$snp,
+                  "E. sagotiana" = filter(snps.parvi, species == "E. sagotiana")$snp,
+                  "E. coriacea" = filter(snps.parvi, species == "E. coriacea")$snp)
+)
+cowplot::plot_grid(ggvenn::ggvenn(snps.list$Symphonia,
+                                  fill_color = c("#CD2626", "#1E90FF", "#0000EE"),
+                                  text_size = 3, set_name_size = 5, 
+                                  stroke_size	= 0.5, stroke_color = "lightgrey"), 
+                   ggvenn::ggvenn(snps.list$Eschweilera, 
+                                  fill_color = c("#1b9e77", "#d95f02", "#7570b3"),
+                                  text_size = 3, set_name_size = 5,
+                                  stroke_size	= 0.5, stroke_color = "lightgrey"))
+```
+
+```{r, eval=FALSE}
+# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --geno 0 --recode A-transpose --out paracou.filtered
+# pop.sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+#                    col_names = c("library", "species"), delim = " ") %>%
+#   mutate(species = recode(species,
+#                                  "sp1" = "sp.1",
+#                                  "globuliferaTypeParacou" = "sp.2",
+#                                  "globuliferaTypeRegina" = "sp.3"))
+# snps.sympho <- vroom::vroom("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/paracou.filtered.traw") %>%
+#   rename(snp = SNP) %>%
+#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>%
+#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>%
+#   mutate(library = gsub("0_", "", library)) %>%
+#   left_join(pop.sympho) %>%
+#   filter(!is.na(species)) %>%
+#   group_by(snp, species) %>%
+#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>%
+#   filter(alt)
+# vroom::vroom_write(snps.sympho, "save/snps.sympho.filtered.tsv")
+snps.sympho <- vroom::vroom("save/snps.sympho.filtered.tsv")
+snps.list <- list("S. sp.1" = filter(snps.sympho, species == "sp.1")$snp,
+                  "S. sp.2" = filter(snps.sympho, species == "sp.2")$snp,
+                  "S. sp.3" = filter(snps.sympho, species == "sp.3")$snp)
+ggvenn::ggvenn(snps.list,
+               fill_color = c("#CD2626", "#1E90FF", "#0000EE"),
+               text_size = 3, set_name_size = 5, 
+               stroke_size	= 0.5, stroke_color = "lightgrey")
+```

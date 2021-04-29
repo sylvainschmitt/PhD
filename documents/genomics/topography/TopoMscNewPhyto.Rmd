@@ -619,6 +619,8 @@ cowplot::plot_grid(
   ggsave("figures/Figure_3.tiff", device = "tiff", dpi = 600, width = 6, height = 3)
 ```
 
+
+
 ```{r parvispecies, fig.cap="Principal component analysis (PCA) of single nucleotide polymorphisms (SNP) from *Eschweilera* clade *Parvifolia.* The colours represent the clusters detected with Kmeans for the best K, K = 3.", fig.height=5, fig.width=5}
 vars <- read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenval"), 
                delim = " ", col_names = "var")
@@ -739,14 +741,14 @@ densities <- trees@data %>%
 g.white <- qplot(1:10, 1:10, geom="blank") +
   theme(axis.title = element_blank(), axis.line = element_blank(), 
         axis.ticks = element_blank(), axis.text = element_blank())
-cowplot::plot_grid(densities$g[[1]], 
-                   bars$g[[2]], 
-                   densities$g[[2]], 
-                   bars$g[[1]],
-                   densities$g[[3]], 
+cowplot::plot_grid(densities$g[[3]], 
                    bars$g[[4]], 
                    densities$g[[4]], 
                    bars$g[[3]],
+                   densities$g[[1]], 
+                   bars$g[[2]], 
+                   densities$g[[2]], 
+                   bars$g[[1]],
                    g.white,
                    gl.legend,
                    g.white,

@@ -34,6 +34,7 @@ trees <- src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>%
   unique()
 ```
 
+
 ```{r envApo}
 # env <- trees %>%
 #   dplyr::select(idTree, Xutm, Yutm) %>%
@@ -66,6 +67,19 @@ Complexes <- bind_rows(
   data.frame(Complex = "Tabernaemontana", Genus = "Tabernaemontana",
              Species = c("attenuata", "undulata"))) %>% 
   mutate_all(as.character)
+```
+
+```{r treesApo2017, eval=F}
+trees <- NA
+src_sqlite(file.path(path, "trees", "Paracou.sqlite")) %>% 
+  tbl("Paracou") %>% 
+  filter(CodeAlive == 1, CensusYear == 2017, Family == "Apocynaceae") %>% 
+  collect() %>% 
+  filter(Genus %in% Complexes$Genus, Species %in% Complexes$Species) %>% 
+  group_by(Genus, Plot, Species) %>% 
+  summarise(N = n()) %>% 
+  group_by(Plot) %>% 
+  summarise(N = n())
 ```
 
 ```{r dataApo}

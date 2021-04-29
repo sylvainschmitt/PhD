@@ -1,0 +1,95 @@
+---
+title: SRA submission
+author: Sylvain Schmitt
+date: '`r Sys.Date()`'
+output:
+  bookdown::html_document2:
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+               cache = F, cache.lazy = F)
+```
+
+# Biosamples
+
+```{r SRA1}
+reads <- read_tsv("filtered_reads.tsv", col_names = "library")
+ids <- read_tsv("Parvicapture - Extraction.tsv") %>% 
+  select(IdGenetic, Plot, SubPlot, TreeFieldNum)
+inds <- read_tsv("Measures_Eschweilera - Individuals.tsv")
+paracou <- src_sqlite(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                                        "trees", "Paracou.sqlite")) %>% 
+                     tbl("Paracou") %>% 
+                     filter(CensusYear == 2015) %>% 
+                     collect()
+reads %>% 
+  separate(library, paste0("X", 1:11)) %>% 
+  rename(IdGenetic = X4) %>% 
+  select(IdGenetic) %>% 
+  unique() %>% 
+  left_join(ids) %>% 
+  unique() %>% 
+  left_join(inds) %>% 
+  left_join(paracou) %>% 
+  mutate(Time = gsub("H", ":", Time)) %>% 
+  mutate(Date = gsub("/", "-", Date)) %>% 
+  mutate(
+    sample_name = paste0(IdGenetic,"_P", Plot, "-", SubPlot, "-", TreeFieldNum),
+    organism = paste(Genus, Species),
+    ecotype = "Paracou",
+    dev_stage = "adult",
+    geo_loc_name = "French Guiana: Paracou",
+    lat_lon = paste0(Lat, " N ", -Lon, " W"),
+    tissue = "leaves",
+    collectedby = "Sylvain Schmitt",
+    collection_date = paste0(Date, "T", Time),
+    diameter = CircCorr/pi,
+    description = paste0("Dawkins:", Dawkins, ", ", Comment)
+  ) %>% 
+  select(sample_name, organism, ecotype, dev_stage, geo_loc_name, lat_lon, tissue, collectedby, collection_date, diameter, description) %>% 
+  write_tsv("SRA1.tsv")
+```
+
+# Biosamples
+
+```{r SRA1}
+reads <- read_tsv("filtered_reads.tsv", col_names = "filename")
+ids <- read_tsv("Parvicapture - Extraction.tsv") %>% 
+  select(IdGenetic, Plot, SubPlot, TreeFieldNum)
+reads %>% 
+  separate(filename, paste0("X", 1:11), remove = F) %>% 
+  rename(IdGenetic = X4) %>% 
+  mutate(library_ID = gsub("_R[1-9]_001.fastq.gz", "", filename)) %>% 
+  select(IdGenetic, library_ID, filename) %>% 
+  group_by(library_ID) %>% 
+  mutate(file = paste0("filename", 1:n())) %>% 
+  reshape2::dcast(IdGenetic + library_ID ~ file, value.var = "filename") %>% 
+  rename(filename = filename1) %>% 
+  left_join(ids) %>% 
+  mutate(sample_name = paste0(IdGenetic,"_P", Plot, "-", SubPlot, "-", TreeFieldNum)) %>% 
+  mutate(
+    title = paste("Targeted capture of Eschweilera: ", sample_name), 
+    library_strategy = "Targeted-Capture", 
+    library_source = "GENOMIC", 
+    library_selection = "Hybrid Selection", 
+    library_layout = "paired", 
+    platform = "ILLUMINA", 
+    instrument_model = "Illumina HiSeq 4000", 
+    design_description = "We designed in silico 20,000 80-mer probes for sequence capture on Eschweilera sagotiana and Eschweilera coriacea. The genetic resources used for the design consisted of two  transcriptomes, and reduced-representation genomic sequence reads. We prepared and pooled libraries for each individual including a few replicates, captured sequences by hybridization with probes, and sequenced them in two lanes of an Illumina HiSeq 4000 instrument, following standard protocols",  
+    filetype = "fastq"
+  ) %>% 
+  select(sample_name, library_ID, title, library_strategy, library_source, library_selection, library_layout, platform, 
+         instrument_model, design_description, filetype, filename, filename2) %>% 
+  unique() %>% 
+  write_tsv("SRA2.tsv")
+```
+

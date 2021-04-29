@@ -1,6 +1,14 @@
 ---
 title: Topography and forest gaps dynamics jointly control adaptation and populations structure in a tropical tree species, insights from a virtual experiment 
 output:
+  bookdown::pdf_document2:
+    includes:
+      before_body: ./template/doc_prefix.tex
+      in_header: ./template/preamble.tex
+    number_sections: false
+    toc: false
+  bookdown::word_document2: 
+    number_sections: false
   bookdown::html_document2:
     number_sections: false
     toc: true
@@ -8,14 +16,6 @@ output:
     include:
       in_header: ../html/hypothesis.html
       before_body: ../html/open_review_block.html
-  bookdown::word_document2: 
-    number_sections: false
-  bookdown::pdf_document2:
-    includes:
-      before_body: ./template/doc_prefix.tex
-      in_header: ./template/preamble.tex
-    number_sections: false
-    toc: false
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/oikos.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -496,6 +496,40 @@ ggplot(data=Inter.HandPick1, aes(x = Htopo, y = fit, group = Hnci))+
   scale_colour_gradient2(expression(h[NCI]^2), midpoint = 0.5,
                         low = scales::muted("blue"),
                         high = scales::muted("red"))
+```
+
+```{r interaction2, fig.cap="Projection of the effects of the heritiability associated with topography ($h^2_{TWI}$), the heritability associated with forest gap dynamics ($h^2_{NCI}$), and their interaction ($h^2_{TWI} \\times h^2_{NCI}$) on local adaptation to topography ($D_G$ for $TWI$). The x-axis shows the variation in the heritiability associated with topography ($h^2_{TWI}$). The colour scale shows the varaition in the heritability associated with forest gap dynamics ($h^2_{NCI}$) from low in blue to high in red. The y-axis shows the projected mean local adaptation to topography ($D_G$ for $TWI$)."}
+sims <- vroom::vroom("../modelling_save/simulations.tsv") %>% 
+  filter(timestep == 60) %>% 
+  dplyr::select(-timestep) %>% 
+  mutate(metric.value = ifelse(metric == "Dg", 1/metric.value, metric.value)) %>% 
+  group_by(parameter) %>%
+  reshape2::dcast(variable + metric + metric.value ~ parameter) %>% 
+  group_by(metric, variable)
+preds <- lapply(list(c("Dg", "topo"),
+            c("Dg", "nci"),
+            c("wss score", "topo"),
+            c("wss score", "nci")),
+  function(p){
+  fit  <- lm(log(metric.value) ~ Htopo + Hnci + Ns + Rdispersion +
+               Htopo:Hnci + Htopo:Ns + Htopo:Rdispersion + 
+               Hnci:Ns + Hnci:Rdispersion + Ns:Rdispersion, 
+             data = filter(sims, metric == p[1], variable == p[2])  )
+  effects::effect('Htopo*Hnci', fit,
+                  xlevels=list(Htopo = seq(0, 1, 0.01),
+                               Hnci = seq(0, 1, 0.01))) %>% 
+    as.data.frame() %>% 
+    mutate(metric = p[1], variable = p[2])
+}) %>% bind_rows() %>% 
+  mutate(variable = recode(variable, "nci" = "NCI", "topo" = "TWI")) %>% 
+  mutate(metric = recode(metric, "Dg" = "log(D[G])", 
+                         "wss score" = "log(WSS[score])"))
+ggplot(data = preds, aes(x = Htopo, y = Hnci)) +
+  metR::geom_contour_fill(aes(z = fit), bins = 25) +
+  xlab(expression(h[TWI]^2)) +
+  ylab(expression(h[NCI]^2)) +
+  viridis::scale_fill_viridis(expression(log(metric)),  option = "magma", discrete = F) +
+  facet_grid(metric ~ variable, labeller = "label_parsed")
 ```
 
 # Discussion
