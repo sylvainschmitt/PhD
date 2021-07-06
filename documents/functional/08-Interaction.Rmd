@@ -381,6 +381,18 @@ preds %>%
   xlab(expression(TWI["i|s"]))  
 ```
 
+```{r ,eval=F}
+preds %>% 
+  filter(Trait == "CC") %>% 
+  # filter(Complex == "Symphonia") %>% 
+  filter(Species == "sagotiana") %>%
+  ggplot(aes(TWIis, group = Species)) +
+  geom_point(aes(y = Y), alpha = 0.2) +
+  geom_ribbon(aes(ymin = Ytwiis5, ymax = Ytwiis95), alpha = 0.2) +
+  geom_line(aes(y = Ytwiis)) +
+  xlab(expression(TWI["i|s"]))
+```
+
 ### Spatial auto-correlation
 
 ```{r residuals}

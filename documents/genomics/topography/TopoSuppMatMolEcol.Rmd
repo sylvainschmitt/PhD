@@ -131,7 +131,7 @@ read_tsv(file.path(path, "..", "variants", "final", "filtered.kmeans")) %>%
 
 \newpage
 
-```{r symcapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Symphonia globulifera} as described in the manuscript.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
+```{r symcapture, fig.cap="Scheme of target selection for the capture experiment of \\emph{Symphonia globulifera} as described in the manuscript. scf refers to genomics scaffolds.", out.width="\\linewidth", fig.align="center", fig.pos="H"}
 include_graphics("figures/Symcapture.png")
 ```
 
@@ -280,17 +280,18 @@ load(file = file.path("../symcapture/symcapture_save/introgress.Rdata"))
 hi.index %>% 
   mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
   mutate(pair = recode(pair, 
-                       sp = "S. sp1 - S. globulifera type Paracou", 
-                       sr = "S. sp1 - S. globulifera type Regina",
-                       pr = "S. globulifera type Paracou - S. globulifera type Regina")) %>% 
+                       sp = "S. sp1 - S. sp2", 
+                       sr = "S. sp1 - S. sp3",
+                       pr = "S. sp2 - S. sp3")) %>% 
   left_join(symcapture.admix[[3]] %>% 
               rownames_to_column(var = "Ind") %>%
               reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
               mutate(genepool = recode(genepool, Cluster1 = "S. sp1", 
-                                       Cluster2 = "S. globulifera type Paracou", 
-                                       Cluster3 = "S. globulifera type Regina"))) %>%
+                                       Cluster2 = "S. sp2", 
+                                       Cluster3 = "S. sp3"))) %>%
+  mutate(pair = factor(pair, level = c("S. sp2 - S. sp3", "S. sp1 - S. sp2", "S. sp1 - S. sp3"))) %>% 
   arrange(pair, desc(h)) %>%
-  mutate(order = 1:nrow(.)) %>% 
+  mutate(order = 1:nrow(.)) %>%
   ggplot(aes(reorder(Ind, order), group = NA)) +
   geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +
   geom_hline(yintercept = c(0.1, 0.9), linetype = "dashed", col = "white") +
@@ -307,7 +308,7 @@ hi.index %>%
 
 \newpage
 
-```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon)."}
+```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) genic SNPs (within an exon), and (iii) putatively-hitchhiker SNPs (close to a transcript or within an intron). The red dashed line represent outlier SNPs with a q-value below 0.05."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
   mutate(snpNb = as.numeric(row.names(.))) %>% 
@@ -315,9 +316,9 @@ bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) 
   mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
   left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
   mutate(snpNb = 1:nrow(.))) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp") %>% 
+  mutate(type = recode(type, "neutral" = "anonymous", "hitchhiker" = "putatively-htichiker", "functional" = "genic"))
 ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
-  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
   ylab(expression(-log[10]("q-value"))) +
@@ -325,51 +326,8 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   ggtitle("4 020 significant SNPs (5.7%)", 
-          "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
-```
-
-\newpage
-
-```{r conhetero, fig.cap="The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera  clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio."}
-congeners <- read_tsv("../../distributions/distribution_save/congenerics.tsv") 
-sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
-         col_names = c("Library", "GeneticSpecies"), delim = " ") %>% 
-  mutate(Genus = "Symphonia") %>% 
-  separate(Library, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
-  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
-  mutate(GeneticSpecies = recode(GeneticSpecies,
-                                 "sp1" = "sp.1",
-                                 "globuliferaTypeParacou" = "sp.2",
-                                 "globuliferaTypeRegina" = "sp.3"))
-paracou <- src_sqlite("../../../data/Paracou/trees/Paracou.sqlite") %>% 
-  tbl("Paracou") %>% 
-  filter(Genus == "Symphonia", CensusYear == 2015) %>% 
-  select(Plot, SubPlot, TreeFieldNum, idTree) %>% 
-  collect()
-left_join(congeners,
-          left_join(sympho, paracou) %>% 
-            select(idTree, Genus, GeneticSpecies)) %>% 
-  mutate(Species = ifelse(!is.na(GeneticSpecies), GeneticSpecies, Species)) %>% 
-  select(-GeneticSpecies) %>% 
-  filter(Species != "globulifera") %>% 
-  mutate(Species = recode(Species, "grandiflora_form2" = "grandiflora")) %>% 
-  group_by(Genus, Species) %>% 
-  summarise(sdgen = sd(congenerics), congenerics = mean(congenerics), 
-            sdsp = sd(conspecifics), conspecifics = mean(conspecifics)) %>% 
-  ggplot(aes(conspecifics, congenerics, 
-             col = paste(paste0(substr(Genus, 1, 1), "."), Species))) + 
-  geom_abline(col = "lightgrey") +
-  geom_point(size = 3) +
-  geom_segment(aes(x = conspecifics - sdsp, xend = conspecifics + sdsp,
-                   y = congenerics, yend = congenerics), alpha = 0.5) +
-  geom_segment(aes(x = conspecifics, xend = conspecifics, 
-                   y = congenerics - sdgen, yend = congenerics + sdgen),
-               alpha = 0.5) +
-  scale_color_discrete("") +
-  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
-  xlab("Number of conspecifics within 25 meter radius") +
-  ylab("Number of congenerics \n (non-conspecifics) within 25 meter radius") +
-  guides(colour = guide_legend(nrow = 3))
+          "1255 anonymous (5.4%), 309 genic (2.5%), and 2456 putatively-hitchhiker (7.0%)") +
+  theme(legend.position = "bottom")
 ```
 
 \newpage
@@ -443,31 +401,46 @@ cowplot::plot_grid(ggvenn::ggvenn(snps.list$Symphonia,
                                   stroke_size	= 0.5, stroke_color = "lightgrey"))
 ```
 
-```{r, eval=FALSE}
-# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --geno 0 --recode A-transpose --out paracou.filtered
-# pop.sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
-#                    col_names = c("library", "species"), delim = " ") %>%
-#   mutate(species = recode(species,
-#                                  "sp1" = "sp.1",
-#                                  "globuliferaTypeParacou" = "sp.2",
-#                                  "globuliferaTypeRegina" = "sp.3"))
-# snps.sympho <- vroom::vroom("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/paracou.filtered.traw") %>%
-#   rename(snp = SNP) %>%
-#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>%
-#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>%
-#   mutate(library = gsub("0_", "", library)) %>%
-#   left_join(pop.sympho) %>%
-#   filter(!is.na(species)) %>%
-#   group_by(snp, species) %>%
-#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>%
-#   filter(alt)
-# vroom::vroom_write(snps.sympho, "save/snps.sympho.filtered.tsv")
-snps.sympho <- vroom::vroom("save/snps.sympho.filtered.tsv")
-snps.list <- list("S. sp.1" = filter(snps.sympho, species == "sp.1")$snp,
-                  "S. sp.2" = filter(snps.sympho, species == "sp.2")$snp,
-                  "S. sp.3" = filter(snps.sympho, species == "sp.3")$snp)
-ggvenn::ggvenn(snps.list,
-               fill_color = c("#CD2626", "#1E90FF", "#0000EE"),
-               text_size = 3, set_name_size = 5, 
-               stroke_size	= 0.5, stroke_color = "lightgrey")
+\newpage
+
+```{r conhetero, fig.cap="The relationship between the numbers of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from *Symphonia* and Eschweilera clade *Parvifolia*. Each point represents the mean values for all individuals in Paracou, and thin lines show the standard deviation. The solid line illustrates a 1:1 ratio."}
+congeners <- read_tsv("../../distributions/distribution_save/congenerics.tsv") 
+sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
+         col_names = c("Library", "GeneticSpecies"), delim = " ") %>% 
+  mutate(Genus = "Symphonia") %>% 
+  separate(Library, c("Plot", "SubPlot", "TreeFieldNum"), convert = T) %>% 
+  mutate(Plot = as.numeric(gsub("P", "", Plot))) %>% 
+  mutate(GeneticSpecies = recode(GeneticSpecies,
+                                 "sp1" = "sp.1",
+                                 "globuliferaTypeParacou" = "sp.2",
+                                 "globuliferaTypeRegina" = "sp.3"))
+paracou <- src_sqlite("../../../data/Paracou/trees/Paracou.sqlite") %>% 
+  tbl("Paracou") %>% 
+  filter(Genus == "Symphonia", CensusYear == 2015) %>% 
+  select(Plot, SubPlot, TreeFieldNum, idTree) %>% 
+  collect()
+left_join(congeners,
+          left_join(sympho, paracou) %>% 
+            select(idTree, Genus, GeneticSpecies)) %>% 
+  mutate(Species = ifelse(!is.na(GeneticSpecies), GeneticSpecies, Species)) %>% 
+  select(-GeneticSpecies) %>% 
+  filter(Species != "globulifera") %>% 
+  mutate(Species = recode(Species, "grandiflora_form2" = "grandiflora")) %>% 
+  group_by(Genus, Species) %>% 
+  summarise(sdgen = sd(congenerics), congenerics = mean(congenerics), 
+            sdsp = sd(conspecifics), conspecifics = mean(conspecifics)) %>% 
+  ggplot(aes(conspecifics, congenerics, 
+             col = paste(paste0(substr(Genus, 1, 1), "."), Species))) + 
+  geom_abline(col = "lightgrey") +
+  geom_point(size = 3) +
+  geom_segment(aes(x = conspecifics - sdsp, xend = conspecifics + sdsp,
+                   y = congenerics, yend = congenerics), alpha = 0.5) +
+  geom_segment(aes(x = conspecifics, xend = conspecifics, 
+                   y = congenerics - sdgen, yend = congenerics + sdgen),
+               alpha = 0.5) +
+  scale_color_discrete("") +
+  theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
+  xlab("Number of conspecifics within 25 meter radius") +
+  ylab("Number of congenerics \n (non-conspecifics) within 25 meter radius") +
+  guides(colour = guide_legend(nrow = 3))
 ```

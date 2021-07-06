@@ -76,13 +76,35 @@ write_tsv(data, path = "thickness_save/data.tsv")
 ```
 
 ```{r, eval=F}
+path <- "../../../data/Paracou/weather/"
 read_csv(file.path(path, "REW_1978-2017_Fabien.csv")) %>% 
   filter(year == 2017) %>% 
   group_by(month) %>% 
   summarise(precipitation = sum(precipitation)) %>% 
   mutate(dry = as.numeric(precipitation < 100)) %>% 
+  ggplot(aes(as.factor(month), precipitation, fill = as.factor(dry))) + geom_col()
   group_by(dry) %>% 
   summarise(precipitation = mean(precipitation))
+```
+
+```{r, eval=F, fig.width=4, fig.height=4}
+path <- "../../../data/Paracou/weather/"
+src_sqlite(file.path(path, "..", "trees", "Paracou.sqlite")) %>%
+  tbl("Paracou") %>%
+  filter(CensusYear == 2017) %>% 
+  filter(Plot == 1) %>% 
+  select(Genus, Species) %>% 
+  collect() %>% 
+  unique() %>% 
+  group_by(Genus) %>% 
+  summarise(NSpecies = n()) %>% 
+  group_by(NSpecies) %>% 
+  summarise(NGenus = n()) %>% 
+  ggplot(aes(as.integer(NSpecies), NGenus, fill = log(NGenus))) +
+  geom_col() +
+  scale_y_sqrt() +
+  viridis::scale_fill_viridis(option = "inferno", guide = F) +
+  xlab("Number of species per genus") + ylab("Number of genus")
 ```
 
 # Weather data

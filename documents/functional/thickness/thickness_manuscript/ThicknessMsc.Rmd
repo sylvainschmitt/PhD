@@ -148,7 +148,7 @@ broom.mixed::tidyMCMC(fits$LogRxSDSI,
         col.names = c("Parameter", "Estimate", "Standard error")) 
 ```
 
-```{r preds, message=FALSE, fig.cap="Model predictions."}
+```{r preds, fig.cap="Model, message=FALSE}
 data <- read_tsv("../thickness_save/data.tsv") %>% 
   mutate(Species = ifelse(Species == "Indet.",
                           c("globulifera", "sp.1", "sp.1")[fct_recode(Bark, "globulifera" = "G",
@@ -173,12 +173,12 @@ as.data.frame(fitLTLogRxSDSI, pars = "predicted") %>%
   unique() %>% 
   ggplot(aes(x = REW, col = Species)) +
   geom_point(aes(y = LT), data = data, alpha = 0.3) +
-  geom_ribbon(aes(ymin = LTq5, ymax = LTq95, group = Species), fill = "lightgrey", col = NA, alpha = 0.5) +
+  # geom_ribbon(aes(ymin = LTq5, ymax = LTq95, group = Species), fill = "lightgrey", col = NA, alpha = 0.5) +
   geom_line(aes(y = LTm)) +
   scale_color_manual("", values = c("#0000EE", "#CD2626")) +
   theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
-  xlab("Relative extractable water (REW)") +
-  ylab("Leaf thickness (LT, µm)") +
+  xlab("Relative extractable water") +
+  ylab("Leaf thickness (µm)") +
   geom_text(y = 200, label = expression(R^2==0.45), col = "black", data = data.frame(REW = 0.5))
 ```
 

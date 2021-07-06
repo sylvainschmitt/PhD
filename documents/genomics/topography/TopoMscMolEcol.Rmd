@@ -424,6 +424,29 @@ spcol <- c("#1b9e77", "#d95f02", "#7570b3", "#1E90FF", "#0000EE", "#CD2626")
 names(spcol) <- c("E. decolorans", "E. sagotiana", "E. coriacea", "S. globulifera Paracou", "S. globulifera Regina", "S. sp1")
 ```
 
+```{r, eval=F}
+load("../symcapture/symcapture_save/Env.Rdata")
+symphonia <- trees
+load("../parvicapture/parvicapture_save/Env.Rdata")
+eschweilera <- trees
+bind_rows(
+  mutate(symphonia, genus = "Symphonia") %>% 
+    dplyr::select("IID", "Ind", "Xutm", "Yutm", "genus", "pop", "TWI", "RE") %>% 
+    dplyr::rename(species = pop) %>% 
+    mutate(species = gsub("Type", " ", species)) %>% 
+    mutate(species = paste0("S. ", species)),
+  mutate(eschweilera, genus = "Eschweilera") %>% 
+    dplyr::select("IID", "Library", "Xutm", "Yutm", "genus", "cluster", "TWI", "RE") %>% 
+    dplyr::rename(Ind = Library, species = cluster) %>% 
+    mutate(species = recode(species, "3" =  "E. decolorans", 
+                            "2" = "E. sagotiana",
+                            "1" = "E. coriacea")) 
+) %>% 
+  mutate(species = recode(species, "	S. globulifera Paracou" =  "S. sp2",
+                          "	S. globulifera Regina" = "S. sp3") ) %>% 
+  write_tsv("save/environment.tsv")
+```
+
 ```{r maps, fig.cap="Map of sampled individuals for species complexes *Symphonia* and *Eschweilera* clade *Parvifolia*. Colours represent species determined based on the genetic structure of capture datasets, which was not necessarily in agreement with original botanical identification. Grey level represents hill shading to visualize topography.", fig.width=6, fig.height=5}
 load("../symcapture/symcapture_save/Env.Rdata")
 symphonia <- trees
@@ -452,10 +475,14 @@ hills <- projectRaster(hills, crs = crs)
 hills <- as(aggregate(hills, 4), "SpatialPixelsDataFrame")
 hills <- as.data.frame(hills)
 colnames(hills) <- c("hills", "Xutm", "Yutm")
-hills <- lapply(c("Symphonia", "Eschweilera"), function(g) mutate(hills, genus = g)) %>% bind_rows()
+
+limits <- shapefile(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/limits/Plots.shp"))
+limits <- crop(limits, trees)
+
 ggplot(hills, aes(x = Xutm, y = Yutm)) +
   geom_tile(aes(fill = hills),  col = NA, alpha = 0.6, data = ) +
   scale_fill_distiller(guide = "none", palette = "Greys", direction = 1) +
+  geom_polygon(data = fortify(limits), aes(x = long, y = lat, group = id), colour='black', fill=NA) +
   geom_point(data = as.data.frame(trees), aes(col = species)) +
   scale_color_manual("", values = spcol[c(3, 1, 2, 4, 5, 6)]) +
   facet_wrap(~ genus) +
@@ -468,7 +495,8 @@ ggplot(hills, aes(x = Xutm, y = Yutm)) +
   theme(axis.title = element_blank(),
         legend.position = "bottom", legend.text = element_text(face = "italic"),
         strip.background = element_blank(), strip.text.x = element_blank())  +
-  guides( col = guide_legend(nrow = 2, byrow = T))
+  guides( col = guide_legend(nrow = 2, byrow = T)) +
+  ggsave("figures/fig1.png")
 ```
 
 ```{r symphospecies, fig.cap="Admixture plot of *Symphonia* individuals for the best K, K = 3.", fig.width=6, fig.height=3}

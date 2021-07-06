@@ -1,10 +1,10 @@
 ---
 title: Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes
-author: Sylvain Schmitt, Niklas Tysklind, Bruno Hérault, Myriam Heuertz
-date: unknown
+author: Sylvain Schmitt, Niklas Tysklind, Bruno Herault, Myriam Heuertz
+date: '`r Sys.Date()`'
 output:
   bookdown::pdf_document2:
-    template: ./template/templateSuppMatNewPhyto.tex
+    template: ./template/templateSuppMatMolEcol.tex
     number_sections: false
     toc: false
     keep_tex: true
@@ -15,56 +15,20 @@ output:
   bookdown::word_document2:
     reference_docx: ./template/template.docx
 linestretch: 1.5
-csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+csl: /home/sylvain/Documents/Bibliography/csl/molecol.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
 link-citations: yes
 always_allow_html: yes
 ---
 
-**_New Phytologist_ Supporting Information**
+<!-- ** -->
+<!-- Instructions for Authors: -->
 
-Article title: **Topography drives microgeographic adaptations among closely-related species of two tropical tree species complexes**
-
-Authors: Sylvain Schmitt, Niklas Tysklind, Bruno Hérault, Myriam Heuertz
-
-Article acceptance date: unknown
-
-
-The following Supporting Information is available for this article:
-
-**Method S1.** Design of the probes set for *Symphonia*.
-
-**Method S2.** Design of the probes set for *Eschweilera*.
-
-**Model S1.**  Stan code for the animal model
-
-**Tab. S\@ref(tab:kmeansConfusion).** *Eschweilera* botanical species and genetic clusters
-
-**Tab. S\@ref(tab:blindIdentification).** *Symphonia* second blind-identification
-
-**Fig. S\@ref(fig:symcapture).** Target selection for the capture experiment of *Symphonia*
-
-**Fig. S\@ref(fig:parvicapture).** Target selection for the capture experiment of *Eschweilera*
-
-**Fig. S\@ref(fig:libmiss).** SNP abundance per library for *Eschweilera*
-
-**Fig. S\@ref(fig:snpmiss).** Library abundance per SNP for *Eschweilera*
-
-**Fig. S\@ref(fig:outgroup).** Outgroup detection for *Eschweilera*
-
-**Fig. S\@ref(fig:admixtureSympoCV).** Cross-validation for *Symphonia* population structure
-
-**Fig. S\@ref(fig:admixtureSympo).** *Symphonia* population structure using admixture
-
-**Fig. S\@ref(fig:introgress).** *Symphonia* population structure using hybrid index 
-
-**Fig. S\@ref(fig:bayescanOutliers).** Outlier SNPs among *Symphonia* species
-
-**Fig. S\@ref(fig:conhetero).** Number of conspecific and congeneric neighbors
-
-**Fig. S\@ref(fig:gnomFrac).** Distribution of derived or minor allele among species
-
-\newpage
+<!-- 1.	use of this branded Supplemental Information template is recommended, but not mandatory -->
+<!-- 1.	consolidate your Supplemental files into as few documents as possible -->
+<!-- 1.	if your file of Supplemental Information is very large, create a Table of Contents -->
+<!-- 1.	Your Supplemental Information will not be copy-edited.  Do not leave in track-changes and other editing marks.  The document will be posted "as is.” -->
+<!-- 1.	Save as PDF if possible -->
 
 # Method S1: Design of the probes set for *Symphonia*.
 
@@ -179,7 +143,7 @@ include_graphics("figures/Parvicapture.png")
 
 \newpage
 
-```{r libmiss, fig.cap="SNP abundance per library rank for raw data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
+```{r libmiss, fig.cap=" Number of called SNPs per number of libraries ranked by number of called SNPs based on raw data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters. To find out how many missing SNPs and libraries to keep in order to have a maximum of libraries with a minimum of missing SNPs, we looked at the number of SNPs called per ranked libraries and tested different values represented by the dashed lines to examine the resulting population structure.", fig.align="center", fig.pos="H"}
 path <- "../../../data/Eschweilera_Paracou/"
 libmiss <- read_delim(file.path(path, "Sequences", "denovo", "raw", "raw.imiss"), delim = " ") %>% 
   dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
@@ -199,7 +163,7 @@ ggplot(libmiss, aes(libraries, snps)) +
 
 \newpage
 
-```{r snpmiss, fig.cap="Library abundance per SNP rank for library-filtered data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters.", fig.align="center", fig.pos="H"}
+```{r snpmiss, fig.cap="Number of libraries per number of filtered SNPs ranked by number of genotyped libraries for library-filtered data of \\emph{Eschweilera} clade \\emph{Parvifolia}. Dashed lines represent tested filters. To determine the number of missing SNPs and libraries to keep in order to have a maximum number of libraries with a minimum number of missing SNPs, we examined the number of libraries per SNP ranked after SNP filtering. We tested different values represented by the dashed lines to examine the resulting population structure.", fig.align="center", fig.pos="H"}
 path <- "../../../data/Eschweilera_Paracou/"
 names(Nlibs) <- list.files(file.path(path, "Sequences", "variants", "libraries_filtered"))
 snpmiss <- lapply(list.files(file.path(path, "Sequences", "variants", "libraries_filtered")), function(f)
@@ -246,16 +210,19 @@ pcas <- lapply(list.files(file.path(path, "Sequences", "variants", "snps_filtere
              delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
     mutate(filter = f)) %>% 
   bind_rows() %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5)
-group_by(pcas, filter) %>% 
-  filter(sum(PCA1) != 0) %>% 
-  cbind(group_by(pcas, filter) %>% 
+t <- group_by(pcas, filter) %>% 
           filter(sum(PCA1) != 0) %>% 
           dplyr::select(., PCA1, PCA2) %>% 
-          do(hc = cutree(hclust(dist(as.matrix(.))), k = 2)) %>% 
-          broom::tidy(hc)) %>% 
-  dplyr::rename(cluster = x) %>% 
+          do(hc = cutree(hclust(dist(as.matrix(.))), k = 2) %>% 
+          broom::tidy()) %>% 
+            unnest(hc) %>% 
+          ungroup()
+group_by(pcas, filter) %>% 
+  filter(sum(PCA1) != 0) %>% 
+  ungroup() %>% 
+  mutate(cluster = t$x) %>% 
   group_by(filter, cluster) %>% 
   mutate(N = n()) %>%
   group_by(filter) %>% 
@@ -308,22 +275,23 @@ gridExtra::grid.arrange(p$plot[[1]])
 
 \newpage
 
-```{r introgress, fig.cap="Genotypinc constitution of \\emph{Symphonia} using hybrid index. Admixture coefficients (black line) are given with 90% confidence interval (light shade). Admixture coefficients of 10 and 90% are indicated by white stippled lines."}
+```{r introgress, fig.cap="Genotypic constitution of \\emph{Symphonia} using hybrid index. Admixture coefficients (black line) are given with 90% confidence interval (light shade). Admixture coefficients of 10 and 90% are indicated by white stippled lines."}
 load(file = file.path("../symcapture/symcapture_save/introgress.Rdata"))
 hi.index %>% 
   mutate_at(c("h", "lower", "upper"), ~ifelse(pair == "pr", 1-., .)) %>% 
   mutate(pair = recode(pair, 
-                       sp = "S. sp1 - S. globulifera type Paracou", 
-                       sr = "S. sp1 - S. globulifera type Regina",
-                       pr = "S. globulifera type Paracou - S. globulifera type Regina")) %>% 
+                       sp = "S. sp1 - S. sp2", 
+                       sr = "S. sp1 - S. sp3",
+                       pr = "S. sp2 - S. sp3")) %>% 
   left_join(symcapture.admix[[3]] %>% 
               rownames_to_column(var = "Ind") %>%
               reshape2::melt(id.vars = "Ind", variable.name = "genepool") %>%
               mutate(genepool = recode(genepool, Cluster1 = "S. sp1", 
-                                       Cluster2 = "S. globulifera type Paracou", 
-                                       Cluster3 = "S. globulifera type Regina"))) %>%
+                                       Cluster2 = "S. sp2", 
+                                       Cluster3 = "S. sp3"))) %>%
+  mutate(pair = factor(pair, level = c("S. sp2 - S. sp3", "S. sp1 - S. sp2", "S. sp1 - S. sp3"))) %>% 
   arrange(pair, desc(h)) %>%
-  mutate(order = 1:nrow(.)) %>% 
+  mutate(order = 1:nrow(.)) %>%
   ggplot(aes(reorder(Ind, order), group = NA)) +
   geom_col(aes(y = value, fill = genepool, col = genepool), position = position_stack(reverse = TRUE)) +
   geom_hline(yintercept = c(0.1, 0.9), linetype = "dashed", col = "white") +
@@ -340,7 +308,7 @@ hi.index %>%
 
 \newpage
 
-```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) putatively-hitchhiker SNPs (close to a transcript or within an intron), and (iii) genic SNPs (within an exon)."}
+```{r bayescanOutliers, fig.cap="High-differentiation outlier SNPs for \\emph{Symphonia} individuals detected with bayescan. We used the genome-transcriptome alignments built for the design of probes sets (Method S1) to classify called SNPs into (i) anonymous SNPs (on scaffolds matching no transcripts), (ii) genic SNPs (within an exon), and (iii) putatively-hitchhiker SNPs (close to a transcript or within an intron). The red dashed line represent outlier SNPs with a q-value below 0.05."}
 path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
 bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) %>% 
   mutate(snpNb = as.numeric(row.names(.))) %>% 
@@ -348,9 +316,9 @@ bayescan <- read.table(file.path(path, "bayescan", "paracou3pop.baye_fst.txt")) 
   mutate(qval = ifelse(qval <= 0.0001, 0.0001, qval)) %>% 
   left_join(read_tsv(file.path(path, "bayescan", "paracou3pop.bim"), col_names = c("scf", "snp", "posM", "pos", "A1", "A2")) %>% 
   mutate(snpNb = 1:nrow(.))) %>% 
-  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp")
+  left_join(read_tsv(file.path(path, "..", "annotation", "snps.annotation")), by = "snp") %>% 
+  mutate(type = recode(type, "neutral" = "anonymous", "hitchhiker" = "putatively-htichiker", "functional" = "genic"))
 ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
-  geom_hline(yintercept = 2, linetype = "dashed", col = "red") +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed", col = "red") +
   geom_point() +
   ylab(expression(-log[10]("q-value"))) +
@@ -358,7 +326,8 @@ ggplot(bayescan, aes(snpNb, -log10(qval), alpha = qval < 0.05, col = type)) +
   scale_alpha_discrete(guide = "none") +
   scale_y_sqrt() +
   ggtitle("4 020 significant SNPs (5.7%)", 
-          "309 functional (2.5%), 2456 hitchhiker (7.0%), and 1255 neutral (5.4%)")
+          "1255 anonymous (5.4%), 309 genic (2.5%), and 2456 putatively-hitchhiker (7.0%)") +
+  theme(legend.position = "bottom")
 ```
 
 \newpage
@@ -432,10 +401,60 @@ cowplot::plot_grid(ggvenn::ggvenn(snps.list$Symphonia,
                                   stroke_size	= 0.5, stroke_color = "lightgrey"))
 ```
 
+\newpage
+
+```{r fst, fig.cap="Pairwise Fst values among each species pairs in each species complex."}
+path <- "~/Documents/BIOGECO/PhD/data/Symphonia_Paracou/Sequences/populationGenomics/"
+symphonia <- lapply(list.files(file.path(path, "..", "populationGenomics", "diversity"), pattern = ".log"), function(file)
+  read_delim(file.path(path, "..", "populationGenomics", "diversity", file), skip = 15, delim = ":",
+  col_names = c("variable", "value")) %>% 
+    mutate(file = file)) %>% 
+  bind_rows() %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = as.numeric(value)) %>% 
+  mutate(variable = ifelse(grepl("mean", variable), "meanFst", "weightedFst")) %>% 
+  filter(variable == "weightedFst") %>% 
+  separate(file, c("type", "Pop1", "Pop2", "log")) %>% 
+  filter(type == "neutral") %>% 
+  dplyr::select(-log) %>% 
+   mutate(Pop1 = recode(Pop1,  "globuliferaTypeParacou" = "sp2", "globuliferaTypeRegina" = "sp3"), 
+         Pop2 = recode(Pop2,  "globuliferaTypeParacou" = "sp2", "globuliferaTypeRegina" = "sp3")) %>% 
+  mutate(Pop1 = paste("S.", Pop1), Pop2 = paste("S.", Pop2)) %>% 
+  ggplot(aes(Pop1, Pop2, label = value, fill = value)) +
+  geom_tile() +
+  geom_text(col = "white") +
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank()) +
+  scale_fill_gradient(high = "#132B43", low = "#56B1F7") +
+  ggtitle("Symphonia")
+path <- "~/Documents/BIOGECO/PhD/data/Eschweilera_Paracou/Sequences/genomics"
+eschweilera <- lapply(list.files(file.path(path, "..", "variants", "final", "fst"), pattern = ".log"), function(file)
+  read_delim(file.path(path, "..", "variants", "final", "fst", file), skip = 15, delim = ":",
+  col_names = c("variable", "value")) %>% 
+    mutate(file = file)) %>% 
+  bind_rows() %>% 
+  filter(!is.na(value)) %>% 
+  mutate(value = as.numeric(value)) %>% 
+  mutate(variable = ifelse(grepl("mean", variable), "meanFst", "weightedFst")) %>% 
+  separate(file, c("Pop1", "Pop2", "log")) %>% 
+  dplyr::select(-log) %>%
+    filter(variable == "weightedFst") %>% 
+  mutate(Pop1 = paste("E.", Pop1), Pop2 = paste("E.", Pop2)) %>% 
+  ggplot(aes(Pop1, Pop2, label = value, fill = value)) +
+  geom_tile() +
+  geom_text(col = "white") +
+  theme(axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.line = element_blank()) +
+  scale_fill_gradient(high = "#132B43", low = "#56B1F7") +
+  ggtitle("Eschweilera")
+cowplot::plot_grid(symphonia, eschweilera, nrow = 2)
+```
 
 \newpage
 
-```{r conhetero, fig.cap="The relationship between the number of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from Symphonia and Eschweilera  clade Parvifolia. Each point represents the mean values for all individuals in Paracou, and thin lines the standard deviation.The solid line illustrates a 1:1 ratio."}
+```{r conhetero, fig.cap="The relationship between the numbers of conspecific and congeneric individuals in a local neighborhood with 25 m radius around trees from *Symphonia* and Eschweilera clade *Parvifolia*. Each point represents the mean values for all individuals in Paracou, and thin lines show the standard deviation. The solid line illustrates a 1:1 ratio."}
 congeners <- read_tsv("../../distributions/distribution_save/congenerics.tsv") 
 sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
          col_names = c("Library", "GeneticSpecies"), delim = " ") %>% 
@@ -477,31 +496,23 @@ left_join(congeners,
   guides(colour = guide_legend(nrow = 3))
 ```
 
-```{r, eval=FALSE}
-# ~/Tools/plink_high_contig/plink -bfile symcapture.all.biallelic.snp.filtered.nonmissing.paracou --allow-extra-chr --set-missing-var-ids @:# --geno 0 --recode A-transpose --out paracou.filtered
-# pop.sympho <- read_delim("../../../data/Symphonia_Paracou/Sequences/populationGenomics/populations/paracou3pop.popmap",
-#                    col_names = c("library", "species"), delim = " ") %>%
-#   mutate(species = recode(species,
-#                                  "sp1" = "sp.1",
-#                                  "globuliferaTypeParacou" = "sp.2",
-#                                  "globuliferaTypeRegina" = "sp.3"))
-# snps.sympho <- vroom::vroom("../../../data/Symphonia_Paracou/Sequences/variantCalling/paracou/paracou.filtered.traw") %>%
-#   rename(snp = SNP) %>%
-#   select(-CHR, -`(C)M`, -POS, -COUNTED, -ALT) %>%
-#   reshape2::melt("snp", variable.name = "library", value.name = "allelicDosage") %>%
-#   mutate(library = gsub("0_", "", library)) %>%
-#   left_join(pop.sympho) %>%
-#   filter(!is.na(species)) %>%
-#   group_by(snp, species) %>%
-#   summarise(alt = sum(allelicDosage, na.rm = T) > 0) %>%
-#   filter(alt)
-# vroom::vroom_write(snps.sympho, "save/snps.sympho.filtered.tsv")
-snps.sympho <- vroom::vroom("save/snps.sympho.filtered.tsv")
-snps.list <- list("S. sp.1" = filter(snps.sympho, species == "sp.1")$snp,
-                  "S. sp.2" = filter(snps.sympho, species == "sp.2")$snp,
-                  "S. sp.3" = filter(snps.sympho, species == "sp.3")$snp)
-ggvenn::ggvenn(snps.list,
-               fill_color = c("#CD2626", "#1E90FF", "#0000EE"),
-               text_size = 3, set_name_size = 5, 
-               stroke_size	= 0.5, stroke_color = "lightgrey")
+\newpage
+
+```{r missingness, fig.cap="Missing SNPs per library."}
+path <- "../../../data/Eschweilera_Paracou/"
+libmiss <- read_delim(file.path(path, "Sequences", "denovo", "raw", "raw.imiss"), delim = " ") %>% 
+  dplyr::rename_all(funs(gsub(" ", "", .))) %>% 
+  mutate(missingness = as.numeric(F_MISS)) %>% 
+  mutate(snps = (1-missingness)*704485) %>% 
+  arrange(missingness) %>% 
+  mutate(libraries = 1:nrow(.))
+cowplot::plot_grid(
+  ggplot(libmiss, aes(missingness)) + geom_histogram() + 
+    xlab("Missing SNPs per library") + ylab("Number of libraries"),
+  ggplot(libmiss, aes(libraries, missingness)) + geom_point() + geom_line() + 
+    ylab("Missing SNPs per library") + xlab("Ranked libraries."),
+  ggplot(libmiss, aes(libraries, snps)) + geom_point() + geom_line() +
+    ylab("Number of SNPs with no missing data")  + xlab("Ranked libraries."),
+  nrow = 1)
 ```
+
