@@ -161,7 +161,7 @@ data <- read_tsv("../thickness_save/data.tsv") %>%
                         "sp.1" = "S. sp1"))
 # load("../thickness_save/fits.Rdata")
 load("../thickness_save/fitLT.Rdata")
-as.data.frame(fitLTLogRxSDSI, pars = "predicted") %>% 
+g <- as.data.frame(fitLTLogRxSDSI, pars = "predicted") %>% 
   reshape2::melt(NULL) %>% 
   group_by(variable) %>% 
   summarise(LTm = median(value), LTq5 = quantile(value, 0.05), LTq95 = quantile(value, 0.95)) %>% 
@@ -179,7 +179,8 @@ as.data.frame(fitLTLogRxSDSI, pars = "predicted") %>%
   theme(legend.position = "bottom", legend.text = element_text(face = "italic")) +
   xlab("Relative extractable water") +
   ylab("Leaf thickness (µm)") +
-  geom_text(y = 200, label = expression(R^2==0.45), col = "black", data = data.frame(REW = 0.5))
+  geom_text(y = 200, label = expression(R^2==0.45), col = "black", data = data.frame(REW = 0.5)) +
+  ggsave(filename = "~/Téléchargements/LTY/Fig2.tif", g, device = "tiff")
 ```
 
 # Discussion

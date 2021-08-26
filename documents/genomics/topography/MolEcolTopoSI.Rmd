@@ -3,17 +3,17 @@ title: Topography drives microgeographic adaptations among closely-related speci
 author: Sylvain Schmitt, Niklas Tysklind, Bruno Herault, Myriam Heuertz
 date: '`r Sys.Date()`'
 output:
+  bookdown::word_document2:
+    reference_docx: ./template/template.docx
+  bookdown::html_document2:
+    number_sections: false
+    toc: true
+    toc_float: yes
   bookdown::pdf_document2:
     template: ./template/templateSuppMatMolEcol.tex
     number_sections: false
     toc: false
     keep_tex: true
-  bookdown::html_document2:
-    number_sections: false
-    toc: true
-    toc_float: yes
-  bookdown::word_document2:
-    reference_docx: ./template/template.docx
 linestretch: 1.5
 csl: /home/sylvain/Documents/Bibliography/csl/molecol.csl
 bibliography: /home/sylvain/Documents/Bibliography/library.bib
@@ -498,7 +498,7 @@ left_join(congeners,
 
 \newpage
 
-```{r missingness, fig.cap="Missing SNPs per library."}
+```{r missingness, fig.cap="Missing SNPs per library of \\emph{Eschweilera} clade \\emph{Parvifolia}."}
 path <- "../../../data/Eschweilera_Paracou/"
 libmiss <- read_delim(file.path(path, "Sequences", "denovo", "raw", "raw.imiss"), delim = " ") %>% 
   dplyr::rename_all(funs(gsub(" ", "", .))) %>% 

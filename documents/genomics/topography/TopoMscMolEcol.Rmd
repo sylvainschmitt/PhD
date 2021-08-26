@@ -414,6 +414,7 @@ library(knitr)
 library(tidyverse)
 library(raster)
 library(bayesplot)
+library(ggfortify)
 theme_set(bayesplot::theme_default())
 opts_chunk$set(echo = F, message = F, warning = F, 
                fig.height = 6, fig.width = 6,
@@ -421,7 +422,7 @@ opts_chunk$set(echo = F, message = F, warning = F,
 # crs <- '+proj=longlat +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0'
 crs <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
 spcol <- c("#1b9e77", "#d95f02", "#7570b3", "#1E90FF", "#0000EE", "#CD2626")
-names(spcol) <- c("E. decolorans", "E. sagotiana", "E. coriacea", "S. globulifera Paracou", "S. globulifera Regina", "S. sp1")
+names(spcol) <- c("E. decolorans", "E. sagotiana", "E. coriacea", "S. sp2", "S. sp3", "S. sp1")
 ```
 
 ```{r, eval=F}
@@ -456,8 +457,11 @@ trees <- bind_rows(
   mutate(symphonia, genus = "Symphonia") %>% 
     dplyr::select("Ind", "Xutm", "Yutm", "genus", "pop") %>% 
     dplyr::rename(species = pop) %>% 
-    mutate(species = gsub("Type", " ", species)) %>% 
-    mutate(species = paste0("S. ", species)),
+    mutate(species = gsub("Type", " ", species))  %>% 
+        mutate(species = recode(species, 
+                                "globulifera Paracou" =  "sp2", 
+                            "globulifera Regina" = "sp3")) %>% 
+    mutate(species = paste0("S. ", species)) ,
   mutate(eschweilera, genus = "Eschweilera") %>% 
     dplyr::select("Library", "Xutm", "Yutm", "genus", "cluster") %>% 
     dplyr::rename(Ind = Library, species = cluster) %>% 
@@ -479,7 +483,7 @@ colnames(hills) <- c("hills", "Xutm", "Yutm")
 limits <- shapefile(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/limits/Plots.shp"))
 limits <- crop(limits, trees)
 
-ggplot(hills, aes(x = Xutm, y = Yutm)) +
+g <- ggplot(hills, aes(x = Xutm, y = Yutm)) +
   geom_tile(aes(fill = hills),  col = NA, alpha = 0.6, data = ) +
   scale_fill_distiller(guide = "none", palette = "Greys", direction = 1) +
   geom_polygon(data = fortify(limits), aes(x = long, y = lat, group = id), colour='black', fill=NA) +
@@ -495,12 +499,45 @@ ggplot(hills, aes(x = Xutm, y = Yutm)) +
   theme(axis.title = element_blank(),
         legend.position = "bottom", legend.text = element_text(face = "italic"),
         strip.background = element_blank(), strip.text.x = element_blank())  +
-  guides( col = guide_legend(nrow = 2, byrow = T)) +
-  ggsave("figures/fig1.png")
+  guides( col = guide_legend(nrow = 2, byrow = T))
+ggsave(g, filename = "figures/Figure_1.tiff", device = "tiff", dpi = 600, bg = "white", compression = "lzw")
+```
+
+```{r soilpca, fig.cap="Principal component analysis (PCA) of topographic wetness index (TWI), relative elevation (RE) with edaphic and hydrological properties. Edaphic and hydrological properties include organic matter (OM), carbon (C), nitrogen (N), exchangeable cation charge (C) [@Soucemarianadin2004; @Roelens2007], water table depth [WTD in cm, @Gourlet-Fleury2004], hydromorphy and waterlogging [waterlog in 5 classes, @Cantet2004]). Data were obtained through interpolation of soil sample data on TWI and RE from LiDAR data."}
+g <- read_tsv("figures/soil.tsv") %>%
+  na.omit() %>% 
+  dplyr::select(-Refus, -Mg_ech, -K_ech, -Polsen, -S, -TS, -Na_ech, -Al_KCl, - Ca_ech) %>% 
+  dplyr::rename(TWI = wetness, RE = relele, OM = MO, "C:N" = C_N, P = PBray2,
+                waterlog1 = waterlog_1, waterlog2 = waterlog_2, waterlog3 = waterlog_3,
+                waterlog4 = waterlog_4, waterlog5 = waterlog_5, 
+                "WTD 0-60" = "wtd_Watertable between 0 and 60 cm",
+                "WTD 60-100" = "wtd_Watertable between 60 and 100 cm", 
+                "WTD 100+" = "wtd_Watertable deeper than 100 cm") %>% 
+  autoplot(prcomp(., scale = T), 
+           data = .,
+           col = "grey",
+           alpha = 0.3,
+           loadings = T,
+           loadings.colour = c('black', 'black', rep('grey', 15)),
+           loadings.label.colour = c('black', 'black', 'blue', 'red', 'red',
+                                     'red', 'blue', 'blue', 'red', 'red', 'red',
+                                     'red', 'red', 'blue', 'blue', 'blue',
+                                     'blue'),
+           loadings.label.fontface = c('bold', 'bold', rep('italic', 15)),
+           loadings.label.size = c(6, 6, rep(4, 15)),
+            loadings.label = T, 
+           loadings.label.repel=T) +
+  geom_hline(aes(yintercept = 0), col = 'black', linetype = "dotted") +
+  geom_vline(aes(xintercept = 0), col = 'black', linetype = "dotted") +
+  scale_color_discrete(guide = "none") +
+  theme(legend.position = c(1, 1), 
+        legend.justification = c(1, 1))
+ggsave(g, filename = "figures/Figure_2.tiff", device = "tiff", dpi = 600, bg = "white", compression = "lzw")
 ```
 
 ```{r symphospecies, fig.cap="Admixture plot of *Symphonia* individuals for the best K, K = 3.", fig.width=6, fig.height=3}
-pophelper::readQ(file.path("../../../data/Symphonia_Paracou/Sequences/populationGenomics/",
+g <- cowplot::plot_grid(
+  pophelper::readQ(file.path("../../../data/Symphonia_Paracou/Sequences/populationGenomics/",
                            "admixture", "paracou", "symcapture.all.biallelic.snp.filtered.nonmissing.paracou.3.Q"))[[1]] %>%
   dplyr::rename(Ssp1 = Cluster1, SgParacou = Cluster2, SgRegina = Cluster3) %>%
   mutate(Ind = gsub(".g.vcf", "", read_tsv(file.path("../../../data/Symphonia_Paracou/Sequences", "variantCalling", "paracou",
@@ -512,25 +549,26 @@ pophelper::readQ(file.path("../../../data/Symphonia_Paracou/Sequences/population
   ggplot(aes(reorder(Ind, order), value, fill = pop, col = pop)) +
   geom_col() +
   scale_fill_manual("", values = c("#CD2626", "#1E90FF", "#0000EE"),
-                    labels = c("S. sp1", "S. globulifera Paracou", "S. globulifera Regina")) +
+                    labels = c("S. sp.1", "S. sp.2", "S. sp.3")) +
   scale_color_manual("", values = c("#CD2626", "#1E90FF", "#0000EE"),
-                     labels = c("S. sp1", "S. globulifera Paracou", "S. globulifera Regina")) +
-  ylab("Admixture coefficient") +
+                     labels = c("S. sp.1", "S. sp.2", "S. sp.3")) +
+  ylab("Admixture\ncoefficient") +
   theme(axis.title.x = element_blank(), axis.line.x = element_blank(),
         axis.ticks.x = element_blank(), axis.text.x = element_blank(),
-        legend.text = element_text(face = "italic"), legend.position = "top")
-```
-
-```{r symphomorphotypes, fig.cap="* trunk morphology. The three morphotypes are identified with their bark with * (left, red) having a light grey thin and smooth bark, the * (center, light blue) having a dark and intermediate thin and smooth bark compared to the thick and lashed bark of *S. globulifera type Regina* (right, dark blue)."}
-include_graphics("figures/symphoniamorphotypes.png")
+        legend.text = element_text(face = "italic"), legend.position = "top"),
+  cowplot::ggdraw() + 
+    cowplot::draw_image("figures/symphoniamorphotypes.png", scale = 0.9),
+  nrow = 2, labels = c("(a)", "(b)")
+)
+ggsave(g, filename = "figures/Figure_3.tiff", device = "tiff", dpi = 600, bg = "white", width = 6, height = 3, compression = "lzw")
 ```
 
 ```{r parvispecies, fig.cap="Principal component analysis (PCA) of single nucleotide polymorphisms (SNP) from *Eschweilera* clade *Parvifolia.* The colours represent the clusters detected with Kmeans for the best K, K = 3.", fig.height=5, fig.width=5}
 vars <- read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenval"), 
                delim = " ", col_names = "var")
-read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenvec"),
+g <- read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.eigenvec"),
            delim = " ", col_names = c("X1", "Sample", paste0("PCA", 1:20))) %>% 
-  separate(Sample, paste0("X", 1:7), "[:punct:]", remove = F) %>% 
+  separate(Sample, paste0("X", 1:7), remove = F) %>% 
   dplyr::rename(IdGenetic = X4, Lane = X5) %>% 
   left_join(read_tsv(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants", "final", "filtered.kmeans"))) %>% 
   mutate(species = recode(cluster, "3" =  "E. decolorans", 
@@ -542,6 +580,7 @@ read_delim(file.path("../../../data/Eschweilera_Paracou/Sequences/", "variants",
   xlab(paste0("PCA 1 - ", vars$var[1], "%")) +
   ylab(paste0("PCA 2 - ", vars$var[2], "%")) +
   scale_color_manual("", values = spcol[c(3,1,2)])
+ggsave(g, filename = "figures/Figure_4.tiff", device = "tiff", dpi = 600, bg = "white", compression = "lzw")
 ```
 
 ```{r SpDistVar, fig.cap="Species distribution and individual variance partitioning along topography. Each subfigure shows density of individuals per species (density plot) against individual variation (barplot) partitioned with the Animal model into between-species (dark grey), between-genotypes (intermediate grey) and residual (light grey). Species distribution and individual variance partitioning partitioning are given along the topographic wetness index (TWI, left subfigures) and the logarithm of relative elevation (log(RE+1), right subfigures) for the species complexes *Eschweilera* clade *Parvifolia* (top subfigures) and *Symphonia* (bottom subfigures). Colours represent species determined based on the genetic structure of capture datasets, which was not necessarily in agreement with original botanical identification. ", fig.width=11, fig.height=6}
@@ -643,7 +682,7 @@ densities <- trees@data %>%
 g.white <- qplot(1:10, 1:10, geom="blank") +
   theme(axis.title = element_blank(), axis.line = element_blank(), 
         axis.ticks = element_blank(), axis.text = element_blank())
-cowplot::plot_grid(densities$g[[1]], 
+g <- cowplot::plot_grid(densities$g[[1]], 
                    bars$g[[2]], 
                    densities$g[[2]], 
                    bars$g[[1]],
@@ -657,4 +696,5 @@ cowplot::plot_grid(densities$g[[1]],
                    gr.legend,
                    nrow = 3, rel_widths = c(3,1,3,1), rel_heights = c(3,3,1),
                    labels = c("A", "", "B", "", "C", "", "D", ""))
+ggsave(g, filename = "figures/Figure_5.tiff", device = "tiff", dpi = 600, bg = "white", width = 11, height = 6, compression = "lzw")
 ```

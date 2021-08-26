@@ -530,7 +530,35 @@ ggplot(data = preds, aes(x = Htopo, y = Hnci)) +
   ylab(expression(h[NCI]^2)) +
   viridis::scale_fill_viridis(expression(log(metric)),  option = "magma", discrete = F) +
   facet_grid(metric ~ variable, labeller = "label_parsed")
+
+ggplot(data = filter(preds, metric == "log(D[G])"),
+       aes(x = Htopo, y = Hnci)) +
+  metR::geom_contour_fill(aes(z = fit), bins = 25) +
+  xlab(expression(h[TWI]^2)) +
+  ylab(expression(h[NCI]^2)) +
+  viridis::scale_fill_viridis(expression(log(metric)),  option = "magma", discrete = F) +
+  facet_grid(metric ~ variable, labeller = "label_parsed")
+
+ggplot(data = filter(preds, metric == "log(D[G])", variable == "NCI"),
+       aes(x = Htopo, y = Hnci)) +
+  metR::geom_contour_fill(aes(z = fit), bins = 25) +
+  xlab(expression(h[TWI]^2)) +
+  ylab(expression(h[NCI]^2)) +
+  viridis::scale_fill_viridis(expression(log(metric)),  option = "magma", discrete = F) +
+  facet_grid(metric ~ variable, labeller = "label_parsed")
+
+filter(preds, metric == "log(D[G])") %>% 
+  group_by(Htopo, Hnci) %>% 
+  summarise(m = mean(fit)) %>% 
+  ggplot(aes(x = Htopo, y = Hnci)) +
+  metR::geom_contour_fill(aes(z = m), bins = 200) +
+  xlab(expression(h[TWI]^2)) +
+  ylab(expression(h[NCI]^2)) +
+  viridis::scale_fill_viridis(expression(log(D[G])),  option = "magma", discrete = F) +
+  xlim(0, 0.25) + ylim(0, 0.25)
 ```
+
+**To be compared with species environmental niches across NCI and TWI (mean position = niche mean + bars = niche width).**
 
 # Discussion
 
