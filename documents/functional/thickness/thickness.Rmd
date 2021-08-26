@@ -1,3 +1,73 @@
+--- 
+title: "Leaf thickness"
+subtitle: "Leaf thickness variation of *Symphonia* trees with weather."
+author: "Sylvain Schmitt"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+colorlinks: yes
+description: "Leaf thickness variation of *Symphonia* trees with weather."
+---
+--- 
+title: "Leaf thickness"
+subtitle: "Leaf thickness variation of *Symphonia* trees with weather."
+author: "Sylvain Schmitt"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+csl: /home/sylvain/Documents/Bibliography/csl/mee.csl
+bibliography: /home/sylvain/Documents/Bibliography/library.bib
+link-citations: yes
+colorlinks: yes
+description: "Leaf thickness variation of *Symphonia* trees with weather."
+---
+
+
+`r if (knitr:::is_html_output()) '# Preface {-}'`
+
+`r if (knitr:::is_html_output()) '![stability-wip](https://img.shields.io/badge/stability-work_in_progress-lightgrey.svg)'`
+
+`r if (knitr:::is_html_output()) 'Leaf thickness variation of *Symphonia* trees with weather.'`
+
+`r if (knitr:::is_html_output()) 'Have a nice reading.'`
+
+`r if (knitr:::is_html_output()) '<div align="right">  *Sylvain*'`
+
+<!--chapter:end:index.Rmd-->
+
+```{r setupintro, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+# path <- "../../data/Paracou/"
+```
+
+# Introduction {-}
+
+Leaf thickness variation of *Symphonia* trees with weather.
+
+## Mails
+
+> L'analyse de l'auto-correlation spatiale des modèles fonctionnels, nous a amené à reparler de l'effet de la météo sur l'épaisseur foliaire observée avec Symphonia à Paracou avec Bruno. Il trouve qu'au vu de la force du signal (pour rappel LT ~ pluie cumulée sur 5 jours, R²=0.73 et je ne pense pas que ce soit le meilleur modèle), il serait dommage de ne pas faire une communication courte à son sujet, et je suis d'accord. Du coup dans un avenir proche ou lointain, on se diasit qu'il pourrait être intéresant de récupérer les données climatiques journalières de la tour à flux concernant cette période et de calucler quelques indices correspondants type REW, pour construire un modèle propre qui montre cette variation de l'épaisseur foliaire. L'idée étant derrière d'en faire un article type communication courte montrant le signal sans trop de prise de partie avec des hypothèses larges et en insistant sur les limites méthodologiques du protocole, qui inviterait des futures recherches sur la question. Voilà, comme j'ai beaucoup de tavail en cette fin de thèse je ne sais pas encore trop quand je compte m'y mettre, mais je me le suis mis dans ma todo list pour un avenir prochain. Dans tout les cas il me parait évident que tu sois associée aux analyses et à la rédaction. *Sylvain*
+
+> Pour les données de la tour, Gaëlle a maintenant une base météo propre, mais il faudra que tu demandes à Damien Bonal pour les utiliser. Il demandera certainement à être associé, ainsi que Benoit. Pour calculer les REW, Nino a mis en package le modèle de Fabien. Je ne l’ai pas encore vérifié mais Stéphane l’a utilisé sans problème. C’est sur le GitHub d’EcoFoG. Fais signe quand tu souhaites d’y mettre. *Géraldine*
+
+> Pour moi l’interprétation est assez intuitive depuis el départ et est lié à l’humidité de l’air. Plus l’air est sec, plus les stomates se ferment, plus le différentiel de pression osmotique est fort et donc plus la feuille se charge en eau. De la physique quoi. Je n’ai pas fait de littérature poussée mais ici on a la même chose dans un vieux papier comme j'aime @Schulze1972. *Bruno*
+
+> Oui mais ça dépend aussi de quand la feuille ferme ses stomates, c’est plus ou moins « tôt » selon les espèces. Camille Ziegler [@Ziegler2019] a mesuré sur *Symphonia globulifera*. Il a mesuré le $\psi _{TLP}$ qui apparement est un bon proxy du potentiel de fermeture stomatique. Il y a aussi un trait qui mesure le potentiel hydrique des feuilles à 50% de fermeture des stomates (mais je ne sais pas s’il l’a mesuré). Et puis il y a aussi le fait que les feuilles ne sont pas complètement étanches même une fois les stomates fermés (conductance cuticulaire). Ca vaudra le coup d’en reparler avec Sabrina et Clément, et certainement de les associer. *Géraldine*
+
+<!--chapter:end:01-Introduction.Rmd-->
+
 ```{r setupdata, include=FALSE}
 rm(list = ls()) ; invisible(gc()) ; set.seed(42)
 library(knitr)
@@ -357,10 +427,63 @@ g.rew <- ggplot(data, aes(x = date, group = date)) +
 gridExtra::grid.arrange(g.rainday, g.rainfidays, g.rew,   
                         layout_matrix = rbind(c(1, 2),
                                               c(3, 3)))
-  
-g <- gridExtra::arrangeGrob(g.rainday, g.rainfidays, g.rew,   
-                            layout_matrix = rbind(c(1, 2),
-                                                  c(3, 3)))
-ggsave(filename = "~/Téléchargements/LTY/Fig1.tif", g, device = "tiff")
 ```
+
+
+<!--chapter:end:02-WeatherData.Rmd-->
+
+
+# LT Models
+
+Placeholder
+
+
+## Summary
+## Variables & parameters
+### Variables
+### Parameters
+## Models
+### $R$ Linear variation with REW
+### $R,S$ Linear variation with REW & species fixed effect on interecept
+### $RxS$ Linear variation with REW & species fixed effect on REW slope
+### $RxS,S$ Linear variation with REW & species fixed effect on intercept and REW slope
+### $D$ Linear variation with logarithm of DBH
+### $D,S$ Linear variation with DBH & species fixed effect on interecept
+### $DxS$ Linear variation with DBH & species fixed effect on DBH slope
+### $DxS,S$ Linear variation with DBH & species fixed effect on intercept and DBH slope
+### $RxS,D,S$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope
+### $RxS,D,S,I$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope & individual random effect
+### $log(RxS,D,S,I)$ Linear variation with REW and DBH & species fixed effect on intercept and REW slope & individual random effect
+
+<!--chapter:end:04-LTmodels.Rmd-->
+
+
+# Models
+
+Placeholder
+
+
+
+<!--chapter:end:05-WCLAmodels.Rmd-->
+
+
+# Literature
+
+Placeholder
+
+
+## Uncategorized
+### @Schulze1972
+### @Syvertsen1982a
+### @Maroco1997
+### @Fisher2006
+### @Nautiyal1994
+### @Ennajeh2010
+### @Guerfel2009
+
+<!--chapter:end:98-Literature.Rmd-->
+
+# References {-}
+
+<!--chapter:end:99-References.Rmd-->
 

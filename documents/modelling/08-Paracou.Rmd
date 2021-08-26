@@ -1,0 +1,131 @@
+```{r setupparacou, include=FALSE}
+rm(list = ls()) ; invisible(gc()) ; set.seed(42)
+library(knitr)
+library(kableExtra)
+if(knitr:::is_html_output()) options(knitr.table.format = "html") 
+if(knitr:::is_latex_output()) options(knitr.table.format = "latex") 
+library(tidyverse)
+library(raster)
+theme_set(bayesplot::theme_default())
+opts_chunk$set(
+  echo = F, message = F, warning = F, fig.height = 6, fig.width = 8,
+  cache = T, cache.lazy = F)
+```
+
+# Paracou
+
+```{r}
+
+nci <- read_tsv("modelling_save/nci.tsv") 
+coordinates(nci) <- ~Xutm + Yutm
+proj4string(nci) <- '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0'
+wetness <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                            "topography", "TWI_1m.tif"))
+dem <- raster(file.path("/home/sylvain//Documents/BIOGECO/PhD/data/Paracou/",
+                        "topography", "DEM_1m_2015.tif")) # for CRS
+projection(wetness) <- projection(dem)
+wetness <- projectRaster(wetness, crs = '+proj=utm +zone=22 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0')
+nci$twi <- extract(wetness, nci)
+rm(dem, wetness)
+
+niches <- nci@data %>% 
+  mutate(twi = ifelse(twi <= 0, 10^-3, twi)) %>% 
+  mutate(TWI = as.vector(scale(log(twi)))) %>% 
+  mutate(NCI = as.vector(scale(NCI))) %>% 
+  filter(DBH >= 10, DBH <= 20) %>% 
+  filter(!grepl("Indet", Species)) %>% 
+  dplyr::select(Genus, Species, NCI, TWI) %>% 
+  group_by(Genus, Species) %>% 
+  filter(n() > 100) %>% 
+  reshape2::melt(c("Genus", "Species")) %>% 
+  group_by(Genus, Species, variable) %>% 
+  summarise(m = mean(value), l = quantile(value, 0.25), h = quantile(value, 0.75)) %>% 
+  mutate(n = h - l) %>% 
+  reshape2::melt(c("Genus", "Species", "variable"), variable.name = "metric") %>% 
+  mutate(variable = paste0(variable, "_", metric)) %>% 
+  dplyr::select(-metric) %>% 
+  reshape2::dcast(Genus + Species ~ variable)
+  
+
+niches %>% 
+  ggplot(aes(col = Species)) +
+  geom_point(aes(TWI_m, NCI_m), alpha = 0.5) +
+  geom_segment(aes(x = TWI_l, xend = TWI_h, y = NCI_m, yend = NCI_m), alpha = 0.5) +
+  geom_segment(aes(x = TWI_m, xend = TWI_m, y = NCI_l, yend = NCI_h), alpha = 0.5) +
+  viridis::scale_color_viridis(discrete = T, guide = "none")
+
+niches %>% 
+  sample_n(100) %>%
+  ggplot(aes(y = paste(Genus, Species), yend = paste(Genus, Species), col = Species)) +
+  geom_point(aes(x = TWI_m), alpha = 0.5) +
+  geom_segment(aes(x = TWI_l, xend = TWI_h), alpha = 0.5) +
+  viridis::scale_color_viridis(discrete = T, guide = "none")
+
+niches %>% 
+  sample_n(100) %>%
+  ggplot(aes(y = paste(Genus, Species), yend = paste(Genus, Species), col = Species)) +
+  geom_point(aes(x = NCI_m), alpha = 0.5) +
+  geom_segment(aes(x = NCI_l, xend = NCI_h), alpha = 0.5) +
+  viridis::scale_color_viridis(discrete = T, guide = "none")
+
+niches %>% 
+  ggplot(aes(col = paste(Genus, Species))) +
+  geom_point(aes(TWI_n, NCI_n), alpha = 0.5) +
+  viridis::scale_color_viridis(discrete = T, guide = "none") +
+  coord_equal()
+
+niches %>% 
+  filter(Genus %in% c("Cecropia", "Symphonia", "Eschweilera", "Inga")) %>% 
+  ggplot(aes(TWI_n, NCI_n, col = NCI_m, label = paste(Genus, Species))) +
+  geom_point() +
+  ggrepel::geom_text_repel() +
+  coord_equal() +
+  viridis::scale_colour_viridis(direction = -1, option = "B") +
+  xlim(0, NA) + ylim(0, NA)
+niches %>% 
+  filter(Genus %in% c("Cecropia", "Symphonia", "Eschweilera", "Inga")) %>% 
+  ggplot(aes(TWI_n, NCI_n, col = TWI_m, label = paste(Genus, Species))) +
+  geom_point() +
+  ggrepel::geom_text_repel() +
+  coord_equal() +
+  viridis::scale_colour_viridis(direction = -1, option = "B") +
+  xlim(0, NA) + ylim(0, NA)
+
+niches %>% 
+  ggplot(aes(NCI_m, TWI_n)) +
+  geom_point()
+
+niches %>% 
+  ggplot(aes(col = TWI_n)) +
+  geom_point(aes(TWI_m, NCI_m), alpha = 0.5) +
+  viridis::scale_colour_viridis(direction = -1, option = "B")
+
+niches %>% 
+  ggplot(aes(col = NCI_n)) +
+  geom_point(aes(TWI_m, NCI_m), alpha = 0.5) +
+  viridis::scale_colour_viridis(direction = -1, option = "B")
+
+niches %>% 
+  ggplot(aes(col = TWI_n*NCI_n)) +
+  geom_point(aes(TWI_m, NCI_m), alpha = 0.5) +
+  viridis::scale_colour_viridis(direction = -1, option = "B") +
+  ggtitle("Plus on s'écarte du centroide plus la niche est spécialisée ?")
+
+niches %>% 
+  ggplot(aes(TWI_m, TWI_n*NCI_n)) +
+  geom_point() +
+  viridis::scale_color_viridis(discrete = T, guide = "none")
+
+niches %>% 
+  ggplot(aes(NCI_m, NCI_n*TWI_n)) +
+  geom_point() +
+  viridis::scale_color_viridis(discrete = T, guide = "none")
+
+niches %>% 
+  sample_n(100) %>%
+  ggplot(aes(y = paste(Genus, Species), yend = paste(Genus, Species), col = Species)) +
+  geom_point(aes(x = NCI_m), alpha = 0.5) +
+  geom_segment(aes(x = NCI_l, xend = NCI_h), alpha = 0.5) +
+  viridis::scale_color_viridis(discrete = T, guide = "none")
+```
+
